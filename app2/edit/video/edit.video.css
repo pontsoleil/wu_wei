@@ -1,0 +1,72 @@
+/**
+ * edit.video.css
+ * Video-specific editor pane styling
+ */
+#edit-video {
+  padding: 8px;
+}
+
+#edit-video .edit {
+  margin-top: 50px;
+}
+
+#edit-video .edit .frame {
+  margin-top: 6px;
+}
+
+/* Fit the edit pane width (standard / widen modes) */
+#edit-video video {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #000;
+  border-radius: 6px;
+  object-fit: contain;
+  /* default: standard width */
+  max-height: 40vh;
+}
+
+/* When the edit pane is widened, allow a taller viewport */
+#edit.widen #edit-video video {
+  max-height: 55vh;
+}
+
+#edit-video .controls {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#edit-video .controls .label {
+  font-size: 12px;
+}
+
+#edit-video .time-inputs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+#edit-video .time-inputs input {
+  width: 180px;
+  padding: 4px 6px;
+}
+
+#edit-video .buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+#edit-video .buttons button {
+  padding: 4px 8px;
+}
+
+
+#edit-video .player {
+  margin-top: 8px;
+  cursor: pointer;
+}
+

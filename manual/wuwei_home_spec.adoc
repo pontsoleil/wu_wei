@@ -1,0 +1,600 @@
+= wuwei.home 画面仕様
+:doctype: book
+:toc: left
+:toclevels: 3
+:sectnums:
+
+== 目的
+
+`wuwei.home` は、保存済み Resource の一覧を表示し、選択した Resource を Note に取り込むための画面である。
+一覧対象は `data/{user_uuid}/resource/yyyy/mm/dd/{resource_uuid}/resource.json` に登録された Resource である。
+upload 領域の実体ファイルを直接一覧対象にはしない。
+
+利用形態は次の 2 つである。
+
+* 選択した Resource から新しい Note を作成する。
+* 選択した Resource を現在作成中の Note に追加する。
+
+`wuwei.home` は Resource を探す場所であり、Note 編集画面ではない。
+利用者はギャラリーで Resource を選び、左上の「選択中のコンテンツ」で内容を確認したうえで、Note 作成または Note 追加を実行する。
+
+== 用語
+
+[cols="1,3"]
+|===
+|用語 |意味
+
+|Resource
+|ユーザーがアップロードしたファイル、または外部 Web URL などの再利用可能なコンテンツ定義。
+
+|Content
+|Note 上に配置される Node。Resource を `resourceRef` で参照する。
+
+|選択中のコンテンツ
+|ギャラリーで選択された Resource を一時的に掲示する領域。Note に追加する前の確認場所。
+
+|ギャラリー
+|Resource の一覧表示領域。サムネイルまたはプレビューをカードとして表示する。
+
+|新規ノート
+|選択 Resource から新しい Note を作成する操作。
+
+|Add to note
+|選択 Resource を現在作成中の Note に Content として追加する操作。
+|===
+
+== 画面構成
+
+画面は大きく次の領域で構成する。
+
+[cols="1,3"]
+|===
+|領域 |役割
+
+|ヘッダー
+|WuWei 画面への戻り、アップロード、ログイン/ログアウト、検索などの入口を提供する。
+
+|左サイドバー上部
+|「選択中のコンテンツ」を表示する。
+
+|左サイドバー下部
+|カレンダーを表示し、Resource の作成日または登録日で絞り込む。
+
+|メイン上部
+|現在の表示範囲、総件数、月/日などの一覧状態を表示する。
+
+|メイン中央
+|Resource ギャラリーを表示する。
+|===
+
+== ギャラリー
+
+ギャラリーは Resource 一覧をカードで表示する。
+ギャラリーに表示する Resource は、カレンダーによる日付条件とキーワード検索条件の組合せで決定する。
+
+=== 表示内容
+
+各カードには次の情報を表示する。
+
+* サムネイルまたはプレビュー。
+* Resource の `identity.title`、または表示用タイトル。
+* Resource 種別。例: PDF、Office、画像、動画、音声、Web。
+* 登録日、取得日、更新日など、一覧用の日付。
+* 必要に応じてファイルサイズ。
+
+=== サムネイルとプレビュー
+
+ギャラリーでは、可能な限りサムネイルまたはプレビューを表示する。
+ギャラリーで使用する画像は、`wuwei.info` ペインの横幅を基準とした正方形イメージとする。
+この正方形イメージは、Resource のサムネイルまたはプレビューをギャラリー表示用に整形したものである。
+
+画像サイズ:
+
+* 一辺の長さは `wuwei.info` ペインの表示幅を基準に決定する。
+* 幅と高さは同じ値にする。
+* 元画像の縦横比は維持する。
+* 余白が出る場合は正方形内に収め、切り抜きが必要な場合も元 Resource の意味が失われない範囲に留める。
+* ギャラリーカードでは、この正方形イメージをカード幅に合わせて縮小表示してよい。
+* 正方形イメージは Resource の `thumbnail`、`preview`、または `viewer` 情報から生成または参照する。
+
+[cols="1,3"]
+|===
+|Resource 種別 |表示
+
+|画像
+|画像サムネイルを表示する。
+
+|PDF / Office
+|生成済みサムネイル、またはプレビュー画像を表示する。
+
+|動画
+|サムネイル画像を表示する。YouTube / Vimeo などの外部動画は埋め込み再生ではなく、カードではサムネイル表示を基本とする。
+
+|音声
+|音声アイコンまたはサムネイルを表示する。
+
+|Web ページ
+|取得済みサムネイルがあれば表示し、なければ Web アイコンを表示する。
+
+|不明
+|汎用ファイルアイコンを表示する。
+|===
+
+=== 選択操作
+
+ギャラリーカードをクリックすると、その Resource を選択状態にする。
+選択状態になった Resource は、左上の「選択中のコンテンツ」に掲示する。
+
+ギャラリーカード上で Note 追加を直接実行しない。
+一度「選択中のコンテンツ」に掲示し、利用者が内容を確認してから実行する。
+
+== 選択中のコンテンツ
+
+「選択中のコンテンツ」は、Note へ取り込む直前の確認領域である。
+
+=== 表示内容
+
+選択中の Resource について、次の情報を表示する。
+
+* プレビュー。
+* タイトル。
+* Resource 種別。
+* 登録日または更新日。
+* 元 URL または参照先。
+* コメントまたは説明。
+* 操作ボタン。
+
+=== プレビュー表示
+
+選択中のコンテンツでは、ギャラリーよりも大きく内容を確認できる表示を行う。
+
+[cols="1,3"]
+|===
+|Resource 種別 |選択中の表示
+
+|画像
+|画像をプレビュー表示する。
+
+|PDF / Office
+|プレビュー PDF または画像を表示する。
+
+|動画
+|可能であれば iframe などで再生可能な埋め込み表示を行う。
+
+|音声
+|再生コントロールまたは音声用プレビューを表示する。
+
+|Web ページ
+|サムネイル、タイトル、URL、概要を表示する。必要に応じて新規タブで開けるリンクを表示する。
+|===
+
+== 操作
+
+=== 新規ノート
+
+`新規ノート` は、選択中の Resource から新しい Note を作成する操作である。
+
+処理方針:
+
+. 選択中の Resource がない場合は無効にする。
+. 現在作成中の Note があり、未保存の変更がある場合は保存確認を表示する。
+. 利用者が保存を選んだ場合は現在の Note を保存する。
+. 利用者が保存しないことを選んだ場合は、現在の Note を破棄または閉じる。
+. 利用者がキャンセルした場合は、新規 Note 作成を中止する。
+. 新しい Note を作成する。
+. 選択 Resource を `resources[]` にコピーする。
+. 選択 Resource を参照する Content ノードを新しい Note の初期 Page に作成する。
+. WuWei 編集画面へ遷移し、新しい Note を表示する。
+
+作成される Content ノードは Resource 本体を保持せず、`resourceRef` で Note 内の Resource 定義を参照する。
+
+=== Add to note
+
+`Add to note` は、選択中の Resource を現在作成中の Note に追加する操作である。
+
+処理方針:
+
+. 選択中の Resource がない場合は無効にする。
+. 現在作成中の Note がない場合は、新規 Note 作成と同じ扱いにするか、Note を開くよう促す。
+. 現在の Note の `resources[]` に同一 Resource が存在するか確認する。
+. 存在しない場合は Resource 定義を Note の `resources[]` にコピーする。
+. 存在する場合は既存の Resource 定義を再利用する。
+. 現在 Page に Content ノードを追加する。
+. Content ノードの `resourceRef` に Resource ID を設定する。
+. 必要に応じて `resourceView` にページ、時間、シートなどの参照位置を設定する。
+. WuWei 編集画面へ戻り、追加された Content を表示する。
+
+== 状態
+
+[cols="1,3"]
+|===
+|状態 |説明
+
+|未選択
+|ギャラリーカードが選択されていない。操作ボタンは無効。
+
+|選択中
+|Resource が選択され、左上に掲示されている。操作ボタンは有効。
+
+|Note 未作成
+|現在編集中の Note がない。`Add to note` は新規 Note 作成へ誘導する。
+
+|Note 編集中・保存済み
+|現在編集中の Note があり、未保存変更がない。`Add to note` はそのまま追加できる。
+
+|Note 編集中・未保存
+|現在編集中の Note に未保存変更がある。`新規ノート` では保存確認が必要。
+
+|保存中
+|Note または Resource 情報を保存している。重複操作を防ぐため操作ボタンを一時無効化する。
+
+|エラー
+|Resource 取得、プレビュー生成、Note 保存、Content 追加などに失敗した状態。メッセージを表示し、選択状態は維持する。
+|===
+
+== Resource 一覧の取得
+
+`wuwei.home` は Resource ライブラリを一覧表示する。
+Resource ライブラリは次の構造で保存される。
+
+[source,text]
+----
+data/{user_uuid}/resource/yyyy/mm/dd/{resource_uuid}/resource.json
+data/{user_uuid}/resource/yyyy/mm/dd/{resource_uuid}/thumbnail.*
+data/{user_uuid}/resource/yyyy/mm/dd/{resource_uuid}/preview.pdf
+----
+
+`wuwei.home` は各 `resource.json` を読み込み、ギャラリー表示用の一覧項目へ変換する。
+upload 領域は Resource が参照する実体ファイルの保存場所であり、home の直接の一覧対象ではない。
+
+一覧取得では次の条件を使用できる。
+
+* ログインユーザー。
+* 年月日。
+* 検索語。
+* 登録日または更新日。
+
+オフラインモードでは、ローカルに定義された Resource またはダミーデータを表示できる。
+ただし、画面仕様上は Resource 一覧を表示する点は同じである。
+
+== カレンダーと日付選択
+
+Resource は `data/{user_uuid}/resource/yyyy/mm/dd/` の日付別フォルダに格納されている。
+そのため、カレンダーには該当日に Resource が存在することを示すマークを表示する。
+
+=== カレンダー表示
+
+カレンダーは次の状態を表示する。
+
+[cols="1,3"]
+|===
+|状態 |表示
+
+|Resource が存在する日
+|日付セルにマークを付ける。
+
+|選択中の日
+|単日選択状態として強調する。
+
+|範囲選択中の日
+|開始日から終了日までを範囲として強調する。
+
+|今日
+|今日であることを別の表示で示す。
+|===
+
+Resource の存在判定は、Resource ライブラリの日付別フォルダを基準にする。
+例: `data/{user_uuid}/resource/yyyy/mm/dd/`。
+upload 領域にファイルが存在していても、対応する Resource が登録されていない場合は `wuwei.home` の表示対象にしない。
+
+=== 日付による選択
+
+日付によるギャラリー表示は、次の方法で選択できる。
+
+[cols="1,3"]
+|===
+|選択方法 |説明
+
+|単日選択
+|カレンダーの日付をクリックし、その日付に属する Resource をギャラリーに表示する。
+
+|範囲選択
+|開始日と終了日を指定し、その範囲に含まれる Resource を候補にする。
+|===
+
+範囲選択時には、表示対象を次から選択できる。
+
+[cols="1,3"]
+|===
+|表示対象 |説明
+
+|範囲内の選択コンテンツ
+|範囲内に含まれる Resource のうち、利用者が選択状態にした Resource のみを表示または操作対象にする。
+
+|範囲内の全コンテンツ
+|範囲内に含まれるすべての Resource を表示または操作対象にする。
+|===
+
+範囲選択で開始日と終了日が同じ場合は、単日選択と同じ結果になる。
+
+== キーワード検索
+
+キーワード検索は、Resource の `label`、`description.body`、タイトル、保存パス、URI を対象として Resource を絞り込む。
+
+=== 検索対象範囲
+
+検索対象範囲は次から選択できる。
+
+[cols="1,3"]
+|===
+|範囲 |説明
+
+|現在の日付条件内
+|選択中の日付、または開始日から終了日までの範囲に含まれる Resource だけを検索する。
+
+|登録済み全コンテンツ
+|日付条件に関係なく、登録済みのすべての Resource を検索する。
+|===
+
+日付条件とキーワード検索を組み合わせる場合は、まず日付条件で候補 Resource を絞り込み、その候補に対してキーワード検索を適用する。
+
+=== 検索対象文字列
+
+キーワード検索では、次の文字列を対象にする。
+
+* Resource の `label`。
+* Resource の `description.body`。
+* Resource の `identity.title`。
+* Resource の `storage.sourcePath`。
+* Resource の `storage.files[].path`。
+* Resource の `identity.uri`。
+* Resource の `identity.canonicalUri`。
+
+Content 化した後の `label` や `description.body` は Note 内の解釈・注釈であり、`wuwei.home` の Resource ライブラリ検索では Resource 側の値を優先する。
+
+次の属性は将来の検討対象とし、現時点の検索対象には含めない。
+
+* `media.kind`
+* `media.mimeType`
+* `rights.owner`
+* `rights.copyright`
+* `rights.license`
+* `rights.attribution`
+
+=== description.body の検索正規化
+
+`description.body` には AsciiDoc、Markdown、HTML などのマークアップ制御文字が含まれることがある。
+検索では、マークアップ形式に応じて制御文字を除去または無視し、利用者が読む本文に相当する文字列を検索対象にする。
+
+[cols="1,3"]
+|===
+|format |検索時の扱い
+
+|`plain/text`
+|本文をそのまま検索対象にする。
+
+|`asciidoc`
+|見出し記号、属性行、ブロック指定、リンク記法、強調記法などの制御文字を除去し、表示本文を検索対象にする。
+
+|`markdown`
+|見出し記号、リンク記法、画像記法、コードフェンス、強調記法などの制御文字を除去し、表示本文を検索対象にする。
+
+|`html`
+|HTML タグを除去し、テキストノードを検索対象にする。
+|===
+
+検索正規化は、検索のための一時処理である。
+元の `description.body` は変更しない。
+
+=== 検索結果
+
+検索結果はギャラリーに表示する。
+検索語に一致した箇所をカード上または選択中コンテンツで強調表示してよい。
+検索結果が 0 件の場合は、条件を変更できるように空状態を表示する。
+
+== データ変換
+
+`wuwei.home` の一覧項目は、内部的には Resource を表す。
+旧実装の `file` という変数名やレスポンス名が残っていても、画面仕様上は Resource として扱う。
+一覧項目は Resource を直接展開して作る。
+旧 upload 一覧、旧 file 一覧、Note snapshot 配下の Resource は、この画面の通常一覧対象ではない。
+
+=== Resource から一覧項目への対応
+
+[cols="1,2"]
+|===
+|一覧項目 |Resource 側の参照元
+
+|`id`
+|`resource.id`
+
+|タイトル
+|`resource.label`、なければ `resource.identity.title`
+
+|説明
+|`resource.description.body`
+
+|種別表示
+|`resource.media.kind`、`resource.media.mimeType`
+
+|サムネイル
+|`storage.files[]` の `role=thumbnail`、または `thumbnail.*`
+
+|プレビュー
+|`storage.files[]` の `role=preview`、または `preview.pdf`
+
+|元ファイル参照
+|`storage.sourcePath`、または `storage.files[]` の `role=original`
+
+|URI
+|`identity.uri`、`identity.canonicalUri`
+
+|登録日
+|Resource の保存パス `yyyy/mm/dd`、または `audit.createdAt`
+|===
+
+Resource から Note に追加する Content ノードの対応は次のとおりである。
+
+[cols="1,2"]
+|===
+|Content 項目 |設定値
+
+|`type`
+|`Content`
+
+|`label`
+|Resource の `identity.title`、または一覧表示タイトル。
+
+|`description`
+|Resource の説明、コメント、または空の `RichText`。
+
+|`resourceRef`
+|Note 内 `resources[]` の Resource ID。
+
+|`resourceView`
+|選択時点のページ、時間、シート、fragment など。指定がなければ既定値。
+
+|`style`
+|Content の既定スタイル。
+|===
+
+== エラー処理
+
+[cols="1,3"]
+|===
+|場面 |処理
+
+|Resource 一覧取得に失敗
+|ギャラリーにエラー表示を出し、再読み込みまたは検索条件変更を促す。
+
+|プレビュー表示に失敗
+|サムネイルまたは汎用アイコンへフォールバックする。
+
+|新規 Note 作成前の保存に失敗
+|新規 Note 作成を中止し、現在の Note を維持する。
+
+|Resource 追加に失敗
+|Note への Content 追加を中止し、選択中のコンテンツを維持する。
+
+|Resource 定義が新モデルでない
+|互換処理を行わずエラーとして停止する。
+|===
+
+== 現行実装からの改定観点
+
+現在の `wuwei.home` 実装を改定するときは、次を優先する。
+
+* 画面仕様上の呼称を Resource に統一する。
+* 旧実装の `file` 変数は段階的に Resource 名へ改める。
+* ギャラリーカード選択後、必ず「選択中のコンテンツ」を更新してから操作する。
+* `homeAnnotateNewButton` は「新規ノート」操作として定義する。
+* `homeAnnotateOpenButton` は「Add to note」操作として定義する。
+* 新規 Note 作成時には、現在作成中 Note の未保存変更を確認する。
+* Resource 追加時には、Note 内 `resources[]` の重複を避ける。
+* Resource 本体を Content ノードへ展開せず、`resourceRef` で参照する。
+* ギャラリーは thumbnail または preview を優先表示する。
+* 選択中のコンテンツでは、可能な Resource 種別について詳細プレビューを表示する。
+
+== 実装対象ファイル
+
+主な改定対象は次のファイルである。
+
+* `app2/home/wuwei.home.markup.js`
+* `app2/home/wuwei.home.js`
+* `app2/home/wuwei.home.css`
+* Resource 一覧取得 CGI または API。
+* Note 作成、Note 追加を担当する annotate / note 関連モジュール。
+== 2026-04-27 補足: Resource preview と Note 追加
+
+この補足は、現行の `wuwei.home` 実装に合わせて、Resource preview と Note 追加時のデータ連携を明確にする。
+
+=== Resource 一覧の対象
+
+`wuwei.home` のギャラリーは `data/{user_uuid}/resource/yyyy/mm/dd/{resource_uuid}/resource.json` を対象とする。
+upload ディレクトリやテストデータを直接一覧対象にしない。
+upload ファイルは Resource として登録された後、Resource metadata を通じて表示・検索・Note 追加の対象となる。
+
+=== preview URI の解決
+
+ギャラリーと選択中コンテンツ preview は、次の順序で表示 URI を解決する。
+
+[source,text]
+----
+resource.viewer.embed.uri
+resource.snapshotSources.previewUri
+resource.identity.uri
+resource.identity.canonicalUri
+storage.files[].role = "preview"
+storage.files[].role = "thumbnail"
+----
+
+Web ページは iframe に URI を直接設定する。
+YouTube / Vimeo は `media.kind = "video"` とし、`viewer.embed.uri` を iframe に設定する。
+PHP proxy は使用しない。
+対象サイトが iframe 表示を拒否する場合は、拒否されたことを示すメッセージと URL を表示し、新しいタブまたは別ウィンドウで開ける導線を残す。
+
+=== Add to note
+
+`Add to note` は、選択中の Resource を編集中 Note に Content ノードとして追加する。
+追加時には Resource 定義を Note の `resources[]` にコピーし、Content ノードには `resourceRef` を設定する。
+Content ノードに Resource 本体を永続保存してはならない。
+
+同じ Resource がすでに Note の `resources[]` に存在する場合は、Resource を重複追加せず既存の `resourceRef` を利用する。
+ただし、同じ Resource を参照する Content ノードは複数作成できる。
+ページ、時刻範囲、fragment、表示モードなど Content ごとに異なる参照条件は `resourceView` に保持する。
+
+=== 新規ノート
+
+`新規ノート` は、新しい Note を作成してから選択中 Resource を Content ノードとして追加する。
+既存の編集中 Note に未保存変更がある場合は、保存確認を行ってから新規 Note 作成に進む。
+
+新規 Note の最小構造は次のとおりである。
+
+[source,json]
+----
+{
+  "note_id": "_note_uuid",
+  "note_name": "Note label",
+  "description": "",
+  "currentPage": "_page_uuid",
+  "resources": [
+    {
+      "id": "_resource_uuid",
+      "type": "Resource"
+    }
+  ],
+  "pages": {
+    "_page_uuid": {
+      "id": "_page_uuid",
+      "nodes": [
+        {
+          "id": "_content_uuid",
+          "type": "Content",
+          "resourceRef": "_resource_uuid",
+          "resourceView": {
+            "mode": "default"
+          }
+        }
+      ],
+      "links": [],
+      "groups": []
+    }
+  },
+  "audit": {}
+}
+----
+
+=== 検索対象
+
+Resource 検索の初期対象は次の項目とする。
+
+* `resource.label`
+* `resource.description.body`
+* `resource.identity.title`
+* `resource.storage.sourcePath`
+* `resource.storage.files[].path`
+* `resource.identity.uri`
+* `resource.identity.canonicalUri`
+
+`description.body` は `description.format` に応じて AsciiDoc、Markdown、HTML などの制御記法を除去した文字列を検索対象にする。
+`media.kind`、`media.mimeType`、`rights.*` は将来の検索対象候補とし、初期実装では検索対象外とする。

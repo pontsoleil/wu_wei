@@ -1,0 +1,18 @@
+#info-uploaded {
+  padding: 8px;
+  box-sizing: border-box;
+}
+
+#info-uploaded .info {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+#info-uploaded #infoFrame,
+#info-uploaded .info iframe {
+  display: block;
+  width: 100%;
+  min-height: 480px;
+  border: none;
+  box-sizing: border-box;
+}

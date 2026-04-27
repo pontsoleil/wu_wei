@@ -1,0 +1,55 @@
+.pagination i,
+.pagination div,
+.pagination span {
+  color: black;
+  float: left;
+  padding: 8px 16px;
+  text-decoration: none;
+  transition: background-color 0.3s;
+}
+
+.pagination div.active {
+  background-color: dodgerblue;
+  color: white;
+}
+
+.pagination i:hover,
+.pagination div:hover:not(.active) {
+  background-color: #ddd;
+}
+
+#sample1, #sample2, #sample3 {
+  position: flex;
+  flex-flow: row;
+  width: 40%;
+}
+
+/** Tooltip container */
+.pagination div {
+  position: relative;
+}
+
+/** Tooltip text */
+.tooltiptext {
+  visibility: hidden;
+  width: 120px;
+  background-color: black;
+  color: #fff !important;
+  text-align: center;
+  padding: 5px 0;
+  border-radius: 6px;
+  /* Position the tooltip text - see examples below! */
+  position: absolute;
+  top: 100%;
+  left: 50%; 
+  margin-left: -60px;
+  z-index: 1;
+}
+.pagination div:hover .tooltiptext {
+  visibility: visible;
+}
+.btn-next,
+.btn-prev {
+  font-size: 2rem;
+  line-height: 1rem;
+}

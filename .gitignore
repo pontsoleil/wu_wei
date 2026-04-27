@@ -1,0 +1,32 @@
+# Runtime data and user content
+/data/
+/public/
+/_WIP/
+
+# Generated archives and large local packages
+*.tar
+*.zip
+*.7z
+*.gz
+
+# Logs, caches, and temporary files
+*.log
+*.tmp
+Tmp-*
+tmp/
+log/
+__pycache__/
+*.py[cod]
+.DS_Store
+Thumbs.db
+
+# Local credentials and environment files
+/cgi-bin/user/
+/cgi-bin/data/environment
+/server/data/environment
+
+# Large server-side helper binaries.
+# Install ffmpeg/ffprobe on the target server or place them locally after clone.
+/server/bin/ffmpeg
+/server/bin/ffprobe
+

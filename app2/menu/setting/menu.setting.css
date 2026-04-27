@@ -1,0 +1,77 @@
+#settingPane {
+  position: fixed;
+  display: block;
+  top: 0;
+  right: 0;
+  width: 240px;
+  height: 100%;
+  padding: 4px;
+  margin: 4px;
+  background: #fcfdfe;
+          box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+  -webkit-box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+     -moz-box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+      -ms-box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+  overflow-y: auto;
+  z-index: 10;
+}
+#settingPane.hidden {
+  display: none;
+}
+.controls {
+  flex-basis: 200px;
+  padding: 0 5px;
+}
+.controls .force {
+  background-color:#f0f0f0;
+  border-radius: 6px;
+  padding: 4px;
+  margin: 2px 0;
+}
+.controls .force.alpha {
+  background-color:#ffffff;
+}
+.controls .force p label {
+  margin-right: .5em;
+  font-size: 120%;
+  font-weight: bold
+}
+.controls .force p {
+  font-size: small;
+  margin: 0;
+  padding: 0;
+}
+.controls .force label {
+  display: inline-block;
+  margin: 0;
+  padding: 0;
+}
+.controls input[type="checkbox"] {
+  transform: scale(1.2, 1.2);
+}
+.controls input[type="range"] {
+  margin: 0 5% 0 5%;
+  width: 200px;
+}
+/* alpha viewer */
+.controls .alpha p {
+  margin-bottom: .25em;
+}
+.controls .alpha .alpha_bar {
+  height: .5em; border: 1px #777 solid;
+  border-radius: 2px;
+  padding: 1px;
+  display: flex;
+}
+.controls .alpha .alpha_bar #alpha_value {
+  background-color: #555;
+  border-radius: 1px;
+  flex-basis: 100%;
+}
+.controls .alpha .alpha_bar:hover {
+  border-width: 2px;
+  margin: -1px;
+}
+.controls .alpha .alpha_bar:active #alpha_value {
+  background-color: #222;
+}

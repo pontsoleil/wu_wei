@@ -1,0 +1,33 @@
+#modal .message {
+  position: absolute;
+  top: 50%;
+  margin-top: -60px;
+  left: 40%;
+  width: 20%;
+  height: 120px;
+}
+#modal.input .message {
+  left: 30%;
+  width: 40%;
+  height: 160px;
+  z-index: 10;
+}
+#modal.input input {
+  width: 75%;
+}
+#modal header {
+  background-image: linear-gradient(to bottom right,#efefef , #fcfdfe);
+}
+#modal header.info {
+  background-image: linear-gradient(to bottom right,#66b6c4 , #fcfdfe);
+}
+#modal header.warn {
+  background-image: linear-gradient(to bottom right,#fff3af , #fcfdfe);
+}
+#modal header.error {
+  background-image: linear-gradient(to bottom right,#ffbfbf , #fcfdfe);
+}
+#modal header * {
+  color: #808080;
+}
+

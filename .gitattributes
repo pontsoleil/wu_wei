@@ -1,0 +1,10 @@
+* text=auto
+*.js text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.adoc text eol=lf
+*.py text eol=lf
+*.cgi text eol=lf
+*.sh text eol=lf
+*.awk text eol=lf
+

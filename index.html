@@ -1,0 +1,266 @@
+<!doctype html>
+<html>
+<!--
+ * WuWei is a free, open-source knowledge modelling tool.
+ *
+ * Licensed under the MIT License.
+ * Copyright (c) 2013-2020,2023,2026 SAMBUICHI, Nobuyuki
+ * (Sambuichi Professional Engineers Office)
+-->
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport"
+    content="maximum-scale=2.0, width=device-width, height=device-height, initial-scale=1.0,user-scalable=no" />
+
+  <title>WuWei (app2)</title>
+
+  <link rel="shortcut icon" href="favicon.ico" type="image/vnd.microsoft.ico" />
+
+  <!-- third-party stylesheets (keep minimal; app2 CSS expects FontAwesome classes) -->
+  <link rel="stylesheet" href="css/w3css/4/w3.css">
+  <link rel="stylesheet" href="css/fontawesome-free-5.8.1-web/css/all.css">
+
+  <!-- app2 stylesheets -->
+  <link type="text/css" rel="stylesheet" href="app2/wuwei.css" />
+
+  <link type="text/css" rel="stylesheet" href="app2/home/wuwei.home.css" />
+
+  <link type="text/css" rel="stylesheet" href="app2/draw/wuwei.draw.css" />
+  <link type="text/css" rel="stylesheet" href="app2/menu/wuwei.menu.css" />
+  <link type="text/css" rel="stylesheet" href="app2/menu/login/menu.login.css" />
+  <link type="text/css" rel="stylesheet" href="app2/menu/upload/menu.upload.css" />
+  <link type="text/css" rel="stylesheet" href="app2/menu/note/menu.note.css" />
+  <link type="text/css" rel="stylesheet" href="app2/menu/page/menu.page.css" />
+  <link type="text/css" rel="stylesheet" href="app2/menu/modal/menu.modal.css" />
+  <link type="text/css" rel="stylesheet" href="app2/menu/publish/menu.publish.css" />
+  <link type="text/css" rel="stylesheet" href="app2/menu/snackbar/menu.snackbar.css" />
+  <link type="text/css" rel="stylesheet" href="app2/menu/pagination/menu.pagination.css" />
+  <link type="text/css" rel="stylesheet" href="app2/menu/progressbar/menu.progressbar.css" />
+  <!-- <link type="text/css" rel="stylesheet" href="app2/menu/setting/menu.setting.css" />
+  <link type="text/css" rel="stylesheet" href="app2/menu/timeline/menu.timeline.css" /> -->
+
+  <link type="text/css" rel="stylesheet" href="app2/edit/wuwei.edit.css" />
+  <link type="text/css" rel="stylesheet" href="app2/edit/generic/edit.generic.css" />
+  <link type="text/css" rel="stylesheet" href="app2/edit/uploaded/edit.uploaded.css" />
+  <link type="text/css" rel="stylesheet" href="app2/edit/video/edit.video.css" />
+  <link type="text/css" rel="stylesheet" href="app2/edit/link/edit.link.css" />
+  <link type="text/css" rel="stylesheet" href="app2/edit/timeline/edit.timeline.css" />
+
+  <link type="text/css" rel="stylesheet" href="app2/info/wuwei.info.css" />
+  <link type="text/css" rel="stylesheet" href="app2/info/generic/info.generic.css" />
+  <link type="text/css" rel="stylesheet" href="app2/info/uploaded/info.uploaded.css" />
+  <link type="text/css" rel="stylesheet" href="app2/info/video/info.video.css" />
+  <link type="text/css" rel="stylesheet" href="app2/info/asciidoc/info.asciidoc.css" />
+  <link type="text/css" rel="stylesheet" href="app2/info/timeline/info.timeline.css" />
+
+  <!-- <link type="text/css" rel="stylesheet" href="app2/filter/wuwei.filter.css" /> -->
+
+  <!-- <link type="text/css" rel="stylesheet" href="app2/search/wuwei.search.css" />
+  <link type="text/css" rel="stylesheet" href="app2/search/this_note/search.this_note.css" />
+  <link type="text/css" rel="stylesheet" href="app2/search/note/search.note.css" />
+  <link type="text/css" rel="stylesheet" href="app2/search/uploaded/search.uploaded.css" /> -->
+
+  <!-- third-party javascript -->
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script>
+    if (!window.jQuery) {
+      document.write('<script src="lib/jquery/1.11.3/jquery.min.js"><\\/script>');
+    }
+  </script>
+  <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"></script>
+  <link rel="stylesheet" href="https://ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/themes/smoothness/jquery-ui.css">
+
+  <!-- d3 (force v5 as requested) -->
+  <script src="https://d3js.org/d3.v5.min.js"></script>
+  <script>
+    if (!window.d3) {
+      document.write('<script src="lib/d3.v4.min.js"><\\/script>');
+    }
+  </script>
+
+  <!-- geometry libs (MUST be loaded before wuwei.model.js) -->
+  <script src="lib/kld-affine/lib/Matrix2D.js"></script>
+  <script src="lib/kld-affine/lib/Point2D.js"></script>
+  <script src="lib/kld-affine/lib/Vector2D.js"></script>
+
+  <script src="lib/kld-polynomial/lib/Polynomial.js"></script>
+  <script src="lib/kld-polynomial/lib/PolynomialAdditionalMethods.js"></script>
+  <script src="lib/kld-polynomial/lib/SqrtPolynomial.js"></script>
+
+  <script src="lib/svg-intersections/lib/functions/bezier.js"></script>
+  <script src="lib/svg-intersections/lib/Intersection.js"></script>
+  <script src="lib/svg-intersections/lib/IntersectionParams.js"></script>
+  <script src="lib/svg-intersections/lib/intersect.js"></script>
+
+  <!-- Color-Picker-Bootstrap-4 -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="app2/edit/Color-Picker-Bootstrap-4/colorpalettepicker.js"></script>
+
+  <!-- Asciidoctor
+       The current CDN browser path throws a syntax error in this build.
+       Runtime falls back gracefully when no processor is available. -->
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+
+  <!-- WuWei javascript -->
+  <script type="text/javascript" src="lib/uuid.js"></script>
+
+  <!-- WuWei -->
+  <script type="text/javascript" src="setting/constants.js"></script>
+  <script type="text/javascript" src="setting/setting.js"></script>
+
+  <!-- WuWei app2 javascript (order matters) -->
+  <script type="text/javascript" src="app2/wuwei.js"></script>
+  <!-- misc -->
+  <script type="text/javascript" src="app2/misc/wuwei.common.js"></script>
+  <script type="text/javascript" src="app2/misc/wuwei.util.js"></script>
+  <script type="text/javascript" src="app2/misc/wuwei.ajax.js"></script>
+  <!-- shell -->
+  <script type="text/javascript" src="app2/wuwei.init.registry.js"></script>
+  <script type="text/javascript" src="app2/wuwei.shell.js"></script>
+  <!-- nls -->
+  <script type="text/javascript" src="app2/nls/wuwei.nls.js"></script>
+  <script type="text/javascript" src="app2/nls/map/cn.js"></script>
+  <script type="text/javascript" src="app2/nls/map/en.js"></script>
+  <script type="text/javascript" src="app2/nls/map/ja.js"></script>
+  <script type="text/javascript" src="app2/nls/map/kr.js"></script>
+  <script type="text/javascript" src="app2/nls/map/tw.js"></script>
+  <!-- home -->
+  <script type="text/javascript" src="app2/home/wuwei.home.js"></script>
+  <script type="text/javascript" src="app2/home/wuwei.home.markup.js"></script>
+  <!-- model -->
+  <script type="text/javascript" src="app2/model/wuwei.auth.js"></script>
+  <script type="text/javascript" src="app2/model/wuwei.model.js"></script>
+  <script type="text/javascript" src="app2/model/wuwei.data.js"></script>
+  <script type="text/javascript" src="app2/model/wuwei.note.js"></script>
+  <script type="text/javascript" src="app2/model/wuwei.log.js"></script>
+  <script type="text/javascript" src="app2/model/wuwei.video.js"></script>
+  <script type="text/javascript" src="app2/model/wuwei.video.markup.js"></script>
+  <script type="text/javascript" src="app2/model/wuwei.timeline.js"></script>
+  <script type="text/javascript" src="app2/model/wuwei.resource.js"></script>
+  <!-- draw -->
+  <script type="text/javascript" src="app2/draw/wuwei.draw.js"></script>
+  <script type="text/javascript" src="app2/draw/wuwei.draw.markup.js"></script>
+  <!-- <script type="text/javascript" src="app2/model/wuwei.file.js"></script>
+  <script type="text/javascript" src="app2/model/wuwei.resource.js"></script> -->
+  <!-- menu -->
+  <script type="text/javascript" src="app2/menu/wuwei.menu.js"></script>
+  <script type="text/javascript" src="app2/menu/wuwei.menu.markup.js"></script>
+  <script type="text/javascript" src="app2/menu/login/menu.login.js"></script>
+  <script type="text/javascript" src="app2/menu/login/menu.login.markup.js"></script>
+  <script type="text/javascript" src="app2/menu/upload/menu.upload.js"></script>
+  <script type="text/javascript" src="app2/menu/upload/menu.upload.markup.js"></script>
+  <script type="text/javascript" src="app2/menu/progressbar/menu.progressbar.js"></script>
+  <script type="text/javascript" src="app2/menu/note/menu.note.js"></script>
+  <script type="text/javascript" src="app2/menu/note/menu.note.markup.js"></script>
+  <script type="text/javascript" src="app2/menu/page/menu.page.js"></script>
+  <script type="text/javascript" src="app2/menu/page/menu.page.markup.js"></script>
+  <script type="text/javascript" src="app2/menu/modal/menu.modal.js"></script>
+  <script type="text/javascript" src="app2/menu/modal/menu.modal.markup.js"></script>
+  <script type="text/javascript" src="app2/menu/publish/menu.publish.js"></script>
+  <script type="text/javascript" src="app2/menu/publish/menu.publish.markup.js"></script>
+  <script type="text/javascript" src="app2/menu/snackbar/menu.snackbar.js"></script>
+  <script type="text/javascript" src="app2/menu/pagination/menu.pagination.js"></script>
+  <script type="text/javascript" src="app2/menu/pagination/menu.pagination.markup.js"></script>
+  <script type="text/javascript" src="app2/menu/setting/menu.setting.js"></script>
+  <script type="text/javascript" src="app2/menu/setting/menu.setting.markup.js"></script>
+  <script type="text/javascript" src="app2/menu/timeline/menu.timeline.js"></script>
+  <script type="text/javascript" src="app2/menu/timeline/menu.timeline.markup.js"></script>
+  <!-- edit -->
+  <script type="text/javascript" src="app2/edit/wuwei.edit.js"></script>
+  <script type="text/javascript" src="app2/edit/wuwei.edit.markup.js"></script>
+  <script type="text/javascript" src="app2/edit/generic/edit.generic.js"></script>
+  <script type="text/javascript" src="app2/edit/generic/edit.generic.markup.js"></script>
+  <script type="text/javascript" src="app2/edit/uploaded/edit.uploaded.js"></script>
+  <script type="text/javascript" src="app2/edit/uploaded/edit.uploaded.markup.js"></script>
+  <script type="text/javascript" src="app2/edit/link/edit.link.js"></script>
+  <script type="text/javascript" src="app2/edit/link/edit.link.markup.js"></script>
+  <script type="text/javascript" src="app2/edit/timeline/edit.timeline.js"></script>
+  <script type="text/javascript" src="app2/edit/timeline/edit.timeline.markup.js"></script>
+  <script type="text/javascript" src="app2/edit/video/edit.video.js"></script>
+  <script type="text/javascript" src="app2/edit/video/edit.video.markup.js"></script>
+  <!-- info -->
+  <script type="text/javascript" src="app2/info/wuwei.info.js"></script>
+  <script type="text/javascript" src="app2/info/wuwei.info.markup.js"></script>
+  <script type="text/javascript" src="app2/info/generic/info.generic.js"></script>
+  <script type="text/javascript" src="app2/info/generic/info.generic.markup.js"></script>
+  <script type="text/javascript" src="app2/info/uploaded/info.uploaded.js"></script>
+  <script type="text/javascript" src="app2/info/uploaded/info.uploaded.markup.js"></script>
+  <script type="text/javascript" src="app2/info/asciidoc/info.asciidoc.js"></script>
+  <script type="text/javascript" src="app2/info/asciidoc/info.asciidoc.markup.js"></script>
+  <script type="text/javascript" src="app2/info/timeline/info.timeline.js"></script>
+  <script type="text/javascript" src="app2/info/timeline/info.timeline.markup.js"></script>
+  <script type="text/javascript" src="app2/info/video/info.video.js"></script>
+  <script type="text/javascript" src="app2/info/video/info.video.markup.js"></script>
+  <!-- filter/search modules are not present in this build -->
+
+</head>
+
+<body>
+
+  <span id="noscript"></span>
+
+  <div id="home" style="display:none"></div>
+
+  <div id="wuwei">
+
+    <!-- miniature navigator (optional, but referenced by code) -->
+    <div id="miniature" class="hidden">
+      <svg class="miniSvg">
+        <g class="miniCanvas"></g>
+        <text class="miniCursor"></text>
+        <text class="miniScale" x="2" y="12" font-family="Arial" font-size="12" fill="#dfdfdf"></text>
+      </svg>
+    </div>
+
+    <svg id="draw" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"></svg>
+    <div id="menu"></div>
+
+  </div>
+
+  <!-- The following placeholders prevent null dereference in menu/edit modules -->
+  <div id="login" class="w3-modal"></div>
+  <div id="newsletter" class="w3-modal"></div>
+  <div id="upload" class="w3-modal"></div>
+  <div id="note" class="w3-modal"></div>
+  <div id="page-list" class="w3-modal"></div>
+  <div id="page-pane" class="w3-modal"></div>
+
+  <div id="edit" class="w3-card" style="display: none;"></div>
+  <div id="info" class="w3-card" style="display: none;"></div>
+  <div id="search" class="w3-card" style="display: none;"></div>
+  <div id="filter" class="w3-card" style="display: none;"></div>
+
+  <div id="modal" class="w3-card" style="display: none;"></div>
+
+  <div id="snackbar"></div>
+
+  <div style="display: none;">
+    <span id="em" style="font-size: 1em; height: 1em;">0123456789abcdefghijklmnopqrstuvwxyz</span>
+    <textarea id="LFtextarea"></textarea>
+  </div>
+
+  <script type="text/javascript">
+    (async function () {
+      // If no query string is present, pass an empty string to initModule().
+      const param = (window.location && typeof window.location.search === 'string')
+        ? window.location.search.slice(1)
+        : '';
+      console.log(`WuWei(app2) Start. param:${param}`);
+
+      // always pass a string
+      await wuwei.initModule(param || '');
+
+      window.addEventListener('beforeunload', (event) => {
+        event.preventDefault();
+        event.returnValue = '';
+      });
+    })();
+  </script>
+
+</body>
+
+</html>
+<!-- Last modified 2026-04-05 -->

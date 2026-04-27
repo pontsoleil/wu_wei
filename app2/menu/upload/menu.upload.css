@@ -1,0 +1,18 @@
+#upload header {
+  background-image: linear-gradient(to bottom right,#efefef , #fcfdfe);
+}
+
+#upload header * {
+  color: #808080;
+}
+
+#progressbar {
+  width: 100%;
+  background: transparent;
+  height: 16px;
+}
+  
+#progressbar .bar {
+  height: 16px;
+  background-color: indigo;
+}

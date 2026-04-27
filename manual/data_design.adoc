@@ -1,0 +1,703 @@
+= WuWei データ設計
+:toc: left
+:toclevels: 3
+:sectnums:
+
+== 目的
+
+この文書は、`save-note` で保存されるファイル構造と、その中に格納されるデータ構造を定義する。
+
+実行時データモデルは `data_model.adoc` の新モデルを前提とする。
+旧モデル由来の属性は `wuwei.note` の読み込み変換でのみ扱い、保存時および通常実行時には使用しない。
+旧モデル属性が残っている場合、互換処理は行わずエラーとして停止する。
+
+== 保存領域の全体像
+
+WuWei は、Note、Resource、アップロード元ファイルを分けて保存する。
+
+[source,text]
+----
+data/
+  {user_uuid}/
+    upload/
+      yyyy/mm/dd/
+        {filename}
+    resource/
+      yyyy/mm/dd/
+        {resource_uuid}/
+          resource.json
+          thumbnail.png
+          thumbnail.jpg
+          preview.pdf
+    note/
+      yyyy/mm/dd/
+        {note_uuid}/
+          note.json
+          resource/
+            {resource_uuid}/
+              resource.json
+              original.*
+              thumbnail.*
+              preview.pdf
+----
+
+=== アップロード元ファイル
+
+アップロード元ファイルは、ユーザーがアップロードした実体ファイルを保持する領域である。
+
+[source,text]
+----
+data/{user_uuid}/upload/yyyy/mm/dd/{filename}
+----
+
+`resource.json` からは、`data/{user_uuid}/upload/` からの相対パスで参照する。
+
+[source,json]
+----
+{
+  "storage": {
+    "sourcePath": "yyyy/mm/dd/original.pdf",
+    "files": [
+      {
+        "role": "original",
+        "path": "yyyy/mm/dd/original.pdf",
+        "sourcePath": "C:/Apache24/htdocs/wu_wei2/data/{user_uuid}/upload/yyyy/mm/dd/original.pdf",
+        "mimeType": "application/pdf",
+        "sha256": "..."
+      }
+    ]
+  }
+}
+----
+
+同じ `yyyy/mm/dd/{filename}` に対してハッシュ値が異なるファイルがアップロードされた場合は、同一ファイルの更新とみなし、Resource を増やさない。
+
+=== Resource ライブラリ
+
+Resource ライブラリは、ユーザー単位で再利用可能な Resource の管理領域である。
+
+[source,text]
+----
+data/{user_uuid}/resource/yyyy/mm/dd/{resource_uuid}/
+  resource.json
+  thumbnail.*
+  preview.pdf
+----
+
+アップロード元ファイルの実体は Resource ライブラリには重複保存しない。
+Resource ライブラリは `resource.json` と派生ファイルを保持し、original は `storage.sourcePath` または `storage.files[].path` で upload 領域を参照する。
+
+=== Note
+
+Note は、ノート本文とページ、ノード、リンク、ノート内 Resource 参照を保持する。
+
+[source,text]
+----
+data/{user_uuid}/note/yyyy/mm/dd/{note_uuid}/note.json
+----
+
+Note を単体ファイルとして受け渡しても表示を再現できるように、Note 内には参照 Resource のメタデータをコピーして保持する。
+
+=== Note Resource スナップショット
+
+Note Resource スナップショットは、Note に紐づく Resource のスナップショット保存領域である。
+
+[source,text]
+----
+data/{user_uuid}/note/yyyy/mm/dd/{note_uuid}/resource/{resource_uuid}/
+  resource.json
+  original.*
+  thumbnail.*
+  preview.pdf
+----
+
+Note 配下の Resource スナップショットは、ノートごとに重複して持ってよい。
+これは、ノート単体の移動、共有、バックアップ時に再現性を優先するためである。
+
+外部 Web URL は原則として実体コピーしない。
+メタデータ、埋め込み情報、サムネイル URL など、再表示に必要な情報のみ保持する。
+
+== note.json の保存形式
+
+`save-note` が書き出す `note.json` は、保存メタデータと Note 本体を分けて保持する。
+
+[source,json]
+----
+{
+  "format_version": 2,
+  "id": "_note_uuid",
+  "user_id": "_user_uuid",
+  "name": "Note label",
+  "description": "Note description",
+  "thumbnail": "",
+  "saved_at": "2026-04-26T12:00:00Z",
+  "json_encoding": "base64",
+  "json_base64": "..."
+}
+----
+
+`json_base64` をデコードした Note 本体は、次の構造を持つ。
+`currentPage` には旧設計のページ番号ではなく、現在表示している Page の `_page_uuid` を保存する。
+`pages[]` は表示順に並ぶ Page 配列であり、各 Page の `id` に `_page_uuid` を保存する。
+ページ番号は保存 ID ではなく、`pages[]` の順序から算出する表示用番号である。
+ページの追加や削除により、同じ `_page_uuid` の Page でも表示上のページ番号は変わり得る。
+
+[source,json]
+----
+{
+  "note_id": "_note_uuid",
+  "note_name": "Note label",
+  "description": "Note description",
+  "currentPage": "_page_uuid",
+  "resources": [],
+  "pages": [],
+  "audit": {}
+}
+----
+
+=== resources[]
+
+`resources[]` は、Note 内で参照される Resource 定義のコピーである。
+
+既存 Resource を参照するだけの場合でも、Note 側には Resource 定義をコピーして保持する。
+ただし、自己アップロードファイルの実体は `storage.copyPolicy` に従って Note Resource スナップショットにコピーする。
+
+=== pages[]
+
+`pages[]` は Page 定義を表示順に並べた配列である。
+旧設計のページ番号や `pp` を Page ID として使わない。
+
+[source,json]
+----
+[
+  {
+    "id": "_page_uuid",
+    "label": "Page label",
+    "description": {
+      "format": "plain/text",
+      "body": ""
+    },
+    "nodes": {},
+    "links": {},
+    "groups": {}
+  }
+]
+----
+
+ページ番号は `pages[]` の index から 1 始まりで算出する。
+ページ一覧の表示や draw 上の表示では、この算出したページ番号を使用する。
+保存時に `pp` を持つ旧モデル構造や、ページ番号を Page ID として扱う構造が渡された場合はエラーにする。
+
+== Resource 定義
+
+Resource は、Content ノードから参照される外部または自己登録コンテンツを表す。
+
+[source,json]
+----
+{
+  "id": "_resource_uuid",
+  "schemaVersion": 1,
+  "origin": "uploaded",
+  "identity": {
+    "uri": "",
+    "canonicalUri": "upload://yyyy/mm/dd/original.pdf",
+    "title": "Document title"
+  },
+  "media": {
+    "kind": "document",
+    "mimeType": "application/pdf"
+  },
+  "viewer": {
+    "supportedModes": ["infoPane", "newTab", "newWindow", "download"],
+    "defaultMode": "infoPane",
+    "embed": {
+      "uri": "",
+      "html": ""
+    }
+  },
+  "storage": {
+    "managed": true,
+    "copyPolicy": "snapshot",
+    "sourcePath": "yyyy/mm/dd/original.pdf",
+    "primaryPath": "data/{user_uuid}/resource/yyyy/mm/dd/{resource_uuid}",
+    "snapshotPath": "data/{user_uuid}/note/yyyy/mm/dd/{note_uuid}/resource/{resource_uuid}",
+    "files": []
+  },
+  "rights": {
+    "owner": "",
+    "copyright": "",
+    "license": ""
+  },
+  "audit": {}
+}
+----
+
+=== 由来
+
+`origin` は Resource の由来を表す。
+
+[cols="1,3"]
+|===
+|値 |意味
+
+|`web`
+|他者の公開 Web 情報。Blog、YouTube、Vimeo、Entity site など。
+
+|`uploaded`
+|自己登録したアップロードファイル。PDF、Office、Text、Video、Audio、Photo など。
+
+|`generated`
+|WuWei 内で生成された派生 Resource。
+|===
+
+=== メディア種別
+
+`media.kind` は表示方法を決定する分類である。
+
+[cols="1,3"]
+|===
+|値 |例
+
+|`webpage`
+|通常の Web ページ。
+
+|`video`
+|YouTube、Vimeo、アップロード動画。
+
+|`audio`
+|アップロード音声。
+
+|`document`
+|PDF、Office、テキスト文書。
+
+|`image`
+|写真、画像。
+
+|`general`
+|特定のビューアを持たない一般 Resource。
+|===
+
+YouTube や Vimeo の URL は `webpage` ではなく `video` として扱う。
+
+=== コピー方針
+
+[cols="1,3"]
+|===
+|値 |意味
+
+|`metadataOnly`
+|実体をコピーしない。外部 Web URL で使用する。
+
+|`snapshot`
+|Note 保存時に Note Resource スナップショットへコピーする。自己アップロードファイルで使用する。
+|===
+
+=== 保存ファイル一覧
+
+`storage.files[]` は、Resource に関連する保存ファイルを列挙する。
+
+[source,json]
+----
+[
+  {
+    "role": "original",
+    "path": "yyyy/mm/dd/original.pdf",
+    "sourcePath": "C:/Apache24/htdocs/wu_wei2/data/{user_uuid}/upload/yyyy/mm/dd/original.pdf",
+    "mimeType": "application/pdf",
+    "size": 123456,
+    "sha256": "..."
+  },
+  {
+    "role": "thumbnail",
+    "path": "thumbnail.png",
+    "mimeType": "image/png",
+    "size": 12345,
+    "sha256": "..."
+  },
+  {
+    "role": "preview",
+    "path": "preview.pdf",
+    "mimeType": "application/pdf",
+    "size": 123456,
+    "sha256": "..."
+  }
+]
+----
+
+`role=original` の `path` は upload 領域からの相対パスである。
+`role=thumbnail` や `role=preview` は Resource directory からの相対パスである。
+
+== Content と Resource の関係
+
+Content ノードは Resource を直接展開して保持せず、`resourceRef` で参照する。
+Content ごとに異なる参照ページ、シート、時間範囲などを指定する場合は `resourceView` に保持する。
+
+[source,json]
+----
+{
+  "id": "_content_uuid",
+  "type": "Content",
+  "label": "XBRL GL Next",
+  "description": {
+    "format": "asciidoc",
+    "body": "== XBRL GL Next"
+  },
+  "resourceRef": "_resource_uuid",
+  "resourceView": {
+    "page": 7,
+    "sheet": "",
+    "time": {
+      "start": "",
+      "end": ""
+    },
+    "fragment": "",
+    "selector": ""
+  }
+}
+----
+
+同一 PDF や Office 文書を複数の Content から参照する場合、Resource は同じ `resource_uuid` を共有し、参照ページなどの違いは Content 側の `resourceView` に保持する。
+
+== Link 制御点の保存
+
+Link の `x`,`y` は第 1 制御点である。
+`HORIZONTAL2` と `VERTICAL2` は 2 点制御の Link 形状であるため、`x2`,`y2` を第 2 制御点として保存する。
+
+[source,json]
+----
+{
+  "id": "_link_uuid",
+  "type": "Link",
+  "from": "_source_node_uuid",
+  "to": "_target_node_uuid",
+  "shape": "HORIZONTAL2",
+  "x": 120,
+  "y": 80,
+  "x2": 240,
+  "y2": 160,
+  "visible": true
+}
+----
+
+`NORMAL`、`HORIZONTAL`、`VERTICAL` では `x2`,`y2` を使用しない。
+`NORMAL` はマウスとリンク線分の交点を一時的な編集点として扱う。
+
+== save-note の処理
+
+`save-note` は Note 保存時に Note 本体と Resource スナップショットを保存する。
+
+. 保存リクエストから Note JSON を受け取る。
+. `pages` と `resources` が配列であり、各 Page が `_page_uuid` の `id` を持つことを検証する。
+. Note 本体を `note.json` の `json_base64` に格納する。
+. `resources[]` を走査する。
+. `storage.copyPolicy=snapshot` の Resource は Note Resource スナップショットにファイルをコピーする。
+. `resource.json` を Note Resource スナップショットに書き出す。
+. `metadataOnly` の外部 Web Resource は実体コピーせず、Resource 定義のみ保存する。
+
+=== スナップショットコピー規則
+
+`save-note` は次の順にコピー元を決定する。
+
+. `storage.files[].sourcePath` がある場合はそれをコピー元にする。
+. `sourcePath` がない場合、`storage.primaryPath` と `storage.files[].path` からコピー元を解決する。
+. ローカル Resource URL を持つ `metadataOnly` Resource は、必要に応じて `snapshot` に昇格して保存する。
+
+== upload の処理
+
+Upload 系 CGI は、アップロードされたファイルから Resource を作成または再利用する。
+
+. ファイル実体を `data/{user_uuid}/upload/yyyy/mm/dd/{filename}` に保存する。
+. `sha256` を計算する。
+. 既存 Resource を検索する。
+. 同一 `storage.sourcePath` があれば、ハッシュ値が異なっても同じ Resource として更新する。
+. 同一 `sha256` があれば、別パスでも同じ Resource として再利用する。
+. 該当 Resource がなければ新規 `resource_uuid` を発行する。
+. `resource.json` と派生ファイルを Resource ライブラリに保存する。
+
+=== 重複判定
+
+[cols="1,1,3"]
+|===
+|sourcePath |sha256 |判定
+
+|同じ
+|同じ
+|同一 Resource。再利用する。
+
+|同じ
+|異なる
+|同一ファイルの更新。Resource を増やさず、既存 Resource を更新する。
+
+|異なる
+|同じ
+|同一実体。既存 Resource を再利用する。
+
+|異なる
+|異なる
+|別 Resource として新規作成する。
+|===
+
+== 外部 Web Resource の例
+
+Vimeo の例。
+
+[source,json]
+----
+{
+  "id": "_resource_uuid",
+  "origin": "web",
+  "identity": {
+    "uri": "https://vimeo.com/933802755",
+    "canonicalUri": "https://vimeo.com/933802755",
+    "title": "小栗判官（7段目・照手車引き）"
+  },
+  "media": {
+    "kind": "video",
+    "mimeType": "text/html"
+  },
+  "viewer": {
+    "supportedModes": ["infoPane", "newTab", "newWindow"],
+    "defaultMode": "infoPane",
+    "embed": {
+      "uri": "https://player.vimeo.com/video/933802755",
+      "html": ""
+    }
+  },
+  "storage": {
+    "managed": false,
+    "copyPolicy": "metadataOnly",
+    "sourcePath": "",
+    "primaryPath": "",
+    "snapshotPath": "",
+    "files": []
+  }
+}
+----
+
+== アップロード PDF Resource の例
+
+[source,json]
+----
+{
+  "id": "_resource_uuid",
+  "origin": "uploaded",
+  "identity": {
+    "uri": "upload://2026/04/26/sample.pdf",
+    "canonicalUri": "upload://2026/04/26/sample.pdf",
+    "title": "sample.pdf"
+  },
+  "media": {
+    "kind": "document",
+    "mimeType": "application/pdf"
+  },
+  "viewer": {
+    "supportedModes": ["infoPane", "newTab", "newWindow", "download"],
+    "defaultMode": "infoPane"
+  },
+  "storage": {
+    "managed": true,
+    "copyPolicy": "snapshot",
+    "sourcePath": "2026/04/26/sample.pdf",
+    "primaryPath": "data/{user_uuid}/resource/2026/04/26/{resource_uuid}",
+    "snapshotPath": "",
+    "files": [
+      {
+        "role": "original",
+        "path": "2026/04/26/sample.pdf",
+        "mimeType": "application/pdf",
+        "sha256": "..."
+      },
+      {
+        "role": "thumbnail",
+        "path": "thumbnail.png",
+        "mimeType": "image/png",
+        "sha256": "..."
+      },
+      {
+        "role": "preview",
+        "path": "preview.pdf",
+        "mimeType": "application/pdf",
+        "sha256": "..."
+      }
+    ]
+  }
+}
+----
+
+== Note スナップショット Resource の例
+
+Note 保存後、同じ Resource は Note 配下にも保存される。
+
+[source,text]
+----
+data/{user_uuid}/note/2026/04/26/{note_uuid}/resource/{resource_uuid}/
+  resource.json
+  original.pdf
+  thumbnail.png
+  preview.pdf
+----
+
+Note スナップショットの `resource.json` では、`storage.snapshotPath` に Note 配下の保存先を設定する。
+
+[source,json]
+----
+{
+  "storage": {
+    "primaryPath": "data/{user_uuid}/resource/2026/04/26/{resource_uuid}",
+    "snapshotPath": "data/{user_uuid}/note/2026/04/26/{note_uuid}/resource/{resource_uuid}",
+    "files": [
+      {
+        "role": "original",
+        "path": "original.pdf",
+        "mimeType": "application/pdf",
+        "sha256": "..."
+      }
+    ]
+  }
+}
+----
+
+== list-note / load-note の注意
+
+`list-note` は Note 一覧を作成するとき、`note.json` または旧版互換の Note ファイルのみを対象とする。
+Note Resource スナップショット配下の `resource.json` は Note 一覧に含めない。
+
+`load-note` は Note ファイルを解決して読み込む。
+Resource スナップショットは Note 本体の `resources[]` と Content の `resourceRef` から参照される。
+
+== 禁止事項
+
+次の旧モデル属性は、保存時および通常実行時に使用しない。
+
+* `node.name`
+* `node.media`
+* `node.url`
+* `node.uri`
+* `node.format`
+* `node.content`
+* `nFont_size`
+* `nFont_color`
+* `background`
+
+必要な情報は、新モデルの次の階層に保存する。
+
+* `node.label`
+* `node.description.format`
+* `node.description.body`
+* `node.resourceRef`
+* `node.resourceView`
+* `resource.media.kind`
+* `resource.media.mimeType`
+* `resource.storage`
+* `node.style.fill`
+* `node.style.font.size`
+* `node.style.font.color`
+
+== 2026-04-27 補足: save-note と Resource URI 保護
+
+この章は、`save-note`、`update-resource`、`list-resource`、`load-note` の現行保存・読込仕様を補足する。
+
+=== CGI 実装方針
+
+ローカル環境では `cgi-bin/*.py` を使用する。
+Linux サーバー環境では `server/*.cgi` を shell script として実装する。
+PHP スクリプトは新規機能の実行経路に使用しない。
+特に info ペインの Web preview では `server/proxy.php` を使用せず、Resource の URI を直接 iframe に設定する。
+
+=== Note 保存時の Resource 保存
+
+`save-note` は Note 本体を保存するとき、Note 内の `resources[]` を確認し、Resource ライブラリと Note snapshot の双方を更新する。
+
+[source,text]
+----
+data/{user_uuid}/note/yyyy/mm/dd/{note_uuid}/note.json
+data/{user_uuid}/note/yyyy/mm/dd/{note_uuid}/resource/{resource_uuid}/resource.json
+
+data/{user_uuid}/resource/yyyy/mm/dd/{resource_uuid}/resource.json
+data/{user_uuid}/resource/yyyy/mm/dd/{resource_uuid}/original.pdf
+data/{user_uuid}/resource/yyyy/mm/dd/{resource_uuid}/thumbnail.png
+data/{user_uuid}/resource/yyyy/mm/dd/{resource_uuid}/preview.pdf
+----
+
+外部 Web URL は原則として実体をコピーしない。
+`storage.copyPolicy = "metadataOnly"` とし、Resource metadata、埋め込み URL、thumbnail URL、権利情報などを保持する。
+
+自己アップロードファイルは `storage.copyPolicy = "snapshot"` とし、Resource ライブラリ側と Note snapshot 側に必要なファイルを保持できるようにする。
+upload 済みファイルの実体は `data/{user_uuid}/upload/yyyy/mm/dd/` にあるため、Resource 定義では `storage.sourcePath` または `storage.files[].sourcePath` で参照する。
+
+=== Resource の同一判定
+
+Resource ライブラリでは、異なる Note で同じ Resource を参照する場合に重複保存しない。
+同一判定は次の優先順位で行う。
+
+[source,text]
+----
+resource.identity.canonicalUri
+resource.identity.uri
+resource.storage.sourcePath
+----
+
+upload ファイルでは、`yyyy/mm/dd/filename` が同じであれば、sha256 が異なっても同じファイルの更新とみなす。
+これは同一日の同一ファイル名を再アップロードした場合に、不要な Resource 増加を避けるためである。
+
+Note snapshot 配下では、同じ Resource であっても Note ごとにコピーを持ってよい。
+Note 単体をファイルとして受け渡しても再現可能にするためである。
+
+=== 空 URI による上書き禁止
+
+既存 Resource に URI が定義されている場合、Note 保存または Resource 更新で渡された Resource 定義の URI が空であっても、既存の URI を空で上書きしてはならない。
+
+保護対象は次の項目である。
+
+[source,text]
+----
+resource.identity.uri
+resource.identity.canonicalUri
+resource.viewer.embed.uri
+resource.snapshotSources.previewUri
+resource.snapshotSources.originalUri
+resource.snapshotSources.thumbnailUri
+----
+
+これは、編集ペインや Note 保存時に Resource metadata の一部だけが送られた場合でも、既存の Web URL、preview URL、埋め込み URLを失わないようにするためである。
+
+=== 読込時の Resource 復元
+
+`load-note` が返す Note JSON では、Content ノードは `resourceRef` のみを保持する。
+`wuwei.note` は Note 読込時に `resources[]` を `id` で索引化し、各 Content ノードの `resourceRef` に対応する Resource を実行時用 `node.resource` として復元する。
+
+復元された `node.resource` は実行時専用であり、保存時の Note JSON には残さない。
+実行時の URL 解決は次の順序で行う。
+
+[source,text]
+----
+resource.identity.uri
+resource.viewer.embed.uri
+resource.snapshotSources.previewUri
+resource.identity.canonicalUri
+resource.snapshotSources.originalUri
+----
+
+=== info ペイン表示
+
+info ペインは Resource の種類に応じて次のように表示する。
+
+[cols="1,3"]
+|===
+|Resource 種別 |表示
+
+|`media.kind = "webpage"`
+|URI を iframe に直接設定する。表示拒否時は URL と拒否メッセージを表示する。
+
+|`media.kind = "video"`
+|YouTube / Vimeo は `viewer.embed.uri` を iframe に設定する。HTML5 video ファイルは video 要素で表示する。
+
+|`media.kind = "document"`
+|preview PDF があれば preview を表示する。Office 文書は preview PDF または外部 viewer を利用する。
+
+|`media.kind = "image"`
+|thumbnail または original image を表示する。
+|===
+
+iframe 表示は対象サイトの方針に依存する。
+WuWei 側は iframe 拒否をエラー停止にせず、代替リンクを表示する。

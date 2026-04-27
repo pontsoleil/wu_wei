@@ -1,0 +1,55 @@
+#edit {
+  height: 100%;
+}
+
+#edit-generic {
+  padding: 8px;
+}
+
+#edit-generic .edit {
+  margin-top: 50px;
+}
+
+#edit-generic .edit .frame img {
+  width: 100%;
+  height: auto;
+}
+
+textarea#labelField,
+textarea#descriptionBodyField {
+  min-height: 2em;
+  max-height: 50vh;
+  width: 100%;
+}
+
+.style-font-align {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin: 6px 0 10px 0;
+}
+
+.style-font-align .align-icon {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  width: 28px;
+  height: 28px;
+  color: #505050;
+  padding: 4px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.style-font-align .align-icon.checked {
+  color: #fefefe !important;
+  background: #505050;
+}
+
+.style-font-align .align-icon:hover {
+  color: #efefef;
+  background: #808080;
+}

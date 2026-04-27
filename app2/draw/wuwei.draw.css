@@ -1,0 +1,75 @@
+g.axis {
+  stroke: #eaf7f8;
+  stroke-width: 1;
+  fill: none;
+}
+g.axis text {
+  stroke: none;
+  fill: #eaf3f4;
+}
+/*#wuwei {
+  display: flex;
+}*/
+#miniature {
+  position: fixed;
+  top: 22.5rem;
+  right: 0.3rem;
+  width: 200px;
+  height: 200px;
+  background: #a0a0a0;
+  border: solid 1px #e0e0e0;
+  box-shadow: 0.3em 0.3em 0.5em rgba(0, 0, 0, 0.3);
+  -webkit-box-shadow: 0.3em 0.3em 0.5em rgba(0, 0, 0, 0.3);
+     -moz-box-shadow: 0.3em 0.3em 0.5em rgba(0, 0, 0, 0.3);
+      -ms-box-shadow: 0.3em 0.3em 0.5em rgba(0, 0, 0, 0.3);
+   -webkit-transform: translateY(-20rem);
+           transform: translateY(-20rem);
+  -webkit-transition: all 1s ease-out;
+          transition: all 1s ease-out;
+  z-index: 5;
+}
+#miniature.hidden {
+  top: 0rem;
+  -webkit-transform: translateY(-20em);
+          transform: translateY(-20em);
+  -webkit-transition: all 1s ease-out;
+          transition: all 1s ease-out;
+}
+#miniature svg {
+  position: absolute;
+  background: #f8f9fa;
+  width: 200px;
+  height: 200px;
+  z-index: 6;
+}
+#miniature text#miniCursor {
+  font-size: 20px;
+  font-family: "Font Awesome 5 Free";
+  text-anchor: middle;
+  cursor: none;
+  z-index: 7;  
+}
+/*.ContextMenu {
+  font-family: "Font Awesome 5 Free";
+  -webkit-font-smoothing: antialiased;
+  display: inline-block;
+  font-style: normal;
+  font-variant: normal;
+  text-rendering: auto;
+  line-height: 1;
+}
+#MenuCMND {
+  content: "\f013";
+}
+#MenuINFO {
+  content: "\f05a";
+}
+#MenuEDIT{
+  content: "\f044";
+}
+#MenuSEL {
+  content: "\f046";
+}
+#MenuPIN {
+  content: "\f08d";
+}*/

@@ -1,0 +1,62 @@
+{
+  "_args": [
+    [
+      "kld-affine@2.0.0",
+      "/Users/pontsoleil/Doc/Projects/WuWei"
+    ]
+  ],
+  "_from": "kld-affine@2.0.0",
+  "_id": "kld-affine@2.0.0",
+  "_inBundle": false,
+  "_integrity": "sha1-o/OpbQjesXakVhxMVSsg1xiiU8c=",
+  "_location": "/kld-affine",
+  "_phantomChildren": {},
+  "_requested": {
+    "type": "version",
+    "registry": true,
+    "raw": "kld-affine@2.0.0",
+    "name": "kld-affine",
+    "escapedName": "kld-affine",
+    "rawSpec": "2.0.0",
+    "saveSpec": null,
+    "fetchSpec": "2.0.0"
+  },
+  "_requiredBy": [
+    "/svg-intersections"
+  ],
+  "_resolved": "https://registry.npmjs.org/kld-affine/-/kld-affine-2.0.0.tgz",
+  "_spec": "2.0.0",
+  "_where": "/Users/pontsoleil/Doc/Projects/WuWei",
+  "author": {
+    "name": "Kevin Lindsey",
+    "email": "kevin@kevlindev.com"
+  },
+  "bugs": {
+    "url": "https://github.com/thelonious/kld-affine/issues"
+  },
+  "description": "A collection of classes used in affine geometry",
+  "devDependencies": {
+    "expresso": "0.9.2"
+  },
+  "engines": {
+    "node": ">= 0.10.4"
+  },
+  "homepage": "https://github.com/thelonious/kld-affine#readme",
+  "keywords": [
+    "affine",
+    "point",
+    "vector",
+    "matrix"
+  ],
+  "license": "BSD",
+  "main": "index.js",
+  "name": "kld-affine",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/thelonious/kld-affine.git"
+  },
+  "scripts": {
+    "test": "expresso"
+  },
+  "version": "2.0.0"
+}

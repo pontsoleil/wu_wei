@@ -1,0 +1,215 @@
+#note header {
+  background-image: linear-gradient(to bottom right,#efefef , #fcfdfe);
+}
+#note header * {
+  color: #808080;
+}
+#note .fa-times,
+#page .fa-times {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+#note header .search-text {
+  position: absolute;
+  top: 46px;
+  left: 16px;
+}
+#note header .pagination {
+  position: absolute;
+  text-align: right;
+  top: 32px;
+  right: 8px;
+          box-shadow: none;
+  -webkit-box-shadow: none;
+     -moz-box-shadow: none;
+      -ms-box-shadow: none;
+}
+#note header .ajax_result {
+  position: absolute;
+  text-align: right;
+  top: 40px;
+  right: 8px;
+}
+
+/** save */
+#note .save {
+  width: 400px;
+}
+#note .save .thumbnail {
+  width: 200px;
+  height: 200px;
+  margin-bottom: 8px;
+}
+/** list */
+#note .list,
+#page .list {
+  width: 98%;
+}
+#note .list .pagination div.active,
+#note .list .pagination div.active a {
+  background-color: dodgerblue;
+  color: white;
+}
+#note .list .pagination i:hover,
+#note .list .pagination div:hover:not(.active) {
+  background-color: #ddd;
+}
+
+#gallery {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-evenly; /*flex-start | flex-end | center | space-between | space-around */
+  padding-bottom: 32px;
+  background: #fafafa;
+}
+#gallery .thumbnail {
+  background: #efefef;
+}
+#note .note,
+#page .page {
+  background: transparent;
+  width: 200px;
+  margin: 8px;
+  padding: 0px;
+}
+#note .iOS .note,
+#page .iOS .page {
+  width: 100px;
+}
+/* #note .note:hover {
+        box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+-webkit-box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+   -moz-box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+    -ms-box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+} */
+/* #note svg {
+  position: absolute;
+  background: #f8f9fa;
+  top: 0;
+  left: 0;
+} */
+.save svg {
+  position: absolute;
+  width: 200px;
+  height: 200px;
+  background: #f8f9fa;
+  top: 70px !important;
+  left: 96px !important;
+}
+#note .desc div {
+  width: 200px;
+  height: auto;
+  padding: 4px;
+  margin: 0;
+  text-align: left;
+}
+#note .desc div.name {
+  padding: 4px;
+  margin: 6px;
+  text-align: center;
+}
+
+.note .flip-card,
+.page .flip-card {
+  background-color: transparent;
+  width: 200px;
+  height: 200px;
+  perspective: 1000px;
+}
+.iOS .note .flip-card,
+.iOS .page .flip-card {
+  background-color: transparent;
+  width: 100px;
+  height: 100px;
+}
+.note .flip-card .thumbnail,
+.page .flip-card .thumbnail {
+  width: 200px;
+  height: 200px;
+}
+.iOS .note .flip-card .thumbnail,
+.iOS .page .flip-card .thumbnail  {
+  width: 100px;
+  height: 100px;
+}
+.note .flip-card .thumbnail svg,
+.page .flip-card .thumbnail svg {
+  width: 200px;
+  height: 200px;
+}
+.iOS .note .flip-card .thumbnail svg,
+.iOS .page .flip-card .thumbnail svg {
+  width: 100px;
+  height: 100px;
+  background-color: #ffffff;
+}
+.flip-card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  text-align: center;
+  transition: transform 0.6s;
+  transform-style: preserve-3d;
+  box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2);
+}
+
+.flip-card:hover .flip-card-inner {
+  transform: rotateY(180deg);
+}
+
+.flip-card-front, .flip-card-back {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  backface-visibility: hidden;
+-webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+-webkit-transition: 0.6s;
+  transition: 0.6s;
+-webkit-transform-style: preserve-3d;
+  transform-style: preserve-3d;
+}
+
+.flip-card-front {
+  background-color: #bbb;
+  color: black;
+  -webkit-transform: rotateY(0deg);
+  transform: rotateY(0deg);
+  z-index: 2;
+}
+
+.flip-card-back {
+  background-color: #4c5052;
+  color: white;
+  -webkit-transform: rotateY(-180deg);
+  transform: rotateY(-180deg);
+  z-index: 1;
+}
+
+#note .flip-card-back .load {
+  position: absolute;
+  display: inline-block;
+  top: 0px;
+  left: 0px;
+  padding: 8px;
+}
+#note .flip-card-back .remove {
+  position: absolute;
+  display: inline-block;
+  bottom: 0px;
+  right: 0px;
+  padding: 8px;
+}
+#note .note .flip-card-back .desc p {
+  margin: 0.2rem 0.5rem!important;
+}
+#note .note .flip-card-back .desc p.datetime {
+  font-size: smaller;
+}
+#note .note .flip-card-back .desc p.description {
+  font-size: small;
+  text-align: start;
+}

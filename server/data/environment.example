@@ -1,0 +1,10 @@
+# Linux server environment example
+note /var/www/wu_wei2/data/*/note
+resource /var/www/wu_wei2/data/*/resource
+trash /var/www/wu_wei2/data/*/trash
+upload /var/www/wu_wei2/data/*/upload
+thumbnail /var/www/wu_wei2/data/*/thumbnail
+public /var/www/wu_wei2/public/note
+base /var/www/wu_wei2/data
+file /var/www/wu_wei2/data/*/content
+

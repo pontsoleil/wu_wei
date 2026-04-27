@@ -1,0 +1,11 @@
+# C:/Apache24/htdocs/wu_wei2/cgi-bin environment example
+note C:/Apache24/htdocs/wu_wei2/data/*/note
+resource C:/Apache24/htdocs/wu_wei2/data/*/resource
+trash C:/Apache24/htdocs/wu_wei2/data/*/trash
+upload C:/Apache24/htdocs/wu_wei2/data/*/upload
+thumbnail C:/Apache24/htdocs/wu_wei2/data/*/thumbnail
+user C:/Apache24/htdocs/wu_wei2/cgi-bin
+public C:/Apache24/htdocs/wu_wei2/public/note
+base C:/Apache24/htdocs/wu_wei2/data
+file C:/Apache24/htdocs/wu_wei2/data/*/content
+

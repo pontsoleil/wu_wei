@@ -1,0 +1,56 @@
+.ww-topmenu-timeline {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+}
+
+.ww-topmenu-button {
+  border: 1px solid #aaa;
+  background: #fafafa;
+  color: #333;
+  padding: 4px 10px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.ww-topmenu-button:hover {
+  background: #f0f0f0;
+}
+
+.ww-topmenu-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 220px;
+  z-index: 9000;
+  background: #fff;
+  border: 1px solid #c8c8c8;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+  padding: 6px 0;
+}
+
+.ww-topmenu-dropdown.is-hidden {
+  display: none;
+}
+
+.ww-timeline-action {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: #333;
+  text-align: left;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.ww-timeline-action:hover {
+  background: #eef6ff;
+}
+
+.ww-timeline-separator {
+  border: none;
+  border-top: 1px solid #e0e0e0;
+  margin: 4px 0;
+}

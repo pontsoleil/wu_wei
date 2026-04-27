@@ -1,0 +1,27 @@
+#info-generic {
+  padding: 8px;
+}
+
+.info-generic-card {
+  width: 100%;
+}
+
+.info-generic-card .info-title-wrap {
+  margin-bottom: 8px;
+}
+
+.info-generic-card .info-title {
+  white-space: pre-line;
+  word-break: break-word;
+  margin: 0;
+}
+
+.info-generic-card .value {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+}
+
+.info-generic-card iframe {
+  background: #ffffff;
+}

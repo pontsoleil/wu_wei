@@ -1,0 +1,191 @@
+#page-pane header,
+#page-list header  {
+  background-image: linear-gradient(to bottom right,#efefef , #fcfdfe);
+}
+#page-pane header * {
+  color: #808080;
+}
+#page-pane .page-name {
+  width: 500px;
+  height: 260px;
+}
+#page-pane .w3-row {
+  padding: 4px;
+}
+#page-list header .dismiss {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+#page-list header .page-add-button {
+  position: absolute;
+  top: 44px;
+  right: 18px;
+  color: #666;
+}
+#page-list header .page-add-button span {
+  margin-left: 0.25rem;
+  font-size: 0.95rem;
+}
+#page-list header .page-list-guidance {
+  color: #666;
+  margin: -8px 0 12px 0;
+  font-size: 0.95rem;
+}
+#page-list .desc div {
+  width: 160px;
+  height: auto;
+  padding: 4px;
+  margin: 0;
+  text-align: left;
+}
+#page-list .desc div.name {
+  padding: 4px;
+  margin: 6px;
+  text-align: center;
+}
+#page-list #gallery {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-evenly;
+  padding-bottom: 32px;
+  background: #fafafa;
+}
+#page-list #gallery .page {
+  display: flex;
+}
+#page-list #gallery .page .flip-card {
+  display: flex;
+  width: 200px;
+  height: 200px;
+  background-color: transparent;
+}
+#page-list #gallery.iOS .page .flip-card {
+  width: 100px;
+  height: 100px;
+  background-color: transparent;
+}
+#page-list #gallery .page .flip-card .pp {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 8px;
+}
+#page-list #gallery .page .flip-card .name {
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 8px;
+}
+#page-list #gallery .page .flip-card .description {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 24px 8px 10px 8px;
+}
+#page-list #gallery .page .flip-card .thumbnail {
+  width: 200px;
+  height: 200px;
+}
+#page-list #gallery.iOS .page .flip-card .thumbnail  {
+  width: 100px;
+  height: 100px;
+}
+#page-list .page .flip-card .thumbnail svg {
+  width: 200px;
+  height: 200px;
+}
+#page-list #gallery.iOS  .page .flip-card .thumbnail svg {
+  width: 100px;
+  height: 100px;
+  background-color: #ffffff;
+}
+.flip-card-inner {
+  position: relative;
+  text-align: center;
+  transition: transform 0.6s;
+  transform-style: preserve-3d;
+  box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2);
+}
+.flip-card:hover .flip-card-inner {
+  transform: rotateY(180deg);
+}
+.flip-card-front,
+.flip-card-back {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+        backface-visibility: hidden;
+-webkit-backface-visibility: hidden;
+        backface-visibility: hidden;
+         -webkit-transition: 0.6s;
+                 transition: 0.6s;
+    -webkit-transform-style: preserve-3d;
+            transform-style: preserve-3d;
+}
+.flip-card-front {
+  background-color: #bbb;
+  color: black;
+  -webkit-transform: rotateY(0deg);
+  transform: rotateY(0deg);
+  z-index: 2;
+}
+.flip-card-back {
+  background-color: #4c5052;
+  color: white;
+  -webkit-transform: rotateY(-180deg);
+  transform: rotateY(-180deg);
+  z-index: 1;
+}
+#page-list .flip-card-back .load {
+  position: absolute;
+  display: inline-block;
+  top: 0px;
+  left: 0px;
+  padding: 8px;
+}
+#page-list .flip-card-back .edit {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+}
+#page-list .flip-card-back .copy {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+#page-list .flip-card-back .remove {
+  position: absolute;
+  display: inline-block;
+  bottom: 0px;
+  right: 0px;
+  padding: 8px;
+}
+
+#page-list #gallery .page .flip-card.name .flip-card-front,
+#page-list #gallery .page .flip-card.copy .flip-card-front {
+  outline: 3px solid rgba(135, 206, 235, 0.85);
+  outline-offset: -3px;
+}
+
+.page.empty-slot{
+  width: 216px;
+  height: 216px;
+  margin: 0 18px 18px 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  pointer-events: none;
+}
+
+.page.empty-slot *{
+  display: none !important;
+}
+
+#gallery.iOS .page.empty-slot{
+  width: 108px;
+  height: 108px;
+}

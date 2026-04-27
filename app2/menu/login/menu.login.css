@@ -1,0 +1,7 @@
+#login header {
+  background-image: linear-gradient(to bottom right,#efefef , #fcfdfe);
+}
+
+#login header * {
+  color: #808080;
+}

@@ -1,0 +1,101 @@
+#info-asciidoc {
+  display: none;
+  margin-top: 0px;
+  padding: 0;
+}
+
+#info-asciidoc,
+#info-asciidoc * {
+  -webkit-touch-callout: default;
+  -webkit-user-select: text;
+  -khtml-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+}
+
+#info-asciidoc .info-asciidoc {
+  padding: 0 0 12px;
+}
+
+#info-asciidoc .info-asciidoc-title-row {
+  margin-bottom: 4px;
+}
+
+#info-asciidoc .info-asciidoc-title {
+  margin: 0;
+  color: #444;
+  font-weight: 600;
+}
+
+#info-asciidoc .info-asciidoc-body {
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+#info-asciidoc .info-asciidoc-body h1,
+#info-asciidoc .info-asciidoc-body h2,
+#info-asciidoc .info-asciidoc-body h3,
+#info-asciidoc .info-asciidoc-body h4,
+#info-asciidoc .info-asciidoc-body h5,
+#info-asciidoc .info-asciidoc-body h6 {
+  margin: 0.7rem 0 0.45rem;
+  line-height: 1.3;
+}
+
+#info-asciidoc .info-asciidoc-body p,
+#info-asciidoc .info-asciidoc-body ul,
+#info-asciidoc .info-asciidoc-body ol,
+#info-asciidoc .info-asciidoc-body dl,
+#info-asciidoc .info-asciidoc-body blockquote,
+#info-asciidoc .info-asciidoc-body table,
+#info-asciidoc .info-asciidoc-body pre,
+#info-asciidoc .info-asciidoc-body .listingblock {
+  margin: 0.5rem 0;
+}
+
+#info-asciidoc .info-asciidoc-body ul,
+#info-asciidoc .info-asciidoc-body ol {
+  padding-left: 1.4rem;
+}
+
+#info-asciidoc .info-asciidoc-body li + li {
+  margin-top: 0.2rem;
+}
+
+#info-asciidoc .info-asciidoc-body pre,
+#info-asciidoc .info-asciidoc-body code {
+  font-family: Consolas, Monaco, 'Courier New', monospace;
+}
+
+#info-asciidoc .info-asciidoc-body pre {
+  white-space: pre-wrap;
+  overflow-x: auto;
+  padding: 6px 8px;
+  background: #f6f8fa;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+#info-asciidoc .info-asciidoc-body table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+#info-asciidoc .info-asciidoc-body th,
+#info-asciidoc .info-asciidoc-body td {
+  border: 1px solid #cfcfcf;
+  padding: 4px 6px;
+  vertical-align: top;
+}
+
+#info-asciidoc .info-asciidoc-body img {
+  max-width: 100%;
+  height: auto;
+}
+
+#info-asciidoc .info-asciidoc-body a {
+  text-decoration: underline;
+}
+

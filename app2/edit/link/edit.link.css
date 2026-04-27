@@ -1,0 +1,10 @@
+#edit-link {
+  padding: 8px;
+}
+#edit-link .edit {
+  margin-top: 50px;
+}
+#edit-link .edit .frame img {
+  width: 100%;
+  height: auto;
+}

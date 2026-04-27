@@ -1,0 +1,1034 @@
+<div id="header">
+<h1>WuWei データ設計</h1>
+</div>
+<div id="content">
+<div class="sect1">
+<h2 id="_目的">1. 目的</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>この文書は、<code>save-note</code> で保存されるファイル構造と、その中に格納されるデータ構造を定義する。</p>
+</div>
+<div class="paragraph">
+<p>実行時データモデルは <code>data_model.adoc</code> の新モデルを前提とする。
+旧モデル由来の属性は <code>wuwei.note</code> の読み込み変換でのみ扱い、保存時および通常実行時には使用しない。
+旧モデル属性が残っている場合、互換処理は行わずエラーとして停止する。</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_保存領域の全体像">2. 保存領域の全体像</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>WuWei は、Note、Resource、アップロード元ファイルを分けて保存する。</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-text" data-lang="text">data/
+  {user_uuid}/
+    upload/
+      yyyy/mm/dd/
+        {filename}
+    resource/
+      yyyy/mm/dd/
+        {resource_uuid}/
+          resource.json
+          thumbnail.png
+          thumbnail.jpg
+          preview.pdf
+    note/
+      yyyy/mm/dd/
+        {note_uuid}/
+          note.json
+          resource/
+            {resource_uuid}/
+              resource.json
+              original.*
+              thumbnail.*
+              preview.pdf</code></pre>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_アップロード元ファイル">2.1. アップロード元ファイル</h3>
+<div class="paragraph">
+<p>アップロード元ファイルは、ユーザーがアップロードした実体ファイルを保持する領域である。</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-text" data-lang="text">data/{user_uuid}/upload/yyyy/mm/dd/{filename}</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p><code>resource.json</code> からは、<code>data/{user_uuid}/upload/</code> からの相対パスで参照する。</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-json" data-lang="json">{
+  "storage": {
+    "sourcePath": "yyyy/mm/dd/original.pdf",
+    "files": [
+      {
+        "role": "original",
+        "path": "yyyy/mm/dd/original.pdf",
+        "sourcePath": "C:/Apache24/htdocs/wu_wei2/data/{user_uuid}/upload/yyyy/mm/dd/original.pdf",
+        "mimeType": "application/pdf",
+        "sha256": "..."
+      }
+    ]
+  }
+}</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>同じ <code>yyyy/mm/dd/{filename}</code> に対してハッシュ値が異なるファイルがアップロードされた場合は、同一ファイルの更新とみなし、Resource を増やさない。</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_resource_ライブラリ">2.2. Resource ライブラリ</h3>
+<div class="paragraph">
+<p>Resource ライブラリは、ユーザー単位で再利用可能な Resource の管理領域である。</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-text" data-lang="text">data/{user_uuid}/resource/yyyy/mm/dd/{resource_uuid}/
+  resource.json
+  thumbnail.*
+  preview.pdf</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>アップロード元ファイルの実体は Resource ライブラリには重複保存しない。
+Resource ライブラリは <code>resource.json</code> と派生ファイルを保持し、original は <code>storage.sourcePath</code> または <code>storage.files[].path</code> で upload 領域を参照する。</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_note">2.3. Note</h3>
+<div class="paragraph">
+<p>Note は、ノート本文とページ、ノード、リンク、ノート内 Resource 参照を保持する。</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-text" data-lang="text">data/{user_uuid}/note/yyyy/mm/dd/{note_uuid}/note.json</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Note を単体ファイルとして受け渡しても表示を再現できるように、Note 内には参照 Resource のメタデータをコピーして保持する。</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_note_resource_スナップショット">2.4. Note Resource スナップショット</h3>
+<div class="paragraph">
+<p>Note Resource スナップショットは、Note に紐づく Resource のスナップショット保存領域である。</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-text" data-lang="text">data/{user_uuid}/note/yyyy/mm/dd/{note_uuid}/resource/{resource_uuid}/
+  resource.json
+  original.*
+  thumbnail.*
+  preview.pdf</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Note 配下の Resource スナップショットは、ノートごとに重複して持ってよい。
+これは、ノート単体の移動、共有、バックアップ時に再現性を優先するためである。</p>
+</div>
+<div class="paragraph">
+<p>外部 Web URL は原則として実体コピーしない。
+メタデータ、埋め込み情報、サムネイル URL など、再表示に必要な情報のみ保持する。</p>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_note_json_の保存形式">3. note.json の保存形式</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p><code>save-note</code> が書き出す <code>note.json</code> は、保存メタデータと Note 本体を分けて保持する。</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-json" data-lang="json">{
+  "format_version": 2,
+  "id": "_note_uuid",
+  "user_id": "_user_uuid",
+  "name": "Note label",
+  "description": "Note description",
+  "thumbnail": "",
+  "saved_at": "2026-04-26T12:00:00Z",
+  "json_encoding": "base64",
+  "json_base64": "..."
+}</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p><code>json_base64</code> をデコードした Note 本体は、次の構造を持つ。
+<code>currentPage</code> には旧設計のページ番号ではなく、現在表示している Page の <code>_page_uuid</code> を保存する。
+<code>pages[]</code> は表示順に並ぶ Page 配列であり、各 Page の <code>id</code> に <code>_page_uuid</code> を保存する。
+ページ番号は保存 ID ではなく、<code>pages[]</code> の順序から算出する表示用番号である。
+ページの追加や削除により、同じ <code>_page_uuid</code> の Page でも表示上のページ番号は変わり得る。</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-json" data-lang="json">{
+  "note_id": "_note_uuid",
+  "note_name": "Note label",
+  "description": "Note description",
+  "currentPage": "_page_uuid",
+  "resources": [],
+  "pages": [],
+  "audit": {}
+}</code></pre>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_resources">3.1. resources[]</h3>
+<div class="paragraph">
+<p><code>resources[]</code> は、Note 内で参照される Resource 定義のコピーである。</p>
+</div>
+<div class="paragraph">
+<p>既存 Resource を参照するだけの場合でも、Note 側には Resource 定義をコピーして保持する。
+ただし、自己アップロードファイルの実体は <code>storage.copyPolicy</code> に従って Note Resource スナップショットにコピーする。</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_pages">3.2. pages[]</h3>
+<div class="paragraph">
+<p><code>pages[]</code> は Page 定義を表示順に並べた配列である。
+旧設計のページ番号や <code>pp</code> を Page ID として使わない。</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-json" data-lang="json">[
+  {
+    "id": "_page_uuid",
+    "label": "Page label",
+    "description": {
+      "format": "plain/text",
+      "body": ""
+    },
+    "nodes": {},
+    "links": {},
+    "groups": {}
+  }
+]</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>ページ番号は <code>pages[]</code> の index から 1 始まりで算出する。
+ページ一覧の表示や draw 上の表示では、この算出したページ番号を使用する。
+保存時に <code>pp</code> を持つ旧モデル構造や、ページ番号を Page ID として扱う構造が渡された場合はエラーにする。</p>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_resource_定義">4. Resource 定義</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Resource は、Content ノードから参照される外部または自己登録コンテンツを表す。</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-json" data-lang="json">{
+  "id": "_resource_uuid",
+  "schemaVersion": 1,
+  "origin": "uploaded",
+  "identity": {
+    "uri": "",
+    "canonicalUri": "upload://yyyy/mm/dd/original.pdf",
+    "title": "Document title"
+  },
+  "media": {
+    "kind": "document",
+    "mimeType": "application/pdf"
+  },
+  "viewer": {
+    "supportedModes": ["infoPane", "newTab", "newWindow", "download"],
+    "defaultMode": "infoPane",
+    "embed": {
+      "uri": "",
+      "html": ""
+    }
+  },
+  "storage": {
+    "managed": true,
+    "copyPolicy": "snapshot",
+    "sourcePath": "yyyy/mm/dd/original.pdf",
+    "primaryPath": "data/{user_uuid}/resource/yyyy/mm/dd/{resource_uuid}",
+    "snapshotPath": "data/{user_uuid}/note/yyyy/mm/dd/{note_uuid}/resource/{resource_uuid}",
+    "files": []
+  },
+  "rights": {
+    "owner": "",
+    "copyright": "",
+    "license": ""
+  },
+  "audit": {}
+}</code></pre>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_由来">4.1. 由来</h3>
+<div class="paragraph">
+<p><code>origin</code> は Resource の由来を表す。</p>
+</div>
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 25%;">
+<col style="width: 75%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">値</th>
+<th class="tableblock halign-left valign-top">意味</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>web</code></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">他者の公開 Web 情報。Blog、YouTube、Vimeo、Entity site など。</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>uploaded</code></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">自己登録したアップロードファイル。PDF、Office、Text、Video、Audio、Photo など。</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>generated</code></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">WuWei 内で生成された派生 Resource。</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="sect2">
+<h3 id="_メディア種別">4.2. メディア種別</h3>
+<div class="paragraph">
+<p><code>media.kind</code> は表示方法を決定する分類である。</p>
+</div>
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 25%;">
+<col style="width: 75%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">値</th>
+<th class="tableblock halign-left valign-top">例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>webpage</code></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">通常の Web ページ。</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>video</code></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">YouTube、Vimeo、アップロード動画。</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>audio</code></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">アップロード音声。</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>document</code></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">PDF、Office、テキスト文書。</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>image</code></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">写真、画像。</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>general</code></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">特定のビューアを持たない一般 Resource。</p></td>
+</tr>
+</tbody>
+</table>
+<div class="paragraph">
+<p>YouTube や Vimeo の URL は <code>webpage</code> ではなく <code>video</code> として扱う。</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_コピー方針">4.3. コピー方針</h3>
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 25%;">
+<col style="width: 75%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">値</th>
+<th class="tableblock halign-left valign-top">意味</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>metadataOnly</code></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">実体をコピーしない。外部 Web URL で使用する。</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>snapshot</code></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Note 保存時に Note Resource スナップショットへコピーする。自己アップロードファイルで使用する。</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="sect2">
+<h3 id="_保存ファイル一覧">4.4. 保存ファイル一覧</h3>
+<div class="paragraph">
+<p><code>storage.files[]</code> は、Resource に関連する保存ファイルを列挙する。</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-json" data-lang="json">[
+  {
+    "role": "original",
+    "path": "yyyy/mm/dd/original.pdf",
+    "sourcePath": "C:/Apache24/htdocs/wu_wei2/data/{user_uuid}/upload/yyyy/mm/dd/original.pdf",
+    "mimeType": "application/pdf",
+    "size": 123456,
+    "sha256": "..."
+  },
+  {
+    "role": "thumbnail",
+    "path": "thumbnail.png",
+    "mimeType": "image/png",
+    "size": 12345,
+    "sha256": "..."
+  },
+  {
+    "role": "preview",
+    "path": "preview.pdf",
+    "mimeType": "application/pdf",
+    "size": 123456,
+    "sha256": "..."
+  }
+]</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p><code>role=original</code> の <code>path</code> は upload 領域からの相対パスである。
+<code>role=thumbnail</code> や <code>role=preview</code> は Resource directory からの相対パスである。</p>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_content_と_resource_の関係">5. Content と Resource の関係</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Content ノードは Resource を直接展開して保持せず、<code>resourceRef</code> で参照する。
+Content ごとに異なる参照ページ、シート、時間範囲などを指定する場合は <code>resourceView</code> に保持する。</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-json" data-lang="json">{
+  "id": "_content_uuid",
+  "type": "Content",
+  "label": "XBRL GL Next",
+  "description": {
+    "format": "asciidoc",
+    "body": "== XBRL GL Next"
+  },
+  "resourceRef": "_resource_uuid",
+  "resourceView": {
+    "page": 7,
+    "sheet": "",
+    "time": {
+      "start": "",
+      "end": ""
+    },
+    "fragment": "",
+    "selector": ""
+  }
+}</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>同一 PDF や Office 文書を複数の Content から参照する場合、Resource は同じ <code>resource_uuid</code> を共有し、参照ページなどの違いは Content 側の <code>resourceView</code> に保持する。</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_link_制御点の保存">6. Link 制御点の保存</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Link の <code>x</code>,<code>y</code> は第 1 制御点である。
+<code>HORIZONTAL2</code> と <code>VERTICAL2</code> は 2 点制御の Link 形状であるため、<code>x2</code>,<code>y2</code> を第 2 制御点として保存する。</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-json" data-lang="json">{
+  "id": "_link_uuid",
+  "type": "Link",
+  "from": "_source_node_uuid",
+  "to": "_target_node_uuid",
+  "shape": "HORIZONTAL2",
+  "x": 120,
+  "y": 80,
+  "x2": 240,
+  "y2": 160,
+  "visible": true
+}</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p><code>NORMAL</code>、<code>HORIZONTAL</code>、<code>VERTICAL</code> では <code>x2</code>,<code>y2</code> を使用しない。
+<code>NORMAL</code> はマウスとリンク線分の交点を一時的な編集点として扱う。</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_save_note_の処理">7. save-note の処理</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p><code>save-note</code> は Note 保存時に Note 本体と Resource スナップショットを保存する。</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>保存リクエストから Note JSON を受け取る。</p>
+</li>
+<li>
+<p><code>pages</code> と <code>resources</code> が配列であり、各 Page が <code>_page_uuid</code> の <code>id</code> を持つことを検証する。</p>
+</li>
+<li>
+<p>Note 本体を <code>note.json</code> の <code>json_base64</code> に格納する。</p>
+</li>
+<li>
+<p><code>resources[]</code> を走査する。</p>
+</li>
+<li>
+<p><code>storage.copyPolicy=snapshot</code> の Resource は Note Resource スナップショットにファイルをコピーする。</p>
+</li>
+<li>
+<p><code>resource.json</code> を Note Resource スナップショットに書き出す。</p>
+</li>
+<li>
+<p><code>metadataOnly</code> の外部 Web Resource は実体コピーせず、Resource 定義のみ保存する。</p>
+</li>
+</ol>
+</div>
+<div class="sect2">
+<h3 id="_スナップショットコピー規則">7.1. スナップショットコピー規則</h3>
+<div class="paragraph">
+<p><code>save-note</code> は次の順にコピー元を決定する。</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p><code>storage.files[].sourcePath</code> がある場合はそれをコピー元にする。</p>
+</li>
+<li>
+<p><code>sourcePath</code> がない場合、<code>storage.primaryPath</code> と <code>storage.files[].path</code> からコピー元を解決する。</p>
+</li>
+<li>
+<p>ローカル Resource URL を持つ <code>metadataOnly</code> Resource は、必要に応じて <code>snapshot</code> に昇格して保存する。</p>
+</li>
+</ol>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_upload_の処理">8. upload の処理</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Upload 系 CGI は、アップロードされたファイルから Resource を作成または再利用する。</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>ファイル実体を <code>data/{user_uuid}/upload/yyyy/mm/dd/{filename}</code> に保存する。</p>
+</li>
+<li>
+<p><code>sha256</code> を計算する。</p>
+</li>
+<li>
+<p>既存 Resource を検索する。</p>
+</li>
+<li>
+<p>同一 <code>storage.sourcePath</code> があれば、ハッシュ値が異なっても同じ Resource として更新する。</p>
+</li>
+<li>
+<p>同一 <code>sha256</code> があれば、別パスでも同じ Resource として再利用する。</p>
+</li>
+<li>
+<p>該当 Resource がなければ新規 <code>resource_uuid</code> を発行する。</p>
+</li>
+<li>
+<p><code>resource.json</code> と派生ファイルを Resource ライブラリに保存する。</p>
+</li>
+</ol>
+</div>
+<div class="sect2">
+<h3 id="_重複判定">8.1. 重複判定</h3>
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 20%;">
+<col style="width: 20%;">
+<col style="width: 60%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">sourcePath</th>
+<th class="tableblock halign-left valign-top">sha256</th>
+<th class="tableblock halign-left valign-top">判定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">同じ</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">同じ</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">同一 Resource。再利用する。</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">同じ</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">異なる</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">同一ファイルの更新。Resource を増やさず、既存 Resource を更新する。</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">異なる</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">同じ</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">同一実体。既存 Resource を再利用する。</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">異なる</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">異なる</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">別 Resource として新規作成する。</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_外部_web_resource_の例">9. 外部 Web Resource の例</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Vimeo の例。</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-json" data-lang="json">{
+  "id": "_resource_uuid",
+  "origin": "web",
+  "identity": {
+    "uri": "https://vimeo.com/933802755",
+    "canonicalUri": "https://vimeo.com/933802755",
+    "title": "小栗判官（7段目・照手車引き）"
+  },
+  "media": {
+    "kind": "video",
+    "mimeType": "text/html"
+  },
+  "viewer": {
+    "supportedModes": ["infoPane", "newTab", "newWindow"],
+    "defaultMode": "infoPane",
+    "embed": {
+      "uri": "https://player.vimeo.com/video/933802755",
+      "html": ""
+    }
+  },
+  "storage": {
+    "managed": false,
+    "copyPolicy": "metadataOnly",
+    "sourcePath": "",
+    "primaryPath": "",
+    "snapshotPath": "",
+    "files": []
+  }
+}</code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_アップロード_pdf_resource_の例">10. アップロード PDF Resource の例</h2>
+<div class="sectionbody">
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-json" data-lang="json">{
+  "id": "_resource_uuid",
+  "origin": "uploaded",
+  "identity": {
+    "uri": "upload://2026/04/26/sample.pdf",
+    "canonicalUri": "upload://2026/04/26/sample.pdf",
+    "title": "sample.pdf"
+  },
+  "media": {
+    "kind": "document",
+    "mimeType": "application/pdf"
+  },
+  "viewer": {
+    "supportedModes": ["infoPane", "newTab", "newWindow", "download"],
+    "defaultMode": "infoPane"
+  },
+  "storage": {
+    "managed": true,
+    "copyPolicy": "snapshot",
+    "sourcePath": "2026/04/26/sample.pdf",
+    "primaryPath": "data/{user_uuid}/resource/2026/04/26/{resource_uuid}",
+    "snapshotPath": "",
+    "files": [
+      {
+        "role": "original",
+        "path": "2026/04/26/sample.pdf",
+        "mimeType": "application/pdf",
+        "sha256": "..."
+      },
+      {
+        "role": "thumbnail",
+        "path": "thumbnail.png",
+        "mimeType": "image/png",
+        "sha256": "..."
+      },
+      {
+        "role": "preview",
+        "path": "preview.pdf",
+        "mimeType": "application/pdf",
+        "sha256": "..."
+      }
+    ]
+  }
+}</code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_note_スナップショット_resource_の例">11. Note スナップショット Resource の例</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Note 保存後、同じ Resource は Note 配下にも保存される。</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-text" data-lang="text">data/{user_uuid}/note/2026/04/26/{note_uuid}/resource/{resource_uuid}/
+  resource.json
+  original.pdf
+  thumbnail.png
+  preview.pdf</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Note スナップショットの <code>resource.json</code> では、<code>storage.snapshotPath</code> に Note 配下の保存先を設定する。</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-json" data-lang="json">{
+  "storage": {
+    "primaryPath": "data/{user_uuid}/resource/2026/04/26/{resource_uuid}",
+    "snapshotPath": "data/{user_uuid}/note/2026/04/26/{note_uuid}/resource/{resource_uuid}",
+    "files": [
+      {
+        "role": "original",
+        "path": "original.pdf",
+        "mimeType": "application/pdf",
+        "sha256": "..."
+      }
+    ]
+  }
+}</code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_list_note_load_note_の注意">12. list-note / load-note の注意</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p><code>list-note</code> は Note 一覧を作成するとき、<code>note.json</code> または旧版互換の Note ファイルのみを対象とする。
+Note Resource スナップショット配下の <code>resource.json</code> は Note 一覧に含めない。</p>
+</div>
+<div class="paragraph">
+<p><code>load-note</code> は Note ファイルを解決して読み込む。
+Resource スナップショットは Note 本体の <code>resources[]</code> と Content の <code>resourceRef</code> から参照される。</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_禁止事項">13. 禁止事項</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>次の旧モデル属性は、保存時および通常実行時に使用しない。</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p><code>node.name</code></p>
+</li>
+<li>
+<p><code>node.media</code></p>
+</li>
+<li>
+<p><code>node.url</code></p>
+</li>
+<li>
+<p><code>node.uri</code></p>
+</li>
+<li>
+<p><code>node.format</code></p>
+</li>
+<li>
+<p><code>node.content</code></p>
+</li>
+<li>
+<p><code>nFont_size</code></p>
+</li>
+<li>
+<p><code>nFont_color</code></p>
+</li>
+<li>
+<p><code>background</code></p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>必要な情報は、新モデルの次の階層に保存する。</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p><code>node.label</code></p>
+</li>
+<li>
+<p><code>node.description.format</code></p>
+</li>
+<li>
+<p><code>node.description.body</code></p>
+</li>
+<li>
+<p><code>node.resourceRef</code></p>
+</li>
+<li>
+<p><code>node.resourceView</code></p>
+</li>
+<li>
+<p><code>resource.media.kind</code></p>
+</li>
+<li>
+<p><code>resource.media.mimeType</code></p>
+</li>
+<li>
+<p><code>resource.storage</code></p>
+</li>
+<li>
+<p><code>node.style.fill</code></p>
+</li>
+<li>
+<p><code>node.style.font.size</code></p>
+</li>
+<li>
+<p><code>node.style.font.color</code></p>
+</li>
+</ul>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_2026_04_27_補足_save_note_と_resource_uri_保護">14. 2026-04-27 補足: save-note と Resource URI 保護</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>この章は、<code>save-note</code>、<code>update-resource</code>、<code>list-resource</code>、<code>load-note</code> の現行保存・読込仕様を補足する。</p>
+</div>
+<div class="sect2">
+<h3 id="_cgi_実装方針">14.1. CGI 実装方針</h3>
+<div class="paragraph">
+<p>ローカル環境では <code>cgi-bin/<strong>.py</code> を使用する。
+Linux サーバー環境では <code>server/</strong>.cgi</code> を shell script として実装する。
+PHP スクリプトは新規機能の実行経路に使用しない。
+特に info ペインの Web preview では <code>server/proxy.php</code> を使用せず、Resource の URI を直接 iframe に設定する。</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_note_保存時の_resource_保存">14.2. Note 保存時の Resource 保存</h3>
+<div class="paragraph">
+<p><code>save-note</code> は Note 本体を保存するとき、Note 内の <code>resources[]</code> を確認し、Resource ライブラリと Note snapshot の双方を更新する。</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-text" data-lang="text">data/{user_uuid}/note/yyyy/mm/dd/{note_uuid}/note.json
+data/{user_uuid}/note/yyyy/mm/dd/{note_uuid}/resource/{resource_uuid}/resource.json
+
+data/{user_uuid}/resource/yyyy/mm/dd/{resource_uuid}/resource.json
+data/{user_uuid}/resource/yyyy/mm/dd/{resource_uuid}/original.pdf
+data/{user_uuid}/resource/yyyy/mm/dd/{resource_uuid}/thumbnail.png
+data/{user_uuid}/resource/yyyy/mm/dd/{resource_uuid}/preview.pdf</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>外部 Web URL は原則として実体をコピーしない。
+<code>storage.copyPolicy = "metadataOnly"</code> とし、Resource metadata、埋め込み URL、thumbnail URL、権利情報などを保持する。</p>
+</div>
+<div class="paragraph">
+<p>自己アップロードファイルは <code>storage.copyPolicy = "snapshot"</code> とし、Resource ライブラリ側と Note snapshot 側に必要なファイルを保持できるようにする。
+upload 済みファイルの実体は <code>data/{user_uuid}/upload/yyyy/mm/dd/</code> にあるため、Resource 定義では <code>storage.sourcePath</code> または <code>storage.files[].sourcePath</code> で参照する。</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_resource_の同一判定">14.3. Resource の同一判定</h3>
+<div class="paragraph">
+<p>Resource ライブラリでは、異なる Note で同じ Resource を参照する場合に重複保存しない。
+同一判定は次の優先順位で行う。</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-text" data-lang="text">resource.identity.canonicalUri
+resource.identity.uri
+resource.storage.sourcePath</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>upload ファイルでは、<code>yyyy/mm/dd/filename</code> が同じであれば、sha256 が異なっても同じファイルの更新とみなす。
+これは同一日の同一ファイル名を再アップロードした場合に、不要な Resource 増加を避けるためである。</p>
+</div>
+<div class="paragraph">
+<p>Note snapshot 配下では、同じ Resource であっても Note ごとにコピーを持ってよい。
+Note 単体をファイルとして受け渡しても再現可能にするためである。</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_空_uri_による上書き禁止">14.4. 空 URI による上書き禁止</h3>
+<div class="paragraph">
+<p>既存 Resource に URI が定義されている場合、Note 保存または Resource 更新で渡された Resource 定義の URI が空であっても、既存の URI を空で上書きしてはならない。</p>
+</div>
+<div class="paragraph">
+<p>保護対象は次の項目である。</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-text" data-lang="text">resource.identity.uri
+resource.identity.canonicalUri
+resource.viewer.embed.uri
+resource.snapshotSources.previewUri
+resource.snapshotSources.originalUri
+resource.snapshotSources.thumbnailUri</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>これは、編集ペインや Note 保存時に Resource metadata の一部だけが送られた場合でも、既存の Web URL、preview URL、埋め込み URLを失わないようにするためである。</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_読込時の_resource_復元">14.5. 読込時の Resource 復元</h3>
+<div class="paragraph">
+<p><code>load-note</code> が返す Note JSON では、Content ノードは <code>resourceRef</code> のみを保持する。
+<code>wuwei.note</code> は Note 読込時に <code>resources[]</code> を <code>id</code> で索引化し、各 Content ノードの <code>resourceRef</code> に対応する Resource を実行時用 <code>node.resource</code> として復元する。</p>
+</div>
+<div class="paragraph">
+<p>復元された <code>node.resource</code> は実行時専用であり、保存時の Note JSON には残さない。
+実行時の URL 解決は次の順序で行う。</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-text" data-lang="text">resource.identity.uri
+resource.viewer.embed.uri
+resource.snapshotSources.previewUri
+resource.identity.canonicalUri
+resource.snapshotSources.originalUri</code></pre>
+</div>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_info_ペイン表示">14.6. info ペイン表示</h3>
+<div class="paragraph">
+<p>info ペインは Resource の種類に応じて次のように表示する。</p>
+</div>
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 25%;">
+<col style="width: 75%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Resource 種別</th>
+<th class="tableblock halign-left valign-top">表示</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>media.kind = "webpage"</code></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">URI を iframe に直接設定する。表示拒否時は URL と拒否メッセージを表示する。</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>media.kind = "video"</code></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">YouTube / Vimeo は <code>viewer.embed.uri</code> を iframe に設定する。HTML5 video ファイルは video 要素で表示する。</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>media.kind = "document"</code></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">preview PDF があれば preview を表示する。Office 文書は preview PDF または外部 viewer を利用する。</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>media.kind = "image"</code></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">thumbnail または original image を表示する。</p></td>
+</tr>
+</tbody>
+</table>
+<div class="paragraph">
+<p>iframe 表示は対象サイトの方針に依存する。
+WuWei 側は iframe 拒否をエラー停止にせず、代替リンクを表示する。</p>
+</div>
+</div>
+</div>
+</div>
+
+<div id="footer">
+<div id="footer-text">
+Last updated 2026-04-27 05:39:30 +0900
+</div>
+</div>
+<div id="toc" class="toc2">
+<div id="toctitle">Table of Contents</div>
+<ul class="sectlevel1">
+<li><a href="#_目的">1. 目的</a></li>
+<li><a href="#_保存領域の全体像">2. 保存領域の全体像</a>
+<ul class="sectlevel2">
+<li><a href="#_アップロード元ファイル">2.1. アップロード元ファイル</a></li>
+<li><a href="#_resource_ライブラリ">2.2. Resource ライブラリ</a></li>
+<li><a href="#_note">2.3. Note</a></li>
+<li><a href="#_note_resource_スナップショット">2.4. Note Resource スナップショット</a></li>
+</ul>
+</li>
+<li><a href="#_note_json_の保存形式">3. note.json の保存形式</a>
+<ul class="sectlevel2">
+<li><a href="#_resources">3.1. resources[]</a></li>
+<li><a href="#_pages">3.2. pages[]</a></li>
+</ul>
+</li>
+<li><a href="#_resource_定義">4. Resource 定義</a>
+<ul class="sectlevel2">
+<li><a href="#_由来">4.1. 由来</a></li>
+<li><a href="#_メディア種別">4.2. メディア種別</a></li>
+<li><a href="#_コピー方針">4.3. コピー方針</a></li>
+<li><a href="#_保存ファイル一覧">4.4. 保存ファイル一覧</a></li>
+</ul>
+</li>
+<li><a href="#_content_と_resource_の関係">5. Content と Resource の関係</a></li>
+<li><a href="#_link_制御点の保存">6. Link 制御点の保存</a></li>
+<li><a href="#_save_note_の処理">7. save-note の処理</a>
+<ul class="sectlevel2">
+<li><a href="#_スナップショットコピー規則">7.1. スナップショットコピー規則</a></li>
+</ul>
+</li>
+<li><a href="#_upload_の処理">8. upload の処理</a>
+<ul class="sectlevel2">
+<li><a href="#_重複判定">8.1. 重複判定</a></li>
+</ul>
+</li>
+<li><a href="#_外部_web_resource_の例">9. 外部 Web Resource の例</a></li>
+<li><a href="#_アップロード_pdf_resource_の例">10. アップロード PDF Resource の例</a></li>
+<li><a href="#_note_スナップショット_resource_の例">11. Note スナップショット Resource の例</a></li>
+<li><a href="#_list_note_load_note_の注意">12. list-note / load-note の注意</a></li>
+<li><a href="#_禁止事項">13. 禁止事項</a></li>
+<li><a href="#_2026_04_27_補足_save_note_と_resource_uri_保護">14. 2026-04-27 補足: save-note と Resource URI 保護</a>
+<ul class="sectlevel2">
+<li><a href="#_cgi_実装方針">14.1. CGI 実装方針</a></li>
+<li><a href="#_note_保存時の_resource_保存">14.2. Note 保存時の Resource 保存</a></li>
+<li><a href="#_resource_の同一判定">14.3. Resource の同一判定</a></li>
+<li><a href="#_空_uri_による上書き禁止">14.4. 空 URI による上書き禁止</a></li>
+<li><a href="#_読込時の_resource_復元">14.5. 読込時の Resource 復元</a></li>
+<li><a href="#_info_ペイン表示">14.6. info ペイン表示</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>

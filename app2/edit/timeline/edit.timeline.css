@@ -1,0 +1,199 @@
+/* edit.timeline.css */
+
+#edit-timeline {
+  display: block;
+}
+
+.edit-timeline-panel {
+  padding: 12px 14px 14px;
+  border-top: 1px solid #ddd;
+  background: #fff;
+}
+
+.edit-timeline-panel + .edit-timeline-panel {
+  border-top: 1px solid #d6d6d6;
+}
+
+.edit-panel-title {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #333;
+}
+
+.edit-field {
+  margin-bottom: 12px;
+}
+
+.edit-field span {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #555;
+}
+
+.edit-field input,
+.edit-field select,
+.edit-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #bbb;
+  border-radius: 2px;
+  padding: 6px 8px;
+  font: inherit;
+  line-height: 1.4;
+  background: #fff;
+  color: #222;
+}
+
+.edit-field input[readonly] {
+  background: #f7f7f7;
+  color: #666;
+}
+
+.edit-field textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.edit-field input:focus,
+.edit-field select:focus,
+.edit-field textarea:focus {
+  outline: none;
+  border-color: #7aa7d9;
+  box-shadow: 0 0 0 2px rgba(122, 167, 217, 0.15);
+}
+
+.edit-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid #e5e5e5;
+}
+
+.edit-actions button {
+  border: 1px solid #aaa;
+  background: #fafafa;
+  padding: 6px 12px;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1.4;
+  border-radius: 2px;
+}
+
+.edit-actions button:hover {
+  background: #f0f0f0;
+}
+
+.edit-actions button:active {
+  background: #e8e8e8;
+}
+
+.edit-timeline-preview-field {
+  margin-bottom: 14px;
+}
+
+.edit-timeline-preview-host {
+  width: 100%;
+  min-height: 180px;
+  border: 1px solid #bbb;
+  background: #f7f7f7;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.edit-timeline-preview-host iframe,
+.edit-timeline-preview-host video,
+.edit-timeline-preview-host .edit-timeline-preview-slot {
+  display: block;
+  width: 100%;
+  min-height: 180px;
+  border: 0;
+}
+
+.edit-timeline-preview-note {
+  padding: 12px;
+  font-size: 12px;
+  color: #555;
+}
+
+.edit-timeline-capture-actions {
+  flex-wrap: wrap;
+}
+
+#edit .edit-timeline-panel {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+#edit .edit-field input[type="color"] {
+  padding: 2px;
+  height: 34px;
+}
+
+.edit-readonly {
+  min-height: 1.8em;
+  padding: 6px 8px;
+  border: 1px solid #d0d0d0;
+  background: #f7f7f7;
+  line-height: 1.4;
+  box-sizing: border-box;
+}
+
+/* Timeline point panel: label と入力を横並び */
+#edit-timeline-point .edit-field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+#edit-timeline-point .edit-field > label,
+#edit-timeline-point .edit-field > span {
+  flex: 0 0 84px;
+  margin: 0;
+}
+
+#edit-timeline-point .edit-field > input[type="text"],
+#edit-timeline-point .edit-field > input[type="number"],
+#edit-timeline-point .edit-field > textarea,
+#edit-timeline-point .edit-field > .edit-readonly {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+#edit-timeline-point .edit-field > textarea {
+  min-height: 6em;
+}
+
+/* preview 行は縦のままにする */
+#edit-timeline-point .edit-timeline-preview-field {
+  display: block;
+}
+
+.edit-color-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.edit-color-inline > input[type="color"] {
+  flex: 0 0 56px;
+  width: 56px;
+  min-width: 56px;
+  padding: 2px;
+  height: 34px;
+}
+
+.edit-color-inline > .edit-color-palette {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+#edit .edit-color-palette .btn {
+  width: 100%;
+  text-align: left;
+}

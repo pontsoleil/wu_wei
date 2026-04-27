@@ -1,0 +1,91 @@
+#info {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 280px;
+  height: 100%;
+  padding: 4px;
+  margin: 4px;
+  background: #fcfdfe;
+          box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+  -webkit-box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+     -moz-box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+      -ms-box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+  overflow-y: auto;
+  cursor: default;
+  z-index: 20;
+}
+#info.widen {
+  width: 420px;
+}
+#info * {
+  /* disable selection */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+#infoWiden {
+  position: absolute;
+  top: 44px;
+  left: 29px;
+}
+#infoDismiss {
+  position: absolute;
+  top: 16px;
+  right: 12px;
+}
+#editOpen {
+  position: absolute;
+  top: 16px;
+  right: 32px;
+}
+#info>header {
+  position: fixed;
+  top: 4px;
+  right: 4px;
+  width: 280px;
+  color: #808080;
+  background-image: linear-gradient(to bottom right,#efefef , #fcfdfe);
+  z-index: 1;
+}
+#info.widen>header {
+  width: 420px;
+}
+#info .fa,
+#info .fas,
+#info .fab,
+#info .far {
+  color: #808080;
+  cursor: pointer;
+}
+#info .fas {
+  color: #808080;
+}
+#info .fa:hover,
+#info .fas:hover,
+#info .fab:hover,
+#info .far:hover  {
+  color: rgb(77, 179, 205);
+  text-shadow: 0em 0.1em 0.1em rgba(0, 0, 0, 0.3);
+}
+.info .frame img {
+  max-width: 100%;
+  height: auto;
+}
+#info .info {
+  margin-top: 50px;
+}
+#info input,
+#info textarea {
+  background: #fcfdfe;
+  border-top: none;
+  border-right: none;
+  border-bottom: 1px solid #cdcdcd;
+  border-left: none;
+  margin-top: 4px;
+  padding: 4px;
+}
+

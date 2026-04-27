@@ -1,0 +1,13 @@
+/**
+ * progressbar
+ */
+ #progressbar {
+  width: 100%;
+  background: transparent;
+  height: 16px;
+}
+  
+#progressbar .bar {
+  height: 16px;
+  background-color: indigo;
+}
