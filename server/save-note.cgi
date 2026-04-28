@@ -91,6 +91,16 @@ debug_preview() {
   printf '[%s] %s_len=%s %s_head=%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$label" "$len" "$label" "$head" >&2
 }
 
+raw_form_value() {
+  key=$1
+  file=$2
+  [ -f "$file" ] || return 0
+  tr '&' '\n' < "$file" |
+  sed -n "s/^${key}=//p" |
+  head -n 1 |
+  sed 's/+/ /g; s/%2[Dd]/-/g; s/%5[Ff]/_/g; s/%40/@/g'
+}
+
 strip_quotes() {
   sed 's/^"\(.*\)"$/\1/'
 }
@@ -301,6 +311,7 @@ cgi-name -s"$ACK" < "$CGIVARS_ORG" > "$CGIVARS"
 
 session_user_id=$(is-login || true)
 user_id=$(nameread user_id "$CGIVARS" | strip_quotes || true)
+[ -n "${user_id:-}" ] || user_id=$(raw_form_value user_id "$CGIVARS_ORG" | strip_quotes || true)
 
 if [ -z "${session_user_id:-}" ] || [ -z "${user_id:-}" ] || [ "$user_id" != "$session_user_id" ]; then
   debug_log "not_logged_in session_user_id=${session_user_id:-} user_id=${user_id:-}"
