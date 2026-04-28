@@ -49,6 +49,39 @@ OFFICE_EXTS = {
 }
 
 
+def resolve_command(*candidates: str) -> str:
+    for candidate in candidates:
+        candidate = trim(candidate)
+        if not candidate:
+            continue
+        path = Path(candidate)
+        if path.is_file():
+            return str(path)
+        found = shutil.which(candidate)
+        if found:
+            # Avoid Windows' filesystem convert.exe when ImageMagick is not on PATH.
+            if Path(found).name.lower() == "convert.exe" and "system32" in found.lower():
+                continue
+            return found
+    return ""
+
+
+def magick_command() -> str:
+    return resolve_command(os.environ.get("WUWEI_MAGICK", ""), MAGICK, "magick", "convert")
+
+
+def soffice_command() -> str:
+    script_bin = Path(__file__).resolve().parent.parent / "server" / "bin"
+    return resolve_command(
+        os.environ.get("WUWEI_SOFFICE", ""),
+        SOFFICE,
+        str(script_bin / "soffice"),
+        str(script_bin / "libreoffice"),
+        "soffice",
+        "libreoffice",
+    )
+
+
 def safe_filename(name: str) -> str:
     name = trim(name).replace("\\", "_").replace("/", "_")
     name = " ".join(name.split())
@@ -71,9 +104,13 @@ def detect_content_type(saved_path: Path, declared: str) -> str:
 
 
 def identify_text(path: Path) -> str:
+    cmd = magick_command()
+    if not cmd:
+        debug("ImageMagick command is not available; identify skipped")
+        return ""
     try:
         cp = subprocess.run(
-            [MAGICK, "identify", str(path)],
+            [cmd, "identify", str(path)] if Path(cmd).name.lower().startswith("magick") else [cmd, str(path)],
             capture_output=True,
             text=True,
         )
@@ -105,11 +142,15 @@ def make_image_thumbnail(src: Path, dest: Path, size: int = 200) -> tuple[str, s
 
 
 def make_pdf_thumbnail(src: Path, dest: Path, size: int = 200) -> tuple[str, str]:
+    cmd = magick_command()
+    if not cmd:
+        debug("ImageMagick command is not available; pdf thumbnail skipped")
+        return "", ""
     try:
         dest.parent.mkdir(parents=True, exist_ok=True)
         cp = subprocess.run(
             [
-                MAGICK,
+                cmd,
                 str(src) + "[0]",
                 "-thumbnail",
                 f"{size}x{size}",
@@ -136,12 +177,16 @@ def make_pdf_thumbnail(src: Path, dest: Path, size: int = 200) -> tuple[str, str
 
 
 def make_office_pdf(src: Path, outdir: Path) -> Path | None:
+    cmd = soffice_command()
+    if not cmd:
+        debug("LibreOffice/soffice command is not available; office pdf conversion skipped")
+        return None
     try:
         outdir.mkdir(parents=True, exist_ok=True)
 
         cp = subprocess.run(
             [
-                SOFFICE,
+                cmd,
                 "--headless",
                 "--convert-to",
                 "pdf",
@@ -305,6 +350,25 @@ def resource_original_hash(resource: dict) -> str:
     return ""
 
 
+def resource_file_exists(resource: dict, role: str) -> bool:
+    storage = resource.get("storage") if isinstance(resource.get("storage"), dict) else {}
+    primary = Path(str(storage.get("primaryPath") or ""))
+    for item in storage.get("files") or []:
+        if not isinstance(item, dict) or item.get("role") != role:
+            continue
+        path_text = str(item.get("sourcePath") or "")
+        path = Path(path_text) if path_text else primary / str(item.get("path") or "")
+        if path.exists():
+            return True
+    return False
+
+
+def office_resource_needs_preview(resource: dict, filename: str) -> bool:
+    if Path(filename or "").suffix.lower() not in OFFICE_EXTS:
+        return False
+    return not resource_file_exists(resource, "preview")
+
+
 def find_existing_resource(resource_root: Path, *, original_hash: str, canonical_uri: str, source_path: str) -> tuple[dict | None, str]:
     canonical_uri = (canonical_uri or "").strip()
     source_path = (source_path or "").replace("\\", "/").strip()
@@ -463,8 +527,15 @@ def main():
         source_path=upload_relpath,
     )
     if existing_resource and dedupe_reason != "sourcePath":
-        debug_kv(dedupe="resource reused", resource_id=existing_resource.get("id"), sha256=original_hash)
-        json_response(response_from_resource(existing_resource, option="upload", warning="resource reused"))
+        if not office_resource_needs_preview(existing_resource, filename):
+            debug_kv(dedupe="resource reused", resource_id=existing_resource.get("id"), sha256=original_hash)
+            json_response(response_from_resource(existing_resource, option="upload", warning="resource reused"))
+        debug_kv(
+            dedupe="office resource reused but preview missing; regenerating",
+            resource_id=existing_resource.get("id"),
+            reason=dedupe_reason,
+        )
+        dedupe_reason = "sourcePath"
 
     if existing_resource and dedupe_reason == "sourcePath":
         resource_id = str(existing_resource.get("id") or "")
@@ -475,6 +546,7 @@ def main():
         rid = str(uuid.uuid4())
         resource_id = f"_{rid}"
         primary_dir = resource_dir / resource_id
+    rid = resource_id.lstrip("_")
     primary_dir.mkdir(parents=True, exist_ok=True)
 
     thumb_ext = ".png" if content_type.lower().startswith("application/pdf") else ".jpg"

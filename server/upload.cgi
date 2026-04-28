@@ -78,6 +78,53 @@ read_env() {
   printf '%s' "$v"
 }
 
+command_path() {
+  local candidate found
+  for candidate in "$@"; do
+    [ -n "${candidate:-}" ] || continue
+    if [ -x "$candidate" ]; then
+      printf '%s' "$candidate"
+      return 0
+    fi
+    found="$(command -v "$candidate" 2>/dev/null || true)"
+    if [ -n "$found" ]; then
+      printf '%s' "$found"
+      return 0
+    fi
+  done
+  return 1
+}
+
+image_command() {
+  command_path "$SCRIPT_DIR/bin/magick" magick convert
+}
+
+office_command() {
+  command_path "$SCRIPT_DIR/bin/soffice" "$SCRIPT_DIR/bin/libreoffice" soffice libreoffice
+}
+
+is_office_file() {
+  local lower
+  lower="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  case "$lower" in
+    *.doc|*.docx|*.xls|*.xlsx|*.ppt|*.pptx|*.odt|*.ods|*.odp)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+thumb_input_arg() {
+  case "$1" in
+    application/pdf*|office-preview)
+      printf '%s[0]' "$2"
+      ;;
+    *)
+      printf '%s' "$2"
+      ;;
+  esac
+}
+
 # UUID regex (bash regex)
 UUID_RE='^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
 
@@ -205,9 +252,41 @@ file_uri="$(printf '%s' "$dest_file" | sed "s/^${escaped_base}\/\(${uuidrgx}\)\/
 # --- detect actual file type ----------------------------------------
 content_type="$(file -b -i -- "$dest_file" 2>/dev/null || true)"
 
+# --- office preview --------------------------------------------------
+preview_pdf=""
+preview_pdf_uri=""
+preview_pdf_url=""
+
+if is_office_file "$filename"; then
+  office_bin="$(office_command || true)"
+  if [ -n "${office_bin:-}" ]; then
+    office_outdir="$Tmp-office"
+    mkdir -p "$office_outdir"
+    if "$office_bin" --headless --convert-to pdf --outdir "$office_outdir" "$dest_file" >&2; then
+      stem="${filename%.*}"
+      generated_pdf="$office_outdir/$stem.pdf"
+      if [ -f "$generated_pdf" ]; then
+        preview_pdf="$resource_dir/$uuid.pdf"
+        cp -f "$generated_pdf" "$preview_pdf" || preview_pdf=""
+      fi
+    fi
+  else
+    echo "office preview skipped: soffice/libreoffice not found" >&2
+  fi
+
+  if [ -n "$preview_pdf" ] && [ -f "$preview_pdf" ]; then
+    preview_pdf_uri="$(printf '%s' "$preview_pdf" | sed "s/^${escaped_base}\/\(${uuidrgx}\)\/resource\/\(.*\)$/resource\/\1\/\2/")"
+    preview_pdf_url="$preview_pdf_uri"
+  else
+    echo "office preview pdf was not generated: $filename" >&2
+  fi
+fi
+
 # --- thumbnail / size ------------------------------------------------
 thumbnail=""
 iw=""; ih=""; w=""; h=""
+thumb_src="$dest_file"
+thumb_kind="$content_type"
 
 if [[ "$content_type" == application/pdf* ]]; then
   thumbnail="$thumbnail_uri"
@@ -217,9 +296,15 @@ elif [[ "$content_type" == image/* ]]; then
   thumbnail="$thumbnail_uri"
   iw="$(identify "$dest_file" 2>/dev/null | sed -e "s/^[^[:blank:]]*[[:blank:]][^[:blank:]]*[[:blank:]]\([0-9]*\)x\([0-9]*\)[[:blank:]].*$/\1/" || true)"
   ih="$(identify "$dest_file" 2>/dev/null | sed -e "s/^[^[:blank:]]*[[:blank:]][^[:blank:]]*[[:blank:]]\([0-9]*\)x\([0-9]*\)[[:blank:]].*$/\2/" || true)"
+elif [ -n "$preview_pdf" ] && [ -f "$preview_pdf" ]; then
+  thumbnail="$thumbnail_uri"
+  thumb_src="$preview_pdf"
+  thumb_kind="office-preview"
+  iw="$(identify "${preview_pdf}[0]" 2>/dev/null | sed -e "s/^[^[:blank:]]*[[:blank:]][^[:blank:]]*[[:blank:]]\([0-9]*\)x\([0-9]*\)[[:blank:]].*$/\1/" || true)"
+  ih="$(identify "${preview_pdf}[0]" 2>/dev/null | sed -e "s/^[^[:blank:]]*[[:blank:]][^[:blank:]]*[[:blank:]]\([0-9]*\)x\([0-9]*\)[[:blank:]].*$/\2/" || true)"
 fi
 
-if [[ "$content_type" == application/pdf* || "$content_type" == image/* ]]; then
+if [[ "$content_type" == application/pdf* || "$content_type" == image/* || -n "$preview_pdf" ]]; then
   size=200
   if [[ -n "${iw:-}" && -n "${ih:-}" ]]; then
     if (( iw > ih && iw > size )); then
@@ -235,14 +320,19 @@ if [[ "$content_type" == application/pdf* || "$content_type" == image/* ]]; then
     w=64; h=64
   fi
 
-  if [[ "$content_type" == application/pdf* ]]; then
-    convert -thumbnail "${w}x${h}" -background white -alpha remove \
-      "${dest_file}[0]" "$thumb_file" \
-      || cp -f "$SCRIPT_DIR/PDF_32.png" "$thumb_file"
+  img_bin="$(image_command || true)"
+  if [ -n "${img_bin:-}" ]; then
+    if [[ "$thumb_kind" == application/pdf* || "$thumb_kind" == office-preview ]]; then
+      "$img_bin" -thumbnail "${w}x${h}" -background white -alpha remove \
+        "$(thumb_input_arg "$thumb_kind" "$thumb_src")" "$thumb_file" \
+        || cp -f "$SCRIPT_DIR/PDF_32.png" "$thumb_file"
+    else
+      "$img_bin" -define "jpeg:size=${iw:-200}x${ih:-200}" \
+        "$thumb_src" -auto-orient -thumbnail "${w}x${h}" -unsharp 0x.5 \
+        "$thumb_file" || true
+    fi
   else
-    convert -define "jpeg:size=${iw:-200}x${ih:-200}" \
-      "$dest_file" -auto-orient -thumbnail "${w}x${h}" -unsharp 0x.5 \
-      "$thumb_file" || true
+    echo "thumbnail skipped: ImageMagick not found" >&2
   fi
 fi
 
@@ -252,6 +342,8 @@ if [[ "$content_type" == application/pdf* ]]; then
   identify_out="$(identify "${dest_file}[0]" 2>/dev/null || true)"
 elif [[ "$content_type" == image/* ]]; then
   identify_out="$(identify "$dest_file" 2>/dev/null || true)"
+elif [ -n "$preview_pdf" ] && [ -f "$preview_pdf" ]; then
+  identify_out="$(identify "${preview_pdf}[0]" 2>/dev/null || true)"
 fi
 
 # --- resource fields -------------------------------------------------
@@ -279,6 +371,17 @@ lastmodified="$(stat -c %y -- "$dest_file" 2>/dev/null || true)"
     echo "value.resource.size ${iw}x${ih}"
     echo "value.thumbnail.uri $thumbnail"
     echo "value.thumbnail.size ${w}x${h}"
+    echo "value.pdf.uri ${preview_pdf_uri:-null}"
+    echo "value.pdf.url ${preview_pdf_url:-null}"
+    echo "value.identify $identify_out"
+    echo "value.file "
+  elif [ -n "$preview_pdf" ] && [ -f "$preview_pdf" ]; then
+    echo "value.resource.uri $resource_uri"
+    echo "value.resource.size ${iw}x${ih}"
+    echo "value.thumbnail.uri $thumbnail"
+    echo "value.thumbnail.size ${w}x${h}"
+    echo "value.pdf.uri $preview_pdf_uri"
+    echo "value.pdf.url $preview_pdf_url"
     echo "value.identify $identify_out"
     echo "value.file "
   else
@@ -286,6 +389,8 @@ lastmodified="$(stat -c %y -- "$dest_file" 2>/dev/null || true)"
     echo "value.resource.size null"
     echo "value.thumbnail.uri null"
     echo "value.thumbnail.size null"
+    echo "value.pdf.uri null"
+    echo "value.pdf.url null"
     echo "value.identify null"
     echo "value.file "
   fi
@@ -294,7 +399,7 @@ lastmodified="$(stat -c %y -- "$dest_file" 2>/dev/null || true)"
 # --- return json -----------------------------------------------------
 printf "Content-Type: application/json\r\n\r\n"
 
-if [[ "$content_type" == application/pdf* || "$content_type" == image/* ]]; then
+if [[ "$content_type" == application/pdf* || "$content_type" == image/* || -n "$preview_pdf" ]]; then
   cat <<JSON
 {
   "id":"$uuid",
@@ -307,6 +412,7 @@ if [[ "$content_type" == application/pdf* || "$content_type" == image/* ]]; then
     "lastmodified":"$(json_escape "${lastmodified:-}")",
     "resource":{"uri":"$(json_escape "$resource_uri")","size":"$(json_escape "${iw}x${ih}")"},
     "thumbnail":{"uri":"$(json_escape "$thumbnail")","size":"$(json_escape "${w}x${h}")"},
+    "pdf":{"uri":"$(json_escape "${preview_pdf_uri:-}")","url":"$(json_escape "${preview_pdf_url:-}")"},
     "file":"",
     "identify":"$(json_escape "$identify_out")"
   }
