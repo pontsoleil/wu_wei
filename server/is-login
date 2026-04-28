@@ -1,35 +1,39 @@
-#! /bin/sh
-# === Initialize shell environment ===================================
-set -eux
-# -e  Exit immediately if a command exits with a non-zero status.
-# -u  Treat unset variables as an error when substituting.
-# -v  Print shell input lines as they are read.
-# -x  Print commands and their arguments as they are executed.
-#export LANG=ja_JP.UTF-8
-#export LC_ALL=ja_JP.utf8
+#!/bin/sh
+# Print the WuWei session user id from HTTP_COOKIE.
+# This helper is called by other CGI scripts, so it must emit only the user id
+# or an empty string.
+
 export LC_ALL=C
-type command >/dev/null 2>&1 && type getconf >/dev/null 2>&1 &&
-export PATH="./bin:$(command -p getconf PATH)${PATH+:}${PATH-}"
-export UNIX_STD=2003  # to make HP-UX conform to POSIX
-Tmp=/tmp/${0##*/}.$$
-# === Log ============================================================
-exec 2>log/${0##*/}.$$.log
-# === Session ========================================================
-# --- 1)Read user_id from Cookie ----------------------------------
-printf '%s' "${HTTP_COOKIE:-''}" | #tee log/${0##*/}.$$.step1.log |
-  sed 's/&/%26/g; s/[;, ]\{1,\}/\&/g; s/^&//; s/&$//' | #tee log/${0##*/}.$$.step2.log |
-  cgi-name > $Tmp-cgivars
-  user_id=$(nameread wuwei_user_id $Tmp-cgivars)
-# --- 2)Response login status from Cookie ----------------------------
-if [ -n "$user_id" ]; then
-cat <<CONTENT
-${user_id}
-CONTENT
-else
- cat <<CONTENT
-  
-CONTENT
-fi
-rm $Tmp-*
-rm log/${0##*/}.$$.*
+
+trim() {
+  sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
+}
+
+user_id=$(
+  printf '%s' "${HTTP_COOKIE:-}" \
+    | tr ';' '\n' \
+    | awk -F= '
+        {
+          key=$1
+          sub(/^[ \t\r\n]+/, "", key)
+          sub(/[ \t\r\n]+$/, "", key)
+          if (key == "wuwei_user_id") {
+            print $2
+            exit
+          }
+        }
+      ' \
+    | trim \
+    | tr -d '\r\n'
+)
+
+case "$user_id" in
+  ????????-????-????-????-????????????)
+    printf '%s\n' "$user_id"
+    ;;
+  *)
+    printf '\n'
+    ;;
+esac
+
 exit 0
