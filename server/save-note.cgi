@@ -287,6 +287,317 @@ save_note_resources() {
   done
 }
 
+process_note_json() {
+  json_file=$1
+  note_root=$2
+  resource_root=$3
+  note_resource_dir=$4
+  user_id_arg=$5
+  note_id_arg=$6
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$json_file" "$note_root" "$resource_root" "$note_resource_dir" "$user_id_arg" "$note_id_arg" "$SCRIPT_DIR" <<'PY'
+import json
+import shutil
+import sys
+from datetime import datetime
+from pathlib import Path
+from urllib.parse import unquote, urlparse
+
+json_file = Path(sys.argv[1])
+note_root = Path(sys.argv[2])
+resource_root = Path(sys.argv[3])
+note_resource_dir = Path(sys.argv[4])
+user_id = sys.argv[5]
+note_id = sys.argv[6]
+script_dir = Path(sys.argv[7])
+now = datetime.now().astimezone()
+
+
+def load_note(path):
+    text = path.read_text(encoding="utf-8")
+    if text.startswith("\ufeff"):
+        text = text.lstrip("\ufeff")
+    if not text:
+        raise ValueError("JSON NOT SPECIFIED")
+    data = json.loads(text)
+    if not isinstance(data, dict):
+        raise ValueError("NOTE JSON MUST BE OBJECT")
+    if "pages" not in data or not isinstance(data.get("pages"), dict):
+        raise ValueError("NOTE JSON PAGES MUST BE OBJECT")
+    if "resources" in data and not isinstance(data.get("resources"), list):
+        raise ValueError("NOTE JSON RESOURCES MUST BE ARRAY")
+    return data
+
+
+def resolve_storage_dir(path_text, base_root):
+    path_text = (path_text or "").replace("\\", "/").strip()
+    if not path_text:
+        return None
+    path_text = path_text.replace("_user_uuid", user_id).replace("user_uuid", user_id)
+    path_text = path_text.replace("_note_uuid", note_id).replace("note_uuid", note_id)
+    path = Path(path_text)
+    if path.is_absolute():
+        return path
+    return base_root / path_text
+
+
+def local_file_from_uri(uri):
+    uri = (uri or "").strip()
+    if not uri:
+        return None
+    parsed = urlparse(uri)
+    path_text = unquote(parsed.path if parsed.scheme else uri)
+    marker = "/wu_wei2/"
+    if marker in path_text:
+        path_text = path_text.split(marker, 1)[1]
+    path_text = path_text.replace("\\", "/").lstrip("/")
+    path = Path(path_text)
+    if path.is_absolute():
+        return path if path.is_file() else None
+    candidate = script_dir.parent / path_text
+    return candidate if candidate.is_file() else None
+
+
+def promote_local_resource_snapshot(resource):
+    storage = resource.get("storage")
+    if not isinstance(storage, dict):
+        storage = {}
+        resource["storage"] = storage
+    if storage.get("managed") is True and storage.get("copyPolicy") == "snapshot":
+        return
+
+    identity = resource.get("identity") if isinstance(resource.get("identity"), dict) else {}
+    media = resource.get("media") if isinstance(resource.get("media"), dict) else {}
+    viewer = resource.get("viewer") if isinstance(resource.get("viewer"), dict) else {}
+    embed = viewer.get("embed") if isinstance(viewer.get("embed"), dict) else {}
+    snapshot_sources = resource.get("snapshotSources") if isinstance(resource.get("snapshotSources"), dict) else {}
+    candidates = [
+        ("original", str(snapshot_sources.get("originalUri") or identity.get("canonicalUri") or ""), str(media.get("mimeType") or "application/octet-stream")),
+        ("preview", str(snapshot_sources.get("previewUri") or embed.get("uri") or identity.get("uri") or ""), "application/pdf"),
+        ("thumbnail", str(snapshot_sources.get("thumbnailUri") or ""), "image/jpeg"),
+    ]
+
+    files = []
+    seen = set()
+    for role, uri, mime_type in candidates:
+        source = local_file_from_uri(uri)
+        if source is None or source in seen:
+            continue
+        seen.add(source)
+        files.append({
+            "role": role,
+            "path": source.name,
+            "sourcePath": str(source),
+            "mimeType": mime_type,
+            "size": source.stat().st_size,
+            "sha256": "",
+        })
+
+    if not files:
+        return
+
+    storage["managed"] = True
+    storage["copyPolicy"] = "snapshot"
+    storage["primaryPath"] = str(Path(files[0]["sourcePath"]).parent)
+    storage.setdefault("snapshotPath", "")
+    storage["files"] = files
+
+
+def resource_timestamp(resource):
+    audit = resource.get("audit") if isinstance(resource.get("audit"), dict) else {}
+    for key in ("createdAt", "lastModifiedAt"):
+        value = str(audit.get(key) or "").strip()
+        if not value:
+            continue
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone()
+        except Exception:
+            continue
+    return now
+
+
+def resource_identity_key(resource):
+    identity = resource.get("identity") if isinstance(resource.get("identity"), dict) else {}
+    storage = resource.get("storage") if isinstance(resource.get("storage"), dict) else {}
+    return str(identity.get("canonicalUri") or identity.get("uri") or storage.get("sourcePath") or "").strip()
+
+
+def resource_uri_values(resource):
+    identity = resource.get("identity") if isinstance(resource.get("identity"), dict) else {}
+    viewer = resource.get("viewer") if isinstance(resource.get("viewer"), dict) else {}
+    embed = viewer.get("embed") if isinstance(viewer.get("embed"), dict) else {}
+    snapshot_sources = resource.get("snapshotSources") if isinstance(resource.get("snapshotSources"), dict) else {}
+    return [
+        str(identity.get("uri") or "").strip(),
+        str(embed.get("uri") or "").strip(),
+        str(snapshot_sources.get("previewUri") or "").strip(),
+        str(identity.get("canonicalUri") or "").strip(),
+        str(snapshot_sources.get("originalUri") or "").strip(),
+    ]
+
+
+def has_resource_uri(resource):
+    return any(resource_uri_values(resource))
+
+
+def merge_resource_uri_fields(resource, existing):
+    identity = resource.setdefault("identity", {})
+    if not isinstance(identity, dict):
+        identity = {}
+        resource["identity"] = identity
+    existing_identity = existing.get("identity") if isinstance(existing.get("identity"), dict) else {}
+    if not str(identity.get("uri") or "").strip() and existing_identity.get("uri"):
+        identity["uri"] = existing_identity.get("uri")
+    if not str(identity.get("canonicalUri") or "").strip() and existing_identity.get("canonicalUri"):
+        identity["canonicalUri"] = existing_identity.get("canonicalUri")
+
+    viewer = resource.setdefault("viewer", {})
+    if not isinstance(viewer, dict):
+        viewer = {}
+        resource["viewer"] = viewer
+    embed = viewer.setdefault("embed", {})
+    if not isinstance(embed, dict):
+        embed = {}
+        viewer["embed"] = embed
+    existing_viewer = existing.get("viewer") if isinstance(existing.get("viewer"), dict) else {}
+    existing_embed = existing_viewer.get("embed") if isinstance(existing_viewer.get("embed"), dict) else {}
+    if not str(embed.get("uri") or "").strip() and existing_embed.get("uri"):
+        embed["uri"] = existing_embed.get("uri")
+
+    snapshot_sources = resource.setdefault("snapshotSources", {})
+    if not isinstance(snapshot_sources, dict):
+        snapshot_sources = {}
+        resource["snapshotSources"] = snapshot_sources
+    existing_snapshot_sources = existing.get("snapshotSources") if isinstance(existing.get("snapshotSources"), dict) else {}
+    for key in ("previewUri", "originalUri", "thumbnailUri"):
+        if not str(snapshot_sources.get(key) or "").strip() and existing_snapshot_sources.get(key):
+            snapshot_sources[key] = existing_snapshot_sources.get(key)
+
+
+def iter_resource_json(root):
+    if root.exists():
+        yield from root.rglob("resource.json")
+
+
+def find_existing_primary_resource_by_id(rid):
+    if not rid:
+        return None
+    for resource_json in iter_resource_json(resource_root):
+        if resource_json.parent.name == rid:
+            return resource_json.parent
+        try:
+            existing = json.loads(resource_json.read_text(encoding="utf-8", errors="strict"))
+        except Exception:
+            continue
+        if isinstance(existing, dict) and str(existing.get("id") or "") == rid:
+            return resource_json.parent
+    return None
+
+
+def find_existing_primary_resource(resource):
+    key = resource_identity_key(resource)
+    if not key:
+        return None
+    for resource_json in iter_resource_json(resource_root):
+        try:
+            existing = json.loads(resource_json.read_text(encoding="utf-8", errors="strict"))
+        except Exception:
+            continue
+        if isinstance(existing, dict) and resource_identity_key(existing) == key:
+            return resource_json.parent
+    return None
+
+
+def save_primary_resource_definition(resource):
+    rid = str(resource.get("id") or "").strip()
+    if not rid:
+        return
+    storage = resource.get("storage")
+    if not isinstance(storage, dict):
+        storage = {}
+        resource["storage"] = storage
+
+    primary = find_existing_primary_resource(resource)
+    if primary is None and not has_resource_uri(resource):
+        primary = find_existing_primary_resource_by_id(rid)
+    should_write = True
+    if primary is None:
+        ts = resource_timestamp(resource)
+        primary = resource_root / ts.strftime("%Y") / ts.strftime("%m") / ts.strftime("%d") / rid
+    elif primary.name != rid:
+        should_write = False
+
+    primary.mkdir(parents=True, exist_ok=True)
+    storage["primaryPath"] = str(primary)
+    if not should_write:
+        return
+
+    resource_json = primary / "resource.json"
+    if resource_json.is_file() and not has_resource_uri(resource):
+        try:
+            existing_resource = json.loads(resource_json.read_text(encoding="utf-8", errors="strict"))
+            if isinstance(existing_resource, dict) and has_resource_uri(existing_resource):
+                merge_resource_uri_fields(resource, existing_resource)
+        except Exception:
+            pass
+    resource_json.write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+
+
+def copy_resource_snapshot(resource, base_root):
+    storage = resource.get("storage")
+    if not isinstance(storage, dict):
+        return
+    if storage.get("managed") is not True or storage.get("copyPolicy") != "snapshot":
+        return
+    rid = str(resource.get("id") or "").strip()
+    if not rid:
+        return
+
+    primary = resolve_storage_dir(str(storage.get("primaryPath") or ""), base_root)
+    snapshot = resolve_storage_dir(str(storage.get("snapshotPath") or ""), base_root)
+    if snapshot is None:
+        snapshot = note_resource_dir / rid
+        storage["snapshotPath"] = snapshot.as_posix()
+    if primary is None or not primary.exists():
+        return
+
+    snapshot.mkdir(parents=True, exist_ok=True)
+    for item in storage.get("files") or []:
+        if not isinstance(item, dict):
+            continue
+        rel = str(item.get("path") or "").replace("\\", "/").strip("/")
+        if not rel:
+            continue
+        source_path = str(item.get("sourcePath") or "").strip()
+        src = Path(source_path) if source_path else primary / rel
+        dst = snapshot / rel
+        if not src.is_file():
+            continue
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+
+    (snapshot / "resource.json").write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+
+
+note = load_note(json_file)
+note["note_id"] = note.get("note_id") or note_id
+note["resources"] = note.get("resources") or []
+base_root = note_root.parent
+for resource in note.get("resources") or []:
+    if not isinstance(resource, dict):
+        continue
+    save_primary_resource_definition(resource)
+    promote_local_resource_snapshot(resource)
+    save_primary_resource_definition(resource)
+    copy_resource_snapshot(resource, base_root)
+
+json_file.write_text(json.dumps(note, ensure_ascii=False, separators=(",", ":")), encoding="utf-8", newline="\n")
+PY
+  else
+    save_note_resources "$json_file" "$resource_root" "$note_resource_dir"
+  fi
+}
+
 # --- Collect CGI params from QUERY_STRING + POST body -------------------
 qs=${QUERY_STRING:-}
 body=""
@@ -353,7 +664,8 @@ mkdir -p "$note_dir" || error_response 'ERROR NOTE DIRECTORY CREATE FAILED'
 
 JSON_FILE="${Tmp}-note.json"
 printf '%s' "$json" > "$JSON_FILE"
-save_note_resources "$JSON_FILE" "$resource_base" "$note_resource_dir" || error_response 'ERROR RESOURCE SNAPSHOT FAILED'
+process_note_json "$JSON_FILE" "$note_base" "$resource_base" "$note_resource_dir" "$user_id" "$id" || error_response 'ERROR RESOURCE SNAPSHOT FAILED'
+json=$(cat "$JSON_FILE")
 
 json_base64=$(printf '%s' "$json" | base64 | tr -d '\n')
 [ -n "${json_base64:-}" ] || error_response 'ERROR JSON ENCODE FAILED'
