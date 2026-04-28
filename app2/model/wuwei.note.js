@@ -72,12 +72,15 @@ wuwei.note = (function () {
 
   function normalizeViewer(viewer) {
     var supported = (viewer && Array.isArray(viewer.supportedModes)) ? viewer.supportedModes.slice() : [];
+    var embed = (viewer && viewer.embed && typeof viewer.embed === 'object') ? util.clone(viewer.embed) : {};
     if (!supported.length) {
       supported = ['infoPane', 'newTab', 'newWindow', 'download'];
     }
     return {
       supportedModes: supported,
-      defaultMode: (viewer && viewer.defaultMode) || supported[0] || 'infoPane'
+      defaultMode: (viewer && viewer.defaultMode) || supported[0] || 'infoPane',
+      embed: embed,
+      thumbnailUri: String((viewer && viewer.thumbnailUri) || embed.thumbnailUri || '')
     };
   }
 
@@ -96,12 +99,94 @@ wuwei.note = (function () {
     };
   }
 
+  function toRuntimeFileUrl(value) {
+    var text = String(value || '').replace(/\\/g, '/');
+    var idx;
+    if (!text) {
+      return '';
+    }
+    if (/^https?:\/\//i.test(text)) {
+      try {
+        var url = new URL(text, window.location.href);
+        if ((url.hostname === 'localhost' || url.hostname === '127.0.0.1') && /^\/wu_wei2\//.test(url.pathname)) {
+          return window.location.origin + url.pathname + url.search + url.hash;
+        }
+      }
+      catch (e) {
+        return text;
+      }
+      return text;
+    }
+    idx = text.indexOf('/wu_wei2/');
+    if (idx >= 0) {
+      return window.location.origin + text.slice(idx);
+    }
+    if (text.charAt(0) === '/') {
+      return window.location.origin + text;
+    }
+    return text;
+  }
+
+  function storageFileUrl(storage, role) {
+    var files = (storage && Array.isArray(storage.files)) ? storage.files : [];
+    var primaryPath = String((storage && storage.primaryPath) || '').replace(/\\/g, '/');
+    var i, file, path, sourcePath;
+    for (i = 0; i < files.length; i += 1) {
+      file = files[i] || {};
+      if (String(file.role || '').toLowerCase() !== role) {
+        continue;
+      }
+      sourcePath = toRuntimeFileUrl(file.sourcePath || '');
+      if (sourcePath) {
+        return sourcePath;
+      }
+      path = String(file.path || '').replace(/\\/g, '/');
+      if (path && primaryPath) {
+        return toRuntimeFileUrl(primaryPath.replace(/\/$/, '') + '/' + path.replace(/^\//, ''));
+      }
+      if (path) {
+        return toRuntimeFileUrl(path);
+      }
+    }
+    return '';
+  }
+
   function normalizeResourceDefinition(resource) {
     var src = (resource && typeof resource === 'object') ? resource : {};
     var media = (src.media && typeof src.media === 'object') ? src.media : {};
     var identity = (src.identity && typeof src.identity === 'object') ? src.identity : {};
     var origin = (src.origin && typeof src.origin === 'object') ? src.origin : {};
     var rights = (src.rights && typeof src.rights === 'object') ? src.rights : {};
+    var viewer = normalizeViewer(src.viewer);
+    var storage = normalizeStorage(src.storage);
+    var snapshotSources = (src.snapshotSources && typeof src.snapshotSources === 'object')
+      ? util.clone(src.snapshotSources)
+      : {};
+    var previewUri = snapshotSources.previewUri || storageFileUrl(storage, 'preview');
+    var thumbnailUri = snapshotSources.thumbnailUri || viewer.thumbnailUri || storageFileUrl(storage, 'thumbnail');
+    var originalUri = snapshotSources.originalUri || storageFileUrl(storage, 'original');
+    if (previewUri) {
+      snapshotSources.previewUri = previewUri;
+      if (!identity.uri) {
+        identity.uri = previewUri;
+      }
+      if (!viewer.embed.uri) {
+        viewer.embed.uri = previewUri;
+      }
+    }
+    if (thumbnailUri) {
+      snapshotSources.thumbnailUri = thumbnailUri;
+      viewer.thumbnailUri = viewer.thumbnailUri || thumbnailUri;
+      if (!viewer.embed.thumbnailUri) {
+        viewer.embed.thumbnailUri = thumbnailUri;
+      }
+    }
+    if (originalUri) {
+      snapshotSources.originalUri = originalUri;
+      if (!identity.canonicalUri) {
+        identity.canonicalUri = originalUri;
+      }
+    }
     return {
       id: src.id || util.createUuid(),
       type: 'Resource',
@@ -121,11 +206,9 @@ wuwei.note = (function () {
         downloadable: media.downloadable === true || src.downloadable === true,
         duration: (typeof media.duration !== 'undefined') ? media.duration : (src.duration || null)
       },
-      viewer: normalizeViewer(src.viewer),
-      storage: normalizeStorage(src.storage),
-      snapshotSources: (src.snapshotSources && typeof src.snapshotSources === 'object')
-        ? util.clone(src.snapshotSources)
-        : {},
+      viewer: viewer,
+      storage: storage,
+      snapshotSources: snapshotSources,
       rights: {
         owner: String(rights.owner || src.owner || ''),
         copyright: String(rights.copyright || src.copyright || ''),
