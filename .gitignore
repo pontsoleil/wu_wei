@@ -1,6 +1,7 @@
 # Runtime data and user content
 /data/
 /public/
+/setting/
 /_WIP/
 
 # Generated archives and large local packages
