@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # save-note.cgi
 #
 # Normal mode:

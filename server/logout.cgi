@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # logout.cgi
 #
 # Normal mode:

@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # list-note.cgi
 #
 # Normal mode:
