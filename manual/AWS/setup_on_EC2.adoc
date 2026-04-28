@@ -1,0 +1,269 @@
+= WuWei2 AWS EC2 Amazon Linux 2 セットアップ手順
+:toc:
+:toclevels: 3
+:sectnums:
+:encoding: utf-8
+
+この文書は、GitHub リポジトリ `pontsoleil/wu_wei` を Amazon Linux 2 の EC2 インスタンスへ配置し、WuWei2 を `/wu_wei2/index.html` として動作させるための手順を説明する。
+
+== 前提
+
+* EC2 は Amazon Linux 2 を使用する。
+* Web サーバーは `nginx` を使用する。
+* CGI 実行は `fcgiwrap` を使用する。
+* WuWei2 の配置先は `/var/www/wu_wei2` とする。
+* GitHub には実データ、公開ノート、ログ、環境ファイル、`ffmpeg` / `ffprobe` 本体は含めない。
+
+== パッケージの導入
+
+[source,bash]
+----
+sudo yum update -y
+sudo yum install -y git nginx fcgiwrap python3
+sudo yum install -y ImageMagick poppler-utils
+----
+
+PDF のプレビュー生成や画像処理を使用する場合は `ImageMagick` と `poppler-utils` を使用する。
+
+動画サムネイルや動画情報取得を使用する場合は `ffmpeg` と `ffprobe` が必要である。導入方法は <<ffmpeg_ffprobe>> を参照する。
+
+== GitHub から clone
+
+[source,bash]
+----
+sudo mkdir -p /var/www
+cd /var/www
+sudo git clone https://github.com/pontsoleil/wu_wei.git wu_wei2
+sudo chown -R ec2-user:ec2-user /var/www/wu_wei2
+----
+
+以後の作業は `/var/www/wu_wei2` で行う。
+
+[source,bash]
+----
+cd /var/www/wu_wei2
+----
+
+== データディレクトリの作成
+
+GitHub には利用者データや公開ノートを含めないため、EC2 上で作成する。
+
+[source,bash]
+----
+mkdir -p data
+mkdir -p public/note
+mkdir -p server/log
+----
+
+必要に応じて、Web サーバー実行ユーザーが書き込める権限を付与する。
+
+[source,bash]
+----
+sudo chown -R ec2-user:nginx data public server/log
+chmod -R 775 data public server/log
+----
+
+環境により nginx の実行ユーザーが `nginx` でない場合は、`ps` や nginx 設定で実行ユーザーを確認して読み替える。
+
+== 環境ファイルの作成
+
+GitHub には実環境ファイルを含めず、サンプルファイルだけを登録している。
+
+[source,bash]
+----
+cp server/data/environment.example server/data/environment
+----
+
+`server/data/environment` の内容を、EC2 の配置先に合わせて確認する。
+
+[source,text]
+----
+note /var/www/wu_wei2/data/*/note
+resource /var/www/wu_wei2/data/*/resource
+trash /var/www/wu_wei2/data/*/trash
+upload /var/www/wu_wei2/data/*/upload
+thumbnail /var/www/wu_wei2/data/*/thumbnail
+public /var/www/wu_wei2/public/note
+base /var/www/wu_wei2/data
+file /var/www/wu_wei2/data/*/content
+----
+
+== CGI と補助コマンドの実行権限
+
+[source,bash]
+----
+chmod +x server/*.cgi
+chmod +x server/is-login
+chmod +x server/bin/*
+----
+
+`server/bin/ffmpeg` と `server/bin/ffprobe` は GitHub には含めない。配置方法は次章で説明する。
+
+[[ffmpeg_ffprobe]]
+== ffmpeg / ffprobe の server/bin への登録
+
+WuWei2 は動画サムネイル生成や動画メタデータ取得で `ffmpeg` と `ffprobe` を使用する。
+
+GitHub には大きなバイナリを含めないため、EC2 上でインストールまたは配置する。
+
+=== yum で導入できる場合
+
+Amazon Linux 2 で EPEL から導入できる場合は、OS にインストールした実体を `server/bin` へシンボリックリンクする。
+
+[source,bash]
+----
+sudo amazon-linux-extras install epel -y
+sudo yum install -y ffmpeg ffmpeg-devel
+----
+
+導入確認:
+
+[source,bash]
+----
+which ffmpeg
+which ffprobe
+ffmpeg -version
+ffprobe -version
+----
+
+WuWei2 の `server/bin` に登録する。
+
+[source,bash]
+----
+cd /var/www/wu_wei2
+mkdir -p server/bin
+
+ln -sf "$(which ffmpeg)" server/bin/ffmpeg
+ln -sf "$(which ffprobe)" server/bin/ffprobe
+
+chmod +x server/bin/ffmpeg server/bin/ffprobe
+----
+
+確認:
+
+[source,bash]
+----
+server/bin/ffmpeg -version
+server/bin/ffprobe -version
+----
+
+=== yum で入らない場合
+
+`sudo yum install ffmpeg` でパッケージが見つからない場合、静的ビルドを取得して `server/bin` に配置する。
+
+[source,bash]
+----
+cd /tmp
+curl -L -o ffmpeg.tar.xz https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
+tar -xf ffmpeg.tar.xz
+cd ffmpeg-*-amd64-static
+
+sudo cp ffmpeg ffprobe /var/www/wu_wei2/server/bin/
+sudo chmod +x /var/www/wu_wei2/server/bin/ffmpeg /var/www/wu_wei2/server/bin/ffprobe
+----
+
+配置確認:
+
+[source,bash]
+----
+/var/www/wu_wei2/server/bin/ffmpeg -version
+/var/www/wu_wei2/server/bin/ffprobe -version
+----
+
+`server/bin/ffmpeg` と `server/bin/ffprobe` が実行できれば、WuWei2 の CGI からも同じパスで利用できる。
+
+== nginx と fcgiwrap の設定
+
+`/etc/nginx/conf.d/wu_wei2.conf` を作成する。
+
+[source,nginx]
+----
+server {
+    listen 80;
+    server_name example.com;
+
+    root /var/www/wu_wei2;
+    index index.html;
+
+    location /wu_wei2/ {
+        alias /var/www/wu_wei2/;
+        index index.html;
+    }
+
+    location ~ ^/wu_wei2/server/(.+\.cgi)$ {
+        root /var/www;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME /var/www/wu_wei2/server/$1;
+        fastcgi_param SCRIPT_NAME /wu_wei2/server/$1;
+        fastcgi_pass unix:/var/run/fcgiwrap.socket;
+    }
+}
+----
+
+`server_name` は利用するドメインまたは EC2 のホスト名に変更する。IP アドレスで確認する場合は、一時的に `_` を指定してもよい。
+
+[source,nginx]
+----
+server_name _;
+----
+
+設定確認と起動:
+
+[source,bash]
+----
+sudo nginx -t
+sudo systemctl enable nginx
+sudo systemctl restart nginx
+
+sudo systemctl enable fcgiwrap
+sudo systemctl restart fcgiwrap
+----
+
+== 動作確認
+
+ブラウザでアプリケーションを確認する。
+
+[source,text]
+----
+http://<EC2のIPまたはドメイン>/wu_wei2/index.html
+----
+
+CGI の確認:
+
+[source,text]
+----
+http://<EC2のIPまたはドメイン>/wu_wei2/server/health.cgi
+----
+
+`ffmpeg` / `ffprobe` の CGI 側利用で問題がある場合は、まず EC2 上で次を確認する。
+
+[source,bash]
+----
+cd /var/www/wu_wei2
+server/bin/ffmpeg -version
+server/bin/ffprobe -version
+ls -l server/bin/ffmpeg server/bin/ffprobe
+----
+
+== GitHub 更新後の反映
+
+EC2 上でソースを更新する場合:
+
+[source,bash]
+----
+cd /var/www/wu_wei2
+git pull origin master
+chmod +x server/*.cgi
+chmod +x server/is-login
+chmod +x server/bin/*
+----
+
+`data/`, `public/`, `server/data/environment`, `server/log` は GitHub 管理外のため、通常の `git pull` で上書きされない。
+
+== 運用上の注意
+
+* `data/` と `public/` はノート、リソース、公開ノートを保持するため、EC2 側でバックアップする。
+* `server/data/environment` は環境依存設定なので GitHub にコミットしない。
+* `server/bin/ffmpeg` と `server/bin/ffprobe` は EC2 ごとに配置する。
+* GitHub には利用者認証情報、ログ、アップロード実体、公開ノート実体を含めない。
+
