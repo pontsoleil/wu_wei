@@ -293,7 +293,9 @@ body=""
 cl=${CONTENT_LENGTH:-0}
 
 if [ "${cl:-0}" -gt 0 ] 2>/dev/null; then
-  body=$(dd bs="$cl" count=1 2>/dev/null || true)
+  # FastCGI provides exactly the request body on stdin. A single large
+  # dd block can return a short read from a pipe, so read until EOF.
+  body=$(cat || true)
 fi
 
 if [ -n "$qs" ] && [ -n "$body" ]; then
