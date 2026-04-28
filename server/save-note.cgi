@@ -32,11 +32,13 @@ if [ -f "$DEBUG_FILE" ]; then
   REQLOG="$SCRIPT_DIR/log/${0##*/}.$$.log"
   # stderr -> both cgi.err and per-request log
   exec 2> >(tee -a "$SCRIPT_DIR/log/cgi.err" >>"$REQLOG")
-  set -eux
+  set -eu
+  DEBUG=1
 else
   # stderr -> cgi.err only
   exec 2>>"$SCRIPT_DIR/log/cgi.err"
   set -eu
+  DEBUG=0
 fi
 
 export LC_ALL=C
@@ -73,6 +75,20 @@ ok_response() {
   printf '\r\n'
   printf '%s\n' "$1"
   exit 0
+}
+
+debug_log() {
+  [ "${DEBUG:-0}" = "1" ] || return 0
+  printf '[%s] %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$*" >&2
+}
+
+debug_preview() {
+  label=$1
+  value=$2
+  [ "${DEBUG:-0}" = "1" ] || return 0
+  len=$(printf '%s' "$value" | wc -c | tr -d ' ')
+  head=$(printf '%s' "$value" | head -c 240 | tr '\r\n\t' '   ')
+  printf '[%s] %s_len=%s %s_head=%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$label" "$len" "$label" "$head" >&2
 }
 
 strip_quotes() {
@@ -287,6 +303,7 @@ session_user_id=$(is-login || true)
 user_id=$(nameread user_id "$CGIVARS" | strip_quotes || true)
 
 if [ -z "${session_user_id:-}" ] || [ -z "${user_id:-}" ] || [ "$user_id" != "$session_user_id" ]; then
+  debug_log "not_logged_in session_user_id=${session_user_id:-} user_id=${user_id:-}"
   error_response 'ERROR NOT LOGGED IN'
 fi
 
@@ -301,6 +318,8 @@ name=$(nameread name "$CGIVARS" | strip_quotes || true)
 description=$(nameread description "$CGIVARS" | strip_quotes || true)
 thumbnail=$(nameread thumbnail "$CGIVARS" | strip_quotes || true)
 json=$(nameread json "$CGIVARS" | strip_quotes || true)
+debug_log "request user_id=$user_id id=$id name=$name content_length=${CONTENT_LENGTH:-0}"
+debug_preview "json_raw" "$json"
 
 [ -n "${id:-}" ] || error_response 'ERROR ID NOT SPECIFIED'
 [ -n "${json:-}" ] || error_response 'ERROR JSON NOT SPECIFIED'
@@ -313,6 +332,7 @@ json=$(printf '%s' "$json" | restore_ack_to_space)
 
 # Remove BOM only. JSON content itself should remain unchanged.
 json=$(printf '%s' "$json" | sed '1s/^\xEF\xBB\xBF//')
+debug_preview "json" "$json"
 
 note_dir="$note_base/$year/$month/$day/$id"
 note_resource_dir="$note_dir/resource"
@@ -324,6 +344,7 @@ save_note_resources "$JSON_FILE" "$resource_base" "$note_resource_dir" || error_
 
 json_base64=$(printf '%s' "$json" | base64 | tr -d '\n')
 [ -n "${json_base64:-}" ] || error_response 'ERROR JSON ENCODE FAILED'
+debug_log "json_base64_len=$(printf '%s' "$json_base64" | wc -c | tr -d ' ') note_dir=$note_dir"
 
 outfile="$note_dir/note.json"
 {
