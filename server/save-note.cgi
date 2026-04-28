@@ -47,9 +47,10 @@ export UNIX_STD=2003
 
 Tmp="/tmp/${0##*/}.$$"
 CGIVARS="${Tmp}-cgivars"
+CGIVARS_ORG="${Tmp}-cgivars-org"
 
 cleanup() {
-  rm -f "$CGIVARS"
+  rm -f "$CGIVARS" "$CGIVARS_ORG"
   rm -rf "${RESOURCE_TMP:-}"
 }
 trap cleanup EXIT HUP INT TERM
