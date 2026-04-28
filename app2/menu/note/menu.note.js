@@ -423,16 +423,28 @@ wuwei.menu.note = wuwei.menu.note || {};
 
   function downloadFile() {
     try {
-      const text = wuwei.note.exportNoteText();
-      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = makeFileName();
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(url);
+      const current = wuwei.common.current || {};
+      const canUseServerBundle = current.note_id && wuwei.common.state && wuwei.common.state.currentUser && wuwei.common.state.currentUser.user_id;
+      const noteTextPromise = canUseServerBundle
+        ? wuwei.note.saveNote().then(function () { return wuwei.note.exportPortableNoteText(); })
+        : Promise.resolve(wuwei.note.exportNoteText());
+      noteTextPromise.then(function (text) {
+        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = makeFileName();
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(url);
+      }).catch(function (e) {
+        console.error(e);
+        wuwei.menu.snackbar.open({
+          type: 'error',
+          message: e && e.message ? e.message : 'ERROR Failed to download note file'
+        });
+      });
     }
     catch (e) {
       console.error(e);

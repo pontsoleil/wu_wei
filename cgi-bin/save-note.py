@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 
 import base64
+import binascii
+import hashlib
 import json
 import shutil
 from datetime import datetime
@@ -302,6 +304,100 @@ def _copy_resource_snapshot(resource: dict, *, base_root: Path, user_id: str, no
     resource_json.write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
 
 
+def _safe_bundle_filename(value: str, fallback: str) -> str:
+    name = Path(str(value or "").replace("\\", "/")).name
+    name = "".join(c for c in name if c not in "\r\n\t")
+    return name or fallback
+
+
+def _embedded_bundle_files(note_json: dict) -> list[dict]:
+    portable = note_json.get("portable")
+    if not isinstance(portable, dict):
+        portable = note_json.get("resourceBundle")
+    if not isinstance(portable, dict):
+        return []
+    files = portable.get("files")
+    return files if isinstance(files, list) else []
+
+
+def _restore_embedded_resource_files(note_json: dict, *, resource_root: Path, note_resource_dir: Path, now: datetime) -> None:
+    bundle_files = _embedded_bundle_files(note_json)
+    if not bundle_files:
+        return
+
+    resources = note_json.get("resources") if isinstance(note_json.get("resources"), list) else []
+    resource_by_id = {
+        str(resource.get("id") or ""): resource
+        for resource in resources
+        if isinstance(resource, dict) and str(resource.get("id") or "")
+    }
+
+    for index, item in enumerate(bundle_files, start=1):
+        if not isinstance(item, dict):
+            continue
+        rid = str(item.get("resourceId") or item.get("resource_id") or "").strip()
+        resource = resource_by_id.get(rid)
+        if not rid or resource is None:
+            continue
+        encoded = str(item.get("base64") or "").strip()
+        if not encoded:
+            continue
+        try:
+            payload = base64.b64decode(encoded, validate=True)
+        except (binascii.Error, ValueError):
+            debug_kv(bundle_skip="invalid base64", resource_id=rid)
+            continue
+
+        role = str(item.get("role") or "original").strip() or "original"
+        filename = _safe_bundle_filename(item.get("path") or item.get("name"), f"{role}-{index}.bin")
+        sha256 = hashlib.sha256(payload).hexdigest()
+        mime_type = str(item.get("mimeType") or item.get("mime_type") or "application/octet-stream").strip()
+
+        storage = resource.get("storage")
+        if not isinstance(storage, dict):
+            storage = {}
+            resource["storage"] = storage
+        ts = _resource_timestamp(resource, now)
+        primary = _find_existing_primary_resource(resource_root, resource)
+        if primary is None:
+            primary = _find_existing_primary_resource_by_id(resource_root, rid)
+        if primary is None:
+            primary = resource_root / ts.strftime("%Y") / ts.strftime("%m") / ts.strftime("%d") / rid
+        snapshot = note_resource_dir / rid
+
+        primary.mkdir(parents=True, exist_ok=True)
+        snapshot.mkdir(parents=True, exist_ok=True)
+        primary_file = primary / filename
+        snapshot_file = snapshot / filename
+        primary_file.write_bytes(payload)
+        snapshot_file.write_bytes(payload)
+
+        storage["managed"] = True
+        storage["copyPolicy"] = "snapshot"
+        storage["primaryPath"] = str(primary)
+        storage["snapshotPath"] = str(snapshot)
+        files = storage.get("files")
+        if not isinstance(files, list):
+            files = []
+            storage["files"] = files
+        files = [f for f in files if not (isinstance(f, dict) and str(f.get("role") or "") == role and str(f.get("path") or "") == filename)]
+        files.append({
+            "role": role,
+            "path": filename,
+            "sourcePath": str(primary_file),
+            "mimeType": mime_type,
+            "size": len(payload),
+            "sha256": sha256,
+        })
+        storage["files"] = files
+
+        (primary / "resource.json").write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+        (snapshot / "resource.json").write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+
+    note_json.pop("portable", None)
+    note_json.pop("resourceBundle", None)
+
+
 def main():
     debug("script begin")
     params = merge_query_and_body_params()
@@ -354,6 +450,12 @@ def main():
     note_json["resources"] = note_json.get("resources") or []
 
     try:
+        _restore_embedded_resource_files(
+            note_json,
+            resource_root=resource_root_path,
+            note_resource_dir=note_resource_dir,
+            now=now,
+        )
         for resource in note_json.get("resources") or []:
             if isinstance(resource, dict):
                 _save_primary_resource_definition(resource, resource_root=resource_root_path, now=now)

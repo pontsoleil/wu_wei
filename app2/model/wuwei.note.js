@@ -609,6 +609,10 @@ wuwei.note = (function () {
       this.currentPage = Number(param.currentPage || 1) || 1;
       this.pages = param.pages || {};
       this.resources = cloneArray(param.resources).map(normalizeResourceDefinition);
+      const portable = (param.portable && typeof param.portable === 'object')
+        ? param.portable
+        : ((param.resourceBundle && typeof param.resourceBundle === 'object') ? param.resourceBundle : null);
+      this.portable = portable ? util.clone(portable) : null;
       this.audit = normalizeAudit(param.audit, state.currentUser);
     }
   }
@@ -864,6 +868,9 @@ wuwei.note = (function () {
       pages: {},
       audit: normalizeAudit(current.audit, state.currentUser)
     };
+    if (current.portable && current.portable.files) {
+      noteToSave.portable = current.portable;
+    }
 
     Object.keys(current.pages || {}).forEach(function (pp) {
       var page = current.pages[pp];
@@ -902,7 +909,10 @@ wuwei.note = (function () {
       json: noteJson,
       thumbnail: iconHTML,
       user_id: cu.user_id
-    }, 'POST', 30000);
+    }, 'POST', 30000).then(function (responseText) {
+      delete current.portable;
+      return responseText;
+    });
   }
 
   function exportNoteText() {
@@ -941,6 +951,24 @@ wuwei.note = (function () {
 
     current.resources = noteToExport.resources;
     return JSON.stringify(noteToExport, null, 2).trim();
+  }
+
+  function exportPortableNoteText() {
+    if (!current.note_id || !util.isUUIDid(current.note_id)) {
+      return Promise.resolve(exportNoteText());
+    }
+    const cu = state.currentUser || {};
+    if (!cu.user_id) {
+      return Promise.resolve(exportNoteText());
+    }
+    const action = util.getAction('load-note');
+    return ajaxRequest(action, {
+      id: current.note_id,
+      user_id: cu.user_id,
+      bundle: 1
+    }, 'POST', 30000).then(function (responseText) {
+      return String(responseText || '').trim() || exportNoteText();
+    });
   }
 
   function publishNote() {
@@ -1473,6 +1501,7 @@ wuwei.note = (function () {
     newNote: newNote,
     updateNote: updateNote,
     exportNoteText: exportNoteText,
+    exportPortableNoteText: exportPortableNoteText,
     saveNote: saveNote,
     publishNote: publishNote,
     searchNote: searchNote,

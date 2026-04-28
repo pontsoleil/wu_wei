@@ -296,6 +296,9 @@ process_note_json() {
   note_id_arg=$6
   if command -v python3 >/dev/null 2>&1; then
     python3 - "$json_file" "$note_root" "$resource_root" "$note_resource_dir" "$user_id_arg" "$note_id_arg" "$SCRIPT_DIR" <<'PY'
+import base64
+import binascii
+import hashlib
 import json
 import shutil
 import sys
@@ -579,10 +582,96 @@ def copy_resource_snapshot(resource, base_root):
     (snapshot / "resource.json").write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
 
 
+def safe_bundle_filename(value, fallback):
+    name = Path(str(value or "").replace("\\", "/")).name
+    name = "".join(c for c in name if c not in "\r\n\t")
+    return name or fallback
+
+
+def embedded_bundle_files(note):
+    portable = note.get("portable")
+    if not isinstance(portable, dict):
+        portable = note.get("resourceBundle")
+    if not isinstance(portable, dict):
+        return []
+    files = portable.get("files")
+    return files if isinstance(files, list) else []
+
+
+def restore_embedded_resource_files(note):
+    bundle_files = embedded_bundle_files(note)
+    if not bundle_files:
+        return
+    resources = note.get("resources") if isinstance(note.get("resources"), list) else []
+    by_id = {
+        str(resource.get("id") or ""): resource
+        for resource in resources
+        if isinstance(resource, dict) and str(resource.get("id") or "")
+    }
+    for index, item in enumerate(bundle_files, start=1):
+        if not isinstance(item, dict):
+            continue
+        rid = str(item.get("resourceId") or item.get("resource_id") or "").strip()
+        resource = by_id.get(rid)
+        encoded = str(item.get("base64") or "").strip()
+        if not rid or resource is None or not encoded:
+            continue
+        try:
+            payload = base64.b64decode(encoded, validate=True)
+        except (binascii.Error, ValueError):
+            continue
+        role = str(item.get("role") or "original").strip() or "original"
+        filename = safe_bundle_filename(item.get("path") or item.get("name"), f"{role}-{index}.bin")
+        mime_type = str(item.get("mimeType") or item.get("mime_type") or "application/octet-stream").strip()
+        sha256 = hashlib.sha256(payload).hexdigest()
+
+        storage = resource.get("storage")
+        if not isinstance(storage, dict):
+            storage = {}
+            resource["storage"] = storage
+        ts = resource_timestamp(resource)
+        primary = find_existing_primary_resource(resource)
+        if primary is None:
+            primary = find_existing_primary_resource_by_id(rid)
+        if primary is None:
+            primary = resource_root / ts.strftime("%Y") / ts.strftime("%m") / ts.strftime("%d") / rid
+        snapshot = note_resource_dir / rid
+
+        primary.mkdir(parents=True, exist_ok=True)
+        snapshot.mkdir(parents=True, exist_ok=True)
+        primary_file = primary / filename
+        snapshot_file = snapshot / filename
+        primary_file.write_bytes(payload)
+        snapshot_file.write_bytes(payload)
+
+        storage["managed"] = True
+        storage["copyPolicy"] = "snapshot"
+        storage["primaryPath"] = str(primary)
+        storage["snapshotPath"] = str(snapshot)
+        files = storage.get("files")
+        if not isinstance(files, list):
+            files = []
+        files = [f for f in files if not (isinstance(f, dict) and str(f.get("role") or "") == role and str(f.get("path") or "") == filename)]
+        files.append({
+            "role": role,
+            "path": filename,
+            "sourcePath": str(primary_file),
+            "mimeType": mime_type,
+            "size": len(payload),
+            "sha256": sha256,
+        })
+        storage["files"] = files
+        (primary / "resource.json").write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+        (snapshot / "resource.json").write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+    note.pop("portable", None)
+    note.pop("resourceBundle", None)
+
+
 note = load_note(json_file)
 note["note_id"] = note.get("note_id") or note_id
 note["resources"] = note.get("resources") or []
 base_root = note_root.parent
+restore_embedded_resource_files(note)
 for resource in note.get("resources") or []:
     if not isinstance(resource, dict):
         continue

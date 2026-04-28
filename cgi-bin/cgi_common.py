@@ -451,6 +451,7 @@ def resolve_note_file(note_root: Path, note_id: str) -> Path:
         return direct / "note.json"
 
     matches = list(note_root.rglob(note_id))
+    matches.sort(key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=True)
     for path in matches:
         if path.is_file() and is_note_file(path):
             return path
