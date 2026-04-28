@@ -33,10 +33,10 @@ scripts.
 ## GitHub Upload
 
 ```powershell
-cd C:\Apache24\htdocs\wu_wei2\GIT
+cd C:\ ... \wu_wei\GIT
 git init -b main
 git add .
-git commit -m "Initial WuWei 2 snapshot"
+git commit -m "Initial WuWei snapshot"
 git remote add origin https://github.com/<owner>/<repo>.git
 git push -u origin main
 ```
