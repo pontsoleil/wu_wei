@@ -1,6 +1,6 @@
-# WuWei 2
+# WuWei
 
-WuWei 2 is a browser-based knowledge modelling and note editing application.
+WuWei is a browser-based knowledge modelling and note editing application.
 
 This repository snapshot is prepared for GitHub upload from the local Apache
 development tree.
