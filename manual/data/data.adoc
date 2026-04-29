@@ -4,6 +4,85 @@
 :toclevels: 3
 :sectnums:
 
+// 2026-04-29 update:
+// Resource file references are stored as area + user-independent relative path.
+// Absolute OS paths such as C:/... or /ebs/... and public URLs are runtime values
+// and must not be persisted in Note JSON or Resource JSON.
+
+== 2026-04-29 補足: Resource ファイル参照の相対パス規約
+
+Note JSON および Resource JSON には、OS 依存の絶対パスや公開 URL を保存しない。
+ファイル実体は `area` と、ユーザー UUID を含まない日付配下の相対 `path` で参照する。
+
+[source,json]
+----
+{
+  "storage": {
+    "managed": true,
+    "copyPolicy": "snapshot",
+    "sourcePath": "2026/04/29/_uploaded_file_uuid/document.pdf",
+    "primaryPath": "2026/04/29/_resource_uuid",
+    "snapshotPath": "",
+    "files": [
+      {
+        "role": "original",
+        "area": "upload",
+        "path": "2026/04/29/_uploaded_file_uuid/document.pdf",
+        "mimeType": "application/pdf"
+      },
+      {
+        "role": "thumbnail",
+        "area": "resource",
+        "path": "2026/04/29/_resource_uuid/thumbnail.jpg",
+        "mimeType": "image/jpeg"
+      },
+      {
+        "role": "preview",
+        "area": "resource",
+        "path": "2026/04/29/_resource_uuid/preview.pdf",
+        "mimeType": "application/pdf"
+      }
+    ]
+  }
+}
+----
+
+`area` は保存領域を表す。
+
+[cols="1,3,3"]
+|===
+|area |JSON 内の path |実体パス
+
+|`upload`
+|`YYYY/MM/DD/{uploaded_file_uuid}/{filename}`
+|`data/{user_uuid}/upload/YYYY/MM/DD/{uploaded_file_uuid}/{filename}`
+
+|`resource`
+|`YYYY/MM/DD/{resource_uuid}/{filename}`
+|`data/{user_uuid}/resource/YYYY/MM/DD/{resource_uuid}/{filename}`
+
+|`note`
+|`YYYY/MM/DD/{note_uuid}/resource/{resource_uuid}/{filename}` または Note 内相対 `resource/{resource_uuid}/{filename}`
+|`data/{user_uuid}/note/YYYY/MM/DD/{note_uuid}/resource/{resource_uuid}/{filename}`
+|===
+
+画面表示や iframe 表示では、実行時に次のように変換する。
+
+[source,text]
+----
+JSON:        area=upload, path=2026/04/29/_file_uuid/document.pdf
+公開URL:     upload/{user_uuid}/2026/04/29/_file_uuid/document.pdf
+実体パス:    data/{user_uuid}/upload/2026/04/29/_file_uuid/document.pdf
+----
+
+編集ペインに表示する文書 URI も、原則として `upload/2026/04/29/...` のような日付配下の相対パスとする。
+ユーザー UUID を含む公開 URL、`C:/...`、`/ebs/...` は保存データには書き込まない。
+
+通常保存では、`role=original` の upload 実体は Note snapshot に複製しない。
+Note snapshot には画面表示維持に必要な `resource.json`、`thumbnail.*`、`preview.pdf` を保存する。
+portable note download では、持ち運びに必要な original / thumbnail / preview を `bundle.files[]` に Base64 で同梱する。
+portable note upload / import では、`bundle.files[]` を現在ユーザーの `upload` または新しい Note snapshot へ復元し、`storage.files[]` は復元後も同じ `area + path` 形式で管理する。
+
 == 目的
 
 この文書は、WuWei app2 で扱う Note、Page、Node、Link、Group、Resource のデータモデル、保存時のファイル配置、入出力 API、メニュー操作との対応を一体として定義する。

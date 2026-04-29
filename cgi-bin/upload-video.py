@@ -258,6 +258,13 @@ def upload_relative_path(upload_root: Path, path: Path) -> str:
         return path.name
 
 
+def resource_relative_path(resource_root: Path, path: Path) -> str:
+    try:
+        return path.relative_to(resource_root).as_posix()
+    except Exception:
+        return path.name
+
+
 def sha256_file(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as f:
@@ -453,7 +460,12 @@ def main():
     if existing_resource and dedupe_reason == "sourcePath":
         resource_id = str(existing_resource.get("id") or "")
         existing_storage = existing_resource.get("storage") if isinstance(existing_resource.get("storage"), dict) else {}
-        primary_dir = Path(str(existing_storage.get("primaryPath") or "")) if existing_storage.get("primaryPath") else resource_dir / resource_id
+        if existing_storage.get("primaryPath"):
+            primary_dir = Path(str(existing_storage.get("primaryPath") or ""))
+            if not primary_dir.is_absolute():
+                primary_dir = resource_root / primary_dir
+        else:
+            primary_dir = resource_dir / resource_id
         debug_kv(dedupe="resource updated by same sourcePath", resource_id=resource_id, source_path=upload_relpath)
     else:
         rid = str(uuid.uuid4())
@@ -497,10 +509,13 @@ def main():
     )
 
     files = [file_entry("original", dest_file, content_type, video_wh or "")]
+    files[0]["area"] = "upload"
     files[0]["path"] = upload_relpath
-    files[0]["sourcePath"] = str(dest_file)
     if thumb_file.exists():
-        files.append(file_entry("thumbnail", thumb_file, "image/jpeg", thumbnail_size or ""))
+        item = file_entry("thumbnail", thumb_file, "image/jpeg", thumbnail_size or "")
+        item["area"] = "resource"
+        item["path"] = resource_relative_path(resource_root, thumb_file)
+        files.append(item)
 
     resource = {
         "id": resource_id,
@@ -533,7 +548,7 @@ def main():
             "managed": True,
             "copyPolicy": "snapshot",
             "sourcePath": upload_relpath,
-            "primaryPath": str(primary_dir),
+            "primaryPath": resource_relative_path(resource_root, primary_dir),
             "snapshotPath": "",
             "files": files,
         },

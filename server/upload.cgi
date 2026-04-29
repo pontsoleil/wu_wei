@@ -444,17 +444,17 @@ cat >"$resource_file" <<JSON || die_json "ERROR: cannot write resource file $res
     "managed": true,
     "copyPolicy": "snapshot",
     "sourcePath": "$(json_escape "$year/$month/$day/$upload_file_uuid/$filename")",
-    "primaryPath": "$(json_escape "$resource_dir")",
+    "primaryPath": "$(json_escape "${resource_dir#$resource_root/}")",
     "snapshotPath": "",
     "files": [
       {
         "role": "original",
+        "area": "upload",
         "path": "$(json_escape "$year/$month/$day/$upload_file_uuid/$filename")",
-        "sourcePath": "$(json_escape "$dest_file")",
         "mimeType": "$(json_escape "$content_type")",
         "size": ${totalsize:-0},
         "sha256": "$(json_escape "$original_sha")"
-      }$(if [ -f "$thumb_file" ]; then printf ',\n      {\n        "role": "thumbnail",\n        "path": "thumbnail.jpg",\n        "sourcePath": "%s",\n        "mimeType": "image/jpeg",\n        "size": %s,\n        "sha256": "%s"\n      }' "$(json_escape "$thumb_file")" "$(stat -c %s -- "$thumb_file" 2>/dev/null || echo 0)" "$(json_escape "$thumb_sha")"; fi)$(if [ -n "$preview_pdf" ] && [ -f "$preview_pdf" ]; then printf ',\n      {\n        "role": "preview",\n        "path": "preview.pdf",\n        "sourcePath": "%s",\n        "mimeType": "application/pdf",\n        "size": %s,\n        "sha256": "%s"\n      }' "$(json_escape "$preview_pdf")" "$(stat -c %s -- "$preview_pdf" 2>/dev/null || echo 0)" "$(json_escape "$preview_sha")"; fi)
+      }$(if [ -f "$thumb_file" ]; then printf ',\n      {\n        "role": "thumbnail",\n        "area": "resource",\n        "path": "%s",\n        "mimeType": "image/jpeg",\n        "size": %s,\n        "sha256": "%s"\n      }' "$(json_escape "${thumb_file#$resource_root/}")" "$(stat -c %s -- "$thumb_file" 2>/dev/null || echo 0)" "$(json_escape "$thumb_sha")"; fi)$(if [ -n "$preview_pdf" ] && [ -f "$preview_pdf" ]; then printf ',\n      {\n        "role": "preview",\n        "area": "resource",\n        "path": "%s",\n        "mimeType": "application/pdf",\n        "size": %s,\n        "sha256": "%s"\n      }' "$(json_escape "${preview_pdf#$resource_root/}")" "$(stat -c %s -- "$preview_pdf" 2>/dev/null || echo 0)" "$(json_escape "$preview_sha")"; fi)
     ]
   },
   "rights": {

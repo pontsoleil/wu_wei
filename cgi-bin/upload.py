@@ -329,6 +329,13 @@ def upload_relative_path(upload_root: Path, path: Path) -> str:
         return path.name
 
 
+def resource_relative_path(resource_root: Path, path: Path) -> str:
+    try:
+        return path.relative_to(resource_root).as_posix()
+    except Exception:
+        return path.name
+
+
 def find_upload_file_for_day(upload_day_dir: Path, filename: str) -> Path | None:
     # Same date + same filename is treated as the same uploaded file, even if
     # the content hash changes after re-upload.
@@ -373,23 +380,30 @@ def resource_original_hash(resource: dict) -> str:
     return ""
 
 
-def resource_file_exists(resource: dict, role: str) -> bool:
+def resource_file_exists(resource: dict, role: str, resource_root: Path) -> bool:
     storage = resource.get("storage") if isinstance(resource.get("storage"), dict) else {}
     primary = Path(str(storage.get("primaryPath") or ""))
+    if storage.get("primaryPath") and not primary.is_absolute():
+        primary = resource_root / primary
     for item in storage.get("files") or []:
         if not isinstance(item, dict) or item.get("role") != role:
             continue
         path_text = str(item.get("sourcePath") or "")
-        path = Path(path_text) if path_text else primary / str(item.get("path") or "")
+        if path_text:
+            path = Path(path_text)
+        elif item.get("area") == "resource":
+            path = resource_root / str(item.get("path") or "")
+        else:
+            path = primary / str(item.get("path") or "")
         if path.exists():
             return True
     return False
 
 
-def office_resource_needs_preview(resource: dict, filename: str) -> bool:
+def office_resource_needs_preview(resource: dict, filename: str, resource_root: Path) -> bool:
     if Path(filename or "").suffix.lower() not in OFFICE_EXTS:
         return False
-    return not resource_file_exists(resource, "preview")
+    return not resource_file_exists(resource, "preview", resource_root)
 
 
 def find_existing_resource(resource_root: Path, *, original_hash: str, canonical_uri: str, source_path: str) -> tuple[dict | None, str]:
@@ -557,7 +571,7 @@ def main():
         source_path=upload_relpath,
     )
     if existing_resource and dedupe_reason != "sourcePath":
-        if not office_resource_needs_preview(existing_resource, filename):
+        if not office_resource_needs_preview(existing_resource, filename, resource_root):
             debug_kv(dedupe="resource reused", resource_id=existing_resource.get("id"), sha256=original_hash)
             json_response(response_from_resource(existing_resource, option="upload", warning="resource reused"))
         debug_kv(
@@ -570,7 +584,12 @@ def main():
     if existing_resource and dedupe_reason == "sourcePath":
         resource_id = str(existing_resource.get("id") or "")
         existing_storage = existing_resource.get("storage") if isinstance(existing_resource.get("storage"), dict) else {}
-        primary_dir = Path(str(existing_storage.get("primaryPath") or "")) if existing_storage.get("primaryPath") else resource_dir / resource_id
+        if existing_storage.get("primaryPath"):
+            primary_dir = Path(str(existing_storage.get("primaryPath") or ""))
+            if not primary_dir.is_absolute():
+                primary_dir = resource_root / primary_dir
+        else:
+            primary_dir = resource_dir / resource_id
         debug_kv(dedupe="resource updated by same sourcePath", resource_id=resource_id, source_path=upload_relpath)
     else:
         rid = str(uuid.uuid4())
@@ -647,15 +666,17 @@ def main():
     )
 
     files = [file_entry("original", dest_file, content_type, resource_size or "")]
+    files[0]["area"] = "upload"
     files[0]["path"] = upload_relpath
-    files[0]["sourcePath"] = str(dest_file)
     if thumb_file.exists():
         item = file_entry("thumbnail", thumb_file, "image/png" if thumb_file.suffix.lower() == ".png" else "image/jpeg", thumbnail_size or "")
-        item["path"] = role_filename("thumbnail", thumb_file)
+        item["area"] = "resource"
+        item["path"] = resource_relative_path(resource_root, thumb_file)
         files.append(item)
     if office_pdf and office_pdf.exists():
         item = file_entry("preview", office_pdf, "application/pdf")
-        item["path"] = role_filename("preview", office_pdf)
+        item["area"] = "resource"
+        item["path"] = resource_relative_path(resource_root, office_pdf)
         files.append(item)
 
     resource = {
@@ -689,7 +710,7 @@ def main():
             "managed": True,
             "copyPolicy": "snapshot",
             "sourcePath": upload_relpath,
-            "primaryPath": str(primary_dir),
+            "primaryPath": resource_relative_path(resource_root, primary_dir),
             "snapshotPath": "",
             "files": files,
         },

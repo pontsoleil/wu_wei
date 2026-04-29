@@ -98,6 +98,23 @@ def _local_file_from_uri(uri: str, *, base_root: Path | None = None, user_id: st
     return candidate if candidate.is_file() else None
 
 
+def _storage_file_from_item(item: dict, *, base_root: Path, user_id: str) -> Path | None:
+    area = str(item.get("area") or "").strip().strip("/")
+    rel = str(item.get("path") or item.get("sourcePath") or "").replace("\\", "/").strip("/")
+    if not rel:
+        return None
+    if not area:
+        role = str(item.get("role") or "").strip().lower()
+        area = "upload" if role == "original" else "resource"
+    public_path = _storage_path_from_public_path(f"{area}/{user_id}/{rel}", base_root=base_root, user_id=user_id)
+    if public_path is not None:
+        return public_path
+    path = Path(rel)
+    if path.is_absolute():
+        return path
+    return base_root / area / rel
+
+
 def _promote_local_resource_snapshot(resource: dict) -> None:
     storage = resource.get("storage")
     if not isinstance(storage, dict):
@@ -287,7 +304,10 @@ def _save_primary_resource_definition(resource: dict, *, resource_root: Path, no
         should_write = False
 
     primary.mkdir(parents=True, exist_ok=True)
-    storage["primaryPath"] = str(primary)
+    try:
+        storage["primaryPath"] = primary.relative_to(resource_root).as_posix()
+    except Exception:
+        storage["primaryPath"] = str(primary)
     if not should_write:
         return
 
@@ -346,7 +366,9 @@ def _copy_resource_snapshot(resource: dict, *, base_root: Path, user_id: str, no
             if src is None:
                 src = Path(source_path)
         else:
-            src = primary / rel if primary is not None else Path()
+            src = _storage_file_from_item(item, base_root=base_root, user_id=user_id)
+            if src is None:
+                src = primary / rel if primary is not None else Path()
         if not src.is_file():
             debug_kv(snapshot_skip="file missing", resource_id=rid, src=str(src))
             snapshot_files.append(dict(item))
@@ -354,8 +376,9 @@ def _copy_resource_snapshot(resource: dict, *, base_root: Path, user_id: str, no
         dst = snapshot / _snapshot_filename(item, src)
         shutil.copy2(src, dst)
         snapshot_item = dict(item)
-        snapshot_item["path"] = dst.name
-        snapshot_item["sourcePath"] = str(dst)
+        snapshot_item["area"] = "note"
+        snapshot_item["path"] = f"resource/{rid}/{dst.name}"
+        snapshot_item.pop("sourcePath", None)
         snapshot_files.append(snapshot_item)
         snapshot_uri = _public_uri_from_storage_path(dst, user_id)
         if snapshot_uri:

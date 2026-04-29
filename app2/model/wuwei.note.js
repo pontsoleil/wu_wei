@@ -90,12 +90,29 @@ wuwei.note = (function () {
 
   function normalizeStorage(storage) {
     var src = (storage && typeof storage === 'object') ? storage : {};
+    var files = Array.isArray(src.files) ? src.files.map(function (file) {
+      var out = util.clone(file);
+      var area = String(out.area || '').trim();
+      var role = String(out.role || '').toLowerCase();
+      if (!area) {
+        area = (role === 'original') ? 'upload' : 'resource';
+      }
+      if (out.sourcePath && !out.path) {
+        out.path = out.sourcePath;
+      }
+      if (out.path) {
+        out.path = util.toStorageRelativePath(out.path, state.currentUser && state.currentUser.user_id, area);
+      }
+      delete out.sourcePath;
+      out.area = area;
+      return out;
+    }) : [];
     return {
       managed: src.managed === true,
       copyPolicy: src.copyPolicy || (src.managed === true ? 'snapshot' : 'metadataOnly'),
-      primaryPath: String(src.primaryPath || src.path || ''),
-      snapshotPath: String(src.snapshotPath || ''),
-      files: Array.isArray(src.files) ? src.files.map(function (file) { return util.clone(file); }) : []
+      primaryPath: util.toStorageRelativePath(src.primaryPath || src.path || '', state.currentUser && state.currentUser.user_id, 'resource'),
+      snapshotPath: util.toStorageRelativePath(src.snapshotPath || '', state.currentUser && state.currentUser.user_id, 'note'),
+      files: files
     };
   }
 
@@ -130,22 +147,19 @@ wuwei.note = (function () {
   function storageFileUrl(storage, role) {
     var files = (storage && Array.isArray(storage.files)) ? storage.files : [];
     var primaryPath = String((storage && storage.primaryPath) || '').replace(/\\/g, '/');
-    var i, file, path, sourcePath;
+    var i, file, path, area;
     for (i = 0; i < files.length; i += 1) {
       file = files[i] || {};
       if (String(file.role || '').toLowerCase() !== role) {
         continue;
       }
-      sourcePath = toRuntimeFileUrl(file.sourcePath || '');
-      if (sourcePath) {
-        return sourcePath;
-      }
+      area = String(file.area || '').trim() || (role === 'original' ? 'upload' : 'resource');
       path = String(file.path || '').replace(/\\/g, '/');
+      if (path) {
+        return toRuntimeFileUrl(util.toPublicResourceUri(area, util.toStorageRelativePath(path, state.currentUser && state.currentUser.user_id, area), state.currentUser && state.currentUser.user_id));
+      }
       if (path && primaryPath) {
         return toRuntimeFileUrl(primaryPath.replace(/\/$/, '') + '/' + path.replace(/^\//, ''));
-      }
-      if (path) {
-        return toRuntimeFileUrl(path);
       }
     }
     return '';
