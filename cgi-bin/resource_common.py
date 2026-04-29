@@ -78,11 +78,18 @@ def local_file_url(user_id: str, source_path: str) -> str:
     return ""
 
 
-def file_url(user_id: str, resource_json: Path, role_path: str, source_path: str = "") -> str:
+def file_url(user_id: str, resource_json: Path, role_path: str, source_path: str = "", area: str = "") -> str:
     if not role_path:
         return local_file_url(user_id, source_path)
     if role_path.startswith("http://") or role_path.startswith("https://") or role_path.startswith("data:"):
         return role_path
+
+    role_path = role_path.replace("\\", "/").strip("/")
+    if area:
+        area_root = Path(environment_path(area, user_id))
+        candidate = area_root / role_path
+        if candidate.exists():
+            return environment_url(area, user_id, role_path)
 
     resource_dir = resource_json.parent
     candidate = resource_dir / role_path
@@ -223,12 +230,12 @@ def collect_resource_record(resource_root: Path, resource_json: Path, user_id: s
         content_type = "text/html"
     viewer_type = viewer_type_for_resource(resource, canonical_uri or uri, content_type)
     preview_uri = embed.get("uri") or (
-        file_url(user_id, resource_json, str(preview.get("path") or ""), str(preview.get("sourcePath") or ""))
+        file_url(user_id, resource_json, str(preview.get("path") or ""), str(preview.get("sourcePath") or ""), str(preview.get("area") or ""))
         if preview
         else uri
     )
     thumbnail_uri = (
-        file_url(user_id, resource_json, str(thumbnail.get("path") or ""), str(thumbnail.get("sourcePath") or ""))
+        file_url(user_id, resource_json, str(thumbnail.get("path") or ""), str(thumbnail.get("sourcePath") or ""), str(thumbnail.get("area") or ""))
         if thumbnail
         else external_thumbnail_uri(resource)
     )

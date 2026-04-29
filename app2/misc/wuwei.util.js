@@ -113,6 +113,14 @@ wuwei.util = (function () {
     setHidden,
     getNodeShape,
     getNodeSize,
+    getCurrentUserId,
+    toStorageRelativePath,
+    toPublicResourceUri,
+    getResourceFile,
+    getResourceFileUri,
+    getResourcePreviewUri,
+    getResourceOriginalUri,
+    getResourceThumbnailUri,
     getThumbnailUri,
     getResource,
     getResourceUri,
@@ -3732,8 +3740,192 @@ wuwei.util = (function () {
     return (node && node.size && 'object' === typeof node.size) ? node.size : {};
   };
 
+  getCurrentUserId = function () {
+    var cu = (state && state.currentUser) || {};
+    return String(cu.user_id || getCookie('wuwei_user_id') || '').trim();
+  };
+
+  toStorageRelativePath = function (uriOrPath, userId, area) {
+    var text = String(uriOrPath || '').replace(/\\/g, '/').trim();
+    var uid = String(userId || getCurrentUserId() || '').trim();
+    var areaName = String(area || '').replace(/^\/+|\/+$/g, '');
+    var idx, m;
+
+    if (!text || /^(?:https?:)?\/\//i.test(text) && !/^https?:\/\/(?:localhost|127\.0\.0\.1|[^/]+)\/wu_wei2\//i.test(text)) {
+      return text;
+    }
+
+    try {
+      if (/^https?:\/\//i.test(text)) {
+        text = (new URL(text, window.location.href)).pathname;
+      }
+    }
+    catch (e) { /* keep the raw value */ }
+
+    idx = text.indexOf('/wu_wei2/');
+    if (idx >= 0) {
+      text = text.slice(idx + '/wu_wei2/'.length);
+    }
+
+    text = text.replace(/^\/+/, '');
+    text = text.replace(/^data\//, '');
+
+    if (uid && text.indexOf(uid + '/') === 0) {
+      text = text.slice(uid.length + 1);
+    }
+
+    m = text.match(/^(upload|resource|note|thumbnail|content)\/(.+)$/);
+    if (m) {
+      text = m[2];
+      if (uid && text.indexOf(uid + '/') === 0) {
+        text = text.slice(uid.length + 1);
+      }
+    }
+
+    if (areaName && text.indexOf(areaName + '/') === 0) {
+      text = text.slice(areaName.length + 1);
+    }
+
+    return text.replace(/^\/+/, '');
+  };
+
+  toPublicResourceUri = function (area, relativePath, userId) {
+    var areaName = String(area || '').replace(/^\/+|\/+$/g, '');
+    var uid = String(userId || getCurrentUserId() || '').trim();
+    var path = String(relativePath || '').replace(/\\/g, '/').trim();
+
+    if (!path || /^https?:\/\//i.test(path)) {
+      return path;
+    }
+    if (path.indexOf('/wu_wei2/') >= 0) {
+      return path.replace(/^.*\/wu_wei2\//, '');
+    }
+    path = path.replace(/^\/+/, '');
+    if (!areaName) {
+      if (/^(upload|resource|note|thumbnail|content)\//.test(path)) {
+        return path;
+      }
+      return path;
+    }
+    if (path.indexOf(areaName + '/') === 0) {
+      path = path.slice(areaName.length + 1);
+      if (uid && path.indexOf(uid + '/') !== 0) {
+        return areaName + '/' + uid + '/' + path;
+      }
+      return areaName + '/' + path;
+    }
+    if (uid && path.indexOf(uid + '/') === 0) {
+      return areaName + '/' + path;
+    }
+    return areaName + '/' + (uid ? uid + '/' : '') + path;
+  };
+
+  getResourceFile = function (resource, role) {
+    var storage = (resource && resource.storage && 'object' === typeof resource.storage) ? resource.storage : {};
+    var files = Array.isArray(storage.files) ? storage.files : [];
+    var expected = String(role || '').toLowerCase();
+    var i, file;
+
+    for (i = 0; i < files.length; i += 1) {
+      file = files[i] || {};
+      if (String(file.role || '').toLowerCase() === expected) {
+        return file;
+      }
+    }
+    return null;
+  };
+
+  getResourceFileUri = function (resource, role, node) {
+    var file = getResourceFile(resource, role);
+    var area, path, raw, uid;
+
+    if (!file) {
+      return '';
+    }
+
+    raw = String(file.path || file.sourcePath || '').trim();
+    if (!raw) {
+      return '';
+    }
+    if (/^https?:\/\//i.test(raw) && raw.indexOf('/wu_wei2/') < 0) {
+      return raw;
+    }
+
+    area = String(file.area || '').trim();
+    if (!area) {
+      area = (String(role || '').toLowerCase() === 'original') ? 'upload' : 'resource';
+    }
+    uid = String((node && node.audit && node.audit.createdBy) || getCurrentUserId() || '').trim();
+    path = toStorageRelativePath(raw, uid, area);
+    return toPublicResourceUri(area, path, uid);
+  };
+
+  getResourcePreviewUri = function (node) {
+    var resource = getResource(node);
+    var viewer = (resource && resource.viewer && 'object' === typeof resource.viewer) ? resource.viewer : {};
+    var embed = (viewer.embed && 'object' === typeof viewer.embed) ? viewer.embed : {};
+    var snapshotSources = (resource && resource.snapshotSources && 'object' === typeof resource.snapshotSources) ? resource.snapshotSources : {};
+    function localUri(value, area) {
+      var text = String(value || '').replace(/\\/g, '/').trim();
+      if (!text || /^https?:\/\//i.test(text) && text.indexOf('/wu_wei2/') < 0) {
+        return text;
+      }
+      if (text.indexOf(area + '/') === 0 || text.indexOf('/' + area + '/') >= 0) {
+        return toPublicResourceUri(area, toStorageRelativePath(text, null, area));
+      }
+      return text;
+    }
+    return String(
+      getResourceFileUri(resource, 'preview', node) ||
+      localUri(embed.uri, 'resource') ||
+      localUri(snapshotSources.previewUri, 'resource') ||
+      localUri(resource.uri, 'upload') ||
+      localUri(resource.canonicalUri, 'upload') ||
+      getResourceFileUri(resource, 'original', node) ||
+      localUri(snapshotSources.originalUri, 'upload') ||
+      ''
+    );
+  };
+
+  getResourceOriginalUri = function (node) {
+    var resource = getResource(node);
+    var snapshotSources = (resource && resource.snapshotSources && 'object' === typeof resource.snapshotSources) ? resource.snapshotSources : {};
+    function localUri(value) {
+      var text = String(value || '').replace(/\\/g, '/').trim();
+      if (!text || /^https?:\/\//i.test(text) && text.indexOf('/wu_wei2/') < 0) {
+        return text;
+      }
+      if (text.indexOf('upload/') === 0 || text.indexOf('/upload/') >= 0) {
+        return toPublicResourceUri('upload', toStorageRelativePath(text, null, 'upload'));
+      }
+      return text;
+    }
+    return String(
+      getResourceFileUri(resource, 'original', node) ||
+      localUri(snapshotSources.originalUri) ||
+      localUri(resource.canonicalUri) ||
+      localUri(resource.uri) ||
+      ''
+    );
+  };
+
+  getResourceThumbnailUri = function (node) {
+    var resource = getResource(node);
+    var viewer = (resource && resource.viewer && 'object' === typeof resource.viewer) ? resource.viewer : {};
+    var embed = (viewer.embed && 'object' === typeof viewer.embed) ? viewer.embed : {};
+    var snapshotSources = (resource && resource.snapshotSources && 'object' === typeof resource.snapshotSources) ? resource.snapshotSources : {};
+    return String(
+      getResourceFileUri(resource, 'thumbnail', node) ||
+      (node && node.thumbnailUri) ||
+      viewer.thumbnailUri ||
+      embed.thumbnailUri ||
+      snapshotSources.thumbnailUri ||
+      ''
+    );
+  };
+
   getThumbnailUri = function (node) {
-    return String((node && node.thumbnailUri) || '');
+    return getResourceThumbnailUri(node) || String((node && node.thumbnailUri) || '');
   };
 
   getResource = function (node) {
@@ -3741,18 +3933,7 @@ wuwei.util = (function () {
   };
 
   getResourceUri = function (node) {
-    var resource = getResource(node);
-    var viewer = (resource && resource.viewer && 'object' === typeof resource.viewer) ? resource.viewer : {};
-    var embed = (viewer.embed && 'object' === typeof viewer.embed) ? viewer.embed : {};
-    var snapshotSources = (resource && resource.snapshotSources && 'object' === typeof resource.snapshotSources) ? resource.snapshotSources : {};
-    return String(
-      embed.uri ||
-      snapshotSources.previewUri ||
-      snapshotSources.originalUri ||
-      (resource && resource.uri) ||
-      (resource && resource.canonicalUri) ||
-      ''
-    );
+    return getResourcePreviewUri(node) || getResourceOriginalUri(node);
   };
 
   getResourceViewer = function (node) {
@@ -3880,6 +4061,14 @@ wuwei.util = (function () {
     setHidden: setHidden,
     getNodeShape: getNodeShape,
     getNodeSize: getNodeSize,
+    getCurrentUserId: getCurrentUserId,
+    toStorageRelativePath: toStorageRelativePath,
+    toPublicResourceUri: toPublicResourceUri,
+    getResourceFile: getResourceFile,
+    getResourceFileUri: getResourceFileUri,
+    getResourcePreviewUri: getResourcePreviewUri,
+    getResourceOriginalUri: getResourceOriginalUri,
+    getResourceThumbnailUri: getResourceThumbnailUri,
     getThumbnailUri: getThumbnailUri,
     getResource: getResource,
     getResourceUri: getResourceUri,

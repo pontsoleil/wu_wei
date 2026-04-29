@@ -33,7 +33,7 @@ wuwei.edit.uploaded.markup = ( function () {
       shape = node.shape,
       style = node.style || {},
       font = (node.style && node.style.font) || node.font || {},
-      resourceUri = (node && node.resource && node.resource.uri) || '',
+      resourceUri = (wuwei.util && wuwei.util.getResourceOriginalUri ? wuwei.util.getResourceOriginalUri(node) : ((node && node.resource && node.resource.uri) || '')),
       match, matchP,
       page = null,
       option = param.option;
@@ -41,6 +41,9 @@ wuwei.edit.uploaded.markup = ( function () {
     const fontSizeValue = normalizeFontSizeValue(font && font.size);
     if ('upload' !== node.option) {
       return '';
+    }
+    if (wuwei.util && wuwei.util.toStorageRelativePath && /^\/?upload\//.test(String(resourceUri).replace(/^.*\/wu_wei2\//, ''))) {
+      resourceUri = 'upload/' + wuwei.util.toStorageRelativePath(resourceUri, null, 'upload');
     }
     match = resourceUri.match(/^content\/.*\.pdf/);
     if (match) {

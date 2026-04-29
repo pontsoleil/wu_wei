@@ -387,6 +387,23 @@ def local_file_from_uri(uri, base_root=None):
     return candidate if candidate.is_file() else None
 
 
+def storage_file_from_item(item, base_root):
+    area = str(item.get("area") or "").strip().strip("/")
+    rel = str(item.get("path") or item.get("sourcePath") or "").replace("\\", "/").strip("/")
+    if not rel:
+        return None
+    if not area:
+        role = str(item.get("role") or "").strip().lower()
+        area = "upload" if role == "original" else "resource"
+    public_path = storage_path_from_public_path(f"{area}/{user_id}/{rel}", base_root)
+    if public_path is not None:
+        return public_path
+    path = Path(rel)
+    if path.is_absolute():
+        return path
+    return base_root / area / rel
+
+
 def promote_local_resource_snapshot(resource):
     storage = resource.get("storage")
     if not isinstance(storage, dict):
@@ -569,7 +586,10 @@ def save_primary_resource_definition(resource):
         should_write = False
 
     primary.mkdir(parents=True, exist_ok=True)
-    storage["primaryPath"] = str(primary)
+    try:
+        storage["primaryPath"] = primary.relative_to(resource_root).as_posix()
+    except Exception:
+        storage["primaryPath"] = str(primary)
     if not should_write:
         return
 
@@ -626,15 +646,18 @@ def copy_resource_snapshot(resource, base_root):
             if src is None:
                 src = Path(source_path)
         else:
-            src = primary / rel if primary is not None else Path()
+            src = storage_file_from_item(item, base_root)
+            if src is None:
+                src = primary / rel if primary is not None else Path()
         if not src.is_file():
             snapshot_files.append(dict(item))
             continue
         dst = snapshot / snapshot_filename(item, src)
         shutil.copy2(src, dst)
         snapshot_item = dict(item)
-        snapshot_item["path"] = dst.name
-        snapshot_item["sourcePath"] = str(dst)
+        snapshot_item["area"] = "note"
+        snapshot_item["path"] = f"resource/{rid}/{dst.name}"
+        snapshot_item.pop("sourcePath", None)
         snapshot_files.append(snapshot_item)
         snapshot_uri = public_uri_from_storage_path(dst, user_id)
         if snapshot_uri:
