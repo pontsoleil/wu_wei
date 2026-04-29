@@ -311,11 +311,34 @@ def file_entry(role: str, path: Path, mime_type: str, size_text: str = "") -> di
     return item
 
 
+def role_filename(role: str, path: Path) -> str:
+    suffix = path.suffix or ".bin"
+    if role == "preview":
+        return "preview.pdf"
+    if role == "thumbnail":
+        return f"thumbnail{suffix}"
+    if role == "original":
+        return f"original{suffix}"
+    return path.name
+
+
 def upload_relative_path(upload_root: Path, path: Path) -> str:
     try:
         return path.relative_to(upload_root).as_posix()
     except Exception:
         return path.name
+
+
+def find_upload_file_for_day(upload_day_dir: Path, filename: str) -> Path | None:
+    # Same date + same filename is treated as the same uploaded file, even if
+    # the content hash changes after re-upload.
+    for child in upload_day_dir.iterdir() if upload_day_dir.exists() else []:
+        if not child.is_dir():
+            continue
+        candidate = child / filename
+        if candidate.is_file():
+            return candidate
+    return None
 
 
 def sha256_file(path: Path) -> str:
@@ -486,11 +509,11 @@ def main():
     month = now.strftime("%m")
     day = now.strftime("%d")
 
-    upload_dir = upload_root / year / month / day
+    upload_day_dir = upload_root / year / month / day
     resource_dir = resource_root / year / month / day
     thumbnail_dir = thumbnail_root / year / month / day
 
-    upload_dir.mkdir(parents=True, exist_ok=True)
+    upload_day_dir.mkdir(parents=True, exist_ok=True)
     resource_dir.mkdir(parents=True, exist_ok=True)
     thumbnail_dir.mkdir(parents=True, exist_ok=True)
 
@@ -513,7 +536,14 @@ def main():
         declared_contenttype=declared_contenttype,
     )
 
-    dest_file = upload_dir / filename
+    existing_upload_file = find_upload_file_for_day(upload_day_dir, filename)
+    if existing_upload_file is not None:
+        dest_file = existing_upload_file
+        upload_file_id = dest_file.parent.name
+    else:
+        upload_file_id = f"_{uuid.uuid4()}"
+        dest_file = upload_day_dir / upload_file_id / filename
+        dest_file.parent.mkdir(parents=True, exist_ok=True)
     with open(dest_file, "wb") as f:
         shutil.copyfileobj(fileitem.file, f)
 
@@ -585,7 +615,7 @@ def main():
         else:
             debug("office pdf conversion failed")
 
-    file_uri = environment_url("upload", user_id, year, month, day, filename)
+    file_uri = environment_url("upload", user_id, year, month, day, upload_file_id, filename)
     file_url = make_absolute_url(file_uri)
     resource_uri = environment_url("resource", user_id, year, month, day, resource_id)
     resource_url = make_absolute_url(resource_uri)
@@ -620,9 +650,13 @@ def main():
     files[0]["path"] = upload_relpath
     files[0]["sourcePath"] = str(dest_file)
     if thumb_file.exists():
-        files.append(file_entry("thumbnail", thumb_file, "image/png" if thumb_file.suffix.lower() == ".png" else "image/jpeg", thumbnail_size or ""))
+        item = file_entry("thumbnail", thumb_file, "image/png" if thumb_file.suffix.lower() == ".png" else "image/jpeg", thumbnail_size or "")
+        item["path"] = role_filename("thumbnail", thumb_file)
+        files.append(item)
     if office_pdf and office_pdf.exists():
-        files.append(file_entry("preview", office_pdf, "application/pdf"))
+        item = file_entry("preview", office_pdf, "application/pdf")
+        item["path"] = role_filename("preview", office_pdf)
+        files.append(item)
 
     resource = {
         "id": resource_id,

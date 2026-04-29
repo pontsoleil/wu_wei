@@ -21,7 +21,8 @@ data/
   {user_uuid}/
     upload/
       yyyy/mm/dd/
-        {filename}
+        {uploaded_file_uuid}/
+          {filename}
     resource/
       yyyy/mm/dd/
         {resource_uuid}/
@@ -47,7 +48,7 @@ data/
 
 [source,text]
 ----
-data/{user_uuid}/upload/yyyy/mm/dd/{filename}
+data/{user_uuid}/upload/yyyy/mm/dd/{uploaded_file_uuid}/{filename}
 ----
 
 `resource.json` からは、`data/{user_uuid}/upload/` からの相対パスで参照する。
@@ -56,12 +57,12 @@ data/{user_uuid}/upload/yyyy/mm/dd/{filename}
 ----
 {
   "storage": {
-    "sourcePath": "yyyy/mm/dd/original.pdf",
+    "sourcePath": "yyyy/mm/dd/{uploaded_file_uuid}/original.pdf",
     "files": [
       {
         "role": "original",
-        "path": "yyyy/mm/dd/original.pdf",
-        "sourcePath": "C:/Apache24/htdocs/wu_wei2/data/{user_uuid}/upload/yyyy/mm/dd/original.pdf",
+        "path": "yyyy/mm/dd/{uploaded_file_uuid}/original.pdf",
+        "sourcePath": "C:/Apache24/htdocs/wu_wei2/data/{user_uuid}/upload/yyyy/mm/dd/{uploaded_file_uuid}/original.pdf",
         "mimeType": "application/pdf",
         "sha256": "..."
       }
@@ -70,7 +71,7 @@ data/{user_uuid}/upload/yyyy/mm/dd/{filename}
 }
 ----
 
-同じ `yyyy/mm/dd/{filename}` に対してハッシュ値が異なるファイルがアップロードされた場合は、同一ファイルの更新とみなし、Resource を増やさない。
+同じ `yyyy/mm/dd/{filename}` に対してハッシュ値が異なるファイルがアップロードされた場合は、既存の `yyyy/mm/dd/{uploaded_file_uuid}/{filename}` を更新し、同一ファイルの更新とみなして Resource を増やさない。
 
 === Resource ライブラリ
 
@@ -218,7 +219,7 @@ Resource は、Content ノードから参照される外部または自己登録
   "storage": {
     "managed": true,
     "copyPolicy": "snapshot",
-    "sourcePath": "yyyy/mm/dd/original.pdf",
+    "sourcePath": "yyyy/mm/dd/{uploaded_file_uuid}/original.pdf",
     "primaryPath": "data/{user_uuid}/resource/yyyy/mm/dd/{resource_uuid}",
     "snapshotPath": "data/{user_uuid}/note/yyyy/mm/dd/{note_uuid}/resource/{resource_uuid}",
     "files": []
@@ -302,7 +303,7 @@ YouTube や Vimeo の URL は `webpage` ではなく `video` として扱う。
   {
     "role": "original",
     "path": "yyyy/mm/dd/original.pdf",
-    "sourcePath": "C:/Apache24/htdocs/wu_wei2/data/{user_uuid}/upload/yyyy/mm/dd/original.pdf",
+    "sourcePath": "C:/Apache24/htdocs/wu_wei2/data/{user_uuid}/upload/yyyy/mm/dd/{uploaded_file_uuid}/original.pdf",
     "mimeType": "application/pdf",
     "size": 123456,
     "sha256": "..."
@@ -406,7 +407,7 @@ Link の `x`,`y` は第 1 制御点である。
 
 Upload 系 CGI は、アップロードされたファイルから Resource を作成または再利用する。
 
-. ファイル実体を `data/{user_uuid}/upload/yyyy/mm/dd/{filename}` に保存する。
+. ファイル実体を `data/{user_uuid}/upload/yyyy/mm/dd/{uploaded_file_uuid}/{filename}` に保存する。
 . `sha256` を計算する。
 . 既存 Resource を検索する。
 . 同一 `storage.sourcePath` があれば、ハッシュ値が異なっても同じ Resource として更新する。
@@ -637,7 +638,7 @@ resource.identity.uri
 resource.storage.sourcePath
 ----
 
-upload ファイルでは、`yyyy/mm/dd/filename` が同じであれば、sha256 が異なっても同じファイルの更新とみなす。
+upload ファイルでは、同一日付内の同じ `filename` は既存の `yyyy/mm/dd/{uploaded_file_uuid}/filename` を更新し、sha256 が異なっても同じファイルの更新とみなす。
 これは同一日の同一ファイル名を再アップロードした場合に、不要な Resource 増加を避けるためである。
 
 Note snapshot 配下では、同じ Resource であっても Note ごとにコピーを持ってよい。

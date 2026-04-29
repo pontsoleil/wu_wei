@@ -443,6 +443,18 @@ def has_resource_uri(resource):
     return any(resource_uri_values(resource))
 
 
+def snapshot_filename(item, src):
+    role = str(item.get("role") or "").strip()
+    suffix = src.suffix or Path(str(item.get("path") or "")).suffix or ".bin"
+    if role == "preview":
+        return "preview.pdf"
+    if role == "thumbnail":
+        return f"thumbnail{suffix}"
+    if role == "original":
+        return f"original{suffix}"
+    return Path(str(item.get("path") or src.name)).name
+
+
 def merge_resource_uri_fields(resource, existing):
     identity = resource.setdefault("identity", {})
     if not isinstance(identity, dict):
@@ -565,6 +577,7 @@ def copy_resource_snapshot(resource, base_root):
         return
 
     snapshot.mkdir(parents=True, exist_ok=True)
+    snapshot_files = []
     for item in storage.get("files") or []:
         if not isinstance(item, dict):
             continue
@@ -573,11 +586,18 @@ def copy_resource_snapshot(resource, base_root):
             continue
         source_path = str(item.get("sourcePath") or "").strip()
         src = Path(source_path) if source_path else primary / rel
-        dst = snapshot / rel
         if not src.is_file():
             continue
-        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst = snapshot / snapshot_filename(item, src)
         shutil.copy2(src, dst)
+        snapshot_item = dict(item)
+        snapshot_item["path"] = dst.name
+        snapshot_item["sourcePath"] = str(dst)
+        snapshot_files.append(snapshot_item)
+
+    if snapshot_files:
+        storage["files"] = snapshot_files
+    storage["snapshotPath"] = snapshot.as_posix()
 
     (snapshot / "resource.json").write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
 
@@ -621,7 +641,8 @@ def restore_embedded_resource_files(note):
         except (binascii.Error, ValueError):
             continue
         role = str(item.get("role") or "original").strip() or "original"
-        filename = safe_bundle_filename(item.get("path") or item.get("name"), f"{role}-{index}.bin")
+        source_filename = safe_bundle_filename(item.get("path") or item.get("name"), f"{role}-{index}.bin")
+        filename = snapshot_filename({"role": role, "path": source_filename}, Path(source_filename))
         mime_type = str(item.get("mimeType") or item.get("mime_type") or "application/octet-stream").strip()
         sha256 = hashlib.sha256(payload).hexdigest()
 

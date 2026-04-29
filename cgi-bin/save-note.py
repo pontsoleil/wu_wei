@@ -160,6 +160,18 @@ def _has_resource_uri(resource: dict) -> bool:
     return any(_resource_uri_values(resource))
 
 
+def _snapshot_filename(item: dict, src: Path) -> str:
+    role = str(item.get("role") or "").strip()
+    suffix = src.suffix or Path(str(item.get("path") or "")).suffix or ".bin"
+    if role == "preview":
+        return "preview.pdf"
+    if role == "thumbnail":
+        return f"thumbnail{suffix}"
+    if role == "original":
+        return f"original{suffix}"
+    return Path(str(item.get("path") or src.name)).name
+
+
 def _merge_resource_uri_fields(resource: dict, existing: dict) -> None:
     identity = resource.setdefault("identity", {})
     if not isinstance(identity, dict):
@@ -285,6 +297,7 @@ def _copy_resource_snapshot(resource: dict, *, base_root: Path, user_id: str, no
         return
 
     snapshot.mkdir(parents=True, exist_ok=True)
+    snapshot_files = []
     for item in storage.get("files") or []:
         if not isinstance(item, dict):
             continue
@@ -293,12 +306,19 @@ def _copy_resource_snapshot(resource: dict, *, base_root: Path, user_id: str, no
             continue
         source_path = str(item.get("sourcePath") or "").strip()
         src = Path(source_path) if source_path else primary / rel
-        dst = snapshot / rel
         if not src.is_file():
             debug_kv(snapshot_skip="file missing", resource_id=rid, src=str(src))
             continue
-        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst = snapshot / _snapshot_filename(item, src)
         shutil.copy2(src, dst)
+        snapshot_item = dict(item)
+        snapshot_item["path"] = dst.name
+        snapshot_item["sourcePath"] = str(dst)
+        snapshot_files.append(snapshot_item)
+
+    if snapshot_files:
+        storage["files"] = snapshot_files
+    storage["snapshotPath"] = snapshot.as_posix()
 
     resource_json = snapshot / "resource.json"
     resource_json.write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
@@ -349,7 +369,8 @@ def _restore_embedded_resource_files(note_json: dict, *, resource_root: Path, no
             continue
 
         role = str(item.get("role") or "original").strip() or "original"
-        filename = _safe_bundle_filename(item.get("path") or item.get("name"), f"{role}-{index}.bin")
+        source_filename = _safe_bundle_filename(item.get("path") or item.get("name"), f"{role}-{index}.bin")
+        filename = _snapshot_filename({"role": role, "path": source_filename}, Path(source_filename))
         sha256 = hashlib.sha256(payload).hexdigest()
         mime_type = str(item.get("mimeType") or item.get("mime_type") or "application/octet-stream").strip()
 

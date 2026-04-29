@@ -164,7 +164,7 @@ HORIZONTAL2 と VERTICAL2 では、始点・終点だけでなく追加制御点
 原則として実体ファイルはコピーせず、URI、metadata、embed 情報を保持します。
 
 Uploadedリソースは、ユーザーがアップロードした PDF、Office 文書、text、video、audio、photo などです。
-アップロード実体は、`data/{user_uuid}/upload/yyyy/mm/dd/` に保存され、リソースはその相対パスを参照します。
+アップロード実体は、`data/{user_uuid}/upload/yyyy/mm/dd/{uploaded_file_uuid}/` に保存され、リソースはその相対パスを参照します。
 
 リソースライブラリは次の場所に保存されます。
 
@@ -180,8 +180,9 @@ data/{user_uuid}/resource/yyyy/mm/dd/{resource_uuid}/preview.*
 [source]
 ----
 data/{user_uuid}/note/yyyy/mm/dd/{note_uuid}/resource/{resource_uuid}/resource.json
+data/{user_uuid}/note/yyyy/mm/dd/{note_uuid}/resource/{resource_uuid}/original.*
 data/{user_uuid}/note/yyyy/mm/dd/{note_uuid}/resource/{resource_uuid}/thumbnail.*
-data/{user_uuid}/note/yyyy/mm/dd/{note_uuid}/resource/{resource_uuid}/preview.*
+data/{user_uuid}/note/yyyy/mm/dd/{note_uuid}/resource/{resource_uuid}/preview.pdf
 ----
 
 == 画面構成

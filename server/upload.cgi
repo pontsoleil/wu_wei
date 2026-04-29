@@ -150,6 +150,7 @@ fi
 # --- dates -----------------------------------------------------------
 year="$(date '+%Y')"
 month="$(date '+%m')"
+day="$(date '+%d')"
 
 # --- environment paths (align with your data/environment) ------------
 # data/environment expects:
@@ -174,13 +175,13 @@ thumbnail_tpl="$(read_env thumbnail)"
 thumbnail_dir="${thumbnail_tpl//\*/$user_id}"
 
 # --- ensure directories ----------------------------------------------
-mkdir -p "$file_dir/$year/$month"      || die_json "ERROR: cannot mkdir $file_dir/$year/$month (permission?)"
-mkdir -p "$resource_dir/$year/$month"  || die_json "ERROR: cannot mkdir $resource_dir/$year/$month (permission?)"
-mkdir -p "$thumbnail_dir/$year/$month" || die_json "ERROR: cannot mkdir $thumbnail_dir/$year/$month (permission?)"
+mkdir -p "$file_dir/$year/$month/$day"      || die_json "ERROR: cannot mkdir $file_dir/$year/$month/$day (permission?)"
+mkdir -p "$resource_dir/$year/$month/$day"  || die_json "ERROR: cannot mkdir $resource_dir/$year/$month/$day (permission?)"
+mkdir -p "$thumbnail_dir/$year/$month/$day" || die_json "ERROR: cannot mkdir $thumbnail_dir/$year/$month/$day (permission?)"
 
-file_dir="$file_dir/$year/$month"
-resource_dir="$resource_dir/$year/$month"
-thumbnail_dir="$thumbnail_dir/$year/$month"
+file_dir="$file_dir/$year/$month/$day"
+resource_day_dir="$resource_dir/$year/$month/$day"
+thumbnail_dir="$thumbnail_dir/$year/$month/$day"
 
 # --- read request body -----------------------------------------------
 # dd bs=1K if=/dev/stdin > "$Tmp-cgivars"
@@ -230,24 +231,38 @@ contenttype="$(
 
 fullname="$(mime-read fullname "$Tmp-cgivars" 2>/dev/null || true)"
 
+upload_file_uuid=""
+for d in "$file_dir"/_*; do
+  [ -d "$d" ] || continue
+  if [ -f "$d/$filename" ]; then
+    upload_file_uuid="${d##*/}"
+    break
+  fi
+done
+[ -n "$upload_file_uuid" ] || upload_file_uuid="_$(uuidgen | tr 'A-Z' 'a-z')"
+upload_file_dir="$file_dir/$upload_file_uuid"
+mkdir -p "$upload_file_dir" || die_json "ERROR: cannot mkdir $upload_file_dir"
+
 # full path to save uploaded file
-dest_file="$file_dir/$filename"
+dest_file="$upload_file_dir/$filename"
 cp -- "$Tmp-uploadfile" "$dest_file" || die_json "ERROR: cannot save upload to $dest_file"
 
 # --- ids / uri mapping -----------------------------------------------
-uuid="$(uuidgen)"
+uuid="_$(uuidgen | tr 'A-Z' 'a-z')"
 uuidrgx='[0-9a-f]\{8\}-[0-9a-f]\{4\}-[1-5][0-9a-f]\{3\}-[89ab][0-9a-f]\{3\}-[0-9a-f]\{12\}'
 
 escaped_base="$(printf '%s' "$base_dir" | sed 's/\//\\\//g')"
 
-resource_file="$resource_dir/$uuid"
-resource_uri="$(printf '%s' "$resource_file" | sed "s/^${escaped_base}\/\(${uuidrgx}\)\/resource\/\(.*\)$/resource\/\1\/\2/")"
+resource_dir="$resource_day_dir/$uuid"
+mkdir -p "$resource_dir" || die_json "ERROR: cannot mkdir $resource_dir"
+resource_file="$resource_dir/resource.json"
+resource_uri="resource/$user_id/$year/$month/$day/$uuid"
 
-thumb_file="$thumbnail_dir/$uuid.jpg"
-thumbnail_uri="$(printf '%s' "$thumb_file" | sed "s/^${escaped_base}\/\(${uuidrgx}\)\/thumbnail\/\(.*\)$/thumbnail\/\1\/\2/")"
+thumb_file="$resource_dir/thumbnail.jpg"
+thumbnail_uri="$resource_uri/thumbnail.jpg"
 
 # stored file uri: upload/<user_uuid>/...
-file_uri="$(printf '%s' "$dest_file" | sed "s/^${escaped_base}\/\(${uuidrgx}\)\/upload\/\(.*\)$/upload\/\1\/\2/")"
+file_uri="upload/$user_id/$year/$month/$day/$upload_file_uuid/$filename"
 
 # --- detect actual file type ----------------------------------------
 content_type="$(file -b -i -- "$dest_file" 2>/dev/null || true)"
@@ -266,7 +281,7 @@ if is_office_file "$filename"; then
       stem="${filename%.*}"
       generated_pdf="$office_outdir/$stem.pdf"
       if [ -f "$generated_pdf" ]; then
-        preview_pdf="$resource_dir/$uuid.pdf"
+        preview_pdf="$resource_dir/preview.pdf"
         cp -f "$generated_pdf" "$preview_pdf" || preview_pdf=""
       fi
     fi
@@ -275,7 +290,7 @@ if is_office_file "$filename"; then
   fi
 
   if [ -n "$preview_pdf" ] && [ -f "$preview_pdf" ]; then
-    preview_pdf_uri="$(printf '%s' "$preview_pdf" | sed "s/^${escaped_base}\/\(${uuidrgx}\)\/resource\/\(.*\)$/resource\/\1\/\2/")"
+    preview_pdf_uri="$resource_uri/preview.pdf"
     preview_pdf_url="$preview_pdf_uri"
   else
     echo "office preview pdf was not generated: $filename" >&2
@@ -357,44 +372,81 @@ totalsize="$(stat -c %s -- "$dest_file" 2>/dev/null || true)"
 lastmodified="$(stat -c %y -- "$dest_file" 2>/dev/null || true)"
 
 # --- write resource file --------------------------------------------
+created_at="$(date '+%Y-%m-%dT%H:%M:%S%z')"
+original_sha="$(sha256sum "$dest_file" 2>/dev/null | awk '{print $1}')"
+thumb_sha=""
+[ -f "$thumb_file" ] && thumb_sha="$(sha256sum "$thumb_file" 2>/dev/null | awk '{print $1}')"
+preview_sha=""
+[ -n "$preview_pdf" ] && [ -f "$preview_pdf" ] && preview_sha="$(sha256sum "$preview_pdf" 2>/dev/null | awk '{print $1}')"
+media_kind="general"
+case "$content_type" in
+  image/*) media_kind="image" ;;
+  video/*) media_kind="video" ;;
+  audio/*) media_kind="audio" ;;
+  text/*|application/pdf*) media_kind="document" ;;
+esac
+if is_office_file "$filename"; then media_kind="document"; fi
+
+cat >"$resource_file" <<JSON || die_json "ERROR: cannot write resource file $resource_file"
 {
-  echo "id $uuid"
-  echo "name $name"
-  echo "option upload"
-  echo "contenttype ${contenttype:-}"
-  echo "uri $file_uri"
-  echo "value.totalsize ${totalsize:-}"
-  echo "value.lastmodified ${lastmodified:-}"
-  echo "value.commment null"
-  if [[ "$content_type" == application/pdf* || "$content_type" == image/* ]]; then
-    echo "value.resource.uri $resource_uri"
-    echo "value.resource.size ${iw}x${ih}"
-    echo "value.thumbnail.uri $thumbnail"
-    echo "value.thumbnail.size ${w}x${h}"
-    echo "value.pdf.uri ${preview_pdf_uri:-null}"
-    echo "value.pdf.url ${preview_pdf_url:-null}"
-    echo "value.identify $identify_out"
-    echo "value.file "
-  elif [ -n "$preview_pdf" ] && [ -f "$preview_pdf" ]; then
-    echo "value.resource.uri $resource_uri"
-    echo "value.resource.size ${iw}x${ih}"
-    echo "value.thumbnail.uri $thumbnail"
-    echo "value.thumbnail.size ${w}x${h}"
-    echo "value.pdf.uri $preview_pdf_uri"
-    echo "value.pdf.url $preview_pdf_url"
-    echo "value.identify $identify_out"
-    echo "value.file "
-  else
-    echo "value.resource.uri $resource_uri"
-    echo "value.resource.size null"
-    echo "value.thumbnail.uri null"
-    echo "value.thumbnail.size null"
-    echo "value.pdf.uri null"
-    echo "value.pdf.url null"
-    echo "value.identify null"
-    echo "value.file "
-  fi
-} >>"$resource_file" || die_json "ERROR: cannot write resource file $resource_file"
+  "id": "$(json_escape "$uuid")",
+  "type": "Resource",
+  "origin": {
+    "type": "userRegistered",
+    "subtype": "uploadedDocument",
+    "provider": "local"
+  },
+  "identity": {
+    "title": "$(json_escape "$name")",
+    "canonicalUri": "$(json_escape "$file_uri")",
+    "uri": "$(json_escape "${preview_pdf_url:-$file_uri}")"
+  },
+  "media": {
+    "kind": "$(json_escape "$media_kind")",
+    "mimeType": "$(json_escape "$content_type")",
+    "downloadable": true,
+    "duration": null
+  },
+  "viewer": {
+    "supportedModes": ["infoPane", "newTab", "newWindow", "download"],
+    "defaultMode": "infoPane",
+    "embed": {
+      "enabled": true,
+      "uri": "$(json_escape "${preview_pdf_url:-$file_uri}")"
+    }
+  },
+  "storage": {
+    "managed": true,
+    "copyPolicy": "snapshot",
+    "sourcePath": "$(json_escape "$year/$month/$day/$upload_file_uuid/$filename")",
+    "primaryPath": "$(json_escape "$resource_dir")",
+    "snapshotPath": "",
+    "files": [
+      {
+        "role": "original",
+        "path": "$(json_escape "$year/$month/$day/$upload_file_uuid/$filename")",
+        "sourcePath": "$(json_escape "$dest_file")",
+        "mimeType": "$(json_escape "$content_type")",
+        "size": ${totalsize:-0},
+        "sha256": "$(json_escape "$original_sha")"
+      }$(if [ -f "$thumb_file" ]; then printf ',\n      {\n        "role": "thumbnail",\n        "path": "thumbnail.jpg",\n        "sourcePath": "%s",\n        "mimeType": "image/jpeg",\n        "size": %s,\n        "sha256": "%s"\n      }' "$(json_escape "$thumb_file")" "$(stat -c %s -- "$thumb_file" 2>/dev/null || echo 0)" "$(json_escape "$thumb_sha")"; fi)$(if [ -n "$preview_pdf" ] && [ -f "$preview_pdf" ]; then printf ',\n      {\n        "role": "preview",\n        "path": "preview.pdf",\n        "sourcePath": "%s",\n        "mimeType": "application/pdf",\n        "size": %s,\n        "sha256": "%s"\n      }' "$(json_escape "$preview_pdf")" "$(stat -c %s -- "$preview_pdf" 2>/dev/null || echo 0)" "$(json_escape "$preview_sha")"; fi)
+    ]
+  },
+  "rights": {
+    "owner": "$(json_escape "$user_id")",
+    "copyright": "",
+    "license": "",
+    "attribution": ""
+  },
+  "audit": {
+    "owner": "$(json_escape "$user_id")",
+    "createdBy": "$(json_escape "$user_id")",
+    "createdAt": "$(json_escape "$created_at")",
+    "lastModifiedBy": "",
+    "lastModifiedAt": ""
+  }
+}
+JSON
 
 # --- return json -----------------------------------------------------
 printf "Content-Type: application/json\r\n\r\n"
@@ -403,6 +455,7 @@ if [[ "$content_type" == application/pdf* || "$content_type" == image/* || -n "$
   cat <<JSON
 {
   "id":"$uuid",
+  "resource":$(cat "$resource_file"),
   "name":"$(json_escape "$name")",
   "option":"upload",
   "contenttype":"$(json_escape "${contenttype:-}")",
@@ -422,6 +475,7 @@ else
   cat <<JSON
 {
   "id":"$uuid",
+  "resource":$(cat "$resource_file"),
   "name":"$(json_escape "$name")",
   "option":"upload",
   "contenttype":"$(json_escape "${contenttype:-}")",
