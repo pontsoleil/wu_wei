@@ -21,7 +21,7 @@ wuwei.info.uploaded.markup = ( function () {
       value = node.value,
       creativeCommons = common.nls.creativeCommons[lang],
       base_url = location.href.substr(0, location.href.lastIndexOf('/'));
-    let uri = (node && node.resource && node.resource.uri) || "";
+    let uri = resolveInfoUri(node);
     let label = (node && node.label) || "";
     let size;
     let width, height;
@@ -88,6 +88,24 @@ wuwei.info.uploaded.markup = ( function () {
 
   function translate(str) {
     return wuwei.info.markup.translate(str);
+  }
+
+  function resolveInfoUri(node) {
+    var resource = (node && node.resource && 'object' === typeof node.resource) ? node.resource : {};
+    var viewer = (resource.viewer && 'object' === typeof resource.viewer) ? resource.viewer : {};
+    var embed = (viewer.embed && 'object' === typeof viewer.embed) ? viewer.embed : {};
+    var snapshotSources = (resource.snapshotSources && 'object' === typeof resource.snapshotSources) ? resource.snapshotSources : {};
+    if (wuwei.util && typeof wuwei.util.getResourceUri === 'function') {
+      return wuwei.util.getResourceUri(node) || '';
+    }
+    return (
+      embed.uri ||
+      snapshotSources.previewUri ||
+      resource.uri ||
+      resource.canonicalUri ||
+      snapshotSources.originalUri ||
+      ''
+    );
   }
 
   return {

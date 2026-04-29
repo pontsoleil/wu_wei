@@ -3746,11 +3746,11 @@ wuwei.util = (function () {
     var embed = (viewer.embed && 'object' === typeof viewer.embed) ? viewer.embed : {};
     var snapshotSources = (resource && resource.snapshotSources && 'object' === typeof resource.snapshotSources) ? resource.snapshotSources : {};
     return String(
-      (resource && resource.uri) ||
       embed.uri ||
       snapshotSources.previewUri ||
-      (resource && resource.canonicalUri) ||
       snapshotSources.originalUri ||
+      (resource && resource.uri) ||
+      (resource && resource.canonicalUri) ||
       ''
     );
   };
