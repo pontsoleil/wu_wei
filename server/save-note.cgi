@@ -333,19 +333,40 @@ def load_note(path):
     return data
 
 
+def storage_path_from_public_path(path_text, base_root):
+    path_text = (path_text or "").replace("\\", "/").strip()
+    if not path_text:
+        return None
+    marker = "/wu_wei2/"
+    if marker in path_text:
+        path_text = path_text.split(marker, 1)[1]
+    path_text = path_text.lstrip("/")
+    prefix = f"data/{user_id}/"
+    if path_text.startswith(prefix):
+        return base_root / path_text[len(prefix):]
+    for area in ("upload", "resource", "note", "thumbnail", "content"):
+        area_prefix = f"{area}/{user_id}/"
+        if path_text.startswith(area_prefix):
+            return base_root / area / path_text[len(area_prefix):]
+    return None
+
+
 def resolve_storage_dir(path_text, base_root):
     path_text = (path_text or "").replace("\\", "/").strip()
     if not path_text:
         return None
     path_text = path_text.replace("_user_uuid", user_id).replace("user_uuid", user_id)
     path_text = path_text.replace("_note_uuid", note_id).replace("note_uuid", note_id)
+    public_path = storage_path_from_public_path(path_text, base_root)
+    if public_path is not None:
+        return public_path
     path = Path(path_text)
     if path.is_absolute():
         return path
     return base_root / path_text
 
 
-def local_file_from_uri(uri):
+def local_file_from_uri(uri, base_root=None):
     uri = (uri or "").strip()
     if not uri:
         return None
@@ -355,6 +376,10 @@ def local_file_from_uri(uri):
     if marker in path_text:
         path_text = path_text.split(marker, 1)[1]
     path_text = path_text.replace("\\", "/").lstrip("/")
+    if base_root is not None:
+        public_path = storage_path_from_public_path(path_text, base_root)
+        if public_path is not None and public_path.is_file():
+            return public_path
     path = Path(path_text)
     if path.is_absolute():
         return path if path.is_file() else None
@@ -596,7 +621,12 @@ def copy_resource_snapshot(resource, base_root):
         if not rel:
             continue
         source_path = str(item.get("sourcePath") or "").strip()
-        src = Path(source_path) if source_path else (primary / rel if primary is not None else Path())
+        if source_path:
+            src = local_file_from_uri(source_path, base_root)
+            if src is None:
+                src = Path(source_path)
+        else:
+            src = primary / rel if primary is not None else Path()
         if not src.is_file():
             snapshot_files.append(dict(item))
             continue
