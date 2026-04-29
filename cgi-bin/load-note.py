@@ -28,51 +28,57 @@ from cgi_common import (
 def _portable_resource_files(note_json: dict, note_file: Path) -> list[dict]:
     note_dir = note_file.parent if note_file.name == "note.json" else note_file.parent
     snapshot_root = note_dir / "resource"
-    if not snapshot_root.is_dir():
-        return []
+    upload_root = None
+    for parent in note_file.parents:
+        if parent.name == "note":
+            upload_root = parent.parent / "upload"
+            break
 
     files: list[dict] = []
     resources = note_json.get("resources") if isinstance(note_json.get("resources"), list) else []
-    known_ids = {
-        str(resource.get("id") or "")
-        for resource in resources
-        if isinstance(resource, dict) and str(resource.get("id") or "")
-    }
-    for resource_dir in sorted(p for p in snapshot_root.iterdir() if p.is_dir()):
-        resource_id = resource_dir.name
-        if known_ids and resource_id not in known_ids:
+    for resource in resources:
+        if not isinstance(resource, dict):
             continue
+        resource_id = str(resource.get("id") or "").strip()
+        if not resource_id:
+            continue
+        resource_dir = snapshot_root / resource_id
         try:
             resource_doc = json.loads((resource_dir / "resource.json").read_text(encoding="utf-8", errors="strict"))
         except Exception:
-            resource_doc = {}
+            resource_doc = resource
         storage = resource_doc.get("storage") if isinstance(resource_doc.get("storage"), dict) else {}
         storage_files = storage.get("files") if isinstance(storage.get("files"), list) else []
         for item in storage_files:
             if not isinstance(item, dict):
                 continue
-            if str(item.get("role") or "original") != "original":
-                continue
-            source_hint = " ".join([
-                str(item.get("sourcePath") or ""),
-                str(item.get("path") or ""),
-                str((resource_doc.get("identity") or {}).get("uri") if isinstance(resource_doc.get("identity"), dict) else ""),
-                str((resource_doc.get("identity") or {}).get("canonicalUri") if isinstance(resource_doc.get("identity"), dict) else ""),
-            ]).replace("\\", "/").lower()
-            if "/upload/" not in source_hint:
-                continue
+            role = str(item.get("role") or "original").strip() or "original"
             rel = str(item.get("path") or "").replace("\\", "/").strip("/")
-            if not rel:
+            source_path = str(item.get("sourcePath") or "").strip()
+            if role == "original":
+                if not rel:
+                    continue
+                bundle_path = rel if rel.startswith("upload/") else f"upload/{rel}"
+                if source_path:
+                    path = Path(source_path)
+                elif upload_root is not None:
+                    path = upload_root / (rel[7:] if rel.startswith("upload/") else rel)
+                else:
+                    continue
+            elif role in {"thumbnail", "preview"}:
+                name = Path(rel).name or ("preview.pdf" if role == "preview" else "thumbnail")
+                bundle_path = f"note/resource/{resource_id}/{name}"
+                path = Path(source_path) if source_path else resource_dir / name
+            else:
                 continue
-            path = resource_dir / rel
             if not path.is_file():
                 continue
             payload = path.read_bytes()
             mime_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
             files.append({
                 "resourceId": resource_id,
-                "role": "original",
-                "path": rel,
+                "role": role,
+                "path": bundle_path,
                 "mimeType": mime_type,
                 "size": len(payload),
                 "sha256": hashlib.sha256(payload).hexdigest(),
@@ -86,7 +92,7 @@ def _with_portable_bundle(json_text: str, note_file: Path) -> str:
     if not isinstance(note_json, dict):
         return json_text
     files = _portable_resource_files(note_json, note_file)
-    note_json["portable"] = {
+    note_json["bundle"] = {
         "type": "wuwei.note.bundle",
         "version": 1,
         "files": files,

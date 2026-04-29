@@ -475,6 +475,11 @@ wuwei.menu.note = wuwei.menu.note || {};
       try {
         const text = String(reader.result || '').replace(/^\uFEFF/, '').trim();
         const noteJson = JSON.parse(text);
+        const hasBundle = !!(
+          (noteJson.bundle && Array.isArray(noteJson.bundle.files)) ||
+          (noteJson.portable && Array.isArray(noteJson.portable.files)) ||
+          (noteJson.resourceBundle && Array.isArray(noteJson.resourceBundle.files))
+        );
         const current = wuwei.note.updateNote(noteJson);
         const nameEl = document.querySelector('#note_name .name');
         const descEl = document.querySelector('#note_name .description');
@@ -490,7 +495,20 @@ wuwei.menu.note = wuwei.menu.note || {};
           wuwei.draw.refresh();
         }
         wuwei.menu.checkPage();
-        wuwei.menu.snackbar.open({ type: 'success', message: 'Imported note file' });
+        if (hasBundle) {
+          wuwei.note.importNote().then(function () {
+            wuwei.menu.snackbar.open({ type: 'success', message: 'Imported note file' });
+          }).catch(function (e) {
+            console.error(e);
+            wuwei.menu.snackbar.open({
+              type: 'warning',
+              message: e && e.message ? e.message : 'Imported note file, but resource restore failed'
+            });
+          });
+        }
+        else {
+          wuwei.menu.snackbar.open({ type: 'success', message: 'Imported note file' });
+        }
       }
       catch (e) {
         console.error(e);

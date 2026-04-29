@@ -313,6 +313,7 @@ note_resource_dir = Path(sys.argv[4])
 user_id = sys.argv[5]
 note_id = sys.argv[6]
 script_dir = Path(sys.argv[7])
+upload_root = note_root.parent / "upload"
 now = datetime.now().astimezone()
 
 
@@ -573,20 +574,22 @@ def copy_resource_snapshot(resource, base_root):
     if snapshot is None:
         snapshot = note_resource_dir / rid
         storage["snapshotPath"] = snapshot.as_posix()
-    if primary is None or not primary.exists():
-        return
-
     snapshot.mkdir(parents=True, exist_ok=True)
     snapshot_files = []
     for item in storage.get("files") or []:
         if not isinstance(item, dict):
             continue
+        role = str(item.get("role") or "original").strip() or "original"
+        if role == "original":
+            snapshot_files.append(dict(item))
+            continue
         rel = str(item.get("path") or "").replace("\\", "/").strip("/")
         if not rel:
             continue
         source_path = str(item.get("sourcePath") or "").strip()
-        src = Path(source_path) if source_path else primary / rel
+        src = Path(source_path) if source_path else (primary / rel if primary is not None else Path())
         if not src.is_file():
+            snapshot_files.append(dict(item))
             continue
         dst = snapshot / snapshot_filename(item, src)
         shutil.copy2(src, dst)
@@ -609,13 +612,14 @@ def safe_bundle_filename(value, fallback):
 
 
 def embedded_bundle_files(note):
-    portable = note.get("portable")
-    if not isinstance(portable, dict):
-        portable = note.get("resourceBundle")
-    if not isinstance(portable, dict):
-        return []
-    files = portable.get("files")
-    return files if isinstance(files, list) else []
+    for key in ("bundle", "portable", "resourceBundle"):
+        bundle = note.get(key)
+        if not isinstance(bundle, dict):
+            continue
+        files = bundle.get("files")
+        if isinstance(files, list):
+            return files
+    return []
 
 
 def restore_embedded_resource_files(note):
@@ -633,7 +637,7 @@ def restore_embedded_resource_files(note):
             continue
         rid = str(item.get("resourceId") or item.get("resource_id") or "").strip()
         resource = by_id.get(rid)
-        encoded = str(item.get("base64") or "").strip()
+        encoded = str(item.get("base64") or item.get("body") or "").strip()
         if not rid or resource is None or not encoded:
             continue
         try:
@@ -641,7 +645,8 @@ def restore_embedded_resource_files(note):
         except (binascii.Error, ValueError):
             continue
         role = str(item.get("role") or "original").strip() or "original"
-        source_filename = safe_bundle_filename(item.get("path") or item.get("name"), f"{role}-{index}.bin")
+        bundle_path = str(item.get("path") or item.get("name") or "").replace("\\", "/").strip("/")
+        source_filename = safe_bundle_filename(bundle_path, f"{role}-{index}.bin")
         filename = snapshot_filename({"role": role, "path": source_filename}, Path(source_filename))
         mime_type = str(item.get("mimeType") or item.get("mime_type") or "application/octet-stream").strip()
         sha256 = hashlib.sha256(payload).hexdigest()
@@ -660,23 +665,44 @@ def restore_embedded_resource_files(note):
 
         primary.mkdir(parents=True, exist_ok=True)
         snapshot.mkdir(parents=True, exist_ok=True)
-        primary_file = primary / filename
-        snapshot_file = snapshot / filename
-        primary_file.write_bytes(payload)
-        snapshot_file.write_bytes(payload)
+        if bundle_path.startswith("upload/"):
+            stored_rel = bundle_path[len("upload/"):].strip("/")
+            dest_file = upload_root / stored_rel
+            storage_path = stored_rel
+            storage_source = str(dest_file)
+        elif bundle_path.startswith("note/resource/"):
+            note_rel = bundle_path[len("note/resource/"):].strip("/")
+            parts = note_rel.split("/", 1)
+            stored_rel = parts[1] if len(parts) == 2 and parts[0] == rid else note_rel
+            dest_file = snapshot / stored_rel
+            storage_path = Path(stored_rel).name
+            storage_source = str(dest_file)
+        elif role == "original":
+            stored_rel = bundle_path or f"{resource_timestamp(resource):%Y/%m/%d}/{rid}/{filename}"
+            dest_file = upload_root / stored_rel
+            storage_path = stored_rel
+            storage_source = str(dest_file)
+        else:
+            storage_path = filename
+            dest_file = snapshot / storage_path
+            storage_source = str(dest_file)
+        dest_file.parent.mkdir(parents=True, exist_ok=True)
+        dest_file.write_bytes(payload)
 
         storage["managed"] = True
         storage["copyPolicy"] = "snapshot"
         storage["primaryPath"] = str(primary)
         storage["snapshotPath"] = str(snapshot)
+        if role == "original":
+            storage["sourcePath"] = storage_path
         files = storage.get("files")
         if not isinstance(files, list):
             files = []
-        files = [f for f in files if not (isinstance(f, dict) and str(f.get("role") or "") == role and str(f.get("path") or "") == filename)]
+        files = [f for f in files if not (isinstance(f, dict) and str(f.get("role") or "") == role)]
         files.append({
             "role": role,
-            "path": filename,
-            "sourcePath": str(primary_file),
+            "path": storage_path,
+            "sourcePath": storage_source,
             "mimeType": mime_type,
             "size": len(payload),
             "sha256": sha256,
@@ -686,6 +712,7 @@ def restore_embedded_resource_files(note):
         (snapshot / "resource.json").write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
     note.pop("portable", None)
     note.pop("resourceBundle", None)
+    note.pop("bundle", None)
 
 
 note = load_note(json_file)

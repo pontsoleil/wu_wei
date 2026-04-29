@@ -692,10 +692,13 @@ wuwei.note = (function () {
       this.currentPage = Number(param.currentPage || 1) || 1;
       this.pages = param.pages || {};
       this.resources = cloneArray(param.resources).map(normalizeResourceDefinition);
-      const portable = (param.portable && typeof param.portable === 'object')
-        ? param.portable
-        : ((param.resourceBundle && typeof param.resourceBundle === 'object') ? param.resourceBundle : null);
-      this.portable = portable ? util.clone(portable) : null;
+      const portable = (param.bundle && typeof param.bundle === 'object')
+        ? param.bundle
+        : ((param.portable && typeof param.portable === 'object')
+          ? param.portable
+          : ((param.resourceBundle && typeof param.resourceBundle === 'object') ? param.resourceBundle : null));
+      this.bundle = portable ? util.clone(portable) : null;
+      this.portable = this.bundle;
       this.audit = normalizeAudit(param.audit, state.currentUser);
     }
   }
@@ -921,7 +924,7 @@ wuwei.note = (function () {
     return current;
   }
 
-  function saveNote(form) {
+  function persistNote(form, actionName) {
     if (!current.note_id || !util.isUUIDid(current.note_id)) {
       current.note_id = util.createUuid();
     }
@@ -951,8 +954,9 @@ wuwei.note = (function () {
       pages: {},
       audit: normalizeAudit(current.audit, state.currentUser)
     };
-    if (current.portable && current.portable.files) {
-      noteToSave.portable = current.portable;
+    const portableBundle = current.bundle || current.portable;
+    if (portableBundle && portableBundle.files) {
+      noteToSave.bundle = portableBundle;
     }
 
     Object.keys(current.pages || {}).forEach(function (pp) {
@@ -984,7 +988,7 @@ wuwei.note = (function () {
 
     const cu = state.currentUser || {};
 
-    const action = util.getAction('save-note')
+    const action = util.getAction(actionName || 'save-note')
     return ajaxRequest(action, {
       id: current.note_id,
       name: current.note_name,
@@ -993,9 +997,18 @@ wuwei.note = (function () {
       thumbnail: iconHTML,
       user_id: cu.user_id
     }, 'POST', 30000).then(function (responseText) {
+      delete current.bundle;
       delete current.portable;
       return responseText;
     });
+  }
+
+  function saveNote(form) {
+    return persistNote(form, 'save-note');
+  }
+
+  function importNote(form) {
+    return persistNote(form, 'import-note');
   }
 
   function exportNoteText() {
@@ -1586,6 +1599,7 @@ wuwei.note = (function () {
     exportNoteText: exportNoteText,
     exportPortableNoteText: exportPortableNoteText,
     saveNote: saveNote,
+    importNote: importNote,
     publishNote: publishNote,
     searchNote: searchNote,
     listNote: listNote,

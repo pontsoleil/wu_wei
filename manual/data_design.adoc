@@ -37,7 +37,6 @@ data/
           resource/
             {resource_uuid}/
               resource.json
-              original.*
               thumbnail.*
               preview.pdf
 ----
@@ -107,7 +106,6 @@ Note Resource スナップショットは、Note に紐づく Resource のスナ
 ----
 data/{user_uuid}/note/yyyy/mm/dd/{note_uuid}/resource/{resource_uuid}/
   resource.json
-  original.*
   thumbnail.*
   preview.pdf
 ----
@@ -533,7 +531,6 @@ Note 保存後、同じ Resource は Note 配下にも保存される。
 ----
 data/{user_uuid}/note/2026/04/26/{note_uuid}/resource/{resource_uuid}/
   resource.json
-  original.pdf
   thumbnail.png
   preview.pdf
 ----
@@ -700,5 +697,140 @@ info ペインは Resource の種類に応じて次のように表示する。
 |thumbnail または original image を表示する。
 |===
 
+== Portable Note bundle と Resource 実体の扱い
+
+通常保存とダウンロードでは、Resource 実体の扱いを分ける。
+
+通常保存では、Note は upload 済み original ファイルを複製しない。`role=original` の実体は次の upload 領域を参照する。
+
+[source,text]
+----
+data/{user_uuid}/upload/YYYY/MM/DD/{uploaded_file_uuid}/{filename}
+----
+
+Note snapshot には、Note の画面表示を崩さないために必要な派生ファイルだけを保存する。標準で保存する対象は `resource.json`、`role=thumbnail`、`role=preview` であり、`original.*` は作成しない。
+
+[source,text]
+----
+data/{user_uuid}/note/YYYY/MM/DD/{note_uuid}/resource/{resource_uuid}/resource.json
+data/{user_uuid}/note/YYYY/MM/DD/{note_uuid}/resource/{resource_uuid}/thumbnail.*
+data/{user_uuid}/note/YYYY/MM/DD/{note_uuid}/resource/{resource_uuid}/preview.pdf
+----
+
+このため、保存後に upload 領域の original ファイルが削除された場合、その original は復元できない。ただし、Note snapshot に thumbnail / preview が残っていれば、Note 上の表示は可能な限り維持される。
+
+ノートをテキストファイルとしてダウンロードする場合は、Note JSON に `bundle.files[]` を追加し、持ち運びに必要なファイルを Base64 で同梱する。bundle 内の `path` はユーザーUUIDを含まない論理パスとする。
+
+[source,json]
+----
+{
+  "bundle": {
+    "type": "wuwei.note.bundle",
+    "version": 1,
+    "files": [
+      {
+        "resourceId": "_resource_uuid",
+        "role": "original",
+        "path": "upload/2026/04/29/_uploaded_file_uuid/document.docx",
+        "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "encoding": "base64",
+        "base64": "..."
+      },
+      {
+        "resourceId": "_resource_uuid",
+        "role": "thumbnail",
+        "path": "note/resource/_resource_uuid/thumbnail.jpg",
+        "mimeType": "image/jpeg",
+        "encoding": "base64",
+        "base64": "..."
+      },
+      {
+        "resourceId": "_resource_uuid",
+        "role": "preview",
+        "path": "note/resource/_resource_uuid/preview.pdf",
+        "mimeType": "application/pdf",
+        "encoding": "base64",
+        "base64": "..."
+      }
+    ]
+  }
+}
+----
+
+アップロード/インポートで復元するときは、`upload/...` を `data/{current_user_uuid}/upload/...` に展開し、`note/resource/...` を新しい Note snapshot 配下に展開する。復元後、`resource.storage.files[].sourcePath` は実際の復元先を指すように更新する。
+
 iframe 表示は対象サイトの方針に依存する。
 WuWei 側は iframe 拒否をエラー停止にせず、代替リンクを表示する。
+
+== 2026-04-29 補足: ノート入出力コマンドと CGI の役務
+
+ノート入出力は、通常保存、保存済みノートの読み込み、ノートファイルのダウンロード、ノートファイルのアップロード/復元を分けて扱う。
+特に、portable bundle の復元保存は通常保存とは別の入口 `import-note` とする。
+
+[cols="1,2,2,2,3"]
+|===
+|メニュー/操作 |JavaScript |ローカル Python CGI |Linux shell CGI |役務
+
+|ノート > 保存
+|`wuwei.menu.note.save()` -> `wuwei.note.saveNote()`
+|`cgi-bin/save-note.py`
+|`server/save-note.cgi`
+|現在の Note JSON を保存する。Resource metadata、Note snapshot の `resource.json`、`thumbnail.*`、`preview.pdf` を保存する。通常保存では `role=original` の実体ファイルは Note snapshot に複製せず、`upload/...` を参照する。
+
+|ノート > 開く
+|`wuwei.menu.note.load()` -> `wuwei.note.loadNote()`
+|`cgi-bin/load-note.py`
+|`server/load-note.cgi`
+|保存済み `note.json` を読み込み、`json_base64` をデコードして Note JSON を返す。
+
+|ノート > ノートファイルをダウンロード
+|`wuwei.menu.note.downloadFile()` -> `wuwei.note.saveNote()` -> `wuwei.note.exportPortableNoteText()`
+|`cgi-bin/save-note.py` の後に `cgi-bin/load-note.py` を `bundle=1` で呼ぶ
+|`server/save-note.cgi` の後に `server/load-note.cgi` を `bundle=1` で呼ぶ
+|まず最新状態を通常保存し、その後 `load-note` が保存済み Note から portable bundle を生成する。ブラウザは返されたテキストを Blob としてダウンロードする。
+
+|ノート > ノートファイルをアップロード
+|`wuwei.menu.note.openFile()` / `importFile()` -> `wuwei.note.importNote()`
+|`cgi-bin/import-note.py`
+|`server/import-note.cgi`
+|利用者が選択したテキストファイルをブラウザで JSON として読み込み、`bundle.files[]` を持つ場合は `import-note` に渡して復元保存する。
+
+|ノート > Publish
+|`wuwei.menu.publish.publish()` -> `wuwei.note.saveNote()` -> `wuwei.note.publishNote()`
+|`cgi-bin/save-note.py` の後に `cgi-bin/publish-note.py`
+|`server/save-note.cgi` の後に `server/publish-note.cgi`
+|公開前に暗黙で最新状態を保存し、公開用 Note を作成する。公開 URL で開いた Note は viewOnly/published として編集、保存、ダウンロードを無効化する。
+|===
+
+=== ダウンロード時のローカル Python
+
+ノートファイルのダウンロードにおいて、portable bundle を生成するローカル Python は `cgi-bin/load-note.py` である。
+`wuwei.note.exportPortableNoteText()` は `load-note` に `bundle=1` を渡す。
+`load-note` は保存済み `note.json` を読み、次のファイルを `bundle.files[]` に Base64 で同梱する。
+
+* `upload/YYYY/MM/DD/{uploaded_file_uuid}/{filename}`: アップロード original。
+* `note/resource/{resource_uuid}/thumbnail.*`: Note snapshot のサムネイル。
+* `note/resource/{resource_uuid}/preview.pdf`: Note snapshot のプレビュー PDF。
+
+=== アップロード/復元時の import-note
+
+`import-note` は portable bundle 復元保存専用の入口である。
+通常保存と保存形式がずれないよう、内部の永続化処理は `save-note` と同じ処理を使う。
+ただし API 名を分けることで、メニューコマンド上の役務を明確にする。
+
+復元時は次の規則でファイルを展開する。
+
+[source,text]
+----
+bundle path: upload/YYYY/MM/DD/{uploaded_file_uuid}/{filename}
+=> data/{current_user_uuid}/upload/YYYY/MM/DD/{uploaded_file_uuid}/{filename}
+
+bundle path: note/resource/{resource_uuid}/thumbnail.*
+=> data/{current_user_uuid}/note/YYYY/MM/DD/{note_uuid}/resource/{resource_uuid}/thumbnail.*
+
+bundle path: note/resource/{resource_uuid}/preview.pdf
+=> data/{current_user_uuid}/note/YYYY/MM/DD/{note_uuid}/resource/{resource_uuid}/preview.pdf
+----
+
+復元後、`resource.storage.files[].sourcePath` は復元先の実パスを指すように更新する。
+`bundle`、`portable`、`resourceBundle` は保存後の Note JSON から取り除く。

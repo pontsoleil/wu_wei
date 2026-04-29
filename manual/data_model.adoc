@@ -998,3 +998,41 @@ YouTube と Vimeo は `media.kind = "video"` として扱う。
   "audit": {}
 }
 ----
+== Portable Note bundle と Resource 実体の扱い
+
+通常保存では、upload 済み original ファイルを Note snapshot に複製しない。`role=original` は `data/{user_uuid}/upload/YYYY/MM/DD/{uploaded_file_uuid}/{filename}` を参照する。
+
+Note snapshot に保存する標準対象は、`resource.json`、`thumbnail.*`、`preview.pdf` である。`data/{user_uuid}/note/YYYY/MM/DD/{note_uuid}/resource/{resource_uuid}/original.*` は標準では作成しない。
+
+ノートをテキストファイルとしてダウンロードするときは、持ち運びに必要なファイルを `bundle.files[]` に Base64 で同梱する。bundle の `path` は次の論理パスを使用し、ユーザーUUIDを含めない。
+
+[source,text]
+----
+upload/YYYY/MM/DD/{uploaded_file_uuid}/{filename}
+note/resource/{resource_uuid}/thumbnail.*
+note/resource/{resource_uuid}/preview.pdf
+----
+
+インポート時は `upload/...` を `data/{current_user_uuid}/upload/...` に、`note/resource/...` を新しい Note snapshot 配下に復元し、`resource.storage.files[].sourcePath` を復元後の実パスに更新する。
+
+== 2026-04-29 補足: Portable bundle と import-note
+
+ノートファイルの受け渡しでは、Note JSON に `bundle.files[]` を追加した portable bundle を使用する。
+通常の Note 保存では、アップロード original は Note snapshot に複製しない。
+`role=original` は `upload/YYYY/MM/DD/{uploaded_file_uuid}/{filename}` を参照する。
+`role=thumbnail` と `role=preview` は Note snapshot 配下に保存し、画面表示が崩れないようにする。
+
+[source,text]
+----
+data/{user_uuid}/upload/YYYY/MM/DD/{uploaded_file_uuid}/{filename}
+data/{user_uuid}/note/YYYY/MM/DD/{note_uuid}/resource/{resource_uuid}/resource.json
+data/{user_uuid}/note/YYYY/MM/DD/{note_uuid}/resource/{resource_uuid}/thumbnail.*
+data/{user_uuid}/note/YYYY/MM/DD/{note_uuid}/resource/{resource_uuid}/preview.pdf
+----
+
+ノートファイルのダウンロードでは、`load-note` が保存済み Note から portable bundle を生成する。
+ローカル環境では `cgi-bin/load-note.py`、Linux サーバーでは `server/load-note.cgi` が担当する。
+
+ノートファイルのアップロード/復元では、`import-note` を使用する。
+ローカル環境では `cgi-bin/import-note.py`、Linux サーバーでは `server/import-note.cgi` が担当する。
+`import-note` は `bundle.files[]` を展開し、`resource.storage.files[].sourcePath` を復元後の実パスに更新してから Note を保存する。
