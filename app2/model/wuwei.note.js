@@ -480,6 +480,7 @@ wuwei.note = (function () {
   function normalizePage(page, pp, resourceById) {
     var src = page || {};
     return PageFactory({
+      id: src.id || util.createUuid(),
       pp: Number(src.pp || pp || 1) || 1,
       name: src.name || '',
       description: src.description || '',
@@ -492,11 +493,92 @@ wuwei.note = (function () {
     });
   }
 
+  function normalizePagesCollection(srcPages, resourceById) {
+    var pages = [];
+    if (Array.isArray(srcPages)) {
+      pages = srcPages.map(function (page, index) {
+        return normalizePage(page, index + 1, resourceById);
+      }).filter(Boolean);
+    }
+    else if (srcPages && typeof srcPages === 'object') {
+      Object.keys(srcPages).sort(function (a, b) {
+        var na = Number(a);
+        var nb = Number(b);
+        if (Number.isFinite(na) && Number.isFinite(nb)) { return na - nb; }
+        return String(a).localeCompare(String(b));
+      }).forEach(function (k, index) {
+        pages.push(normalizePage(srcPages[k], Number(k) || index + 1, resourceById));
+      });
+    }
+    refreshPageNumbers(pages);
+    return pages;
+  }
+
+  function refreshPageNumbers(pages) {
+    (Array.isArray(pages) ? pages : []).forEach(function (page, index) {
+      if (!page.id) { page.id = util.createUuid(); }
+      page.pp = index + 1;
+    });
+    return pages;
+  }
+
+  function pagesAsArray(note) {
+    var src = note || common.current || {};
+    if (Array.isArray(src.pages)) {
+      refreshPageNumbers(src.pages);
+      return src.pages;
+    }
+    src.pages = normalizePagesCollection(src.pages, {});
+    if (!src.pages.length) {
+      src.pages.push(createPage(1));
+    }
+    refreshPageNumbers(src.pages);
+    return src.pages;
+  }
+
+  function findPageByRef(note, pageRef) {
+    var pages = pagesAsArray(note);
+    var ref = (typeof pageRef === 'undefined' || pageRef === null) ? (note && note.currentPage) : pageRef;
+    var page = null;
+    if (typeof ref === 'string' && ref.charAt(0) === '_') {
+      page = pages.find(function (item) { return item && item.id === ref; }) || null;
+    }
+    if (!page && Number.isFinite(Number(ref))) {
+      page = pages[Number(ref) - 1] || pages.find(function (item) { return Number(item && item.pp) === Number(ref); }) || null;
+    }
+    return page || pages[0] || null;
+  }
+
+  function setCurrentPageByPage(page) {
+    if (!page) { return null; }
+    current = common.current;
+    current.page = page;
+    current.currentPage = page.id;
+    return page;
+  }
+
+  function serializePageForSave(page, index, resources, defaultThumbnail) {
+    return {
+      id: page.id || util.createUuid(),
+      pp: index + 1,
+      name: page.name || '',
+      description: page.description || '',
+      nodes: (page.nodes || []).filter(Boolean).map(function (node) {
+        return stripRuntimeNodeForSave(node, resources);
+      }),
+      links: (page.links || []).filter(Boolean).map(stripRuntimeLink),
+      groups: (page.groups || []).filter(Boolean).map(stripRuntimeGroup),
+      transform: normalizeTransform(page.transform || page.translate),
+      thumbnail: (typeof page.thumbnail === 'undefined') ? defaultThumbnail : page.thumbnail,
+      audit: normalizeAudit(page.audit || current.audit, state.currentUser)
+    };
+  }
+
   function normalizeNote(note) {
     var src = note || {};
-    var pages = {};
     var resources = cloneArray(src.resources).map(normalizeResourceDefinition);
     var resourceById = {};
+    var pages, currentPage;
 
     resources.forEach(function (resource) {
       if (resource && resource.id) {
@@ -504,18 +586,19 @@ wuwei.note = (function () {
       }
     });
 
-    if (src.pages && typeof src.pages === 'object') {
-      Object.keys(src.pages).forEach(function (k) { pages[String(k)] = normalizePage(src.pages[k], k, resourceById); });
-    } else if (src.page) {
-      pages['1'] = normalizePage(src.page, 1, resourceById);
-    } else {
-      pages['1'] = createPage(1);
+    pages = normalizePagesCollection(src.pages, resourceById);
+    if (!pages.length && src.page) {
+      pages = [normalizePage(src.page, 1, resourceById)];
     }
+    if (!pages.length) {
+      pages = [createPage(1)];
+    }
+    currentPage = findPageByRef({ pages: pages, currentPage: src.currentPage }, src.currentPage) || pages[0];
     return NoteFactory({
       note_id: src.note_id || util.createUuid(),
       note_name: decodeMaybe(src.note_name || ''),
       description: decodeMaybe((src.description || '').replace(/\\n/g, '\n')),
-      currentPage: Number(src.currentPage || 1) || 1,
+      currentPage: currentPage.id,
       pages: pages,
       resources: resources,
       audit: normalizeAudit(src.audit || { createdBy: src.owner_id || src.ownerId || (state.currentUser && state.currentUser.user_id) || common.TEMP_OWNER_ID }, state.currentUser)
@@ -689,8 +772,13 @@ wuwei.note = (function () {
       this.note_id = param.note_id || util.createUuid();
       this.note_name = param.note_name || '';
       this.description = param.description || '';
-      this.currentPage = Number(param.currentPage || 1) || 1;
-      this.pages = param.pages || {};
+      this.pages = Array.isArray(param.pages) ? param.pages : normalizePagesCollection(param.pages, {});
+      if (!this.pages.length) {
+        this.pages.push(createPage(1));
+      }
+      refreshPageNumbers(this.pages);
+      this.currentPage = (findPageByRef(this, param.currentPage) || this.pages[0]).id;
+      this.page = findPageByRef(this, this.currentPage);
       this.resources = cloneArray(param.resources).map(normalizeResourceDefinition);
       const portable = (param.bundle && typeof param.bundle === 'object')
         ? param.bundle
@@ -707,15 +795,15 @@ wuwei.note = (function () {
     if (!param) {
       return null;
     }
-    var pages = {};
-    if (param.pages && typeof param.pages === 'object') {
-      Object.keys(param.pages).forEach(function (pp) {
-        pages[String(pp)] = PageFactory(param.pages[pp]);
-      });
-    } else {
-      pages[String(param.currentPage || 1)] = PageFactory(param.page || createPage(1));
+    var pages = Array.isArray(param.pages)
+      ? param.pages.map(function (page, index) { return PageFactory(Object.assign({}, page, { pp: index + 1 })); }).filter(Boolean)
+      : normalizePagesCollection(param.pages, {});
+    if (!pages.length) {
+      pages.push(PageFactory(param.page || createPage(1)));
     }
+    refreshPageNumbers(pages);
     param.pages = pages;
+    param.currentPage = (findPageByRef({ pages: pages, currentPage: param.currentPage }, param.currentPage) || pages[0]).id;
     return new Note(param);
   }
 
@@ -736,14 +824,14 @@ wuwei.note = (function () {
       note_id: util.createUuid(),
       note_name: '',
       description: '',
-      currentPage: 1,
-      pages: { '1': firstPage },
+      currentPage: firstPage.id,
+      pages: [firstPage],
       resources: [],
       audit: normalizeAudit(null, state.currentUser)
     });
 
     common.current = current;
-    setGraphFromCurrentPage(1);
+    setGraphFromCurrentPage(firstPage.id);
     updateCanvasTransform(util.getPageTransform(current.page));
 
     const noteName = document.querySelector('#note_name .name');
@@ -949,9 +1037,9 @@ wuwei.note = (function () {
       note_id: current.note_id,
       note_name: current.note_name,
       description: current.description,
-      currentPage: Number(current.currentPage || 1) || 1,
+      currentPage: (findPageByRef(current, current.currentPage) || current.page || {}).id || current.currentPage,
       resources: cloneArray(current.resources).map(normalizeResourceDefinition),
-      pages: {},
+      pages: [],
       audit: normalizeAudit(current.audit, state.currentUser)
     };
     const portableBundle = current.bundle || current.portable;
@@ -959,22 +1047,9 @@ wuwei.note = (function () {
       noteToSave.bundle = portableBundle;
     }
 
-    Object.keys(current.pages || {}).forEach(function (pp) {
-      var page = current.pages[pp];
+    pagesAsArray(current).forEach(function (page, index) {
       if (!page) { return; }
-      noteToSave.pages[String(pp)] = {
-        pp: Number(page.pp || pp) || 1,
-        name: page.name || '',
-        description: page.description || '',
-        nodes: (page.nodes || []).filter(Boolean).map(function (node) {
-          return stripRuntimeNodeForSave(node, noteToSave.resources);
-        }),
-        links: (page.links || []).filter(Boolean).map(stripRuntimeLink),
-        groups: (page.groups || []).filter(Boolean).map(stripRuntimeGroup),
-        transform: normalizeTransform(page.transform || page.translate),
-        thumbnail: (typeof page.thumbnail === 'undefined') ? null : page.thumbnail,
-        audit: normalizeAudit(page.audit || current.audit, state.currentUser)
-      };
+      noteToSave.pages.push(serializePageForSave(page, index, noteToSave.resources, null));
     });
 
     current.resources = noteToSave.resources;
@@ -1021,28 +1096,15 @@ wuwei.note = (function () {
       note_id: current.note_id,
       note_name: current.note_name || '',
       description: current.description || '',
-      currentPage: Number(current.currentPage || 1) || 1,
+      currentPage: (findPageByRef(current, current.currentPage) || current.page || {}).id || current.currentPage,
       resources: cloneArray(current.resources).map(normalizeResourceDefinition),
-      pages: {},
+      pages: [],
       audit: normalizeAudit(current.audit, state.currentUser)
     };
 
-    Object.keys(current.pages || {}).forEach(function (pp) {
-      var page = current.pages[pp];
+    pagesAsArray(current).forEach(function (page, index) {
       if (!page) { return; }
-      noteToExport.pages[String(pp)] = {
-        pp: Number(page.pp || pp) || 1,
-        name: page.name || '',
-        description: page.description || '',
-        nodes: (page.nodes || []).filter(Boolean).map(function (node) {
-          return stripRuntimeNodeForSave(node, noteToExport.resources);
-        }),
-        links: (page.links || []).filter(Boolean).map(stripRuntimeLink),
-        groups: (page.groups || []).filter(Boolean).map(stripRuntimeGroup),
-        transform: normalizeTransform(page.transform || page.translate),
-        thumbnail: (typeof page.thumbnail === 'undefined') ? currentPageThumbnail : page.thumbnail,
-        audit: normalizeAudit(page.audit || current.audit, state.currentUser)
-      };
+      noteToExport.pages.push(serializePageForSave(page, index, noteToExport.resources, currentPageThumbnail));
     });
 
     current.resources = noteToExport.resources;
@@ -1072,7 +1134,7 @@ wuwei.note = (function () {
       current.note_id = util.createUuid();
     }
     const noteJson = exportNoteText();
-    const currentPage = current.pages && current.pages[String(current.currentPage)];
+    const currentPage = findPageByRef(current, current.currentPage);
     const thumbnail = (currentPage && currentPage.thumbnail) || snapshotCurrentPageThumbnail() || '';
     const data = {
       user_id: state.currentUser.user_id,
@@ -1153,6 +1215,7 @@ wuwei.note = (function () {
   class Page {
     constructor(param) {
       param = param || {};
+      this.id = param.id || util.createUuid();
       this.pp = param.pp || 1;
       this.name = param.name || '';
       this.description = param.description || '';
@@ -1183,6 +1246,7 @@ wuwei.note = (function () {
 
   function createPage(pp, param) {
     const base = Object.assign({
+      id: util.createUuid(),
       pp: Number(pp) || 1,
       name: '',
       description: '',
@@ -1208,10 +1272,8 @@ wuwei.note = (function () {
     current = common.current;
     current.page = page;
 
-    if (page.pp != null) {
-      current.currentPage = Number(page.pp) || current.currentPage || 1;
-      return setGraphFromCurrentPage(current.currentPage);
-    }
+    current.currentPage = page.id || current.currentPage;
+    return setGraphFromCurrentPage(current.currentPage);
 
     graph.nodes = page.nodes;
     graph.links = page.links;
@@ -1220,10 +1282,11 @@ wuwei.note = (function () {
     return page;
   }
 
-  function setGraphFromCurrentPage(pp) {
+  function setGraphFromCurrentPage(pageRef) {
+    var pp = pageRef;
     // graph 構成は model 側が pseudo group / timeline を含めて管理する。
     if (pp != null) {
-      wuwei.model.getCurrentPage(pp);
+      wuwei.model.getCurrentPage(pageRef);
     }
     return wuwei.model.setGraphFromCurrentPage();
   }
@@ -1233,7 +1296,7 @@ wuwei.note = (function () {
     if (!current) {
       return null;
     }
-    return setGraphFromCurrentPage(Number(current.currentPage || 1) || 1);
+    return setGraphFromCurrentPage(current.currentPage);
   }
 
   function updateCanvasTransform(translate) {
@@ -1314,7 +1377,7 @@ wuwei.note = (function () {
 
     isCurrentPage = current && current.page && (
       current.page === targetPage ||
-      Number(current.currentPage || 1) === Number(targetPage.pp || 1)
+      current.currentPage === targetPage.id
     );
 
     thumbnail = isCurrentPage ? captureCurrentMiniatureThumbnail() : '';
@@ -1328,15 +1391,7 @@ wuwei.note = (function () {
 
   function getNewPP() {
     current = common.current;
-    let maxpp = 0;
-    const pages = current.pages || {};
-    for (const key in pages) {
-      if (!Object.prototype.hasOwnProperty.call(pages, key)) continue;
-      const p = pages[key];
-      const pp = Number((p && p.pp != null) ? p.pp : key);
-      if (Number.isFinite(pp) && pp > maxpp) maxpp = pp;
-    }
-    return maxpp + 1;
+    return pagesAsArray(current).length + 1;
   }
 
   /*  function applyPageState(page) {
@@ -1354,10 +1409,9 @@ wuwei.note = (function () {
     }
 
     current = common.current;
-    current.page = targetPage;
-    current.currentPage = Number(targetPage.pp || current.currentPage || 1) || 1;
+    setCurrentPageByPage(targetPage);
 
-    activePage = setGraphFromCurrentPage(current.currentPage);
+    activePage = setGraphFromCurrentPage(targetPage.id);
     if (!activePage) {
       activePage = targetPage;
     }
@@ -1369,45 +1423,36 @@ wuwei.note = (function () {
 
   function copyPage(sourcePP) {
     current = common.current;
-    const pages = current.pages || (current.pages = {});
+    const pages = pagesAsArray(current);
     const nodeIndexer = {};
     const linkIndexer = {};
-    let _id, id, sourcePage;
+    let _id, id, sourcePage, copiedPage;
 
     snapshotCurrentPageThumbnail();
     if (wuwei.model && typeof wuwei.model.syncPageFromGraph === 'function') {
       wuwei.model.syncPageFromGraph();
     }
 
-    let pp = getNewPP();
-    while (pages[String(pp)]) pp = Number(pp) + 1;
+    sourcePage = (sourcePP != null) ? findPageByRef(current, sourcePP) : (current.page || wuwei.model.getCurrentPage());
+    copiedPage = PageFactory(Object.assign(util.clone(sourcePage), { id: util.createUuid(), pp: pages.length + 1 }));
+    pages.push(copiedPage);
+    refreshPageNumbers(pages);
 
-    if (sourcePP != null && pages[String(sourcePP)]) {
-      sourcePage = pages[String(sourcePP)];
-    }
-    else {
-      sourcePage = current.page || wuwei.model.getCurrentPage();
-    }
+    setCurrentPageByPage(copiedPage);
 
-    const key = String(pp);
-    pages[key] = PageFactory(Object.assign(util.clone(sourcePage), { pp: pp }));
-
-    current.currentPage = pp;
-    current.page = pages[key];
-
-    for (let node of pages[key].nodes) {
+    for (let node of copiedPage.nodes) {
       id = util.createUuid();
       nodeIndexer[node.id] = id;
     }
-    for (let link of pages[key].links) {
+    for (let link of copiedPage.links) {
       id = util.createUuid();
       linkIndexer[link.id] = id;
     }
-    for (let node of pages[key].nodes) {
+    for (let node of copiedPage.nodes) {
       _id = node.id;
       node.id = nodeIndexer[_id];
     }
-    for (let link of pages[key].links) {
+    for (let link of copiedPage.links) {
       _id = link.id;
       const srcId = (link.from && typeof link.from === 'object') ? link.from.id
         : (link.from || ((link.source && typeof link.source === 'object') ? link.source.id : link.source));
@@ -1419,7 +1464,7 @@ wuwei.note = (function () {
       delete link.source;
       delete link.target;
     }
-    for (let group of (pages[key].groups || [])) {
+    for (let group of (copiedPage.groups || [])) {
       if (Array.isArray(group.members)) {
         group.members = group.members.map(function (it) {
           const next = util.clone(it);
@@ -1443,22 +1488,19 @@ wuwei.note = (function () {
 
   function clonePage() {
     current = common.current;
-    const pages = current.pages || (current.pages = {});
+    const pages = pagesAsArray(current);
+    let clonedPage;
 
     snapshotCurrentPageThumbnail();
     if (wuwei.model && typeof wuwei.model.syncPageFromGraph === 'function') {
       wuwei.model.syncPageFromGraph();
     }
 
-    let pp = getNewPP();
-    while (pages[String(pp)]) pp = Number(pp) + 1;
-
-    const key = String(pp);
-    pages[key] = PageFactory(Object.assign(util.clone(wuwei.model.getCurrentPage()), { pp: pp }));
-
-    current.currentPage = pp;
-    current.page = pages[key];
-    setGraphFromCurrentPage(pp);
+    clonedPage = PageFactory(Object.assign(util.clone(wuwei.model.getCurrentPage()), { id: util.createUuid(), pp: pages.length + 1 }));
+    pages.push(clonedPage);
+    refreshPageNumbers(pages);
+    setCurrentPageByPage(clonedPage);
+    setGraphFromCurrentPage(clonedPage.id);
 
     applyPageState(current.page);
     updatePageName(current.page);
@@ -1471,18 +1513,14 @@ wuwei.note = (function () {
       pp = getNewPP();
     }
 
-    const pages = current.pages || (current.pages = {});
-    while (pages[String(pp)]) {
-      pp = Number(pp) + 1;
-    }
+    const pages = pagesAsArray(current);
 
     snapshotCurrentPageThumbnail();
 
-    const key = String(pp);
-    pages[key] = createPage(pp);
-
-    current.currentPage = Number(pp);
-    current.page = pages[key];
+    const page = createPage(pp);
+    pages.push(page);
+    refreshPageNumbers(pages);
+    setCurrentPageByPage(page);
 
     applyPageState(current.page);
     updatePageName(current.page);
@@ -1495,47 +1533,32 @@ wuwei.note = (function () {
 
   function removePage(pp) {
     current = common.current;
-    const pages = current.pages || (current.pages = {});
-    const pageNo = Number(pp) || 1;
-    const key = String(pageNo);
+    const pages = pagesAsArray(current);
+    const targetPage = findPageByRef(current, pp);
+    const targetIndex = pages.indexOf(targetPage);
     const deletingCurrent =
-      Number(current.currentPage || 1) === pageNo ||
-      (current.page && Number(current.page.pp || 0) === pageNo);
+      !!targetPage && (current.currentPage === targetPage.id || current.page === targetPage);
 
-    if (!pages[key]) {
+    if (targetIndex < 0) {
       return current.page || wuwei.model.getCurrentPage();
     }
 
-    delete pages[key];
+    pages.splice(targetIndex, 1);
+    refreshPageNumbers(pages);
 
-    let keys = Object.keys(pages)
-      .map(Number)
-      .filter(Number.isFinite)
-      .sort((a, b) => a - b);
-
-    if (keys.length === 0) {
-      pages['1'] = createPage(1);
-      current.currentPage = 1;
-      current.page = pages['1'];
-      setGraphFromCurrentPage(1);
+    if (pages.length === 0) {
+      pages.push(createPage(1));
+      refreshPageNumbers(pages);
+      setCurrentPageByPage(pages[0]);
+      setGraphFromCurrentPage(pages[0].id);
       applyPageState(current.page);
       updatePageName(current.page);
       return current.page;
     }
 
-    let activePP;
+    setCurrentPageByPage(deletingCurrent ? pages[Math.min(targetIndex, pages.length - 1)] : (findPageByRef(current, current.currentPage) || pages[0]));
 
-    if (deletingCurrent) {
-      activePP = keys[0];
-    } else {
-      const currentPP = Number(current.currentPage || 1);
-      activePP = pages[String(currentPP)] ? currentPP : keys[0];
-    }
-
-    current.currentPage = activePP;
-    current.page = pages[String(activePP)];
-
-    setGraphFromCurrentPage(activePP);
+    setGraphFromCurrentPage(current.currentPage);
     applyPageState(current.page);
     updatePageName(current.page);
     return current.page;
@@ -1551,13 +1574,12 @@ wuwei.note = (function () {
    */
   function openPage(pp) {
     current = common.current;
-    const key = String(pp);
-    if (!current.pages || !current.pages[key]) {
+    const page = findPageByRef(current, pp);
+    if (!page) {
       return null;
     }
     snapshotCurrentPageThumbnail();
-    current.currentPage = Number(pp);
-    current.page = current.pages[key];
+    setCurrentPageByPage(page);
 
     applyPageState(current.page);
     updatePageName(current.page);
@@ -1571,7 +1593,7 @@ wuwei.note = (function () {
     const span_name = document.querySelector('#page_name .name');
     const span_description = document.querySelector('#page_name .description');
     if (span_pp) {
-      span_pp.textContent = (current.pages && Object.keys(current.pages).length > 1) ? `P.${page.pp}` : '';
+      span_pp.textContent = (pagesAsArray(current).length > 1) ? `P.${page.pp}` : '';
     }
     if (span_name) {
       span_name.textContent = page.name || '';

@@ -169,6 +169,7 @@ file_dir="${upload_tpl//\*/$user_id}"
 resource_tpl="$(read_env resource)"
 [ -z "${resource_tpl:-}" ] && die_json "ERROR: 'resource' is empty in data/environment"
 resource_dir="${resource_tpl//\*/$user_id}"
+resource_root="$resource_dir"
 
 thumbnail_tpl="$(read_env thumbnail)"
 [ -z "${thumbnail_tpl:-}" ] && die_json "ERROR: 'thumbnail' is empty in data/environment"
@@ -247,16 +248,40 @@ mkdir -p "$upload_file_dir" || die_json "ERROR: cannot mkdir $upload_file_dir"
 dest_file="$upload_file_dir/$filename"
 cp -- "$Tmp-uploadfile" "$dest_file" || die_json "ERROR: cannot save upload to $dest_file"
 
+upload_relpath="$year/$month/$day/$upload_file_uuid/$filename"
+original_sha="$(sha256sum "$dest_file" 2>/dev/null | awk '{print $1}')"
+
+find_existing_resource_dir() {
+  local sha="$1" rel="$2" rf
+  find "$resource_root" -type f -name resource.json 2>/dev/null | while IFS= read -r rf; do
+    if { [ -n "$sha" ] && grep -q "\"sha256\"[[:space:]]*:[[:space:]]*\"$sha\"" "$rf"; } ||
+       { [ -n "$rel" ] && grep -q "\"sourcePath\"[[:space:]]*:[[:space:]]*\"$rel\"" "$rf"; }; then
+      dirname "$rf"
+      break
+    fi
+  done
+}
+
 # --- ids / uri mapping -----------------------------------------------
-uuid="_$(uuidgen | tr 'A-Z' 'a-z')"
+existing_resource_dir="$(find_existing_resource_dir "$original_sha" "$upload_relpath" || true)"
+if [ -n "$existing_resource_dir" ]; then
+  uuid="${existing_resource_dir##*/}"
+else
+  uuid="_$(uuidgen | tr 'A-Z' 'a-z')"
+fi
 uuidrgx='[0-9a-f]\{8\}-[0-9a-f]\{4\}-[1-5][0-9a-f]\{3\}-[89ab][0-9a-f]\{3\}-[0-9a-f]\{12\}'
 
 escaped_base="$(printf '%s' "$base_dir" | sed 's/\//\\\//g')"
 
-resource_dir="$resource_day_dir/$uuid"
+resource_dir="${existing_resource_dir:-$resource_day_dir/$uuid}"
 mkdir -p "$resource_dir" || die_json "ERROR: cannot mkdir $resource_dir"
 resource_file="$resource_dir/resource.json"
-resource_uri="resource/$user_id/$year/$month/$day/$uuid"
+if [ -n "$existing_resource_dir" ]; then
+  resource_rel="${existing_resource_dir#$resource_root/}"
+  resource_uri="resource/$user_id/$resource_rel"
+else
+  resource_uri="resource/$user_id/$year/$month/$day/$uuid"
+fi
 
 thumb_file="$resource_dir/thumbnail.jpg"
 thumbnail_uri="$resource_uri/thumbnail.jpg"

@@ -80,7 +80,7 @@ wuwei.csv = ( function () {
         // document.querySelector('#note_name .description').innerHTML = common.current.description || '';
         /*
         setTimeout(() => {
-          if (Object.keys(wuwei.common.current.pages).length > 1) {
+          if ((wuwei.common.current.pages || []).length > 1) {
             wuwei.menu.refreshPagenation();
           }
           if ('draw' === graph.mode) {

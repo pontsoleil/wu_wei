@@ -154,6 +154,10 @@ wuwei.menu.markup = (function () {
         <i class="fa fa-plus fa-fw"></i>
         <span>${translate('New')}</span>
       </div>
+      <div class="operator Discard loggedin" ${state.viewOnly ? 'style="display:none"' : ''}>
+        <i class="fas fa-ban fa-fw"></i>
+        <span>${translate('Discard')}</span>
+      </div>
       <div class="operator Open loggedin">
         <i class="fas fa-book-open fa-fw"></i>
         <span>${translate('Open')}</span>

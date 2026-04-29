@@ -455,6 +455,22 @@ wuwei.menu.note = wuwei.menu.note || {};
     }
   }
 
+  function discard() {
+    const message = nls.translate('Discard current note without saving?');
+    if (!window.confirm(message)) {
+      return false;
+    }
+    wuwei.note.newNote();
+    if (wuwei.draw && typeof wuwei.draw.refresh === 'function') {
+      wuwei.draw.refresh();
+    }
+    wuwei.menu.snackbar.open({
+      type: 'success',
+      message: nls.translate('Discarded current note')
+    });
+    return true;
+  }
+
   function openFile() {
     const input = document.getElementById('noteFileInput');
     if (!input) {
@@ -679,6 +695,7 @@ wuwei.menu.note = wuwei.menu.note || {};
   ns.save = save;
   ns.publish = publish;
   ns.downloadFile = downloadFile;
+  ns.discard = discard;
   ns.openFile = openFile;
   ns.remove = remove;
 })(wuwei.menu.note);
