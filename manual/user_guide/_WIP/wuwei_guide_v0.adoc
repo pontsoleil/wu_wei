@@ -1,0 +1,624 @@
+= WuWei 利用ガイド
+:doctype: book
+:toc: left
+:toclevels: 3
+:sectnums:
+:lang: ja
+
+== この文書について
+
+この文書は、WuWei app2 の利用方法を説明する新版ガイドである。
+
+WuWei を初めて使う利用者が、Home 画面で Resource を探し、Note に Content として追加し、Topic、Memo、Link、Group、Timeline で調査構造を作り、保存・公開するまでの流れを理解できるように構成する。
+
+この文書では、操作説明とデータ概念を次の観点で整理する。
+
+* WuWei の基本概念。
+* Note、Page、Content、Topic、Memo、Link、Group、Resource の関係。
+* Home 画面から Resource を選び、Note に追加する流れ。
+* ヘッダーメニューごとの操作手順。
+* Publish した公開 Note の扱い。
+* 表示、編集、保存、公開、閲覧専用モードの違い。
+
+== WuWei の目的
+
+WuWei は、資料を単に保存するためのツールではない。
+
+Web ページ、PDF、Office 文書、画像、動画、音声、メモなどを Content として配置し、それをどう読むか、どの観点で見るかを Topic や Memo として記録し、それらの関係を Link で結ぶことで、調査や思考の流れを構造として残すためのノート環境である。
+
+WuWei で作成する Note は、完成した結論だけを記録するものではない。
+調査途中の仮説、気づき、比較、関連づけ、保留事項も含めて、後から見直せる形で残すことを目的とする。
+
+== 基本概念
+
+=== Note
+
+Note は WuWei の作業単位である。
+
+Note は複数の Page を持ち、各 Page に Node、Link、Group が配置される。
+また、Note は参照する Resource の定義コピーを `resources[]` として保持する。
+
+Note を単体ファイルとして受け渡しても再現しやすいように、Note 内には参照 Resource のメタデータを保持する。
+ただし、Content ノード自体に Resource 本体を展開して保存してはならない。
+
+=== Page
+
+Page は Note 内の作業面である。
+
+Page には Page ID があり、ページ番号とは別である。
+画面上のページ番号は、Note 内の Page の並び順から決まる表示用番号である。
+Page を追加、削除、コピーした場合、表示上のページ番号は変わり得る。
+
+Page は次の情報を持つ。
+
+* Node 一覧。
+* Link 一覧。
+* Group 一覧。
+* 表示位置と拡大率。
+* Page thumbnail。
+* 監査情報。
+
+Page thumbnail は、右上の縮小図と同じ 200 x 200 の SVG として保存される。
+ページ一覧画面や左下のページ番号ホバー時のサムネイル表示では、この Page thumbnail を利用する。
+
+=== Node
+
+Node は Page 上に配置される要素である。
+
+主な Node 種別は次のとおりである。
+
+* Content
+* Topic
+* Memo
+* Timeline axis
+* Timeline segment
+
+Content は Resource を参照する Node である。
+Topic は観点、論点、分類、キーワードなどを表す。
+Memo は自由記述のメモであり、Asciidoc、Markdown、plain text、HTML などの記述形式を持てる。
+
+=== Content と Resource
+
+Content は Note 上に置かれる参照ノードである。
+Resource は Content が参照する再利用可能なコンテンツ定義である。
+
+Content ノードは Resource 定義を直接保持せず、`resourceRef` で Note 内の `resources[]` にある Resource を参照する。
+同じ Resource を複数の Content ノードから参照できる。
+
+同じ PDF や Office 文書を参照していても、Content ごとに参照ページ、シート、時間範囲、fragment などを変えたい場合は、Content 側の `resourceView` に保持する。
+
+=== Link
+
+Link は Node 間の関係を表す。
+
+Link は単なる線ではなく、どの資料がどの観点に関係するか、どの Topic がどの Topic を補足または対比するかなど、思考上の関係を残すための要素である。
+
+Link には形状があり、NORMAL、HORIZONTAL、HORIZONTAL2、VERTICAL、VERTICAL2 などを利用できる。
+HORIZONTAL2 と VERTICAL2 では、始点・終点だけでなく追加制御点を持つ。
+
+=== Group
+
+Group は複数の Node をまとめて扱うための要素である。
+
+Group 種別は次のとおりである。
+
+* simple
+* horizontal
+* vertical
+* timeline
+
+Group は表示・非表示操作の単位にもなる。
+Group のメンバー Node、または Group の軸を非表示にする場合は、Group 全体を一括して非表示にする。
+bloom でメンバー Node が再表示される場合も、その Node が属する Group 全体を再表示する。
+
+timeline Group も同じ一括表示・非表示規則に従う。
+
+=== Resource
+
+Resource は再利用可能なコンテンツ定義である。
+
+Resource は大きく次の 2 種類に分ける。
+
+* 外部 Web Resource
+* Uploaded Resource
+
+外部 Web Resource は、Web page、blog、YouTube、Vimeo、団体サイト、公開 PDF URL など、他者が公開している情報を参照する。
+原則として実体ファイルはコピーせず、URI、metadata、embed 情報を保持する。
+
+Uploaded Resource は、ユーザーがアップロードした PDF、Office 文書、text、video、audio、photo などである。
+アップロード実体は `data/{user_uuid}/upload/yyyy/mm/dd/` に保存され、Resource はその相対パスを参照する。
+
+Resource ライブラリは次の場所に保存される。
+
+[source]
+----
+data/{user_uuid}/resource/yyyy/mm/dd/{resource_uuid}/resource.json
+data/{user_uuid}/resource/yyyy/mm/dd/{resource_uuid}/thumbnail.*
+data/{user_uuid}/resource/yyyy/mm/dd/{resource_uuid}/preview.*
+----
+
+Note 保存時には、Note 内で参照している Resource 定義のコピーを Note snapshot 側にも保持する。
+
+[source]
+----
+data/{user_uuid}/note/yyyy/mm/dd/{note_uuid}/resource/{resource_uuid}/resource.json
+data/{user_uuid}/note/yyyy/mm/dd/{note_uuid}/resource/{resource_uuid}/thumbnail.*
+data/{user_uuid}/note/yyyy/mm/dd/{note_uuid}/resource/{resource_uuid}/preview.*
+----
+
+== 画面構成
+
+=== Home 画面
+
+Home 画面は、Resource ライブラリに登録されたコンテンツを探し、Note に追加するための画面である。
+
+Home 画面のギャラリーは、`data/{user_uuid}/resource/yyyy/mm/dd/{resource_uuid}/resource.json` を対象に表示する。
+upload ディレクトリやテストデータを直接一覧対象にはしない。
+
+Home 画面では次の操作を行う。
+
+* Resource を日付で探す。
+* Resource をキーワードで探す。
+* ギャラリーで Resource を選択する。
+* 選択した Resource を左上の「選択中のコンテンツ」に表示する。
+* 選択した Resource から新規 Note を作成する。
+* 選択した Resource を編集中 Note に追加する。
+
+ギャラリーの表示サイズは、info ペイン幅を上限とする正方形である。
+Web ページ、YouTube、Vimeo などは iframe 表示を基本とする。
+サイト側が iframe 表示を拒否する場合は、その旨を表示し、必要に応じて新規タブで開く。
+
+=== Note 編集画面
+
+Note 編集画面は、SVG 上に Node と Link を描画する作業画面である。
+
+Node の上にマウスを置くとコンテキストメニューが表示される。
+対象 Node または Link に応じて、利用可能なコマンドだけが表示される。
+
+編集画面には次の主な補助表示がある。
+
+* 右上の縮小図。
+* 左下のページ番号。
+* ページ番号ホバー時の Page thumbnail。
+* edit ペイン。
+* info ペイン。
+
+== ヘッダーメニュー操作マニュアル
+
+ヘッダーメニューは画面左上に並ぶ主要操作入口である。
+
+表示されるメニューや操作可能な項目は、ログイン状態、編集中かどうか、公開閲覧モードかどうかによって変わる。
+
+=== ハンバーガーメニュー
+
+ハンバーガーメニューは、画面全体の主要表示や Home 画面との切り替えに使う。
+
+主な用途は次のとおりである。
+
+* Home 画面を開く。
+* WuWei 編集画面に戻る。
+* 画面全体の表示領域を切り替える。
+
+Home 画面では、アップロード済み Resource や Web Resource を探して Note に追加する。
+Note 編集画面では、Node と Link を配置して調査構造を作成する。
+
+=== ノートメニュー
+
+ノートメニューは、本のアイコンから開く。
+
+主な操作は次のとおりである。
+
+==== 新規
+
+新しい Note を作成する。
+
+現在の Note に未保存変更がある場合は、必要に応じて保存してから実行する。
+新規 Note 作成後は、空の Page が作成され、編集画面に表示される。
+
+==== 開く
+
+保存済み Note の一覧を表示する。
+
+Note 一覧では、Note thumbnail、Note 名、更新日時、説明を確認できる。
+Note を選択すると、その Note を読み込んで編集画面に表示する。
+
+Note 一覧から Note を削除することもできる。
+削除は保存済み Note に対する操作であるため、実行前に対象を確認する。
+
+==== 保存
+
+現在編集中の Note を保存する。
+
+保存時には、Note 本体と、Note 内で参照している Resource 定義が保存される。
+現在 Page の thumbnail も Page データに保持される。
+
+Note 保存では、Content ノードに展開された実行時用 `node.resource` は保存しない。
+保存データでは `resourceRef` と `resources[]` に戻す。
+
+==== Publish
+
+現在の Note を公開する。
+
+Publish 成功後はモーダルメッセージを表示する。
+モーダルには次の内容を表示する。
+
+* 公開しました。
+* 公開URL。
+* 新規タブで開く。
+* URLをコピー。
+
+「新規タブで開く」を押した場合だけ、公開URLを `window.open(publicUrl, '_blank', 'noopener')` で開く。
+自動では新規タブを開かない。
+
+公開URLで開いた Note は、公開閲覧モードとして扱う。
+公開閲覧モードでは、編集、保存、Publish、ダウンロードを無効化する。
+
+==== ログアウト
+
+ログイン状態を解除する。
+
+ログアウト後は、ログインが必要な保存、公開、アップロードなどの操作は利用できない。
+
+=== ページメニュー
+
+ページメニューは、ファイルアイコンから開く。
+
+Page は Note 内の作業面であり、複数の Page を持てる。
+
+==== 一覧
+
+Page 一覧画面を表示する。
+
+Page 一覧では各 Page の thumbnail を確認できる。
+thumbnail は右上の縮小図と同じ 200 x 200 の SVG として保存されたものを表示する。
+
+Page 一覧画面には「ページ追加」ボタンがある。
+このボタンを押すと、白紙 Page を Note の最終 Page として追加する。
+
+==== 名前
+
+現在編集中の Page に名前と説明を設定する。
+
+Page 名は画面上部の Page 表示や Page 一覧で利用される。
+
+==== コピー
+
+現在編集中の Page と同じ内容を持つ Page を、Note の最終 Page として追加する。
+
+コピー時には、Node ID、Link ID を新しく採番する。
+Link の接続先もコピー後の Node ID に更新する。
+
+==== ページ作成
+
+白紙 Page を Note の最終 Page として追加する。
+
+ページ追加後、左下のページ番号が更新される。
+Page が 2 以上ある場合、左下にページ番号の円が表示され、クリックで Page を切り替えられる。
+
+=== 新規メニュー
+
+新規メニューは、プラスアイコンから開く。
+
+主な操作は次のとおりである。
+
+==== コンテンツ
+
+新しい Content ノードを作成する。
+
+Content は Resource を参照する Node である。
+URL、アップロード済み Resource、Web Resource、PDF、Office 文書、画像、動画などを扱う。
+
+==== トピック
+
+新しい Topic ノードを作成する。
+
+Topic は資料を読む観点、論点、分類、キーワード、仮説などを表す。
+
+==== 付箋紙
+
+新しい Memo ノードを作成する。
+
+Memo は説明、仮説、補足、未解決事項などを自由に書くために使う。
+Memo の description は format と body を持ち、Asciidoc、Markdown、plain text、HTML などで表現できる。
+
+==== アップロード
+
+ファイルをアップロードして Resource として登録する。
+
+アップロードした実体ファイルは upload 領域に保存される。
+Resource ライブラリには `resource.json`、thumbnail、preview などが登録される。
+Home 画面のギャラリーは、この Resource ライブラリを対象に表示する。
+
+=== グループメニュー
+
+グループメニューは、グループアイコンから開く。
+
+グループメニューは階層的に整理されている。
+
+* 揃える
+* 定義/解除
+* その他
+
+==== 揃える
+
+選択中の Node を整列する。
+
+利用できる操作は次のとおりである。
+
+* 上に揃える。
+* 水平に揃える。
+* 下に揃える。
+* 左に揃える。
+* 垂直に揃える。
+* 右に揃える。
+* 左右に整列。
+* 上下に整列。
+
+==== 定義/解除
+
+選択中の Node から Group を定義する。
+
+利用できる操作は次のとおりである。
+
+* 単純グループを定義。
+* 水平軸グループを定義。
+* 垂直軸グループを定義。
+* グループ解除。
+
+simple Group はメンバー全体を囲む。
+horizontal Group と vertical Group は軸を持ち、軸をドラッグして配置を調整できる。
+
+==== その他
+
+選択中 Node に対して、コピー、クリップボード、編集、選択解除などを行う。
+
+=== 描画モード切替
+
+描画モードアイコンでは、作業モードを切り替える。
+
+主なモードは次のとおりである。
+
+* draw
+* view
+* simulation
+
+draw モードでは Node、Link、Group を編集できる。
+view モードでは閲覧を中心とし、編集操作は制限される。
+simulation モードでは、力学モデルによって Node 配置を動的に調整する。
+
+simulation では Group の形状はできるだけ保持し、Group 軸や囲み線が不要な残像を残さないように描画を更新する。
+
+=== 検索メニュー
+
+検索アイコンから、Note 内の文字列検索を行う。
+
+検索対象には、Node の label、description、Content の参照情報などが含まれる。
+Resource ライブラリ全体を検索する場合は Home 画面の検索を利用する。
+
+=== ユーザー状態アイコン
+
+ユーザーアイコンは、ログイン状態を示す。
+
+ログインしている場合は、保存、公開、アップロードなどの操作が利用できる。
+ログインしていない場合は、閲覧またはオフラインで可能な操作に制限される。
+
+== コンテキストメニュー操作
+
+Node または Link にマウスを置くと、対象に応じたコンテキストメニューが表示される。
+
+=== コマンド
+
+歯車アイコンから、対象に対する表示操作を行う。
+
+主な操作は次のとおりである。
+
+* bloom
+* wilt
+* root
+* forward
+* backward
+* hide
+* download
+
+公開閲覧モードでは、download は表示しない。
+
+=== 編集
+
+鉛筆アイコンから、対象に対する編集操作を行う。
+
+主な操作は次のとおりである。
+
+* 編集。
+* コンテンツ追加。
+* トピック追加。
+* 付箋紙追加。
+* コピー。
+* 削除。
+
+公開閲覧モードまたは view モードでは、編集メニューは表示しない。
+
+=== 情報
+
+i アイコンから、対象の info ペインを表示する。
+
+Content の info ペインでは、Resource の種類に応じて表示方法を切り替える。
+
+* PDF や文書は preview または viewer で表示する。
+* 画像は画像として表示する。
+* YouTube、Vimeo、動画は iframe または video viewer で表示する。
+* Web ページは iframe 表示を試みる。
+* iframe 表示が拒否された場合は、その旨と URL を表示する。
+
+== bloom / wilt / hide
+
+=== wilt
+
+wilt は、起点 Node から Link をたどって関連 Node を折りたたむ操作である。
+
+たどった先の Node に、たどってきた Link 以外の表示対象 Link がない場合、その Node と Link を非表示にする。
+この処理は再帰的に行う。
+
+非表示になった Link の数は、起点 Node の右上に未表示リンク数として表示する。
+
+Group のメンバー Node が非表示になる場合は、その Group 全体を非表示にする。
+このとき、メンバー Node に関連づけられた Link も非表示にする。
+
+=== bloom
+
+bloom は、非表示になっている Link と、その先の Node を再表示する操作である。
+
+bloom は wilt と違い 1 段だけ開く。
+新しく開いた Node が Group のメンバーである場合は、その Group 全体を再表示する。
+
+=== hide
+
+hide は、選択した Node、Link、Group を直接非表示にする操作である。
+
+hide は削除ではない。
+必要になれば、Link を経由した bloom などで再表示できる場合がある。
+
+ただし、Link と接続していない孤立 Node を hide した場合は、bloom でたどれないため再表示できない。
+孤立させたくない Node は、少なくとも 1 つの Link で他の Node と関連づけておく。
+
+== Timeline 操作
+
+動画 Resource では、timeline を作成できる。
+
+timeline は動画全体を時間軸として扱い、重要な場面を segment として切り出すために使う。
+
+基本的な流れは次のとおりである。
+
+. 動画 Content を作成する。
+. info ペインで動画を確認する。
+. コンテキストメニューから timeline axis を作成する。
+. 再生位置に基づいて segment を追加する。
+. segment に label、description、開始時刻、終了時刻を設定する。
+. segment を Topic や Memo と Link で結ぶ。
+
+timeline Group も Group の一種であり、表示・非表示は Group 全体で一括して扱う。
+
+== Publish と公開閲覧モード
+
+Publish は、Note を公開用 URL で閲覧できるようにする操作である。
+
+Publish 成功後、画面には公開URLを含むモーダルを表示する。
+
+利用者は次の操作を選べる。
+
+* 公開URLを確認する。
+* 公開URLをコピーする。
+* 公開URLを新規タブで開く。
+
+公開URLで開いた Note は、公開閲覧モードで表示する。
+
+公開閲覧モードでは次の操作を無効化する。
+
+* Node、Link、Group の編集。
+* Note 保存。
+* Publish。
+* Resource ダウンロード。
+* 新規 Node 作成。
+* Page 編集操作。
+
+公開閲覧モードでは、読者が Note の構造、Content、Topic、Memo、Link、Page を閲覧できることを優先する。
+
+== Home 画面から Note に追加する
+
+Home 画面では、登録済み Resource を探して Note に追加できる。
+
+=== 新規ノート
+
+「新規ノート」は、選択中 Resource から新しい Note を作成する。
+
+処理の流れは次のとおりである。
+
+. 選択中 Resource を確認する。
+. 新しい Note を作成する。
+. Note の `resources[]` に Resource 定義をコピーする。
+. 初期 Page に Content ノードを作成する。
+. Content ノードの `resourceRef` に Resource ID を設定する。
+
+=== Add to note
+
+「Add to note」は、選択中 Resource を現在編集中の Note に追加する。
+
+処理の流れは次のとおりである。
+
+. 選択中 Resource を確認する。
+. 現在 Note の `resources[]` に同一 Resource があるか確認する。
+. なければ Resource 定義をコピーする。
+. あれば既存 Resource 定義を再利用する。
+. 現在 Page に Content ノードを作成する。
+. Content ノードの `resourceRef` に Resource ID を設定する。
+
+同じ Resource を参照する Content ノードは複数作成できる。
+参照ページや時刻範囲など Content ごとの違いは `resourceView` に保持する。
+
+== 保存と受け渡し
+
+Note 保存時には、Note 本体の JSON が保存される。
+
+Note 本体は次の構造を持つ。
+
+[source,json]
+----
+{
+  "note_id": "_note_uuid",
+  "note_name": "Note label",
+  "description": "Note description",
+  "currentPage": "_page_uuid",
+  "resources": [],
+  "pages": [],
+  "audit": {}
+}
+----
+
+`resources[]` は Note が参照する Resource 定義のコピーである。
+`pages[]` は Page の配列であり、ページ番号はこの配列の順序から決まる。
+
+Note をファイルとして受け渡す場合でも再現できるように、Resource metadata と Page thumbnail を Note 側に保持する。
+
+== 利用上のポイント
+
+=== 最初から完成形を目指さない
+
+WuWei は完成図を最初に作るためのツールではない。
+まず中心となる Resource や Topic を置き、少しずつ Link を追加しながら構造を育てる。
+
+=== Link を意識する
+
+Node を置くだけでは、資料置き場になりやすい。
+重要なのは、どの Content がどの Topic に関係するのか、どの Topic がどの Topic を補足または対比するのかを Link で表すことである。
+
+=== wilt / hide で焦点を絞る
+
+調査が広がるほど、画面上の要素は増える。
+wilt と hide を使って、いま注目したい範囲だけを表示すると、Note の構造が見えやすくなる。
+
+=== bloom で必要な範囲を戻す
+
+いったん折りたたんだ関係は、必要に応じて bloom で戻す。
+bloom は 1 段ずつ開くため、関係を確認しながら表示範囲を広げられる。
+
+=== Memo を積極的に残す
+
+Memo は完成した説明だけでなく、疑問、仮説、保留、気づきを残すためにも使う。
+後から見返したとき、なぜその Link を作ったのか、なぜその Resource に注目したのかを理解しやすくなる。
+
+== まとめ
+
+WuWei は、資料、観点、関係、途中の気づきを同じ作業面に残すための調査ノート環境である。
+
+現在仕様では、Resource ライブラリ、Home 画面、Page thumbnail、Group 一括操作、Timeline、Publish 公開閲覧モードなどが統合されている。
+
+基本的な使い方は次の流れである。
+
+. Home 画面または新規メニューから Resource / Content を追加する。
+. Topic や Memo を置いて、読み方や観点を記録する。
+. Link で Content、Topic、Memo の関係を結ぶ。
+. 必要に応じて Group や Timeline を定義する。
+. wilt、hide、bloom で表示範囲を調整する。
+. Page を分けて調査の段階や観点を整理する。
+. Note を保存し、必要に応じて Publish する。
+
+この流れにより、WuWei は単なる資料一覧ではなく、調査と思考の過程をたどれる構造化 Note として機能する。
