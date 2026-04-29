@@ -69,8 +69,11 @@ wuwei.log = (function () {
     page.links = util.clone(previous.page.links || []);
     page.groups = util.clone(previous.page.groups || []);
     current.page = page;
-    if (current.pages) {
-      current.pages[String(page.pp || current.currentPage || 1)] = page;
+    if (Array.isArray(current.pages)) {
+      var idx = current.pages.findIndex(function (item) { return item && item.id === page.id; });
+      if (idx >= 0) {
+        current.pages[idx] = page;
+      }
     }
 
     model.setGraphFromCurrentPage();

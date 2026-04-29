@@ -7495,30 +7495,71 @@ wuwei.model = (function () {
     return wuwei.common && wuwei.common.current ? wuwei.common.current : common.current;
   }
 
-  function getCurrentPage() {
+  function normalizePagesForCurrent(current) {
+    if (Array.isArray(current.pages)) {
+      current.pages.forEach(function (page, index) {
+        if (!page.id && wuwei.util && typeof wuwei.util.createUuid === 'function') {
+          page.id = wuwei.util.createUuid();
+        }
+        page.pp = index + 1;
+      });
+      return current.pages;
+    }
+    var pages = [];
+    if (current.pages && typeof current.pages === 'object') {
+      Object.keys(current.pages).sort(function (a, b) {
+        var na = Number(a);
+        var nb = Number(b);
+        if (Number.isFinite(na) && Number.isFinite(nb)) { return na - nb; }
+        return String(a).localeCompare(String(b));
+      }).forEach(function (key, index) {
+        var page = current.pages[key];
+        if (!page) { return; }
+        if (!page.id && wuwei.util && typeof wuwei.util.createUuid === 'function') {
+          page.id = wuwei.util.createUuid();
+        }
+        page.pp = index + 1;
+        pages.push(page);
+      });
+    }
+    current.pages = pages;
+    return pages;
+  }
+
+  function createEmptyPage(pp) {
+    return {
+      id: (wuwei.util && typeof wuwei.util.createUuid === 'function') ? wuwei.util.createUuid() : ('_' + Date.now()),
+      pp: pp || 1,
+      name: '',
+      description: '',
+      nodes: [],
+      links: [],
+      groups: [],
+      transform: { x: 0, y: 0, scale: 1 },
+      thumbnail: null
+    };
+  }
+
+  function getCurrentPage(pageRef) {
     const current = getCurrent() || {};
-    if (!current.pages) {
-      current.pages = {};
+    const pages = normalizePagesForCurrent(current);
+    var ref = (typeof pageRef === 'undefined' || pageRef === null) ? current.currentPage : pageRef;
+    var page = null;
+    if (!pages.length) {
+      pages.push(createEmptyPage(1));
     }
-    const pageNo = Number(current.currentPage || 1) || 1;
-    const key = String(pageNo);
-    if (!current.pages[key]) {
-      current.pages[key] = {
-        pp: pageNo,
-        name: '',
-        description: '',
-        nodes: [],
-        links: [],
-        groups: [],
-        translate: { x: 0, y: 0, scale: 1 },
-        thumbnail: null
-      };
+    if (typeof ref === 'string' && ref.charAt(0) === '_') {
+      page = pages.find(function (item) { return item && item.id === ref; }) || null;
     }
-    if (!Array.isArray(current.pages[key].groups)) {
-      current.pages[key].groups = [];
+    if (!page && Number.isFinite(Number(ref))) {
+      page = pages[Number(ref) - 1] || pages.find(function (item) { return Number(item && item.pp) === Number(ref); }) || null;
     }
-    current.currentPage = pageNo;
-    current.page = current.pages[key];
+    page = page || pages[0];
+    if (!Array.isArray(page.groups)) {
+      page.groups = [];
+    }
+    current.currentPage = page.id;
+    current.page = page;
     return current.page;
   }
 
@@ -7677,10 +7718,14 @@ wuwei.model = (function () {
       return !(link && link.pseudo);
     });
     current.page = page;
-    if (!current.pages) {
-      current.pages = {};
+    var pages = normalizePagesForCurrent(current);
+    var idx = pages.findIndex(function (item) { return item && item.id === page.id; });
+    if (idx < 0) {
+      pages.push(page);
+    } else {
+      pages[idx] = page;
     }
-    current.pages[String(page.pp || current.currentPage || 1)] = page;
+    normalizePagesForCurrent(current);
     return page;
   }
 

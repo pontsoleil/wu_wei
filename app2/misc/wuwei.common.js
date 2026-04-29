@@ -179,7 +179,7 @@ wuwei.common = (function () {
     note_id: null,
     note_name: '',
     description: '',
-    currentPage: 1,
+    currentPage: '',
     page: {
       pp: 1,
       name: '',
@@ -195,7 +195,7 @@ wuwei.common = (function () {
       thumbnail: null,
       audit: null
     },
-    pages: {},
+    pages: [],
     audit: null
   };
 

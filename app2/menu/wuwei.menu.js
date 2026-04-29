@@ -1256,7 +1256,8 @@ wuwei.menu = wuwei.menu || {};
           return false;
         }
 
-        const page = current.pages && current.pages[String(pp)];
+        const pages = Array.isArray(current.pages) ? current.pages : [];
+        const page = pages[pp - 1] || pages.find(function (item) { return Number(item && item.pp) === pp; });
         if (!page) {
           thumbnail.innerHTML = '';
           thumbnail.style.display = 'none';
@@ -1342,10 +1343,11 @@ wuwei.menu = wuwei.menu || {};
 
   refreshPagenation = function () {
     const current = wuwei.common.current;
-    const pageNos = Object.keys(current.pages || {})
-      .map(Number)
-      .filter(Number.isFinite)
-      .sort((a, b) => a - b);
+    const pages = Array.isArray(current.pages) ? current.pages : [];
+    const pageNos = pages.map(function (page, index) {
+      page.pp = index + 1;
+      return page.pp;
+    });
 
     const total = pageNos.length;
     const paginationEl = document.getElementById('Pagination');
@@ -1368,7 +1370,8 @@ wuwei.menu = wuwei.menu || {};
     let count = 1,
       per_page = 5;
 
-    const currentPP = Number(current.currentPage || (current.page && current.page.pp) || pageNos[0]);
+    const activePage = pages.find(function (page) { return page && page.id === current.currentPage; }) || current.page || pages[0];
+    const currentPP = Number((activePage && activePage.pp) || pageNos[0]);
     const currentIndex = Math.max(0, pageNos.indexOf(currentPP));
     const current_page = 1 + Math.floor(currentIndex / per_page);
 
@@ -3991,6 +3994,11 @@ wuwei.menu = wuwei.menu || {};
     registerClick('.pulldown.note .operators .operator.Download', () => {
       if (state.viewOnly || state.published) { return; }
       wuwei.menu.note.downloadFile();
+      closeNoteMenu();
+    });
+    registerClick('.pulldown.note .operators .operator.Discard', () => {
+      if (state.viewOnly || state.published) { return; }
+      wuwei.menu.note.discard();
       closeNoteMenu();
     });
     registerClick('.pulldown.note .operators .operator.UploadNote', () => {

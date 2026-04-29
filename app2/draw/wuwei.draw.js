@@ -130,12 +130,13 @@ wuwei.draw = wuwei.draw || {};
 
   function getCurrentPage() {
     const note = common.current || {};
-    if (!note.pages || typeof note.pages !== 'object') {
+    if (wuwei.model && typeof wuwei.model.getCurrentPage === 'function') {
+      return wuwei.model.getCurrentPage();
+    }
+    if (!Array.isArray(note.pages)) {
       return null;
     }
-    const pageNo = Number(note.currentPage || 1) || 1;
-    const key = String(pageNo);
-    const page = note.pages[key] || null;
+    const page = note.pages.find(function (item) { return item && item.id === note.currentPage; }) || note.pages[0] || null;
     if (page) {
       note.page = page;
     }

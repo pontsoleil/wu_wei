@@ -37,8 +37,8 @@ def _ensure_note_json(value: str) -> dict:
     data = json.loads(text)
     if not isinstance(data, dict):
         raise ValueError("NOTE JSON MUST BE OBJECT")
-    if "pages" not in data or not isinstance(data.get("pages"), dict):
-        raise ValueError("NOTE JSON PAGES MUST BE OBJECT")
+    if "pages" not in data or not isinstance(data.get("pages"), list):
+        raise ValueError("NOTE JSON PAGES MUST BE ARRAY")
     if "resources" in data and not isinstance(data.get("resources"), list):
         raise ValueError("NOTE JSON RESOURCES MUST BE ARRAY")
     return data
@@ -84,6 +84,8 @@ def _promote_local_resource_snapshot(resource: dict) -> None:
     identity = resource.get("identity") if isinstance(resource.get("identity"), dict) else {}
     media = resource.get("media") if isinstance(resource.get("media"), dict) else {}
     viewer = resource.get("viewer") if isinstance(resource.get("viewer"), dict) else {}
+    if not isinstance(resource.get("viewer"), dict):
+        resource["viewer"] = viewer
     embed = viewer.get("embed") if isinstance(viewer.get("embed"), dict) else {}
     snapshot_sources = resource.get("snapshotSources") if isinstance(resource.get("snapshotSources"), dict) else {}
     candidates = [
@@ -294,6 +296,13 @@ def _copy_resource_snapshot(resource: dict, *, base_root: Path, user_id: str, no
 
     snapshot.mkdir(parents=True, exist_ok=True)
     snapshot_files = []
+    snapshot_sources = resource.get("snapshotSources") if isinstance(resource.get("snapshotSources"), dict) else {}
+    if not isinstance(resource.get("snapshotSources"), dict):
+        resource["snapshotSources"] = snapshot_sources
+    viewer = resource.get("viewer") if isinstance(resource.get("viewer"), dict) else {}
+    embed = viewer.get("embed") if isinstance(viewer.get("embed"), dict) else {}
+    if isinstance(viewer, dict) and not isinstance(viewer.get("embed"), dict):
+        viewer["embed"] = embed
     for item in storage.get("files") or []:
         if not isinstance(item, dict):
             continue
@@ -318,6 +327,22 @@ def _copy_resource_snapshot(resource: dict, *, base_root: Path, user_id: str, no
         snapshot_item["path"] = dst.name
         snapshot_item["sourcePath"] = str(dst)
         snapshot_files.append(snapshot_item)
+        snapshot_uri = _public_uri_from_storage_path(dst, user_id)
+        if snapshot_uri:
+            if role == "thumbnail":
+                snapshot_sources["thumbnailUri"] = snapshot_uri
+                if isinstance(viewer, dict):
+                    viewer["thumbnailUri"] = snapshot_uri
+                if isinstance(embed, dict):
+                    embed["thumbnailUri"] = snapshot_uri
+            elif role == "preview":
+                snapshot_sources["previewUri"] = snapshot_uri
+                identity = resource.get("identity") if isinstance(resource.get("identity"), dict) else {}
+                if not isinstance(resource.get("identity"), dict):
+                    resource["identity"] = identity
+                identity["uri"] = snapshot_uri
+                if isinstance(embed, dict):
+                    embed["uri"] = snapshot_uri
 
     if snapshot_files:
         storage["files"] = snapshot_files
@@ -325,6 +350,26 @@ def _copy_resource_snapshot(resource: dict, *, base_root: Path, user_id: str, no
 
     resource_json = snapshot / "resource.json"
     resource_json.write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+
+
+def _public_uri_from_storage_path(path: Path, user_id: str) -> str:
+    path_s = path.resolve().as_posix()
+    uid = str(user_id or "").strip("/")
+    if not uid:
+        return ""
+    markers = [
+        f"/wu_wei2/data/{uid}/note/",
+        f"/wu_wei2/{uid}/note/",
+    ]
+    for marker in markers:
+        idx = path_s.find(marker)
+        if idx < 0:
+            continue
+        rel = path_s[idx + len(marker):].lstrip("/")
+        if marker.startswith("/wu_wei2/data/"):
+            return f"/wu_wei2/data/{uid}/note/{rel}"
+        return f"/wu_wei2/note/{uid}/{rel}"
+    return ""
 
 
 def _safe_bundle_filename(value: str, fallback: str) -> str:

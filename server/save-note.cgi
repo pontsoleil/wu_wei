@@ -326,8 +326,8 @@ def load_note(path):
     data = json.loads(text)
     if not isinstance(data, dict):
         raise ValueError("NOTE JSON MUST BE OBJECT")
-    if "pages" not in data or not isinstance(data.get("pages"), dict):
-        raise ValueError("NOTE JSON PAGES MUST BE OBJECT")
+    if "pages" not in data or not isinstance(data.get("pages"), list):
+        raise ValueError("NOTE JSON PAGES MUST BE ARRAY")
     if "resources" in data and not isinstance(data.get("resources"), list):
         raise ValueError("NOTE JSON RESOURCES MUST BE ARRAY")
     return data
@@ -576,6 +576,15 @@ def copy_resource_snapshot(resource, base_root):
         storage["snapshotPath"] = snapshot.as_posix()
     snapshot.mkdir(parents=True, exist_ok=True)
     snapshot_files = []
+    snapshot_sources = resource.get("snapshotSources") if isinstance(resource.get("snapshotSources"), dict) else {}
+    if not isinstance(resource.get("snapshotSources"), dict):
+        resource["snapshotSources"] = snapshot_sources
+    viewer = resource.get("viewer") if isinstance(resource.get("viewer"), dict) else {}
+    if not isinstance(resource.get("viewer"), dict):
+        resource["viewer"] = viewer
+    embed = viewer.get("embed") if isinstance(viewer.get("embed"), dict) else {}
+    if not isinstance(viewer.get("embed"), dict):
+        viewer["embed"] = embed
     for item in storage.get("files") or []:
         if not isinstance(item, dict):
             continue
@@ -597,12 +606,45 @@ def copy_resource_snapshot(resource, base_root):
         snapshot_item["path"] = dst.name
         snapshot_item["sourcePath"] = str(dst)
         snapshot_files.append(snapshot_item)
+        snapshot_uri = public_uri_from_storage_path(dst, user_id)
+        if snapshot_uri:
+            if role == "thumbnail":
+                snapshot_sources["thumbnailUri"] = snapshot_uri
+                viewer["thumbnailUri"] = snapshot_uri
+                embed["thumbnailUri"] = snapshot_uri
+            elif role == "preview":
+                snapshot_sources["previewUri"] = snapshot_uri
+                identity = resource.get("identity") if isinstance(resource.get("identity"), dict) else {}
+                if not isinstance(resource.get("identity"), dict):
+                    resource["identity"] = identity
+                identity["uri"] = snapshot_uri
+                embed["uri"] = snapshot_uri
 
     if snapshot_files:
         storage["files"] = snapshot_files
     storage["snapshotPath"] = snapshot.as_posix()
 
     (snapshot / "resource.json").write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+
+
+def public_uri_from_storage_path(path, user_id):
+    path_s = Path(path).resolve().as_posix()
+    uid = str(user_id or "").strip("/")
+    if not uid:
+        return ""
+    markers = [
+        f"/wu_wei2/data/{uid}/note/",
+        f"/wu_wei2/{uid}/note/",
+    ]
+    for marker in markers:
+        idx = path_s.find(marker)
+        if idx < 0:
+            continue
+        rel = path_s[idx + len(marker):].lstrip("/")
+        if marker.startswith("/wu_wei2/data/"):
+            return f"/wu_wei2/data/{uid}/note/{rel}"
+        return f"/wu_wei2/note/{uid}/{rel}"
+    return ""
 
 
 def safe_bundle_filename(value, fallback):
