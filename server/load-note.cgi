@@ -119,54 +119,62 @@ note_file = Path(sys.argv[1])
 text = sys.stdin.read()
 note = json.loads(text)
 note_dir = note_file.parent
-resource_root = note_dir / "resource"
+snapshot_root = note_dir / "resource"
+upload_root = None
+for parent in note_file.parents:
+    if parent.name == "note":
+        upload_root = parent.parent / "upload"
+        break
 files = []
 resources = note.get("resources") if isinstance(note.get("resources"), list) else []
-known_ids = {
-    str(resource.get("id") or "")
-    for resource in resources
-    if isinstance(resource, dict) and str(resource.get("id") or "")
-}
-if resource_root.is_dir():
-    for resource_dir in sorted(p for p in resource_root.iterdir() if p.is_dir()):
-        rid = resource_dir.name
-        if known_ids and rid not in known_ids:
+for resource in resources:
+    if not isinstance(resource, dict):
+        continue
+    rid = str(resource.get("id") or "").strip()
+    if not rid:
+        continue
+    resource_dir = snapshot_root / rid
+    try:
+        resource_doc = json.loads((resource_dir / "resource.json").read_text(encoding="utf-8", errors="strict"))
+    except Exception:
+        resource_doc = resource
+    storage = resource_doc.get("storage") if isinstance(resource_doc.get("storage"), dict) else {}
+    storage_files = storage.get("files") if isinstance(storage.get("files"), list) else []
+    for item in storage_files:
+        if not isinstance(item, dict):
             continue
-        try:
-            resource_doc = json.loads((resource_dir / "resource.json").read_text(encoding="utf-8", errors="strict"))
-        except Exception:
-            resource_doc = {}
-        storage = resource_doc.get("storage") if isinstance(resource_doc.get("storage"), dict) else {}
-        storage_files = storage.get("files") if isinstance(storage.get("files"), list) else []
-        identity = resource_doc.get("identity") if isinstance(resource_doc.get("identity"), dict) else {}
-        for item in storage_files:
-            if not isinstance(item, dict) or str(item.get("role") or "original") != "original":
-                continue
-            source_hint = " ".join([
-                str(item.get("sourcePath") or ""),
-                str(item.get("path") or ""),
-                str(identity.get("uri") or ""),
-                str(identity.get("canonicalUri") or ""),
-            ]).replace("\\", "/").lower()
-            if "/upload/" not in source_hint:
-                continue
-            rel = str(item.get("path") or "").replace("\\", "/").strip("/")
+        role = str(item.get("role") or "original").strip() or "original"
+        rel = str(item.get("path") or "").replace("\\", "/").strip("/")
+        source_path = str(item.get("sourcePath") or "").strip()
+        if role == "original":
             if not rel:
                 continue
-            path = resource_dir / rel
-            if not path.is_file():
+            bundle_path = rel if rel.startswith("upload/") else f"upload/{rel}"
+            if source_path:
+                path = Path(source_path)
+            elif upload_root is not None:
+                path = upload_root / (rel[7:] if rel.startswith("upload/") else rel)
+            else:
                 continue
-            payload = path.read_bytes()
-            files.append({
-                "resourceId": rid,
-                "role": "original",
-                "path": rel,
-                "mimeType": mimetypes.guess_type(path.name)[0] or "application/octet-stream",
-                "size": len(payload),
-                "sha256": hashlib.sha256(payload).hexdigest(),
-                "base64": base64.b64encode(payload).decode("ascii"),
-            })
-note["portable"] = {"type": "wuwei.note.bundle", "version": 1, "files": files}
+        elif role in {"thumbnail", "preview"}:
+            name = Path(rel).name or ("preview.pdf" if role == "preview" else "thumbnail")
+            bundle_path = f"note/resource/{rid}/{name}"
+            path = Path(source_path) if source_path else resource_dir / name
+        else:
+            continue
+        if not path.is_file():
+            continue
+        payload = path.read_bytes()
+        files.append({
+            "resourceId": rid,
+            "role": role,
+            "path": bundle_path,
+            "mimeType": mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+            "size": len(payload),
+            "sha256": hashlib.sha256(payload).hexdigest(),
+            "base64": base64.b64encode(payload).decode("ascii"),
+        })
+note["bundle"] = {"type": "wuwei.note.bundle", "version": 1, "files": files}
 print(json.dumps(note, ensure_ascii=False, indent=2), end="")
 PY
 )
@@ -198,54 +206,62 @@ note_file = Path(sys.argv[1])
 text = sys.stdin.read()
 note = json.loads(text)
 note_dir = note_file.parent
-resource_root = note_dir / "resource"
+snapshot_root = note_dir / "resource"
+upload_root = None
+for parent in note_file.parents:
+    if parent.name == "note":
+        upload_root = parent.parent / "upload"
+        break
 files = []
 resources = note.get("resources") if isinstance(note.get("resources"), list) else []
-known_ids = {
-    str(resource.get("id") or "")
-    for resource in resources
-    if isinstance(resource, dict) and str(resource.get("id") or "")
-}
-if resource_root.is_dir():
-    for resource_dir in sorted(p for p in resource_root.iterdir() if p.is_dir()):
-        rid = resource_dir.name
-        if known_ids and rid not in known_ids:
+for resource in resources:
+    if not isinstance(resource, dict):
+        continue
+    rid = str(resource.get("id") or "").strip()
+    if not rid:
+        continue
+    resource_dir = snapshot_root / rid
+    try:
+        resource_doc = json.loads((resource_dir / "resource.json").read_text(encoding="utf-8", errors="strict"))
+    except Exception:
+        resource_doc = resource
+    storage = resource_doc.get("storage") if isinstance(resource_doc.get("storage"), dict) else {}
+    storage_files = storage.get("files") if isinstance(storage.get("files"), list) else []
+    for item in storage_files:
+        if not isinstance(item, dict):
             continue
-        try:
-            resource_doc = json.loads((resource_dir / "resource.json").read_text(encoding="utf-8", errors="strict"))
-        except Exception:
-            resource_doc = {}
-        storage = resource_doc.get("storage") if isinstance(resource_doc.get("storage"), dict) else {}
-        storage_files = storage.get("files") if isinstance(storage.get("files"), list) else []
-        identity = resource_doc.get("identity") if isinstance(resource_doc.get("identity"), dict) else {}
-        for item in storage_files:
-            if not isinstance(item, dict) or str(item.get("role") or "original") != "original":
-                continue
-            source_hint = " ".join([
-                str(item.get("sourcePath") or ""),
-                str(item.get("path") or ""),
-                str(identity.get("uri") or ""),
-                str(identity.get("canonicalUri") or ""),
-            ]).replace("\\", "/").lower()
-            if "/upload/" not in source_hint:
-                continue
-            rel = str(item.get("path") or "").replace("\\", "/").strip("/")
+        role = str(item.get("role") or "original").strip() or "original"
+        rel = str(item.get("path") or "").replace("\\", "/").strip("/")
+        source_path = str(item.get("sourcePath") or "").strip()
+        if role == "original":
             if not rel:
                 continue
-            path = resource_dir / rel
-            if not path.is_file():
+            bundle_path = rel if rel.startswith("upload/") else f"upload/{rel}"
+            if source_path:
+                path = Path(source_path)
+            elif upload_root is not None:
+                path = upload_root / (rel[7:] if rel.startswith("upload/") else rel)
+            else:
                 continue
-            payload = path.read_bytes()
-            files.append({
-                "resourceId": rid,
-                "role": "original",
-                "path": rel,
-                "mimeType": mimetypes.guess_type(path.name)[0] or "application/octet-stream",
-                "size": len(payload),
-                "sha256": hashlib.sha256(payload).hexdigest(),
-                "base64": base64.b64encode(payload).decode("ascii"),
-            })
-note["portable"] = {"type": "wuwei.note.bundle", "version": 1, "files": files}
+        elif role in {"thumbnail", "preview"}:
+            name = Path(rel).name or ("preview.pdf" if role == "preview" else "thumbnail")
+            bundle_path = f"note/resource/{rid}/{name}"
+            path = Path(source_path) if source_path else resource_dir / name
+        else:
+            continue
+        if not path.is_file():
+            continue
+        payload = path.read_bytes()
+        files.append({
+            "resourceId": rid,
+            "role": role,
+            "path": bundle_path,
+            "mimeType": mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+            "size": len(payload),
+            "sha256": hashlib.sha256(payload).hexdigest(),
+            "base64": base64.b64encode(payload).decode("ascii"),
+        })
+note["bundle"] = {"type": "wuwei.note.bundle", "version": 1, "files": files}
 print(json.dumps(note, ensure_ascii=False, indent=2), end="")
 PY
 )
