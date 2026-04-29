@@ -16,7 +16,10 @@ wuwei.menu.upload.markup = ( function () {
     let state = wuwei.common.state,
         currentUser = state.currentUser,
         user = currentUser.login,
-        token = currentUser.token;
+        token = currentUser.token,
+        uploadAction = (wuwei.util && typeof wuwei.util.getServerUrl === 'function')
+          ? wuwei.util.getServerUrl('upload')
+          : 'server/upload.cgi';
     const html = `
   <div class="upload w3-modal-content w3-animate-zoom w3-card-4" style="width:50%">
     <header class="w3-container">
@@ -25,7 +28,7 @@ wuwei.menu.upload.markup = ( function () {
       <h2 class="w3-wide w3-margin-bottom">${translate('Upload')}</h2>
     </header>
     <form onsubmit="wuwei.menu.upload.upload(this); return false;"
-        action="server/upload.cgi" method="post" enctype="multipart/form-data"
+        action="${uploadAction}" method="post" enctype="multipart/form-data"
         class="w3-container w3-white w3-center">
       <input type="hidden" id="user" name="user" value="${user}">
       <input type="hidden" id="token" name="token" value="${token}">
