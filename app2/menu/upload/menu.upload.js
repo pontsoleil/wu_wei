@@ -45,6 +45,16 @@ wuwei.menu.upload = wuwei.menu.upload || {};
   function upload(form) {
     const fileInput = form.querySelector('input[type="file"][name="file"]');
     const f = fileInput && fileInput.files ? fileInput.files[0] : null;
+    const requestedLabelEl = form.querySelector('input[name="fullname"]');
+    const requestedLabel = requestedLabelEl ? String(requestedLabelEl.value || '').trim() : '';
+    let noteIdEl = form.querySelector('input[name="note_id"]');
+    if (!noteIdEl) {
+      noteIdEl = document.createElement('input');
+      noteIdEl.type = 'hidden';
+      noteIdEl.name = 'note_id';
+      form.appendChild(noteIdEl);
+    }
+    noteIdEl.value = (common.current && common.current.note_id) || 'new_note';
 
     let scriptName = 'upload';
 
@@ -98,7 +108,15 @@ wuwei.menu.upload = wuwei.menu.upload || {};
 
         console.log(response);
 
-        let name = response.name;
+        if (requestedLabel) {
+          response.label = requestedLabel;
+          response.name = requestedLabel;
+          if (response.resource && response.resource.identity) {
+            response.resource.identity.title = requestedLabel;
+          }
+        }
+
+        let name = response.label || response.name;
         if (!name && response.uri) {
           name = response.uri.split('/').pop();
         }

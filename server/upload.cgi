@@ -185,6 +185,10 @@ thumbnail_tpl="$(resolve_env_template "$(read_env thumbnail)")"
 [ -z "${thumbnail_tpl:-}" ] && die_json "ERROR: 'thumbnail' is empty in data/environment"
 thumbnail_dir="${thumbnail_tpl//\*/$user_id}"
 
+note_tpl="$(resolve_env_template "$(read_env note)")"
+note_root=""
+[ -n "${note_tpl:-}" ] && note_root="${note_tpl//\*/$user_id}"
+
 # --- ensure directories ----------------------------------------------
 mkdir -p "$file_dir/$year/$month/$day"      || die_json "ERROR: cannot mkdir $file_dir/$year/$month/$day (permission?)"
 mkdir -p "$resource_dir/$year/$month/$day"  || die_json "ERROR: cannot mkdir $resource_dir/$year/$month/$day (permission?)"
@@ -241,6 +245,15 @@ contenttype="$(
 )"
 
 fullname="$(mime-read fullname "$Tmp-cgivars" 2>/dev/null || true)"
+note_id="$(mime-read note_id "$Tmp-cgivars" 2>/dev/null || true)"
+note_id="$(trim "$(printf '%s' "$note_id" | tr -d '\r\n')")"
+case "$note_id" in
+  new_note|_[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]-*)
+    ;;
+  *)
+    note_id=""
+    ;;
+esac
 
 upload_file_uuid=""
 for d in "$file_dir"/_*; do
@@ -289,6 +302,23 @@ resource_file="$resource_dir/resource.json"
 resource_uri=""
 
 thumb_file="$resource_dir/thumbnail.jpg"
+thumb_area="resource"
+thumb_rel_root="$resource_root"
+if [ "$note_id" = "new_note" ] && [ -n "$note_root" ]; then
+  note_dir="$note_root/$year/$month/$day/$note_id"
+  note_resource_dir="$note_root/$year/$month/$day/$note_id/resource/$uuid"
+  mkdir -p "$note_dir" || die_json "ERROR: cannot mkdir $note_dir"
+  mkdir -p "$note_resource_dir" || die_json "ERROR: cannot mkdir $note_resource_dir"
+  if [ ! -f "$note_dir/note.json" ]; then
+    printf 'format_version 2\nid new_note\nuser_id %s\nname \ndescription \nthumbnail \nsaved_at %s\njson_encoding base64\njson_base64 %s\n' \
+      "$user_id" "$(date '+%Y-%m-%dT%H:%M:%S%z')" \
+      "$(printf '{"note_id":"new_note","note_uuid":"new_note","note_name":"","description":"","currentPage":null,"resources":[],"pages":[]}' | base64 | tr -d '\n')" \
+      > "$note_dir/note.json" || die_json "ERROR: cannot write draft note.json"
+  fi
+  thumb_file="$note_resource_dir/thumbnail.jpg"
+  thumb_area="note"
+  thumb_rel_root="$note_root"
+fi
 thumbnail_uri=""
 
 url_encode() {
@@ -418,7 +448,7 @@ if [[ "$content_type" == application/pdf* || "$content_type" == image/* || -n "$
   fi
 fi
 
-[ -f "$thumb_file" ] && thumbnail_uri="$(protected_file_uri resource "${thumb_file#$resource_root/}")"
+[ -f "$thumb_file" ] && thumbnail_uri="$(protected_file_uri "$thumb_area" "${thumb_file#$thumb_rel_root/}")"
 [ -n "$thumbnail_uri" ] && thumbnail="$thumbnail_uri"
 
 # --- identify (optional) --------------------------------------------
@@ -496,7 +526,7 @@ cat >"$resource_file" <<JSON || die_json "ERROR: cannot write resource file $res
         "mimeType": "$(json_escape "$content_type")",
         "size": ${totalsize:-0},
         "sha256": "$(json_escape "$original_sha")"
-      }$(if [ -f "$thumb_file" ]; then printf ',\n      {\n        "role": "thumbnail",\n        "area": "resource",\n        "path": "%s",\n        "mimeType": "image/jpeg",\n        "size": %s,\n        "sha256": "%s"\n      }' "$(json_escape "${thumb_file#$resource_root/}")" "$(stat -c %s -- "$thumb_file" 2>/dev/null || echo 0)" "$(json_escape "$thumb_sha")"; fi)$(if [ -n "$preview_pdf" ] && [ -f "$preview_pdf" ]; then printf ',\n      {\n        "role": "preview",\n        "area": "upload",\n        "path": "%s",\n        "mimeType": "application/pdf",\n        "size": %s,\n        "sha256": "%s"\n      }' "$(json_escape "${preview_pdf#$upload_root/}")" "$(stat -c %s -- "$preview_pdf" 2>/dev/null || echo 0)" "$(json_escape "$preview_sha")"; fi)
+      }$(if [ -f "$thumb_file" ]; then printf ',\n      {\n        "role": "thumbnail",\n        "area": "%s",\n        "path": "%s",\n        "mimeType": "image/jpeg",\n        "size": %s,\n        "sha256": "%s"\n      }' "$(json_escape "$thumb_area")" "$(json_escape "${thumb_file#$thumb_rel_root/}")" "$(stat -c %s -- "$thumb_file" 2>/dev/null || echo 0)" "$(json_escape "$thumb_sha")"; fi)$(if [ -n "$preview_pdf" ] && [ -f "$preview_pdf" ]; then printf ',\n      {\n        "role": "preview",\n        "area": "upload",\n        "path": "%s",\n        "mimeType": "application/pdf",\n        "size": %s,\n        "sha256": "%s"\n      }' "$(json_escape "${preview_pdf#$upload_root/}")" "$(stat -c %s -- "$preview_pdf" 2>/dev/null || echo 0)" "$(json_escape "$preview_sha")"; fi)
     ]
   },
   "rights": {

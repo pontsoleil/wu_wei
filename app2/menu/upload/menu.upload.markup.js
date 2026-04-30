@@ -15,7 +15,10 @@ wuwei.menu.upload.markup = ( function () {
   function template() {
     let state = wuwei.common.state,
         currentUser = state.currentUser,
+        current = wuwei.common.current || {},
         user = currentUser.login,
+        user_id = currentUser.user_id,
+        note_id = current.note_id || 'new_note',
         token = currentUser.token,
         uploadAction = (wuwei.util && typeof wuwei.util.getServerUrl === 'function')
           ? wuwei.util.getServerUrl('upload')
@@ -31,6 +34,8 @@ wuwei.menu.upload.markup = ( function () {
         action="${uploadAction}" method="post" enctype="multipart/form-data"
         class="w3-container w3-white w3-center">
       <input type="hidden" id="user" name="user" value="${user}">
+      <input type="hidden" id="user_id" name="user_id" value="${user_id}">
+      <input type="hidden" id="note_id" name="note_id" value="${note_id}">
       <input type="hidden" id="token" name="token" value="${token}">
       <p><input type="file" name="file" class="w3-input w3-border"
           placeholder="${translate('File')}"></p>

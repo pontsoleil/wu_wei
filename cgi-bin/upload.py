@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import cgi
+import base64
 import hashlib
 import json
 import mimetypes
@@ -14,6 +15,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+from urllib.parse import quote
 
 try:
     from PIL import Image
@@ -26,8 +28,9 @@ from cgi_common import (
     debug_exception,
     debug_kv,
     environment_path,
-    environment_url,
+    get_effective_user_id,
     get_session_user_id,
+    is_local_host,
     json_response,
     read_named_value,
     script_error,
@@ -336,6 +339,52 @@ def resource_relative_path(resource_root: Path, path: Path) -> str:
         return path.name
 
 
+def note_relative_path(note_root: Path, path: Path) -> str:
+    try:
+        return path.relative_to(note_root).as_posix()
+    except Exception:
+        return path.name
+
+
+def safe_note_id(value: str) -> str:
+    value = trim(value)
+    if value == "new_note":
+        return value
+    return ""
+
+
+def ensure_draft_note_json(note_dir: Path, user_id: str) -> None:
+    note_file = note_dir / "note.json"
+    if note_file.exists():
+        return
+    draft = {
+        "note_id": "new_note",
+        "note_uuid": "new_note",
+        "note_name": "",
+        "description": "",
+        "currentPage": None,
+        "resources": [],
+        "pages": [],
+    }
+    encoded = json.dumps(draft, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    note_file.write_text(
+        "\n".join([
+            "format_version 2",
+            "id new_note",
+            f"user_id {user_id}",
+            "name ",
+            "description ",
+            "thumbnail ",
+            f"saved_at {datetime.now().astimezone().strftime('%Y-%m-%dT%H:%M:%S%z')}",
+            "json_encoding base64",
+            f"json_base64 {base64.b64encode(encoded).decode('ascii')}",
+            "",
+        ]),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+
 def find_upload_file_for_day(upload_day_dir: Path, filename: str) -> Path | None:
     # Same date + same filename is treated as the same uploaded file, even if
     # the content hash changes after re-upload.
@@ -364,6 +413,18 @@ def file_url_from_path(path: Path) -> str:
     return path_s
 
 
+def protected_file_url(user_id: str, area: str, rel_path: str) -> str:
+    area = trim(area).lower()
+    rel_path = str(rel_path or "").replace("\\", "/").strip("/")
+    if not area or not rel_path:
+        return ""
+    return (
+        f"cgi-bin/load-file.py?area={quote(area, safe='')}"
+        f"&path={quote(rel_path, safe='')}"
+        f"&user_id={quote(user_id, safe='')}"
+    )
+
+
 def load_resource_json(path: Path) -> dict | None:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -380,30 +441,26 @@ def resource_original_hash(resource: dict) -> str:
     return ""
 
 
-def resource_file_exists(resource: dict, role: str, resource_root: Path) -> bool:
+def resource_file_exists(resource: dict, role: str, resource_root: Path, upload_root: Path | None = None) -> bool:
     storage = resource.get("storage") if isinstance(resource.get("storage"), dict) else {}
-    primary = Path(str(storage.get("primaryPath") or ""))
-    if storage.get("primaryPath") and not primary.is_absolute():
-        primary = resource_root / primary
     for item in storage.get("files") or []:
         if not isinstance(item, dict) or item.get("role") != role:
             continue
-        path_text = str(item.get("sourcePath") or "")
-        if path_text:
-            path = Path(path_text)
-        elif item.get("area") == "resource":
+        if item.get("area") == "resource":
             path = resource_root / str(item.get("path") or "")
+        elif item.get("area") == "upload" and upload_root is not None:
+            path = upload_root / str(item.get("path") or "")
         else:
-            path = primary / str(item.get("path") or "")
+            continue
         if path.exists():
             return True
     return False
 
 
-def office_resource_needs_preview(resource: dict, filename: str, resource_root: Path) -> bool:
+def office_resource_needs_preview(resource: dict, filename: str, resource_root: Path, upload_root: Path | None = None) -> bool:
     if Path(filename or "").suffix.lower() not in OFFICE_EXTS:
         return False
-    return not resource_file_exists(resource, "preview", resource_root)
+    return not resource_file_exists(resource, "preview", resource_root, upload_root)
 
 
 def find_existing_resource(resource_root: Path, *, original_hash: str, canonical_uri: str, source_path: str) -> tuple[dict | None, str]:
@@ -416,14 +473,17 @@ def find_existing_resource(resource_root: Path, *, original_hash: str, canonical
         identity = resource.get("identity") if isinstance(resource.get("identity"), dict) else {}
         storage = resource.get("storage") if isinstance(resource.get("storage"), dict) else {}
         existing_uri = str(identity.get("canonicalUri") or identity.get("uri") or "").strip()
-        existing_primary = str(storage.get("primaryPath") or "").replace("\\", "/").strip()
-        existing_source = str(storage.get("sourcePath") or "").replace("\\", "/").strip()
+        existing_source = ""
+        for item in storage.get("files") or []:
+            if isinstance(item, dict) and item.get("role") == "original":
+                existing_source = str(item.get("path") or "").replace("\\", "/").strip()
+                break
         if original_hash and resource_original_hash(resource) == original_hash:
             return resource, "sha256"
         if canonical_uri and existing_uri == canonical_uri:
             return resource, "canonicalUri"
-        if source_path and (existing_source == source_path or existing_primary == source_path):
-            return resource, "sourcePath"
+        if source_path and existing_source == source_path:
+            return resource, "originalPath"
     return None, ""
 
 
@@ -432,14 +492,12 @@ def response_from_resource(resource: dict, *, option: str, warning: str = "") ->
     media = resource.get("media") if isinstance(resource.get("media"), dict) else {}
     storage = resource.get("storage") if isinstance(resource.get("storage"), dict) else {}
     files = [item for item in (storage.get("files") or []) if isinstance(item, dict)]
-    primary = Path(str(storage.get("primaryPath") or ""))
 
     def file_url(role: str) -> str:
         for item in files:
             if item.get("role") == role and item.get("path"):
-                p = Path(str(item.get("sourcePath") or "")) if item.get("sourcePath") else primary / str(item.get("path"))
-                if p.exists():
-                    return file_url_from_path(p)
+                area = str(item.get("area") or ("upload" if role == "original" else "resource"))
+                return protected_file_url(str(resource.get("audit", {}).get("owner") or ""), area, str(item.get("path")))
         return ""
 
     original_url = file_url("original") or str(identity.get("canonicalUri") or identity.get("uri") or "")
@@ -483,7 +541,11 @@ def response_from_resource(resource: dict, *, option: str, warning: str = "") ->
 def main():
     debug("script begin")
 
-    user_id = get_session_user_id()
+    form = cgi.FieldStorage()
+    requested_user_id = trim(form.getfirst("user_id", ""))
+    user_id = get_effective_user_id()
+    if requested_user_id == "guest" and is_local_host(os.environ.get("HTTP_HOST", "")):
+        user_id = "guest"
     debug_kv(user_id=user_id)
     if not user_id:
         script_error("ERROR NOT LOGGED IN")
@@ -491,6 +553,7 @@ def main():
     upload_root_s = environment_path("upload", user_id)
     resource_root_s = environment_path("resource", user_id)
     thumbnail_root_s = environment_path("thumbnail", user_id)
+    note_root_s = environment_path("note", user_id)
 
     debug_kv(
         env_file=str(ENV_FILE),
@@ -503,6 +566,7 @@ def main():
         upload_root=upload_root_s,
         resource_root=resource_root_s,
         thumbnail_root=thumbnail_root_s,
+        note_root=note_root_s,
     )
 
     if not upload_root_s:
@@ -515,6 +579,8 @@ def main():
     upload_root = Path(upload_root_s)
     resource_root = Path(resource_root_s)
     thumbnail_root = Path(thumbnail_root_s)
+    note_root = Path(note_root_s) if note_root_s else None
+    note_id = safe_note_id(form.getfirst("note_id", ""))
     pdf_preview_uri = None
     pdf_preview_url = None
 
@@ -530,8 +596,6 @@ def main():
     upload_day_dir.mkdir(parents=True, exist_ok=True)
     resource_dir.mkdir(parents=True, exist_ok=True)
     thumbnail_dir.mkdir(parents=True, exist_ok=True)
-
-    form = cgi.FieldStorage()
 
     if "file" not in form:
         script_error("ERROR FILE NOT FOUND IN MULTIPART")
@@ -570,8 +634,8 @@ def main():
         canonical_uri="",
         source_path=upload_relpath,
     )
-    if existing_resource and dedupe_reason != "sourcePath":
-        if not office_resource_needs_preview(existing_resource, filename, resource_root):
+    if existing_resource and dedupe_reason != "originalPath" and not note_id:
+        if not office_resource_needs_preview(existing_resource, filename, resource_root, upload_root):
             debug_kv(dedupe="resource reused", resource_id=existing_resource.get("id"), sha256=original_hash)
             json_response(response_from_resource(existing_resource, option="upload", warning="resource reused"))
         debug_kv(
@@ -579,27 +643,31 @@ def main():
             resource_id=existing_resource.get("id"),
             reason=dedupe_reason,
         )
-        dedupe_reason = "sourcePath"
+        dedupe_reason = "originalPath"
 
-    if existing_resource and dedupe_reason == "sourcePath":
+    if existing_resource and dedupe_reason == "originalPath":
         resource_id = str(existing_resource.get("id") or "")
-        existing_storage = existing_resource.get("storage") if isinstance(existing_resource.get("storage"), dict) else {}
-        if existing_storage.get("primaryPath"):
-            primary_dir = Path(str(existing_storage.get("primaryPath") or ""))
-            if not primary_dir.is_absolute():
-                primary_dir = resource_root / primary_dir
-        else:
-            primary_dir = resource_dir / resource_id
-        debug_kv(dedupe="resource updated by same sourcePath", resource_id=resource_id, source_path=upload_relpath)
+        primary_dir = resource_dir / resource_id
+        debug_kv(dedupe="resource updated by same original path", resource_id=resource_id, source_path=upload_relpath)
     else:
-        rid = str(uuid.uuid4())
-        resource_id = f"_{rid}"
+        resource_id = upload_file_id
         primary_dir = resource_dir / resource_id
     rid = resource_id.lstrip("_")
     primary_dir.mkdir(parents=True, exist_ok=True)
 
     thumb_ext = ".png" if content_type.lower().startswith("application/pdf") else ".jpg"
     thumb_file = primary_dir / f"thumbnail{thumb_ext}"
+    thumb_area = "resource"
+    thumb_root = resource_root
+    if note_id == "new_note" and note_root is not None:
+        note_dir = note_root / year / month / day / note_id
+        note_dir.mkdir(parents=True, exist_ok=True)
+        ensure_draft_note_json(note_dir, user_id)
+        note_thumb_dir = note_dir / "resource" / resource_id
+        note_thumb_dir.mkdir(parents=True, exist_ok=True)
+        thumb_file = note_thumb_dir / f"thumbnail{thumb_ext}"
+        thumb_area = "note"
+        thumb_root = note_root
     resource_file = primary_dir / "resource.json"
     identify_out = identify_text(dest_file)
 
@@ -617,13 +685,15 @@ def main():
         resource_size, thumbnail_size = make_pdf_thumbnail(dest_file, thumb_file)
 
     elif dest_file.suffix.lower() in OFFICE_EXTS:
-        pdf_preview_dir = primary_dir
+        # Keep the uploaded Office document and its PDF rendition together.
+        # The thumbnail/resource metadata stay under resource/.
+        pdf_preview_dir = dest_file.parent
         office_pdf = make_office_pdf(dest_file, pdf_preview_dir)
 
         if office_pdf and office_pdf.exists():
             resource_size, thumbnail_size = make_pdf_thumbnail(office_pdf, thumb_file)
-            pdf_preview_uri = environment_url("resource", user_id, year, month, day, resource_id, office_pdf.name)
-            pdf_preview_url = make_absolute_url(pdf_preview_uri)
+            pdf_preview_uri = protected_file_url(user_id, "upload", upload_relative_path(upload_root, office_pdf))
+            pdf_preview_url = pdf_preview_uri
             debug_kv(
                 office_preview_pdf=str(office_pdf),
                 office_preview_uri=pdf_preview_uri,
@@ -634,13 +704,14 @@ def main():
         else:
             debug("office pdf conversion failed")
 
-    file_uri = environment_url("upload", user_id, year, month, day, upload_file_id, filename)
-    file_url = make_absolute_url(file_uri)
-    resource_uri = environment_url("resource", user_id, year, month, day, resource_id)
-    resource_url = make_absolute_url(resource_uri)
+    file_uri = protected_file_url(user_id, "upload", upload_relpath)
+    file_url = file_uri
+    resource_uri = ""
+    resource_url = ""
 
     if thumb_file.exists():
-        thumbnail_uri = environment_url("resource", user_id, year, month, day, resource_id, thumb_file.name)
+        thumb_rel = note_relative_path(thumb_root, thumb_file) if thumb_area == "note" else resource_relative_path(thumb_root, thumb_file)
+        thumbnail_uri = protected_file_url(user_id, thumb_area, thumb_rel)
 
     name = fullname or filename
     totalsize = dest_file.stat().st_size
@@ -670,13 +741,13 @@ def main():
     files[0]["path"] = upload_relpath
     if thumb_file.exists():
         item = file_entry("thumbnail", thumb_file, "image/png" if thumb_file.suffix.lower() == ".png" else "image/jpeg", thumbnail_size or "")
-        item["area"] = "resource"
-        item["path"] = resource_relative_path(resource_root, thumb_file)
+        item["area"] = thumb_area
+        item["path"] = note_relative_path(thumb_root, thumb_file) if thumb_area == "note" else resource_relative_path(thumb_root, thumb_file)
         files.append(item)
     if office_pdf and office_pdf.exists():
         item = file_entry("preview", office_pdf, "application/pdf")
-        item["area"] = "resource"
-        item["path"] = resource_relative_path(resource_root, office_pdf)
+        item["area"] = "upload"
+        item["path"] = upload_relative_path(upload_root, office_pdf)
         files.append(item)
 
     resource = {
@@ -689,8 +760,8 @@ def main():
         },
         "identity": {
             "title": name,
-            "canonicalUri": file_url,
-            "uri": pdf_preview_url or file_url,
+            "canonicalUri": "",
+            "uri": "",
         },
         "media": {
             "kind": media_kind(content_type, filename),
@@ -703,15 +774,12 @@ def main():
             "defaultMode": "infoPane",
             "embed": {
                 "enabled": bool(pdf_preview_url or content_type.startswith("image/")),
-                "uri": pdf_preview_url or file_url,
+                "uri": "",
             },
         },
         "storage": {
             "managed": True,
             "copyPolicy": "snapshot",
-            "sourcePath": upload_relpath,
-            "primaryPath": resource_relative_path(resource_root, primary_dir),
-            "snapshotPath": "",
             "files": files,
         },
         "rights": {
