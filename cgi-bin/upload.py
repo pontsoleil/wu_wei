@@ -712,6 +712,11 @@ def main():
     if thumb_file.exists():
         thumb_rel = note_relative_path(thumb_root, thumb_file) if thumb_area == "note" else resource_relative_path(thumb_root, thumb_file)
         thumbnail_uri = protected_file_url(user_id, thumb_area, thumb_rel)
+        if thumb_area == "note":
+            try:
+                shutil.copy2(thumb_file, primary_dir / thumb_file.name)
+            except Exception as e:
+                debug_kv(resource_thumbnail_copy_exception=str(e), src=str(thumb_file), dst=str(primary_dir / thumb_file.name))
 
     name = fullname or filename
     totalsize = dest_file.stat().st_size

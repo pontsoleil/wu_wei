@@ -450,6 +450,9 @@ fi
 
 [ -f "$thumb_file" ] && thumbnail_uri="$(protected_file_uri "$thumb_area" "${thumb_file#$thumb_rel_root/}")"
 [ -n "$thumbnail_uri" ] && thumbnail="$thumbnail_uri"
+if [ "$thumb_area" = "note" ] && [ -f "$thumb_file" ]; then
+  cp -- "$thumb_file" "$resource_dir/thumbnail.jpg" 2>/dev/null || true
+fi
 
 # --- identify (optional) --------------------------------------------
 identify_out=""
