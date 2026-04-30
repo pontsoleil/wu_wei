@@ -78,6 +78,15 @@ read_env() {
   printf '%s' "$v"
 }
 
+resolve_env_template() {
+  local tpl="$1"
+  case "$tpl" in
+    /*) printf '%s' "$tpl" ;;
+    wu_wei2/*) printf '%s/%s' "$(dirname "$SCRIPT_DIR")" "${tpl#wu_wei2/}" ;;
+    *) printf '%s/%s' "$SCRIPT_DIR" "$tpl" ;;
+  esac
+}
+
 command_path() {
   local candidate found
   for candidate in "$@"; do
@@ -159,19 +168,19 @@ day="$(date '+%d')"
 #   resource  /.../wu_wei2/*/resource
 #   thumbnail /.../wu_wei2/*/thumbnail
 
-base_dir="$(read_env user)"
+base_dir="$(resolve_env_template "$(read_env user)")"
 [ -z "${base_dir:-}" ] && die_json "ERROR: 'user' is empty in data/environment"
 
-upload_tpl="$(read_env upload)"
+upload_tpl="$(resolve_env_template "$(read_env upload)")"
 [ -z "${upload_tpl:-}" ] && die_json "ERROR: 'upload' is empty in data/environment"
 file_dir="${upload_tpl//\*/$user_id}"
 
-resource_tpl="$(read_env resource)"
+resource_tpl="$(resolve_env_template "$(read_env resource)")"
 [ -z "${resource_tpl:-}" ] && die_json "ERROR: 'resource' is empty in data/environment"
 resource_dir="${resource_tpl//\*/$user_id}"
 resource_root="$resource_dir"
 
-thumbnail_tpl="$(read_env thumbnail)"
+thumbnail_tpl="$(resolve_env_template "$(read_env thumbnail)")"
 [ -z "${thumbnail_tpl:-}" ] && die_json "ERROR: 'thumbnail' is empty in data/environment"
 thumbnail_dir="${thumbnail_tpl//\*/$user_id}"
 
