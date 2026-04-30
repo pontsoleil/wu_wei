@@ -372,6 +372,18 @@ wuwei.menu = wuwei.menu || {};
     return isUploadBackedResource(resource);
   }
 
+  function isLocalPythonOfficeUpload(allNodes) {
+    var target = getContextTarget(allNodes);
+
+    if (!util || typeof util.isLocalHost !== 'function' || !util.isLocalHost()) {
+      return false;
+    }
+    if (!isUploadBackedContent(allNodes)) {
+      return false;
+    }
+    return isOfficeResourceForMenu(getNodeResource(target));
+  }
+
   toAbsoluteUrl = function (href) {
     if (!href) {
       return '';
@@ -3290,7 +3302,8 @@ wuwei.menu = wuwei.menu || {};
         if (state.Selecting || state.Connecting) {
           return false;
         }
-        return isContextOpenableTarget(allNodes);
+        return isContextOpenableTarget(allNodes) &&
+          !isLocalPythonOfficeUpload(allNodes);
       },
       null,
       'fas fa-external-link-alt fa-lg fa-fw'
@@ -3324,7 +3337,8 @@ wuwei.menu = wuwei.menu || {};
         if (state.Selecting || state.Connecting) {
           return false;
         }
-        return isContextOpenableTarget(allNodes);
+        return isContextOpenableTarget(allNodes) &&
+          !isLocalPythonOfficeUpload(allNodes);
       },
       null,
       'fas fa-external-link-alt fa-lg fa-fw'
