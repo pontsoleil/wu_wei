@@ -24,7 +24,8 @@ wuwei.note = (function () {
     /** util */
     util = wuwei.util,
     /** model */
-    model = wuwei.model;
+    model = wuwei.model,
+    DRAFT_NOTE_ID = 'new_note';
 
   function remove(el) {
     el.parentNode.removeChild(el);
@@ -48,6 +49,40 @@ wuwei.note = (function () {
 
   function nowIsoString() {
     try { return new Date().toISOString(); } catch (e) { return ''; }
+  }
+
+  function isDraftNoteId(noteId) {
+    return noteId === DRAFT_NOTE_ID;
+  }
+
+  function ensureEditableNoteId() {
+    if (!current.note_id) {
+      current.note_id = DRAFT_NOTE_ID;
+    }
+    else if (!isDraftNoteId(current.note_id) && !util.isUUIDid(current.note_id)) {
+      current.note_id = util.createUuid();
+    }
+    return current.note_id;
+  }
+
+  function parseSaveResponse(responseText) {
+    var text = String(responseText || '').replace(/^\uFEFF/, '').trim();
+    if (!text || /^ERROR/.test(text) || text.indexOf('#! /bin/sh') >= 0) {
+      return { name: text, note_id: '' };
+    }
+    if (text.charAt(0) === '{') {
+      try {
+        var response = JSON.parse(text);
+        return {
+          name: String(response.name || response.note_name || '').trim(),
+          note_id: String(response.note_id || response.id || '').trim()
+        };
+      }
+      catch (e) {
+        console.warn('save-note JSON response parse failed:', e);
+      }
+    }
+    return { name: text, note_id: '' };
   }
 
   function normalizeAudit(audit, user) {
@@ -95,10 +130,7 @@ wuwei.note = (function () {
       var area = String(out.area || '').trim();
       var role = String(out.role || '').toLowerCase();
       if (!area) {
-        area = (role === 'original') ? 'upload' : 'resource';
-      }
-      if (out.sourcePath && !out.path) {
-        out.path = out.sourcePath;
+        area = (role === 'original') ? 'upload' : 'note';
       }
       if (out.path) {
         out.path = util.toStorageRelativePath(out.path, state.currentUser && state.currentUser.user_id, area);
@@ -110,8 +142,6 @@ wuwei.note = (function () {
     return {
       managed: src.managed === true,
       copyPolicy: src.copyPolicy || (src.managed === true ? 'snapshot' : 'metadataOnly'),
-      primaryPath: util.toStorageRelativePath(src.primaryPath || src.path || '', state.currentUser && state.currentUser.user_id, 'resource'),
-      snapshotPath: util.toStorageRelativePath(src.snapshotPath || '', state.currentUser && state.currentUser.user_id, 'note'),
       files: files
     };
   }
@@ -146,20 +176,16 @@ wuwei.note = (function () {
 
   function storageFileUrl(storage, role) {
     var files = (storage && Array.isArray(storage.files)) ? storage.files : [];
-    var primaryPath = String((storage && storage.primaryPath) || '').replace(/\\/g, '/');
     var i, file, path, area;
     for (i = 0; i < files.length; i += 1) {
       file = files[i] || {};
       if (String(file.role || '').toLowerCase() !== role) {
         continue;
       }
-      area = String(file.area || '').trim() || (role === 'original' ? 'upload' : 'resource');
+      area = String(file.area || '').trim() || (role === 'original' ? 'upload' : 'note');
       path = String(file.path || '').replace(/\\/g, '/');
       if (path) {
         return toRuntimeFileUrl(util.toPublicResourceUri(area, util.toStorageRelativePath(path, state.currentUser && state.currentUser.user_id, area), state.currentUser && state.currentUser.user_id));
-      }
-      if (path && primaryPath) {
-        return toRuntimeFileUrl(primaryPath.replace(/\/$/, '') + '/' + path.replace(/^\//, ''));
       }
     }
     return '';
@@ -683,8 +709,6 @@ wuwei.note = (function () {
       storage: normalizeStorage(src.storage || {
         managed: isManaged,
         copyPolicy: isManaged ? 'snapshot' : 'metadataOnly',
-        primaryPath: src.primaryPath || '',
-        snapshotPath: '',
         files: []
       }),
       rights: {
@@ -835,7 +859,7 @@ wuwei.note = (function () {
 
     const firstPage = createPage(1);
     current = NoteFactory({
-      note_id: util.createUuid(),
+      note_id: DRAFT_NOTE_ID,
       note_name: '',
       description: '',
       currentPage: firstPage.id,
@@ -1027,9 +1051,7 @@ wuwei.note = (function () {
   }
 
   function persistNote(form, actionName) {
-    if (!current.note_id || !util.isUUIDid(current.note_id)) {
-      current.note_id = util.createUuid();
-    }
+    ensureEditableNoteId();
 
     const nameEl = form && form.elements ? form.elements['name'] : null;
     const descEl = form && form.elements ? form.elements['description'] : null;
@@ -1086,9 +1108,13 @@ wuwei.note = (function () {
       thumbnail: iconHTML,
       user_id: cu.user_id
     }, 'POST', 30000).then(function (responseText) {
+      const saveResult = parseSaveResponse(responseText);
+      if (saveResult.note_id && util.isUUIDid(saveResult.note_id)) {
+        current.note_id = saveResult.note_id;
+      }
       delete current.bundle;
       delete current.portable;
-      return responseText;
+      return saveResult.name || responseText;
     });
   }
 
@@ -1101,9 +1127,7 @@ wuwei.note = (function () {
   }
 
   function exportNoteText() {
-    if (!current.note_id || !util.isUUIDid(current.note_id)) {
-      current.note_id = util.createUuid();
-    }
+    ensureEditableNoteId();
 
     const currentPageThumbnail = snapshotCurrentPageThumbnail();
     const noteToExport = {

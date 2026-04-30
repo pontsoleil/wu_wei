@@ -6,6 +6,7 @@ import binascii
 import hashlib
 import json
 import shutil
+import uuid
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -15,6 +16,7 @@ from cgi_common import (
     debug_exception,
     debug_kv,
     environment_path,
+    get_effective_user_id,
     get_session_user_id,
     merge_query_and_body_params,
     script_error,
@@ -22,6 +24,8 @@ from cgi_common import (
     text_response,
     validate_simple_id,
 )
+
+DRAFT_NOTE_ID = "new_note"
 
 
 def _single_line_meta(value: str) -> str:
@@ -42,6 +46,38 @@ def _ensure_note_json(value: str) -> dict:
     if "resources" in data and not isinstance(data.get("resources"), list):
         raise ValueError("NOTE JSON RESOURCES MUST BE ARRAY")
     return data
+
+
+def _assert_no_legacy_runtime_fields(value, path: str = "$") -> None:
+    legacy = {"sourcePath", "primaryPath", "snapshotPath"}
+    if isinstance(value, dict):
+        for key, child in value.items():
+            child_path = f"{path}.{key}"
+            if key in legacy:
+                raise ValueError(f"LEGACY FIELD NOT ALLOWED: {child_path}")
+            _assert_no_legacy_runtime_fields(child, child_path)
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            _assert_no_legacy_runtime_fields(child, f"{path}[{index}]")
+
+
+def _rewrite_draft_note_paths(value, note_id: str):
+    if isinstance(value, dict):
+        for key, child in list(value.items()):
+            value[key] = _rewrite_draft_note_paths(child, note_id)
+        return value
+    if isinstance(value, list):
+        return [_rewrite_draft_note_paths(child, note_id) for child in value]
+    if isinstance(value, str):
+        if value in (DRAFT_NOTE_ID, "_note_uuid", "note_uuid"):
+            return note_id
+        return (
+            value
+            .replace(f"/{DRAFT_NOTE_ID}/", f"/{note_id}/")
+            .replace(f"/_note_uuid/", f"/{note_id}/")
+            .replace(f"/note_uuid/", f"/{note_id}/")
+        )
+    return value
 
 
 def _storage_path_from_public_path(path_text: str, *, base_root: Path, user_id: str) -> Path | None:
@@ -100,12 +136,12 @@ def _local_file_from_uri(uri: str, *, base_root: Path | None = None, user_id: st
 
 def _storage_file_from_item(item: dict, *, base_root: Path, user_id: str) -> Path | None:
     area = str(item.get("area") or "").strip().strip("/")
-    rel = str(item.get("path") or item.get("sourcePath") or "").replace("\\", "/").strip("/")
+    rel = str(item.get("path") or "").replace("\\", "/").strip("/")
     if not rel:
         return None
     if not area:
         role = str(item.get("role") or "").strip().lower()
-        area = "upload" if role == "original" else "resource"
+        area = "upload" if role == "original" else "note"
     public_path = _storage_path_from_public_path(f"{area}/{user_id}/{rel}", base_root=base_root, user_id=user_id)
     if public_path is not None:
         return public_path
@@ -116,50 +152,9 @@ def _storage_file_from_item(item: dict, *, base_root: Path, user_id: str) -> Pat
 
 
 def _promote_local_resource_snapshot(resource: dict) -> None:
-    storage = resource.get("storage")
-    if not isinstance(storage, dict):
-        storage = {}
-        resource["storage"] = storage
-    if storage.get("managed") is True and storage.get("copyPolicy") == "snapshot":
-        return
-
-    identity = resource.get("identity") if isinstance(resource.get("identity"), dict) else {}
-    media = resource.get("media") if isinstance(resource.get("media"), dict) else {}
-    viewer = resource.get("viewer") if isinstance(resource.get("viewer"), dict) else {}
-    if not isinstance(resource.get("viewer"), dict):
-        resource["viewer"] = viewer
-    embed = viewer.get("embed") if isinstance(viewer.get("embed"), dict) else {}
-    snapshot_sources = resource.get("snapshotSources") if isinstance(resource.get("snapshotSources"), dict) else {}
-    candidates = [
-        ("original", str(snapshot_sources.get("originalUri") or identity.get("canonicalUri") or ""), str(media.get("mimeType") or "application/octet-stream")),
-        ("preview", str(snapshot_sources.get("previewUri") or embed.get("uri") or identity.get("uri") or ""), "application/pdf"),
-        ("thumbnail", str(snapshot_sources.get("thumbnailUri") or ""), "image/jpeg"),
-    ]
-
-    files = []
-    seen = set()
-    for role, uri, mime_type in candidates:
-        source = _local_file_from_uri(uri)
-        if source is None or source in seen:
-            continue
-        seen.add(source)
-        files.append({
-            "role": role,
-            "path": source.name,
-            "sourcePath": str(source),
-            "mimeType": mime_type,
-            "size": source.stat().st_size,
-            "sha256": "",
-        })
-
-    if not files:
-        return
-
-    storage["managed"] = True
-    storage["copyPolicy"] = "snapshot"
-    storage["primaryPath"] = str(Path(files[0]["sourcePath"]).parent)
-    storage.setdefault("snapshotPath", "")
-    storage["files"] = files
+    # Runtime data is expected to have been normalized to the new model by
+    # wuwei.note. Do not infer storage from legacy snapshotSources here.
+    return
 
 
 def _resource_timestamp(resource: dict, fallback: datetime) -> datetime:
@@ -177,11 +172,9 @@ def _resource_timestamp(resource: dict, fallback: datetime) -> datetime:
 
 def _resource_identity_key(resource: dict) -> str:
     identity = resource.get("identity") if isinstance(resource.get("identity"), dict) else {}
-    storage = resource.get("storage") if isinstance(resource.get("storage"), dict) else {}
     return str(
         identity.get("canonicalUri")
         or identity.get("uri")
-        or storage.get("sourcePath")
         or ""
     ).strip()
 
@@ -304,10 +297,6 @@ def _save_primary_resource_definition(resource: dict, *, resource_root: Path, no
         should_write = False
 
     primary.mkdir(parents=True, exist_ok=True)
-    try:
-        storage["primaryPath"] = primary.relative_to(resource_root).as_posix()
-    except Exception:
-        storage["primaryPath"] = str(primary)
     if not should_write:
         return
 
@@ -322,6 +311,14 @@ def _save_primary_resource_definition(resource: dict, *, resource_root: Path, no
     resource_json.write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
 
 
+def _note_area_path(path: Path) -> str:
+    resolved = path.resolve()
+    for parent in resolved.parents:
+        if parent.name == "note":
+            return resolved.relative_to(parent).as_posix()
+    return path.name
+
+
 def _copy_resource_snapshot(resource: dict, *, base_root: Path, user_id: str, note_id: str, note_resource_dir: Path) -> None:
     storage = resource.get("storage")
     if not isinstance(storage, dict):
@@ -333,11 +330,7 @@ def _copy_resource_snapshot(resource: dict, *, base_root: Path, user_id: str, no
     if not rid:
         return
 
-    primary = _resolve_storage_dir(str(storage.get("primaryPath") or ""), base_root=base_root, user_id=user_id, note_id=note_id)
-    snapshot = _resolve_storage_dir(str(storage.get("snapshotPath") or ""), base_root=base_root, user_id=user_id, note_id=note_id)
-    if snapshot is None:
-        snapshot = note_resource_dir / rid
-        storage["snapshotPath"] = snapshot.as_posix()
+    snapshot = note_resource_dir / rid
 
     snapshot.mkdir(parents=True, exist_ok=True)
     snapshot_files = []
@@ -355,20 +348,16 @@ def _copy_resource_snapshot(resource: dict, *, base_root: Path, user_id: str, no
         if role == "original":
             # The original uploaded file remains in data/{user}/upload/...
             # Keep the reference, but do not duplicate the body into the note snapshot.
-            snapshot_files.append(dict(item))
+            original_item = dict(item)
+            original_item.setdefault("area", "upload")
+            snapshot_files.append(original_item)
             continue
         rel = str(item.get("path") or "").replace("\\", "/").strip("/")
         if not rel:
             continue
-        source_path = str(item.get("sourcePath") or "").strip()
-        if source_path:
-            src = _local_file_from_uri(source_path, base_root=base_root, user_id=user_id)
-            if src is None:
-                src = Path(source_path)
-        else:
-            src = _storage_file_from_item(item, base_root=base_root, user_id=user_id)
-            if src is None:
-                src = primary / rel if primary is not None else Path()
+        src = _storage_file_from_item(item, base_root=base_root, user_id=user_id)
+        if src is None:
+            src = Path()
         if not src.is_file():
             debug_kv(snapshot_skip="file missing", resource_id=rid, src=str(src))
             snapshot_files.append(dict(item))
@@ -377,52 +366,13 @@ def _copy_resource_snapshot(resource: dict, *, base_root: Path, user_id: str, no
         shutil.copy2(src, dst)
         snapshot_item = dict(item)
         snapshot_item["area"] = "note"
-        snapshot_item["path"] = f"resource/{rid}/{dst.name}"
-        snapshot_item.pop("sourcePath", None)
+        snapshot_item["path"] = _note_area_path(dst)
         snapshot_files.append(snapshot_item)
-        snapshot_uri = _public_uri_from_storage_path(dst, user_id)
-        if snapshot_uri:
-            if role == "thumbnail":
-                snapshot_sources["thumbnailUri"] = snapshot_uri
-                if isinstance(viewer, dict):
-                    viewer["thumbnailUri"] = snapshot_uri
-                if isinstance(embed, dict):
-                    embed["thumbnailUri"] = snapshot_uri
-            elif role == "preview":
-                snapshot_sources["previewUri"] = snapshot_uri
-                identity = resource.get("identity") if isinstance(resource.get("identity"), dict) else {}
-                if not isinstance(resource.get("identity"), dict):
-                    resource["identity"] = identity
-                identity["uri"] = snapshot_uri
-                if isinstance(embed, dict):
-                    embed["uri"] = snapshot_uri
-
     if snapshot_files:
         storage["files"] = snapshot_files
-    storage["snapshotPath"] = snapshot.as_posix()
 
     resource_json = snapshot / "resource.json"
     resource_json.write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
-
-
-def _public_uri_from_storage_path(path: Path, user_id: str) -> str:
-    path_s = path.resolve().as_posix()
-    uid = str(user_id or "").strip("/")
-    if not uid:
-        return ""
-    markers = [
-        f"/wu_wei2/data/{uid}/note/",
-        f"/wu_wei2/{uid}/note/",
-    ]
-    for marker in markers:
-        idx = path_s.find(marker)
-        if idx < 0:
-            continue
-        rel = path_s[idx + len(marker):].lstrip("/")
-        if marker.startswith("/wu_wei2/data/"):
-            return f"/wu_wei2/data/{uid}/note/{rel}"
-        return f"/wu_wei2/note/{uid}/{rel}"
-    return ""
 
 
 def _safe_bundle_filename(value: str, fallback: str) -> str:
@@ -495,32 +445,28 @@ def _restore_embedded_resource_files(note_json: dict, *, resource_root: Path, up
             stored_rel = bundle_path[len("upload/"):].strip("/")
             dest_file = upload_root / stored_rel
             storage_path = stored_rel
-            storage_source = str(dest_file)
+            storage_area = "upload"
         elif bundle_path.startswith("note/resource/"):
             note_rel = bundle_path[len("note/resource/"):].strip("/")
             parts = note_rel.split("/", 1)
             stored_rel = parts[1] if len(parts) == 2 and parts[0] == rid else note_rel
             dest_file = snapshot / stored_rel
-            storage_path = Path(stored_rel).name
-            storage_source = str(dest_file)
+            storage_path = _note_area_path(dest_file)
+            storage_area = "note"
         elif role == "original":
             stored_rel = bundle_path or f"{ts:%Y/%m/%d}/{rid}/{filename}"
             dest_file = upload_root / stored_rel
             storage_path = stored_rel
-            storage_source = str(dest_file)
+            storage_area = "upload"
         else:
-            storage_path = filename
-            dest_file = snapshot / storage_path
-            storage_source = str(dest_file)
+            dest_file = snapshot / filename
+            storage_path = _note_area_path(dest_file)
+            storage_area = "note"
         dest_file.parent.mkdir(parents=True, exist_ok=True)
         dest_file.write_bytes(payload)
 
         storage["managed"] = True
         storage["copyPolicy"] = "snapshot"
-        storage["primaryPath"] = str(primary)
-        storage["snapshotPath"] = str(snapshot)
-        if role == "original":
-            storage["sourcePath"] = storage_path
         files = storage.get("files")
         if not isinstance(files, list):
             files = []
@@ -528,8 +474,8 @@ def _restore_embedded_resource_files(note_json: dict, *, resource_root: Path, up
         files = [f for f in files if not (isinstance(f, dict) and str(f.get("role") or "") == role)]
         files.append({
             "role": role,
+            "area": storage_area,
             "path": storage_path,
-            "sourcePath": storage_source,
             "mimeType": mime_type,
             "size": len(payload),
             "sha256": sha256,
@@ -550,15 +496,20 @@ def main():
     debug_kv(params=params)
 
     session_user_id = get_session_user_id()
+    effective_user_id = get_effective_user_id()
+    requested_user_id = params.get("user_id", "") or ""
+    if not effective_user_id and not requested_user_id:
+        debug_kv(error="NOT LOGGED IN", session_user_id=session_user_id, effective_user_id=effective_user_id)
+        script_error("ERROR NOT LOGGED IN")
     try:
-        user_id = validate_simple_id(params.get("user_id", "") or "", "USER_ID")
+        user_id = validate_simple_id(requested_user_id or effective_user_id, "USER_ID")
         note_id = validate_simple_id(params.get("id", "") or "", "NOTE_ID")
     except ValueError as e:
         debug_kv(validation_error=str(e))
         script_error(f"ERROR {e}")
 
-    if not session_user_id or user_id != session_user_id:
-        debug_kv(error="NOT LOGGED IN", session_user_id=session_user_id, user_id=user_id)
+    if not effective_user_id or user_id != effective_user_id:
+        debug_kv(error="NOT LOGGED IN", session_user_id=session_user_id, effective_user_id=effective_user_id, user_id=user_id)
         script_error("ERROR NOT LOGGED IN")
 
     note_root = environment_path("note", user_id)
@@ -580,8 +531,16 @@ def main():
     day = now.strftime("%d")
     saved_at = now.strftime("%Y-%m-%dT%H:%M:%S%z")
 
+    requested_note_id = note_id
+    if note_id == DRAFT_NOTE_ID:
+        note_id = f"_{uuid.uuid4()}"
+
     note_dir = Path(note_root) / year / month / day / note_id
     note_resource_dir = note_dir / "resource"
+    if requested_note_id == DRAFT_NOTE_ID:
+        draft_dir = Path(note_root) / year / month / day / DRAFT_NOTE_ID
+        if draft_dir.is_dir() and draft_dir != note_dir:
+            shutil.copytree(draft_dir, note_dir, dirs_exist_ok=True)
     note_dir.mkdir(parents=True, exist_ok=True)
 
     name = _single_line_meta(params.get("name", "") or "")
@@ -590,6 +549,7 @@ def main():
 
     try:
         note_json = _ensure_note_json(params.get("json", "") or "")
+        _assert_no_legacy_runtime_fields(note_json)
     except ValueError as e:
         debug_kv(json_error=str(e))
         script_error(f"ERROR {e}")
@@ -597,7 +557,12 @@ def main():
     base_root = Path(note_root).parent
     resource_root_path = Path(resource_root)
     upload_root_path = Path(upload_root)
-    note_json["note_id"] = note_json.get("note_id") or note_id
+    if note_id != DRAFT_NOTE_ID:
+        _rewrite_draft_note_paths(note_json, note_id)
+    if str(note_json.get("note_id") or "") == DRAFT_NOTE_ID or not note_json.get("note_id"):
+        note_json["note_id"] = note_id
+    if str(note_json.get("note_uuid") or "") == DRAFT_NOTE_ID or note_json.get("note_uuid") is None:
+        note_json["note_uuid"] = note_id
     note_json["resources"] = note_json.get("resources") or []
 
     try:
@@ -650,8 +615,7 @@ def main():
         script_error("ERROR SAVE FAILED")
 
     debug_kv(saved_note_id=note_id, response_name=name)
-    # shell 版互換: note name を応答
-    text_response(name)
+    text_response(json.dumps({"name": name, "note_id": note_id}, ensure_ascii=False))
 
 
 if __name__ == "__main__":
