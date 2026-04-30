@@ -350,7 +350,7 @@ def safe_note_id(value: str) -> str:
     value = trim(value)
     if value == "new_note":
         return value
-    return ""
+    return "new_note"
 
 
 def ensure_draft_note_json(note_dir: Path, user_id: str) -> None:

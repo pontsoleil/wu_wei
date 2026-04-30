@@ -255,6 +255,7 @@ case "$note_id" in
     note_id=""
     ;;
 esac
+[ -n "$note_id" ] || note_id="new_note"
 
 upload_file_uuid=""
 for d in "$file_dir"/_*; do
