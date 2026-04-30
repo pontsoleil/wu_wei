@@ -124,6 +124,17 @@ rel=$(safe_rel "$path" || true)
 base=$(resolve_env_path "$area" "$user_id" || true)
 [ -n "$base" ] || text_response 'ERROR AREA NOT DEFINED' '404 Not Found'
 target="$base/$rel"
+if [ ! -f "$target" ] && [ "$area" = "note" ]; then
+  upload_base=$(resolve_env_path upload "$user_id" || true)
+  if [ -n "$upload_base" ]; then
+    alt_base="$(dirname "$upload_base")/note"
+    alt_target="$alt_base/$rel"
+    if [ -f "$alt_target" ]; then
+      base="$alt_base"
+      target="$alt_target"
+    fi
+  fi
+fi
 [ -f "$target" ] || text_response 'ERROR FILE NOT FOUND' '404 Not Found'
 
 printf 'Content-Type: %s\r\n' "$(mime_for_path "$rel")"

@@ -63,6 +63,19 @@ def main() -> None:
         target.relative_to(base)
     except ValueError:
         reject("ERROR INVALID FILE PATH", "403 Forbidden")
+    if area == "note" and not target.is_file():
+        upload_base_text = environment_path("upload", user_id)
+        if upload_base_text:
+            alt_base = (Path(upload_base_text).resolve().parent / "note").resolve()
+            alt_target = (alt_base / rel).resolve()
+            try:
+                alt_target.relative_to(alt_base)
+            except ValueError:
+                pass
+            else:
+                if alt_target.is_file():
+                    base = alt_base
+                    target = alt_target
     if not target.is_file():
         reject("ERROR FILE NOT FOUND", "404 Not Found")
 
