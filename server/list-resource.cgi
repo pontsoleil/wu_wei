@@ -333,7 +333,7 @@ while IFS= read -r path; do
   [ -n "$month_key" ] && case "$d" in "$month_key"-*) ;; *) continue ;; esac
   [ -n "$date_filter" ] && [ "$d" != "$date_filter" ] && continue
   [ -n "$term" ] && ! grep -Fqi -- "$term" "$path" && continue
-  [ -n "$d" ] && case "_$days_" in *"_$d_"*) ;; *) days="${days}${days:+_}$d" ;; esac
+  [ -n "$d" ] && case "_${days}_" in *"_$d_"*) ;; *) days="${days}${days:+_}$d" ;; esac
   m=${d%-*}
   [ -n "$m" ] && case " $months " in *" $m "*) ;; *) months="${months}${months:+ }$m" ;; esac
   [ "$count" -gt 0 ] && printf ',' >> "$records_tmp"

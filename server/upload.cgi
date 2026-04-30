@@ -64,7 +64,7 @@ die_json() {
   local msg="$1"
   printf "Content-Type: application/json\r\n\r\n"
   printf '{ "error": "%s" }\n' "$(json_escape "$msg")"
-  rm -f "$Tmp"-*
+  rm -rf "$Tmp"-*
   exit 1
 }
 
@@ -152,7 +152,7 @@ Content-Type: text/plain
 
 ERROR NOT LOGGED IN
 HTTP_RESPONSE
-  rm -f "$Tmp"-*
+  rm -rf "$Tmp"-*
   exit 1
 fi
 
@@ -558,5 +558,5 @@ else
 JSON
 fi
 
-rm -f "$Tmp" "$Tmp"-*
+rm -rf "$Tmp" "$Tmp"-*
 exit 0
