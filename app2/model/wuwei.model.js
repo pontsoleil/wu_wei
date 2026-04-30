@@ -3812,9 +3812,25 @@ wuwei.model = (function () {
       item,
       linkCountNode;
     thumbnail = node.thumbnailUri || node.thumbnail || '';
-    if ((!thumbnail || /^fa-/.test(thumbnail)) && util.getResourceThumbnailUri) {
-      const resourceThumbnail = util.getResourceThumbnailUri(node);
-      if (resourceThumbnail && !/^fa-/.test(resourceThumbnail)) {
+    if (util.getResourceThumbnailUri) {
+      let resourceThumbnail = util.getResourceThumbnailUri(node);
+      const staleResourceThumbnail = /[?&]area=resource(?:&|$)/.test(String(thumbnail || ''));
+      if (staleResourceThumbnail && (!resourceThumbnail || resourceThumbnail === thumbnail) &&
+        common.current && common.current.note_id === 'new_note' && util.toPublicResourceUri) {
+        const match = String(thumbnail || '').match(/[?&]path=([^&]+)/);
+        const oldPath = match ? decodeURIComponent(match[1]) : '';
+        const draftPath = oldPath.replace(
+          /^(\d{4}\/\d{2}\/\d{2}\/(_[0-9a-f-]+)\/thumbnail\.[A-Za-z0-9]+)$/i,
+          function (_all, _path, resourceId) {
+            return oldPath.replace(resourceId + '/', 'new_note/resource/' + resourceId + '/');
+          }
+        );
+        if (draftPath && draftPath !== oldPath) {
+          resourceThumbnail = util.toPublicResourceUri('note', draftPath, util.getCurrentUserId && util.getCurrentUserId());
+        }
+      }
+      if (resourceThumbnail && !/^fa-/.test(resourceThumbnail) &&
+        (!thumbnail || /^fa-/.test(thumbnail) || staleResourceThumbnail || resourceThumbnail !== thumbnail)) {
         thumbnail = resourceThumbnail;
         node.thumbnailUri = resourceThumbnail;
         if (node.size && node.size.width <= 40 && node.size.height <= 60) {
