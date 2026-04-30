@@ -70,10 +70,31 @@ resolve_env_path() {
   esac
 }
 
+url_encode() {
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"
+  elif command -v python >/dev/null 2>&1; then
+    python -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"
+  else
+    printf '%s' "$1" | sed 's/%/%25/g; s/ /%20/g; s#/#%2F#g; s/&/%26/g; s/?/%3F/g; s/=/%3D/g'
+  fi
+}
+
 resource_rel_url() {
   uid=$1
   rel=$2
-  printf '/wu_wei2/data/%s/resource/%s' "$uid" "$rel"
+  printf '/wu_wei2/server/load-file.cgi?area=resource&path=%s&user_id=%s' \
+    "$(url_encode "$rel")" "$(url_encode "$uid")"
+}
+
+file_rel_url() {
+  uid=$1
+  area=$2
+  rel=$3
+  [ -n "$area" ] || return 0
+  [ -n "$rel" ] || return 0
+  printf '/wu_wei2/server/load-file.cgi?area=%s&path=%s&user_id=%s' \
+    "$(url_encode "$area")" "$(url_encode "$rel")" "$(url_encode "$uid")"
 }
 
 json_string_field() {
@@ -123,6 +144,54 @@ json_object_field() {
           else if (c == "}") {
             depth--
             if (depth == 0) { print substr($0, start, i - start + 1); exit }
+          }
+        }
+      }
+    }
+  ' "$file"
+}
+
+json_file_field_for_role() {
+  role=$1
+  key=$2
+  file=$3
+  awk -v role="$role" -v key="$key" '
+    BEGIN { RS=""; ORS="" }
+    {
+      for (i = 1; i <= length($0); i++) {
+        c = substr($0, i, 1)
+        if (in_s) {
+          if (esc) esc = 0
+          else if (c == "\\") esc = 1
+          else if (c == "\"") in_s = 0
+          continue
+        }
+        if (c == "\"") { in_s = 1; continue }
+        if (c == "{") {
+          if (depth == 0) start = i
+          depth++
+          continue
+        }
+        if (c == "}") {
+          depth--
+          if (depth == 0 && start > 0) {
+            obj = substr($0, start, i - start + 1)
+            role_pat = "\"role\"[ \t\r\n]*:[ \t\r\n]*\"" role "\""
+            key_pat = "\"" key "\"[ \t\r\n]*:[ \t\r\n]*\""
+            if (obj ~ role_pat && match(obj, key_pat)) {
+              s = substr(obj, RSTART + RLENGTH)
+              out = ""; esc2 = 0
+              for (j = 1; j <= length(s); j++) {
+                d = substr(s, j, 1)
+                if (esc2) { out = out d; esc2 = 0; continue }
+                if (d == "\\") { out = out d; esc2 = 1; continue }
+                if (d == "\"") break
+                out = out d
+              }
+              print out
+              exit
+            }
+            start = 0
           }
         }
       }
@@ -182,6 +251,19 @@ emit_record() {
   preview="$source_uri"
   thumb=$(json_string_field thumbnailUri "$path")
   res_url=$(resource_rel_url "$uid" "$rel")
+  original_area=$(json_file_field_for_role original area "$path")
+  original_path=$(json_file_field_for_role original path "$path")
+  preview_area=$(json_file_field_for_role preview area "$path")
+  preview_path=$(json_file_field_for_role preview path "$path")
+  thumb_area=$(json_file_field_for_role thumbnail area "$path")
+  thumb_path=$(json_file_field_for_role thumbnail path "$path")
+  original_file_url=$(file_rel_url "$uid" "${original_area:-upload}" "$original_path")
+  preview_file_url=$(file_rel_url "$uid" "${preview_area:-note}" "$preview_path")
+  thumb_file_url=$(file_rel_url "$uid" "${thumb_area:-note}" "$thumb_path")
+  [ -n "$preview_file_url" ] && preview="$preview_file_url"
+  [ -z "$preview" ] && preview="$original_file_url"
+  [ -n "$thumb_file_url" ] && thumb="$thumb_file_url"
+  download_url=${original_file_url:-$source_uri}
 
   printf '{'
   printf '"id":"%s",' "$(printf '%s' "$id" | json_escape)"
@@ -195,7 +277,7 @@ emit_record() {
   printf '"contenttype":"%s",' "$(printf '%s' "$mime" | json_escape)"
   printf '"uri":"%s",' "$(printf '%s' "$uri" | json_escape)"
   printf '"url":"%s",' "$(printf '%s' "$preview" | json_escape)"
-  printf '"download_url":"%s",' "$(printf '%s' "$source_uri" | json_escape)"
+  printf '"download_url":"%s",' "$(printf '%s' "$download_url" | json_escape)"
   printf '"preview_url":"%s",' "$(printf '%s' "$preview" | json_escape)"
   printf '"value":{'
   printf '"lastmodified":"%s",' "$(printf '%s' "$ts" | sed 's/T/ /' | json_escape)"

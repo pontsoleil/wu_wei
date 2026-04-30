@@ -255,7 +255,7 @@ find_existing_resource_dir() {
   local sha="$1" rel="$2" rf
   find "$resource_root" -type f -name resource.json 2>/dev/null | while IFS= read -r rf; do
     if { [ -n "$sha" ] && grep -q "\"sha256\"[[:space:]]*:[[:space:]]*\"$sha\"" "$rf"; } ||
-       { [ -n "$rel" ] && grep -q "\"sourcePath\"[[:space:]]*:[[:space:]]*\"$rel\"" "$rf"; }; then
+       { [ -n "$rel" ] && grep -q "\"role\"[[:space:]]*:[[:space:]]*\"original\"" "$rf" && grep -q "\"path\"[[:space:]]*:[[:space:]]*\"$rel\"" "$rf"; }; then
       dirname "$rf"
       break
     fi
@@ -267,7 +267,7 @@ existing_resource_dir="$(find_existing_resource_dir "$original_sha" "$upload_rel
 if [ -n "$existing_resource_dir" ]; then
   uuid="${existing_resource_dir##*/}"
 else
-  uuid="_$(uuidgen | tr 'A-Z' 'a-z')"
+  uuid="$upload_file_uuid"
 fi
 uuidrgx='[0-9a-f]\{8\}-[0-9a-f]\{4\}-[1-5][0-9a-f]\{3\}-[89ab][0-9a-f]\{3\}-[0-9a-f]\{12\}'
 
@@ -276,18 +276,29 @@ escaped_base="$(printf '%s' "$base_dir" | sed 's/\//\\\//g')"
 resource_dir="${existing_resource_dir:-$resource_day_dir/$uuid}"
 mkdir -p "$resource_dir" || die_json "ERROR: cannot mkdir $resource_dir"
 resource_file="$resource_dir/resource.json"
-if [ -n "$existing_resource_dir" ]; then
-  resource_rel="${existing_resource_dir#$resource_root/}"
-  resource_uri="resource/$user_id/$resource_rel"
-else
-  resource_uri="resource/$user_id/$year/$month/$day/$uuid"
-fi
+resource_uri=""
 
 thumb_file="$resource_dir/thumbnail.jpg"
-thumbnail_uri="$resource_uri/thumbnail.jpg"
+thumbnail_uri=""
 
-# stored file uri: upload/<user_uuid>/...
-file_uri="upload/$user_id/$year/$month/$day/$upload_file_uuid/$filename"
+url_encode() {
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"
+  elif command -v python >/dev/null 2>&1; then
+    python -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"
+  else
+    printf '%s' "$1" | sed 's/%/%25/g; s/ /%20/g; s#/#%2F#g; s/&/%26/g; s/?/%3F/g; s/=/%3D/g'
+  fi
+}
+
+protected_file_uri() {
+  local area="$1" rel="$2"
+  printf '/wu_wei2/server/load-file.cgi?area=%s&path=%s&user_id=%s' \
+    "$(url_encode "$area")" "$(url_encode "$rel")" "$(url_encode "$user_id")"
+}
+
+# protected runtime file uri; resource JSON stores area/path instead.
+file_uri="$(protected_file_uri upload "$year/$month/$day/$upload_file_uuid/$filename")"
 
 # --- detect actual file type ----------------------------------------
 content_type="$(file -b -i -- "$dest_file" 2>/dev/null || true)"
@@ -306,7 +317,9 @@ if is_office_file "$filename"; then
       stem="${filename%.*}"
       generated_pdf="$office_outdir/$stem.pdf"
       if [ -f "$generated_pdf" ]; then
-        preview_pdf="$resource_dir/preview.pdf"
+        # Keep the uploaded Office document and its PDF rendition together.
+        # The thumbnail/resource metadata stay under resource/.
+        preview_pdf="$upload_file_dir/$stem.pdf"
         cp -f "$generated_pdf" "$preview_pdf" || preview_pdf=""
       fi
     fi
@@ -315,7 +328,7 @@ if is_office_file "$filename"; then
   fi
 
   if [ -n "$preview_pdf" ] && [ -f "$preview_pdf" ]; then
-    preview_pdf_uri="$resource_uri/preview.pdf"
+    preview_pdf_uri="$(protected_file_uri upload "${preview_pdf#$upload_root/}")"
     preview_pdf_url="$preview_pdf_uri"
   else
     echo "office preview pdf was not generated: $filename" >&2
@@ -376,6 +389,9 @@ if [[ "$content_type" == application/pdf* || "$content_type" == image/* || -n "$
   fi
 fi
 
+[ -f "$thumb_file" ] && thumbnail_uri="$(protected_file_uri resource "${thumb_file#$resource_root/}")"
+[ -n "$thumbnail_uri" ] && thumbnail="$thumbnail_uri"
+
 # --- identify (optional) --------------------------------------------
 identify_out=""
 if [[ "$content_type" == application/pdf* ]]; then
@@ -423,8 +439,8 @@ cat >"$resource_file" <<JSON || die_json "ERROR: cannot write resource file $res
   },
   "identity": {
     "title": "$(json_escape "$name")",
-    "canonicalUri": "$(json_escape "$file_uri")",
-    "uri": "$(json_escape "${preview_pdf_url:-$file_uri}")"
+    "canonicalUri": "",
+    "uri": ""
   },
   "media": {
     "kind": "$(json_escape "$media_kind")",
@@ -437,15 +453,12 @@ cat >"$resource_file" <<JSON || die_json "ERROR: cannot write resource file $res
     "defaultMode": "infoPane",
     "embed": {
       "enabled": true,
-      "uri": "$(json_escape "${preview_pdf_url:-$file_uri}")"
+      "uri": ""
     }
   },
   "storage": {
     "managed": true,
     "copyPolicy": "snapshot",
-    "sourcePath": "$(json_escape "$year/$month/$day/$upload_file_uuid/$filename")",
-    "primaryPath": "$(json_escape "${resource_dir#$resource_root/}")",
-    "snapshotPath": "",
     "files": [
       {
         "role": "original",
@@ -454,7 +467,7 @@ cat >"$resource_file" <<JSON || die_json "ERROR: cannot write resource file $res
         "mimeType": "$(json_escape "$content_type")",
         "size": ${totalsize:-0},
         "sha256": "$(json_escape "$original_sha")"
-      }$(if [ -f "$thumb_file" ]; then printf ',\n      {\n        "role": "thumbnail",\n        "area": "resource",\n        "path": "%s",\n        "mimeType": "image/jpeg",\n        "size": %s,\n        "sha256": "%s"\n      }' "$(json_escape "${thumb_file#$resource_root/}")" "$(stat -c %s -- "$thumb_file" 2>/dev/null || echo 0)" "$(json_escape "$thumb_sha")"; fi)$(if [ -n "$preview_pdf" ] && [ -f "$preview_pdf" ]; then printf ',\n      {\n        "role": "preview",\n        "area": "resource",\n        "path": "%s",\n        "mimeType": "application/pdf",\n        "size": %s,\n        "sha256": "%s"\n      }' "$(json_escape "${preview_pdf#$resource_root/}")" "$(stat -c %s -- "$preview_pdf" 2>/dev/null || echo 0)" "$(json_escape "$preview_sha")"; fi)
+      }$(if [ -f "$thumb_file" ]; then printf ',\n      {\n        "role": "thumbnail",\n        "area": "resource",\n        "path": "%s",\n        "mimeType": "image/jpeg",\n        "size": %s,\n        "sha256": "%s"\n      }' "$(json_escape "${thumb_file#$resource_root/}")" "$(stat -c %s -- "$thumb_file" 2>/dev/null || echo 0)" "$(json_escape "$thumb_sha")"; fi)$(if [ -n "$preview_pdf" ] && [ -f "$preview_pdf" ]; then printf ',\n      {\n        "role": "preview",\n        "area": "upload",\n        "path": "%s",\n        "mimeType": "application/pdf",\n        "size": %s,\n        "sha256": "%s"\n      }' "$(json_escape "${preview_pdf#$upload_root/}")" "$(stat -c %s -- "$preview_pdf" 2>/dev/null || echo 0)" "$(json_escape "$preview_sha")"; fi)
     ]
   },
   "rights": {
@@ -483,7 +496,7 @@ if [[ "$content_type" == application/pdf* || "$content_type" == image/* || -n "$
   "resource":$(cat "$resource_file"),
   "name":"$(json_escape "$name")",
   "option":"upload",
-  "contenttype":"$(json_escape "${contenttype:-}")",
+  "contenttype":"$(json_escape "${contenttype:-$content_type}")",
   "uri":"$(json_escape "$file_uri")",
   "value":{
     "totalsize":"$(json_escape "${totalsize:-}")",
@@ -503,7 +516,7 @@ else
   "resource":$(cat "$resource_file"),
   "name":"$(json_escape "$name")",
   "option":"upload",
-  "contenttype":"$(json_escape "${contenttype:-}")",
+  "contenttype":"$(json_escape "${contenttype:-$content_type}")",
   "uri":"$(json_escape "$file_uri")",
   "value":{
     "totalsize":"$(json_escape "${totalsize:-}")",

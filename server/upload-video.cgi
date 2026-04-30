@@ -87,6 +87,7 @@ fi
 # --- dates -----------------------------------------------------------
 year="$(date '+%Y')"
 month="$(date '+%m')"
+day="$(date '+%d')"
 
 # --- environment paths (align with your data/environment) ------------
 # data/environment expects:
@@ -111,13 +112,15 @@ thumbnail_tpl="$(read_env thumbnail)"
 thumbnail_dir="${thumbnail_tpl//\*/$user_id}"
 
 # --- ensure directories ----------------------------------------------
-mkdir -p "$file_dir/$year/$month"      || die_json "ERROR: cannot mkdir $file_dir/$year/$month (permission?)"
-mkdir -p "$resource_dir/$year/$month"  || die_json "ERROR: cannot mkdir $resource_dir/$year/$month (permission?)"
-mkdir -p "$thumbnail_dir/$year/$month" || die_json "ERROR: cannot mkdir $thumbnail_dir/$year/$month (permission?)"
+mkdir -p "$file_dir/$year/$month/$day"      || die_json "ERROR: cannot mkdir $file_dir/$year/$month/$day (permission?)"
+mkdir -p "$resource_dir/$year/$month/$day"  || die_json "ERROR: cannot mkdir $resource_dir/$year/$month/$day (permission?)"
+mkdir -p "$thumbnail_dir/$year/$month/$day" || die_json "ERROR: cannot mkdir $thumbnail_dir/$year/$month/$day (permission?)"
 
-file_dir="$file_dir/$year/$month"
-resource_dir="$resource_dir/$year/$month"
-thumbnail_dir="$thumbnail_dir/$year/$month"
+upload_root="$file_dir"
+resource_root="$resource_dir"
+file_dir="$file_dir/$year/$month/$day"
+resource_day_dir="$resource_dir/$year/$month/$day"
+thumbnail_dir="$thumbnail_dir/$year/$month/$day"
 
 # --- read request body -----------------------------------------------
 dd bs=1K if=/dev/stdin > "$Tmp-cgivars"
@@ -144,20 +147,41 @@ contenttype_declared="$(
 )"
 fullname="$(mime-read fullname "$Tmp-cgivars" 2>/dev/null || true)"
 
-DEST_FILE="$file_dir/$filename"
+upload_file_uuid="_$(uuidgen | tr 'A-Z' 'a-z')"
+upload_file_dir="$file_dir/$upload_file_uuid"
+mkdir -p "$upload_file_dir" || die_json "ERROR: cannot mkdir $upload_file_dir"
+
+DEST_FILE="$upload_file_dir/$filename"
 cp -- "$Tmp-uploadfile" "$DEST_FILE" || die_json "ERROR: cannot save upload to $DEST_FILE"
 
-uuid="$(uuidgen)"
-uuidrgx='[0-9a-f]\{8\}-[0-9a-f]\{4\}-[1-5][0-9a-f]\{3\}-[89ab][0-9a-f]\{3\}-[0-9a-f]\{12\}'
-escaped_base="$(printf '%s' "$base_dir" | sed 's/\//\\\//g')"
+uuid="$upload_file_uuid"
+resource_dir="$resource_day_dir/$uuid"
+mkdir -p "$resource_dir" || die_json "ERROR: cannot mkdir $resource_dir"
 
-resource_file="$resource_dir/$uuid"
-resource_uri="$(printf '%s' "$resource_file" | sed "s/^${escaped_base}\/\(${uuidrgx}\)\/resource\/\(.*\)$/resource\/\1\/\2/")"
+resource_file="$resource_dir/resource.json"
+resource_uri=""
 
-thumb_file="$thumbnail_dir/$uuid.jpg"
-thumbnail_uri="$(printf '%s' "$thumb_file" | sed "s/^${escaped_base}\/\(${uuidrgx}\)\/thumbnail\/\(.*\)$/thumbnail\/\1\/\2/")"
+thumb_file="$resource_dir/thumbnail.jpg"
+thumbnail_uri=""
 
-file_uri="$(printf '%s' "$DEST_FILE" | sed "s/^${escaped_base}\/\(${uuidrgx}\)\/upload\/\(.*\)$/upload\/\1\/\2/")"
+url_encode() {
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"
+  elif command -v python >/dev/null 2>&1; then
+    python -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"
+  else
+    printf '%s' "$1" | sed 's/%/%25/g; s/ /%20/g; s#/#%2F#g; s/&/%26/g; s/?/%3F/g; s/=/%3D/g'
+  fi
+}
+
+protected_file_uri() {
+  local area="$1" rel="$2"
+  printf '/wu_wei2/server/load-file.cgi?area=%s&path=%s&user_id=%s' \
+    "$(url_encode "$area")" "$(url_encode "$rel")" "$(url_encode "$user_id")"
+}
+
+upload_relpath="$year/$month/$day/$upload_file_uuid/$filename"
+file_uri="$(protected_file_uri upload "$upload_relpath")"
 
 det_mime="$(file -b --mime-type -- "$DEST_FILE" 2>/dev/null || true)"
 det_full="$(file -b -i -- "$DEST_FILE" 2>/dev/null || true)"
@@ -199,7 +223,7 @@ if [[ "${det_mime:-}" == video/* || "${contenttype:-}" == video/* ]]; then
       -ss "$ss" -i "$DEST_FILE" \
       -frames:v 1 -vf "scale='min($size,iw)':-2" -q:v 3 \
       "$thumb_file"; then
-    thumbnail="$thumbnail_uri"
+      thumbnail="$(protected_file_uri resource "${thumb_file#$resource_root/}")"
       if [[ -n "$FFPROBE" ]]; then
         thumb_wh="$("$FFPROBE" -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0:s=x "$thumb_file" 2>/dev/null || true)"
       fi
@@ -221,27 +245,68 @@ totalsize="$(stat -c %s -- "$DEST_FILE" 2>/dev/null || true)"
 lastmodified="$(stat -c %y -- "$DEST_FILE" 2>/dev/null || true)"
 
 {
-  echo "id $uuid"
-  echo "name $name"
-  echo "option video"
-  echo "contenttype ${contenttype:-}"
-  echo "uri $file_uri"
-  echo "value.totalsize ${totalsize:-}"
-  echo "value.lastmodified ${lastmodified:-}"
-  echo "value.commment null"
-  echo "value.resource.uri $resource_uri"
-  if [[ -n "${video_wh:-}" ]]; then echo "value.resource.size $video_wh"; else echo "value.resource.size null"; fi
-  if [[ -n "${thumbnail:-}" ]]; then
-    echo "value.thumbnail.uri $thumbnail"
-    echo "value.thumbnail.size ${tw}x${th}"
-  else
-    echo "value.thumbnail.uri null"
-    echo "value.thumbnail.size null"
-  fi
-  if [[ -n "${duration:-}" ]]; then echo "value.duration $duration"; else echo "value.duration null"; fi
-  echo "value.identify $(printf '%s' "$det_full" | tr -d '\n' || true)"
-  echo "value.file "
-} >>"$resource_file" || die_json "ERROR: cannot write resource file $resource_file"
+  original_sha="$(sha256sum "$DEST_FILE" 2>/dev/null | awk '{print $1}')"
+  thumb_sha=""
+  [ -f "$thumb_file" ] && thumb_sha="$(sha256sum "$thumb_file" 2>/dev/null | awk '{print $1}')"
+  created_at="$(date '+%Y-%m-%dT%H:%M:%S%z')"
+  cat <<JSON
+{
+  "id": "$(json_escape "$uuid")",
+  "type": "Resource",
+  "origin": {
+    "type": "userRegistered",
+    "subtype": "uploadedVideo",
+    "provider": "local"
+  },
+  "identity": {
+    "title": "$(json_escape "$name")",
+    "canonicalUri": "",
+    "uri": ""
+  },
+  "media": {
+    "kind": "video",
+    "mimeType": "$(json_escape "${contenttype:-application/octet-stream}")",
+    "downloadable": true,
+    "duration": $(if [ -n "${duration:-}" ]; then printf '%s' "$duration"; else printf 'null'; fi)
+  },
+  "viewer": {
+    "supportedModes": ["infoPane", "newTab", "newWindow", "download", "player"],
+    "defaultMode": "infoPane",
+    "embed": {
+      "enabled": true,
+      "uri": ""
+    }
+  },
+  "storage": {
+    "managed": true,
+    "copyPolicy": "snapshot",
+    "files": [
+      {
+        "role": "original",
+        "area": "upload",
+        "path": "$(json_escape "$upload_relpath")",
+        "mimeType": "$(json_escape "${contenttype:-application/octet-stream}")",
+        "size": ${totalsize:-0},
+        "sha256": "$(json_escape "$original_sha")"$(if [ -n "${video_wh:-}" ]; then printf ',\n        "displaySize": "%s"' "$(json_escape "$video_wh")"; fi)
+      }$(if [ -f "$thumb_file" ]; then printf ',\n      {\n        "role": "thumbnail",\n        "area": "resource",\n        "path": "%s",\n        "mimeType": "image/jpeg",\n        "size": %s,\n        "sha256": "%s"%s\n      }' "$(json_escape "${thumb_file#$resource_root/}")" "$(stat -c %s -- "$thumb_file" 2>/dev/null || echo 0)" "$(json_escape "$thumb_sha")" "$(if [ -n "${tw:-}" ] && [ -n "${th:-}" ]; then printf ',\n        "displaySize": "%s"' "$(json_escape "${tw}x${th}")"; fi)"; fi)
+    ]
+  },
+  "rights": {
+    "owner": "$(json_escape "$user_id")",
+    "copyright": "",
+    "license": "",
+    "attribution": ""
+  },
+  "audit": {
+    "owner": "$(json_escape "$user_id")",
+    "createdBy": "$(json_escape "$user_id")",
+    "createdAt": "$(json_escape "$created_at")",
+    "lastModifiedBy": "",
+    "lastModifiedAt": ""
+  }
+}
+JSON
+} >"$resource_file" || die_json "ERROR: cannot write resource file $resource_file"
 
 printf "Content-Type: application/json\r\n\r\n"
 
@@ -256,6 +321,7 @@ if [[ -n "${thumbnail:-}" ]]; then
   cat <<JSON
 {
   "id":"$uuid",
+  "resource":$(cat "$resource_file"),
   "name":"$(json_escape "$name")",
   "option":"video",
   "contenttype":"$(json_escape "${contenttype:-}")",
@@ -276,6 +342,7 @@ else
   cat <<JSON
 {
   "id":"$uuid",
+  "resource":$(cat "$resource_file"),
   "name":"$(json_escape "$name")",
   "option":"video",
   "contenttype":"$(json_escape "${contenttype:-}")",
