@@ -267,6 +267,111 @@ wuwei.menu = wuwei.menu || {};
     );
   }
 
+  function isLocalTemporaryUser() {
+    var ownerId = '';
+
+    if (!(common && typeof common.isLocalHost === 'function' && common.isLocalHost())) {
+      return false;
+    }
+
+    if (util && typeof util.getCurrentUserId === 'function') {
+      ownerId = util.getCurrentUserId();
+    }
+    if (!ownerId && common && typeof common.getCurrentOwnerId === 'function') {
+      ownerId = common.getCurrentOwnerId();
+    }
+
+    return !state.loggedIn || (
+      common &&
+      typeof common.isTemporaryOwnerId === 'function' &&
+      common.isTemporaryOwnerId(ownerId)
+    );
+  }
+
+  function getResourceFilesForMenu(resource) {
+    var storage = resource && resource.storage;
+    return (storage && Array.isArray(storage.files)) ? storage.files : [];
+  }
+
+  function getResourceOriginalPathForMenu(resource) {
+    var files = getResourceFilesForMenu(resource);
+    var file, i;
+
+    for (i = 0; i < files.length; i += 1) {
+      file = files[i] || {};
+      if (String(file.role || '').toLowerCase() === 'original') {
+        return String(file.path || file.uri || file.url || file.sourcePath || '').trim();
+      }
+    }
+
+    return String(
+      (resource && (
+        resource.canonicalUri ||
+        resource.uri ||
+        (resource.snapshotSources && resource.snapshotSources.originalUri)
+      )) || ''
+    ).trim();
+  }
+
+  function isUploadBackedResource(resource) {
+    var files = getResourceFilesForMenu(resource);
+    var file, text, i;
+
+    for (i = 0; i < files.length; i += 1) {
+      file = files[i] || {};
+      if (String(file.role || '').toLowerCase() !== 'original') {
+        continue;
+      }
+      if (String(file.area || '').toLowerCase() === 'upload') {
+        return true;
+      }
+      text = String(file.path || file.uri || file.url || '').replace(/\\/g, '/');
+      if (/^(?:upload\/|\d{4}\/\d{2}\/\d{2}\/)/.test(text)) {
+        return true;
+      }
+      if (/[?&]area=upload(?:&|$)/.test(text)) {
+        return true;
+      }
+    }
+
+    text = String(
+      (resource && (
+        resource.canonicalUri ||
+        resource.uri ||
+        (resource.snapshotSources && resource.snapshotSources.originalUri)
+      )) || ''
+    ).replace(/\\/g, '/');
+    return /^(?:upload\/|\d{4}\/\d{2}\/\d{2}\/)/.test(text) ||
+      /[?&]area=upload(?:&|$)/.test(text);
+  }
+
+  function isOfficeResourceForMenu(resource) {
+    var fmt = String((resource && resource.mimeType) || '').toLowerCase();
+    var kind = String((resource && resource.kind) || '').toLowerCase();
+    var ref = getResourceOriginalPathForMenu(resource).toLowerCase();
+
+    return (
+      kind === 'office' ||
+      (util && typeof util.isOfficeDocument === 'function' && util.isOfficeDocument(fmt)) ||
+      /\.(doc|docx|xls|xlsx|ppt|pptx)(\?|#|$)/.test(ref)
+    );
+  }
+
+  function isUploadBackedContent(allNodes) {
+    var target = getContextTarget(allNodes);
+    var resource;
+
+    if (!target || target.type !== 'Content') {
+      return false;
+    }
+    if (target.option === 'upload') {
+      return true;
+    }
+
+    resource = getNodeResource(target);
+    return isUploadBackedResource(resource);
+  }
+
   toAbsoluteUrl = function (href) {
     if (!href) {
       return '';
@@ -1052,7 +1157,6 @@ wuwei.menu = wuwei.menu || {};
       ? wuwei.model.getCurrent().nodes.find(n => n.id === nodeId)
       : null;
 
-    const resource = node ? getNodeResource(node) : null;
     const url = getDownloadUrl(node);
     if (!url) {
       wuwei.menu.snackbar.open({ type: 'warning', message: 'ダウンロードURLがありません' });
@@ -1061,7 +1165,7 @@ wuwei.menu = wuwei.menu || {};
 
     const a = document.createElement('a');
     a.href = url;
-    a.download = (resource && resource.title) || node.label || '';
+    a.download = getDownloadFilename(node, url);
     a.rel = 'noopener';
     document.body.appendChild(a);
     a.click();
@@ -1438,10 +1542,92 @@ wuwei.menu = wuwei.menu || {};
     return new URL(href, base).href;
   };
 
+  function basenameFromDownloadPath(value) {
+    var text = String(value || '').trim();
+    var url, queryPath;
+    if (!text) { return ''; }
+    try {
+      url = new URL(text, window.location && window.location.href ? window.location.href : undefined);
+      queryPath = url.searchParams.get('path');
+      text = queryPath || url.pathname || text;
+    } catch (e) {
+      // Keep relative filesystem/data paths as-is.
+    }
+    text = text.replace(/\\/g, '/').replace(/[?#].*$/, '').replace(/\/+$/, '');
+    try {
+      text = decodeURIComponent(text);
+    } catch (e) {
+      // Leave undecodable paths unchanged.
+    }
+    return text.split('/').pop() || '';
+  }
+
+  function hasFileExtension(name) {
+    return /\.[A-Za-z0-9]{1,12}$/.test(String(name || ''));
+  }
+
+  function extensionFromMimeType(mimeType) {
+    var mime = String(mimeType || '').toLowerCase();
+    if (mime === 'application/pdf') { return '.pdf'; }
+    if (mime.indexOf('wordprocessingml.document') >= 0) { return '.docx'; }
+    if (mime.indexOf('spreadsheetml.sheet') >= 0) { return '.xlsx'; }
+    if (mime.indexOf('presentationml.presentation') >= 0) { return '.pptx'; }
+    if (mime === 'application/msword') { return '.doc'; }
+    if (mime === 'application/vnd.ms-excel') { return '.xls'; }
+    if (mime === 'application/vnd.ms-powerpoint') { return '.ppt'; }
+    if (mime.indexOf('image/jpeg') === 0) { return '.jpg'; }
+    if (mime.indexOf('image/png') === 0) { return '.png'; }
+    if (mime.indexOf('text/plain') === 0) { return '.txt'; }
+    return '';
+  }
+
+  function getDownloadFilename(node, href) {
+    var resource = node ? getNodeResource(node) : null;
+    var file = null;
+    var identity = (resource && resource.identity) || {};
+    var candidates = [];
+    var fallback = '';
+    var ext = '';
+
+    if (resource && wuwei.util && typeof wuwei.util.getResourceFile === 'function') {
+      file = wuwei.util.getResourceFile(resource, 'original');
+    }
+    if (file) {
+      candidates.push(file.path, file.sourcePath, file.uri, file.url);
+    }
+    candidates.push(
+      href,
+      resource && resource.title,
+      identity.title,
+      node && node.label
+    );
+
+    for (var i = 0; i < candidates.length; i += 1) {
+      var name = basenameFromDownloadPath(candidates[i]);
+      if (hasFileExtension(name)) {
+        return name;
+      }
+      if (!fallback && name) {
+        fallback = name;
+      }
+    }
+
+    fallback = fallback || String((resource && resource.title) || identity.title || (node && node.label) || 'download');
+    ext = extensionFromMimeType((file && file.mimeType) || (resource && resource.mimeType) || '');
+    return hasFileExtension(fallback) ? fallback : fallback + ext;
+  }
+
   getDownloadUrl = function (node) {
     var resource = getNodeResource(node);
-    var href = (resource && (resource.canonicalUri || resource.uri)) || '';
+    var href = '';
     var base;
+
+    if (resource && wuwei.util && typeof wuwei.util.getResourceFileUri === 'function') {
+      href = wuwei.util.getResourceFileUri(resource, 'original', node);
+    }
+    if (!href) {
+      href = (resource && (resource.canonicalUri || resource.uri)) || '';
+    }
 
     href = String(href || '').trim();
     if (!href) {
@@ -2006,11 +2192,7 @@ wuwei.menu = wuwei.menu || {};
       const a = document.createElement('a');
       a.href = href;
       a.rel = 'noopener';
-      var resourceForDownload = getNodeResource(node);
-      a.setAttribute(
-        'download',
-        resourceForDownload.title || node.label || String(href).split('/').pop().split('?')[0] || 'download'
-      );
+      a.setAttribute('download', getDownloadFilename(node, href));
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -3108,7 +3290,8 @@ wuwei.menu = wuwei.menu || {};
         if (state.Selecting || state.Connecting) {
           return false;
         }
-        return isContextOpenableTarget(allNodes);
+        return isContextOpenableTarget(allNodes) &&
+          !isUploadBackedContent(allNodes);
       },
       null,
       'fas fa-external-link-alt fa-lg fa-fw'
@@ -3142,7 +3325,8 @@ wuwei.menu = wuwei.menu || {};
         if (state.Selecting || state.Connecting) {
           return false;
         }
-        return isContextOpenableTarget(allNodes);
+        return isContextOpenableTarget(allNodes) &&
+          !isUploadBackedContent(allNodes);
       },
       null,
       'fas fa-external-link-alt fa-lg fa-fw'

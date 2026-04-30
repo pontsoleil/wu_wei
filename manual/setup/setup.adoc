@@ -1,0 +1,370 @@
+= WuWei セットアップ設計書
+:doctype: article
+:toc: left
+:toclevels: 3
+:sectnums:
+
+== 目的
+
+この文書は、WuWei の `data/` 配下に保存するノート、リソース、アップロードファイルを、WuWei の認証・権限確認を経由してのみ参照できるようにするための環境設定と実装方式を定義する。
+
+`data/` 配下には、PDF、Office 文書、画像、動画、音声、テキスト、サムネイル、プレビュー、`note.json`、`resource.json` などが保存される。これらは URL が分かっても直接ダウンロードできないことを基本方針とする。
+
+== 基本方針
+
+* ブラウザから `/wu_wei2/data/...` へ直接アクセスした場合は、すべて `403 Forbidden` とする。
+* 実ファイルの配信は nginx の `internal` location と `X-Accel-Redirect` を使う。
+* WuWei の Python CGI または Bash CGI が、ログイン状態、ユーザー UUID、対象ファイルの参照可否を確認する。
+* CGI が許可した場合だけ、nginx に内部パスを渡してファイルを配信させる。
+* Note JSON / Resource JSON には OS 絶対パスや公開 URL を保存しない。
+* Note JSON / Resource JSON には `area` と日付配下の相対 `path` を保存する。
+* ローカル Python CGI では、通常はログイン不要で `guest` 利用者として操作できる。
+* 公開 Linux サーバーの Bash CGI では、非ログイン保存と非ログイン upload を禁止する。
+
+== ディレクトリ構造
+
+ローカル Apache 環境と Linux サーバー環境で、アプリケーションから見える構造を揃える。
+
+[source,text]
+----
+wu_wei2/
+  data/
+    {user_uuid}/
+      note/YYYY/MM/DD/{note_uuid}/note.json
+      note/YYYY/MM/DD/{note_uuid}/resource/{uploaded_uuid}/resource.json
+      note/YYYY/MM/DD/{note_uuid}/resource/{uploaded_uuid}/thumbnail.*
+      note/YYYY/MM/DD/{note_uuid}/resource/{uploaded_uuid}/preview.pdf
+
+      upload/YYYY/MM/DD/{uploaded_uuid}/{uploaded_file}
+      thumbnail/YYYY/MM/DD/{thumbnail_file}
+      resource/YYYY/MM/DD/{resource_uuid}/resource.json
+----
+
+通常のアップロード実体は `upload` に保存する。ノート配下の `resource` には、ノート表示を維持するための `resource.json`、サムネイル、プレビューを保存する。
+
+== JSON に保存するパス
+
+JSON にはユーザー UUID を含めない。ユーザー UUID はログイン状態または実行時コンテキストから決定する。
+
+[source,json]
+----
+{
+  "storage": {
+    "files": [
+      {
+        "role": "original",
+        "area": "upload",
+        "path": "2026/04/29/_uploaded_uuid/document.pdf",
+        "mimeType": "application/pdf"
+      },
+      {
+        "role": "thumbnail",
+        "area": "note",
+        "path": "2026/04/29/_note_uuid/resource/_uploaded_uuid/thumbnail.jpg",
+        "mimeType": "image/jpeg"
+      },
+      {
+        "role": "preview",
+        "area": "note",
+        "path": "2026/04/29/_note_uuid/resource/_uploaded_uuid/preview.pdf",
+        "mimeType": "application/pdf"
+      }
+    ]
+  }
+}
+----
+
+`area` の意味は次の通り。
+Uploaded Resource では `resource.id` と `uploaded_uuid` を同一 ID として扱う。
+この場合、Note snapshot 配下の `resource/{...}` ディレクトリ名も `uploaded_uuid` を使う。
+
+[cols="1,3,3"]
+|===
+|area |JSON の path |実ファイル
+
+|`upload`
+|`YYYY/MM/DD/{uploaded_uuid}/{filename}`
+|`wu_wei2/data/{user_uuid}/upload/YYYY/MM/DD/{uploaded_uuid}/{filename}`
+
+|`note`
+|`YYYY/MM/DD/{note_uuid}/resource/{uploaded_uuid}/{filename}`
+|`wu_wei2/data/{user_uuid}/note/YYYY/MM/DD/{note_uuid}/resource/{uploaded_uuid}/{filename}`
+
+|`resource`
+|`YYYY/MM/DD/{resource_uuid}/{filename}`
+|`wu_wei2/data/{user_uuid}/resource/YYYY/MM/DD/{resource_uuid}/{filename}`
+
+|`thumbnail`
+|`YYYY/MM/DD/{filename}`
+|`wu_wei2/data/{user_uuid}/thumbnail/YYYY/MM/DD/{filename}`
+|===
+
+現行仕様では、Note 表示用の thumbnail / preview は原則として `note` area に保存する。
+`thumbnail` area は旧実装および移行用の領域として扱い、新規 Note snapshot の保存先にはしない。
+
+== nginx 設定
+
+=== 直接アクセス禁止
+
+`/wu_wei2/data/` 配下は、JSON だけでなく PDF、Office、画像、映像、テキストも直接アクセス禁止にする。
+
+[source,nginx]
+----
+location ^~ /wu_wei2/data/ {
+    deny all;
+    return 403;
+}
+----
+
+=== 内部配信用 location
+
+CGI から `X-Accel-Redirect` で指定された場合だけ、nginx が実ファイルを返す。
+
+[source,nginx]
+----
+location ^~ /_wuwei2_data/ {
+    internal;
+    alias /ebs/www/sambuichi.jp/public_html/wu_wei2/data/;
+}
+----
+
+`internal` を指定した location は、ブラウザから直接アクセスできない。例えば次の URL は nginx に拒否される。
+
+[source,text]
+----
+https://www.sambuichi.jp/_wuwei2_data/{user_uuid}/upload/2026/04/29/_uploaded_uuid/document.pdf
+----
+
+=== CGI location
+
+CGI は従来通り FastCGI 経由で実行する。
+
+[source,nginx]
+----
+location ~ \.cgi$ {
+    fastcgi_pass 127.0.0.1:9001;
+    fastcgi_index index.cgi;
+    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    fastcgi_param HTTP_COOKIE $http_cookie;
+    fastcgi_param HTTPS on;
+    include /etc/nginx/fastcgi_params;
+    client_max_body_size 128m;
+    client_body_buffer_size 128m;
+    fastcgi_request_buffering on;
+    fastcgi_read_timeout 120s;
+}
+----
+
+設定変更後は次を実行する。
+
+[source,bash]
+----
+sudo nginx -t
+sudo systemctl reload nginx
+----
+
+== WuWei 経由のファイル配信
+
+=== URL 形式
+
+画面からファイルを表示する場合は、`data/` の直接 URL ではなく、WuWei のロード CGI を呼び出す。
+
+[source,text]
+----
+/wu_wei2/server/load-file.cgi?area=upload&path=2026/04/29/_uploaded_uuid/document.pdf
+----
+
+必要に応じて `resource_id`、`note_id`、`role` を渡してもよい。
+
+[source,text]
+----
+/wu_wei2/server/load-file.cgi?resource_id=_resource_uuid&role=preview
+----
+
+=== CGI の責務
+
+ファイル配信 CGI は次の処理を行う。
+
+1. Cookie からログインユーザー UUID を取得する。
+2. `area` と `path`、または `resource_id` と `role` を受け取る。
+3. パスに `..`、絶対パス、制御文字が含まれていないことを確認する。
+4. 対象ファイルが現在ユーザーの `wu_wei2/data/{user_uuid}/...` 配下にあることを確認する。
+5. 必要に応じて、対象ノートまたは対象リソースから参照されているファイルか確認する。
+6. MIME type を判定する。
+7. `X-Accel-Redirect` で nginx 内部パスを返す。
+
+=== Python CGI の実装方式
+
+Python 版では、パス解決、権限確認、MIME 判定を関数化する。
+
+[source,python]
+----
+def validate_relative_path(path):
+    if not path or path.startswith("/") or "\\" in path:
+        raise ValueError("invalid path")
+    parts = path.split("/")
+    if any(part in ("", ".", "..") for part in parts):
+        raise ValueError("invalid path")
+    return path
+
+def resolve_data_file(data_root, user_id, area, path):
+    safe_path = validate_relative_path(path)
+    base = os.path.realpath(os.path.join(data_root, user_id, area))
+    target = os.path.realpath(os.path.join(base, safe_path))
+    if not target.startswith(base + os.sep):
+        raise PermissionError("outside data root")
+    return target
+
+def send_accel(user_id, area, path, mime_type):
+    print(f"Content-Type: {mime_type}")
+    print(f"X-Accel-Redirect: /_wuwei2_data/{user_id}/{area}/{path}")
+    print()
+----
+
+公開 Linux サーバーで Python CGI を使う場合は、ファイル本体を `print()` で返さない。大きな PDF や動画を Python 経由で読み込むとメモリ負荷が高くなるため、実体配信は nginx に任せる。
+ローカル PC 上の Python CGI は本人の開発・個人利用環境を前提とするため、認証確認後にファイル本体を直接返してよい。
+
+=== Bash CGI の実装方式
+
+Bash 版でも同じ責務を持つ。`area` と `path` を検証し、許可された場合だけ `X-Accel-Redirect` を返す。
+
+[source,bash]
+----
+validate_relative_path() {
+  case "$1" in
+    ""|/*|*\\*|*../*|../*|*/..|*"/./"*|./*) return 1 ;;
+  esac
+  return 0
+}
+
+send_accel() {
+  user_id="$1"
+  area="$2"
+  path="$3"
+  mime_type="$4"
+
+  printf 'Content-Type: %s\r\n' "$mime_type"
+  printf 'X-Accel-Redirect: /_wuwei2_data/%s/%s/%s\r\n' "$user_id" "$area" "$path"
+  printf '\r\n'
+}
+----
+
+Bash CGI もファイル本体を `cat` で返さない。認証と `X-Accel-Redirect` の発行だけを担当する。
+
+== JavaScript 側の実装方式
+
+JavaScript は、`data/` の直接 URL を生成しない。ファイル表示には WuWei のロード CGI URL を生成する。
+
+[source,javascript]
+----
+function buildProtectedFileUrl(file) {
+  const params = new URLSearchParams();
+  params.set('area', file.area);
+  params.set('path', file.path);
+  return `server/load-file.cgi?${params.toString()}`;
+}
+----
+
+画像、PDF、動画、Office プレビューなども同じ URL を使う。
+
+[source,html]
+----
+<img src="server/load-file.cgi?area=note&path=2026/04/29/_note_uuid/resource/_uploaded_uuid/thumbnail.jpg">
+<iframe src="server/load-file.cgi?area=note&path=2026/04/29/_note_uuid/resource/_uploaded_uuid/preview.pdf"></iframe>
+----
+
+Office 文書の原本はブラウザ内表示に適さないことがあるため、プレビュー PDF またはサムネイルを優先して表示する。
+ローカル環境では Microsoft Office viewer が `localhost` / `127.0.0.1` の文書を扱えないため、アップロード済み Office 文書のコンテキストメニューには `newTab` / `newWindow` を表示しない。
+利用者が原本を取得する場合はダウンロードを使う。
+ダウンロード時のファイル名は、表示ラベルではなく `storage.files[]` の `role=original` が指す元ファイル名を使う。
+編集ペインでは、アップロード済みリソースの URL、縮小画像 URL、メディア種類を管理項目として read only 表示する。
+
+== 保存処理との関係
+
+`save-note` は、ファイルを直接公開する URL を保存しない。保存するのは `area` と `path` である。
+
+通常保存では、アップロード原本は `upload` を参照する。ノート表示を維持するために、サムネイルとプレビューは `note` 配下の snapshot に保存する。
+
+[source,text]
+----
+original:
+  area=upload
+  path=YYYY/MM/DD/{uploaded_uuid}/{filename}
+
+thumbnail:
+  area=note
+  path=YYYY/MM/DD/{note_uuid}/resource/{uploaded_uuid}/thumbnail.jpg
+
+preview:
+  area=note
+  path=YYYY/MM/DD/{note_uuid}/resource/{uploaded_uuid}/preview.pdf
+----
+
+== ダウンロードとアップロード
+
+ノートを portable bundle としてダウンロードする場合、通常保存とは別に、持ち運びに必要なファイルを bundle に含める。
+
+* `note.json` は `area + path` のまま保持する。
+* アップロード原本は `bundle.files[]` に Base64 で同梱する。
+* サムネイルとプレビューも必要に応じて `bundle.files[]` に同梱する。
+* 復元時は、現在ユーザーの `wu_wei2/data/{current_user_uuid}/upload/...` または `wu_wei2/data/{current_user_uuid}/note/...` に展開する。
+* 復元後も JSON は `area + path` の形式を維持する。
+
+== セキュリティ上の注意
+
+* `X-Accel-Redirect` に渡すパスは、必ず CGI 側で検証する。
+* ユーザー UUID はクエリ文字列ではなく、ログインセッションから決定する。
+* `path` にユーザー UUID を含めない。
+* `..`、絶対パス、Windows パス区切り、空セグメントを拒否する。
+* `Content-Type` は拡張子だけに依存せず、可能であれば保存済み metadata の `mimeType` を優先する。
+* `note.json` や `resource.json` を直接公開しない。
+* 公開ノートの場合も、公開許可されたノートから参照されるファイルだけを配信する。
+
+== ローカル Apache 環境での扱い
+
+ローカル環境では nginx の `internal` は使えない。開発確認では、次のいずれかで代替する。
+
+* Python CGI が認証確認後にファイル本体を返す。
+* Apache の設定で `data/` を直接公開せず、CGI 経由に統一する。
+* 開発用に直接参照を許可する場合でも、本番とは異なることを明示する。
+
+ローカル Python CGI は、利用者本人の PC 上で実行する開発・個人利用環境を前提とする。このため、Linux サーバーのように複数利用者や外部アクセスを想定した `nginx internal` による強制的な非公開配信は必須ではない。
+
+ローカル環境では、通常はログイン不要で `guest` 利用者として操作できる。
+未ログイン時の保存先は固定の `wu_wei2/data/guest/` とする。
+登録ユーザーでのログイン必須動作を確認したい場合は、`index.html?login=required`、`index.html?required-login`、または `index.html?force-login` で起動する。
+
+ローカル環境では、Python CGI が `data/` 配下のファイルを直接読み取り、ログインユーザーまたは `guest` 利用者の権限確認後にレスポンス本文として返してよい。これは、ファイルシステムも Web サーバーも本人の PC 内にあり、主な目的が動作確認と開発効率であるためである。
+
+ただし、ローカル Apache を LAN や外部ネットワークに公開する場合は本番サーバーと同等のリスクがある。その場合は `data/` の直接公開を避け、CGI 経由の配信に統一する。
+
+本番 Linux サーバーでは、ファイル本体の配信は nginx の `X-Accel-Redirect` に統一する。
+また、Bash CGI は Cookie の `wuwei_user_id` でログインを確認し、非ログイン時は `ERROR NOT LOGGED IN` で停止する。
+
+== 動作確認
+
+直接アクセスが拒否されることを確認する。
+
+[source,bash]
+----
+curl -i https://www.sambuichi.jp/wu_wei2/data/{user_uuid}/upload/2026/04/29/{uploaded_uuid}/file.pdf
+----
+
+期待結果は `403 Forbidden`。
+
+WuWei 経由で取得できることを確認する。
+
+[source,bash]
+----
+curl -i \
+  -H 'Cookie: wuwei_user_id={user_uuid}' \
+  'https://www.sambuichi.jp/wu_wei2/server/load-file.cgi?area=upload&path=2026/04/29/{uploaded_uuid}/file.pdf'
+----
+
+期待結果は `200 OK`。レスポンス本文は nginx が返す実ファイルになる。
+
+== まとめ
+
+`data/` を直接公開せず、WuWei CGI と nginx `internal` 配信に分離することで、URL を知っているだけではファイルを取得できない構成にできる。
+
+この方式では、Python/Bash CGI は認証・認可・パス検証を担当し、nginx は大きなファイルの高速・安定配信を担当する。JSON の保存形式は `area + path` に統一し、OS 絶対パスや公開 URL を永続化しない。

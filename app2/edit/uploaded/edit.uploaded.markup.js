@@ -27,24 +27,103 @@ wuwei.edit.uploaded.markup = ( function () {
     return String(value);
   }
 
+  function getMediaKindValue(node) {
+    var resource = (node && node.resource) || {};
+    var kind = String(resource.kind || '').toLowerCase();
+    var mimeType = String(resource.mimeType || '').toLowerCase();
+    var uri = String(resource.uri || '').toLowerCase();
+
+    if (kind === 'web') { return 'webpage'; }
+    if (kind === 'pdf' || kind === 'office' || kind === 'document') { return 'document'; }
+    if (kind === 'image' || kind === 'video' || kind === 'audio') { return kind; }
+    if (mimeType.indexOf('video/') === 0) { return 'video'; }
+    if (mimeType.indexOf('image/') === 0) { return 'image'; }
+    if (mimeType.indexOf('audio/') === 0) { return 'audio'; }
+    if (mimeType.indexOf('application/pdf') === 0 ||
+      mimeType.indexOf('application/msword') === 0 ||
+      mimeType.indexOf('application/vnd.ms-excel') === 0 ||
+      mimeType.indexOf('application/vnd.ms-powerpoint') === 0 ||
+      mimeType.indexOf('application/vnd.openxmlformats-officedocument') === 0 ||
+      /\.(pdf|doc|docx|xls|xlsx|ppt|pptx)(\?|#|$)/.test(uri)) {
+      return 'document';
+    }
+    return kind || '';
+  }
+
+  function getEditableThumbnailUri(node) {
+    var uri = (node && (node.thumbnailUri || node.thumbnail)) || '';
+    if (wuwei.util && typeof wuwei.util.getResourceFilePath === 'function' &&
+      node && node.resource) {
+      uri = wuwei.util.getResourceFilePath(node.resource, 'thumbnail', node) || uri;
+    }
+    if (wuwei.util && typeof wuwei.util.toStorageRelativePath === 'function' &&
+      (/^(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i.test(String(uri || '')) ||
+        /^\/?(resource|note)\//.test(String(uri).replace(/^.*\/wu_wei2\//, '')) ||
+        /\/(resource|note)\//.test(String(uri || '')))) {
+      uri = wuwei.util.toStorageRelativePath(uri, null, /(?:^|\/)note\//.test(String(uri || '')) ? 'note' : 'resource');
+    }
+    return getSnapshotDisplayPath(node, 'thumbnail', uri);
+  }
+
+  function getEditableResourceUri(node) {
+    var uri = (wuwei.util && wuwei.util.getResourceOriginalPath)
+      ? wuwei.util.getResourceOriginalPath(node)
+      : ((node && node.resource && node.resource.uri) || '');
+    if (wuwei.util && wuwei.util.toStorageRelativePath &&
+      (/^(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i.test(String(uri || '')) ||
+        /^\/?upload\//.test(String(uri).replace(/^.*\/wu_wei2\//, '')) ||
+        /\/upload\//.test(String(uri || '')))) {
+      uri = wuwei.util.toStorageRelativePath(uri, null, 'upload');
+    }
+    return getSnapshotDisplayPath(node, 'original', uri);
+  }
+
+  function getSnapshotDisplayPath(node, role, current) {
+    var resource = node && node.resource;
+    var storage = resource && resource.storage;
+    var files = storage && Array.isArray(storage.files) ? storage.files : [];
+    var snapshotPath = String(storage && storage.snapshotPath || '').replace(/\\/g, '/');
+    var file, raw, path, uid, i;
+
+    if (/^\d{4}\/\d{2}\/\d{2}\//.test(String(current || ''))) {
+      return current;
+    }
+    if (!snapshotPath || !wuwei.util || typeof wuwei.util.toStorageRelativePath !== 'function') {
+      return current;
+    }
+    for (i = 0; i < files.length; i += 1) {
+      file = files[i] || {};
+      if (String(file.role || '').toLowerCase() !== String(role || '').toLowerCase()) {
+        continue;
+      }
+      raw = String(file.path || '').replace(/\\/g, '/').trim();
+      if (!raw || /^(?:https?:|cgi-bin\/|server\/|\d{4}\/\d{2}\/\d{2}\/)/i.test(raw)) {
+        return current;
+      }
+      uid = String(
+        (resource.audit && (resource.audit.owner || resource.audit.createdBy)) ||
+        (node.audit && (node.audit.owner || node.audit.createdBy)) ||
+        ''
+      ).trim();
+      path = wuwei.util.toStorageRelativePath(snapshotPath.replace(/\/+$/, '') + '/' + raw, uid, 'note');
+      return path || current;
+    }
+    return current;
+  }
+
   const template = function( param ) {
     let
       node = param.node,
       shape = node.shape,
       style = node.style || {},
       font = (node.style && node.style.font) || node.font || {},
-      resourceUri = (wuwei.util && wuwei.util.getResourceOriginalUri ? wuwei.util.getResourceOriginalUri(node) : ((node && node.resource && node.resource.uri) || '')),
+      resourceUri = getEditableResourceUri(node),
+      thumbnailUri = getEditableThumbnailUri(node),
       match, matchP,
       page = null,
       option = param.option;
     const fontAlign = getFontAlign(node);
     const fontSizeValue = normalizeFontSizeValue(font && font.size);
-    if ('upload' !== node.option) {
-      return '';
-    }
-    if (wuwei.util && wuwei.util.toStorageRelativePath && /^\/?upload\//.test(String(resourceUri).replace(/^.*\/wu_wei2\//, ''))) {
-      resourceUri = 'upload/' + wuwei.util.toStorageRelativePath(resourceUri, null, 'upload');
-    }
     match = resourceUri.match(/^content\/.*\.pdf/);
     if (match) {
       matchP = resourceUri.match(/^(content\/.*\.pdf)#page=([0-9]*)$/);
@@ -94,9 +173,19 @@ wuwei.edit.uploaded.markup = ( function () {
           placeholder="${translate('Comment')}\nAsciiDoc\n**text** Bold Text\n*text* Italic Text\n+text+ Underline Text\n~~text~~ Strikethrough Text\n^text^ Superscript\n~text~ Subscript\n* text <ul>\n. text <ol>\n= text <h1>\n====== text <h6>\n----\nsource code\n----">${value}</textarea>
   </div>
   <div class="w3-row">
-  <label for="rUri" class="w3-col s4">url</label>
-  <input type="text" id="rUri" name="resource.uri" data-path="resource.uri" class="w3-col s8"
+  <label for="rUri" class="w3-col s2">URL:</label>
+  <input type="text" id="rUri" name="resource.uri" data-path="resource.uri" class="w3-col s10" readonly aria-readonly="true"
       value="${resourceUri || ''}">
+  </div>
+  <div class="w3-row">
+    <label for="resource_kind" data-path="resource.kind" class="w3-col s6">${translate('Media type')}</label>
+    <input type="text" id="resource_kind" name="resource.kind" data-path="resource.kind" class="w3-col s6" readonly aria-readonly="true"
+      value="${getMediaKindValue(node) || 'auto'}">
+  </div>
+  <div class="w3-row">
+  <label for="thumbnailUri" class="w3-col s4">${translate('THUMBNAIL')}</label>
+  <input type="text" id="thumbnailUri" name="thumbnailUri" data-path="thumbnailUri" class="w3-col s8" readonly aria-readonly="true"
+      value="${thumbnailUri || ''}">
   </div>
   ${match
     ? `<div class="w3-row">
