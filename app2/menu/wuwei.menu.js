@@ -3290,8 +3290,7 @@ wuwei.menu = wuwei.menu || {};
         if (state.Selecting || state.Connecting) {
           return false;
         }
-        return isContextOpenableTarget(allNodes) &&
-          !isUploadBackedContent(allNodes);
+        return isContextOpenableTarget(allNodes);
       },
       null,
       'fas fa-external-link-alt fa-lg fa-fw'
@@ -3325,8 +3324,7 @@ wuwei.menu = wuwei.menu || {};
         if (state.Selecting || state.Connecting) {
           return false;
         }
-        return isContextOpenableTarget(allNodes) &&
-          !isUploadBackedContent(allNodes);
+        return isContextOpenableTarget(allNodes);
       },
       null,
       'fas fa-external-link-alt fa-lg fa-fw'
@@ -3357,7 +3355,7 @@ wuwei.menu = wuwei.menu || {};
 
         var resource = getNodeResource(node);
         fmt = String(resource.mimeType || '').toLowerCase();
-        ref = String(resource.canonicalUri || resource.uri || '').toLowerCase();
+        ref = String(getDownloadUrl(node) || resource.canonicalUri || resource.uri || '').toLowerCase();
 
         isImageOrPdf =
           0 === fmt.indexOf('image/') ||
@@ -3372,7 +3370,7 @@ wuwei.menu = wuwei.menu || {};
           0 === fmt.indexOf('application/vnd.ms-powerpoint') ||
           /\.(doc|docx|xls|xlsx|ppt|pptx)(\?|#|$)/.test(ref);
 
-        return isImageOrPdf || isOffice;
+        return isUploadBackedContent(allNodes) || isImageOrPdf || isOffice;
       },
       null,
       'fas fa-download fa-lg fa-fw'
