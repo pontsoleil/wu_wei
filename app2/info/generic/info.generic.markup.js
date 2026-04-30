@@ -13,15 +13,14 @@ wuwei.info.generic = wuwei.info.generic || {};
 wuwei.info.generic.markup = (function () {
   const template = function (param) {
     let
-      node = param.node,
-      base_url = location.href.substr(0, location.href.lastIndexOf('/'));
+      node = param.node;
     const util = wuwei.util;
-    let uri = util.getResourceUri(node);
+    let uri = resolveInfoUri(node);
     let label = node.label || '';
     let value = '';
     let fontSize = (node.style && node.style.font && node.style.font.size) || 14;
     let fontClass = 'font-size-M';
-    let thumbnailUri = util.getThumbnailUri(node);
+    let thumbnailUri = resolveThumbnailUri(node);
     if ('string' === typeof node.value) {
       value = node.value;
     }
@@ -34,15 +33,6 @@ wuwei.info.generic.markup = (function () {
       height = +node.size.height;
       height = 256 * height / width;
       width = 256;
-    }
-    if (uri) {
-      uri = uri.toLowerCase().indexOf('pdf') > 0 && uri.toLowerCase().indexOf('http') < 0
-        ? `${base_url}/pdf.js/web/viewer.html?file=${base_url}/${uri}`
-        : uri.match(/upload\/[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}\/[0-9]{4}\/[0-9]{2}\/.*.docx/) ||
-          uri.match(/upload\/[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}\/[0-9]{4}\/[0-9]{2}\/.*.pptx/) ||
-          uri.match(/upload\/[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}\/[0-9]{4}\/[0-9]{2}\/.*.xlsx/)
-          ? 'https://view.officeapps.live.com/op/view.aspx?src=https%3A%2F%2Fwww.wuwei.space%2Fwu_wei2%2F' + encodeURIComponent(uri)
-          : uri;
     }
     var html = `
 <!--Card-->
@@ -98,6 +88,38 @@ wuwei.info.generic.markup = (function () {
 
   function translate(str) {
     return wuwei.nls.translate(str);
+  }
+
+  function resolveInfoUri(node) {
+    var util = wuwei.util || {};
+    var resource = util.getResource && util.getResource(node);
+    var viewer = (resource && resource.viewer && 'object' === typeof resource.viewer) ? resource.viewer : {};
+    var embed = (viewer.embed && 'object' === typeof viewer.embed) ? viewer.embed : {};
+    var uri = '';
+
+    if (resource && util.getResourceFileUri) {
+      uri = util.getResourceFileUri(resource, 'preview', node) ||
+        util.getResourceFileUri(resource, 'original', node);
+    }
+    if (uri) {
+      return uri;
+    }
+
+    // Current model: external references are represented as normal URLs.
+    uri = String(embed.uri || (resource && (resource.uri || resource.canonicalUri)) || '').trim();
+    if (/^https?:\/\//i.test(uri) && uri.indexOf('/wu_wei2/') < 0) {
+      return uri;
+    }
+    return '';
+  }
+
+  function resolveThumbnailUri(node) {
+    var util = wuwei.util || {};
+    var resource = util.getResource && util.getResource(node);
+    if (resource && util.getResourceFileUri) {
+      return util.getResourceFileUri(resource, 'thumbnail', node) || '';
+    }
+    return '';
   }
 
   function iframe_error() {
