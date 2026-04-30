@@ -307,6 +307,10 @@ def resolve_user_template(path_template: str, user_id: str | None = None) -> str
 
 def environment_path(name: str, user_id: str | None = None) -> str:
     base = read_named_value(ENV_FILE, name)
+    if not base and name == "note":
+        upload_base = environment_path("upload", user_id)
+        if upload_base:
+            return str(Path(upload_base).parent / "note")
     expanded = resolve_user_template(base, user_id)
 
     if not expanded:

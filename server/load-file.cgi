@@ -50,6 +50,17 @@ resolve_env_path() {
   key=$1
   uid=$2
   tpl=$(nameread "$key" data/environment | strip_quotes || true)
+  if [ -z "$tpl" ] && [ "$key" = "note" ]; then
+    tpl=$(nameread upload data/environment | strip_quotes || true)
+    [ -n "$tpl" ] || return 1
+    tpl=$(printf '%s' "$tpl" | sed "s#/\*/#/${uid}/#; s#\*#${uid}#")
+    case "$tpl" in
+      /*) printf '%s\n' "$(dirname "$tpl")/note" ;;
+      wu_wei2/*) printf '%s\n' "$(dirname "$(dirname "$SCRIPT_DIR")/${tpl#wu_wei2/}")/note" ;;
+      *) printf '%s\n' "$(dirname "$SCRIPT_DIR/$tpl")/note" ;;
+    esac
+    return 0
+  fi
   [ -n "$tpl" ] || return 1
   tpl=$(printf '%s' "$tpl" | sed "s#/\*/#/${uid}/#; s#\*#${uid}#")
   case "$tpl" in
