@@ -2827,9 +2827,38 @@ wuwei.model = (function () {
     let nodeUrl = response.url || '';
     let downloadUrl = response.download_url || response.url || '';
 
+    const resourceViewer = resourceDef && resourceDef.viewer ? resourceDef.viewer : {};
+    const resourceEmbed = resourceViewer && resourceViewer.embed ? resourceViewer.embed : {};
+    const resourceSnapshots = resourceDef && resourceDef.snapshotSources ? resourceDef.snapshotSources : {};
+    const resourceIdentity = resourceDef && resourceDef.identity ? resourceDef.identity : {};
+
+    function isIconThumbnail(value) {
+      return /^fa-/.test(String(value || ''));
+    }
+
+    function resolveUploadedThumbnail() {
+      const candidates = [
+        resourceDef && util.getResourceFileUri ? util.getResourceFileUri(resourceDef, 'thumbnail') : '',
+        value.thumbnail && value.thumbnail.uri,
+        resourceViewer.thumbnailUri,
+        resourceEmbed.thumbnailUri,
+        resourceSnapshots.thumbnailUri
+      ];
+
+      for (let i = 0; i < candidates.length; i++) {
+        const candidate = String(candidates[i] || '').trim();
+        if (candidate && !isIconThumbnail(candidate)) {
+          return candidate;
+        }
+      }
+      return '';
+    }
+
+    thumbnail = resolveUploadedThumbnail() || thumbnail;
+
     if (isOffice || isTextPlain) {
       if (isOffice) {
-        if (!isLocal && !thumbnail) {
+        if (!thumbnail) {
           thumbnail = util.getOfficeIcon ? util.getOfficeIcon(format) : 'fa-file';
         }
       } else if (isTextPlain) {
@@ -2848,11 +2877,11 @@ wuwei.model = (function () {
         if (guessed && guessed.length > 0) {
           thumbnail_size = guessed[0].trim();
         } else {
-          thumbnail_size = '40x60';
+          thumbnail_size = isIconThumbnail(thumbnail) ? '40x60' : '77x100';
         }
       }
 
-      if (thumbnail && /^fa-/.test(thumbnail)) {
+      if (thumbnail && isIconThumbnail(thumbnail)) {
         color = '#505050';
       }
     }
@@ -2885,11 +2914,8 @@ wuwei.model = (function () {
       label = uri.split('/').pop();
     }
 
-    const resourceViewer = resourceDef && resourceDef.viewer ? resourceDef.viewer : {};
-    const resourceEmbed = resourceViewer && resourceViewer.embed ? resourceViewer.embed : {};
-    const resourceSnapshots = resourceDef && resourceDef.snapshotSources ? resourceDef.snapshotSources : {};
-    const resourceIdentity = resourceDef && resourceDef.identity ? resourceDef.identity : {};
     const runtimeResourceUri = resourceIdentity.uri || resourceEmbed.uri || resourceSnapshots.previewUri || nodeUrl || uri || resourceIdentity.canonicalUri || resourceSnapshots.originalUri || '';
+    const snapshotThumbnailUri = thumbnail && !isIconThumbnail(thumbnail) ? thumbnail : '';
     const runtimeResource = resourceDef ? Object.assign({}, resourceDef, {
       id: resourceDef.id || content_id,
       kind: (resourceDef.media && resourceDef.media.kind) || resourceDef.kind || 'general',
@@ -2902,7 +2928,7 @@ wuwei.model = (function () {
       snapshotSources: Object.assign({}, resourceSnapshots, {
         originalUri: resourceIdentity.canonicalUri || resourceSnapshots.originalUri || downloadUrl || '',
         previewUri: resourceEmbed.uri || resourceIdentity.uri || resourceSnapshots.previewUri || nodeUrl || uri || '',
-        thumbnailUri: thumbnail || ''
+        thumbnailUri: snapshotThumbnailUri || resourceSnapshots.thumbnailUri || ''
       }),
       viewer: resourceViewer
     }) : null;
@@ -2954,7 +2980,7 @@ wuwei.model = (function () {
         snapshotSources: {
           originalUri: downloadUrl || '',
           previewUri: nodeUrl || uri || '',
-          thumbnailUri: thumbnail || ''
+          thumbnailUri: snapshotThumbnailUri || ''
         },
         viewer: {
           supportedModes: ['infoPane', 'newTab', 'newWindow', 'download'],
@@ -3786,6 +3812,19 @@ wuwei.model = (function () {
       item,
       linkCountNode;
     thumbnail = node.thumbnailUri || node.thumbnail || '';
+    if ((!thumbnail || /^fa-/.test(thumbnail)) && util.getResourceThumbnailUri) {
+      const resourceThumbnail = util.getResourceThumbnailUri(node);
+      if (resourceThumbnail && !/^fa-/.test(resourceThumbnail)) {
+        thumbnail = resourceThumbnail;
+        node.thumbnailUri = resourceThumbnail;
+        if (node.size && node.size.width <= 40 && node.size.height <= 60) {
+          node.size.width = 77;
+          node.size.height = 100;
+          width = node.size.width;
+          height = node.size.height;
+        }
+      }
+    }
     resourceUri = (node.resource && node.resource.uri) || '';
 
     if (width < 0) {
