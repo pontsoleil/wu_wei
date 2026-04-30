@@ -13,9 +13,9 @@
 == 基本方針
 
 * ブラウザから `/wu_wei2/data/...` へ直接アクセスした場合は、すべて `403 Forbidden` とする。
-* 実ファイルの配信は nginx の `internal` location と `X-Accel-Redirect` を使う。
+* 実ファイルの配信は WuWei のロード CGI が担当し、認証・パス検証後にファイル本体をストリームする。
 * WuWei の Python CGI または Bash CGI が、ログイン状態、ユーザー UUID、対象ファイルの参照可否を確認する。
-* CGI が許可した場合だけ、nginx に内部パスを渡してファイルを配信させる。
+* CGI が許可した場合だけ、`Content-Type`、`Content-Disposition`、`Content-Length` とファイル本文を返す。
 * Note JSON / Resource JSON には OS 絶対パスや公開 URL を保存しない。
 * Note JSON / Resource JSON には `area` と日付配下の相対 `path` を保存する。
 * ローカル Python CGI では、通常はログイン不要で `guest` 利用者として操作できる。
@@ -116,25 +116,6 @@ location ^~ /wu_wei2/data/ {
 }
 ----
 
-=== 内部配信用 location
-
-CGI から `X-Accel-Redirect` で指定された場合だけ、nginx が実ファイルを返す。
-
-[source,nginx]
-----
-location ^~ /_wuwei2_data/ {
-    internal;
-    alias /ebs/www/sambuichi.jp/public_html/wu_wei2/data/;
-}
-----
-
-`internal` を指定した location は、ブラウザから直接アクセスできない。例えば次の URL は nginx に拒否される。
-
-[source,text]
-----
-https://www.sambuichi.jp/_wuwei2_data/{user_uuid}/upload/2026/04/29/_uploaded_uuid/document.pdf
-----
-
 === CGI location
 
 CGI は従来通り FastCGI 経由で実行する。
@@ -191,7 +172,7 @@ sudo systemctl reload nginx
 4. 対象ファイルが現在ユーザーの `wu_wei2/data/{user_uuid}/...` 配下にあることを確認する。
 5. 必要に応じて、対象ノートまたは対象リソースから参照されているファイルか確認する。
 6. MIME type を判定する。
-7. `X-Accel-Redirect` で nginx 内部パスを返す。
+7. `Content-Type` と `Content-Disposition: inline` を返し、ファイル本体をストリームする。
 
 === Python CGI の実装方式
 
@@ -215,18 +196,20 @@ def resolve_data_file(data_root, user_id, area, path):
         raise PermissionError("outside data root")
     return target
 
-def send_accel(user_id, area, path, mime_type):
+def stream_file(target, mime_type):
     print(f"Content-Type: {mime_type}")
-    print(f"X-Accel-Redirect: /_wuwei2_data/{user_id}/{area}/{path}")
+    print("Content-Disposition: inline")
     print()
+    with open(target, "rb") as f:
+        sys.stdout.buffer.write(f.read())
 ----
 
-公開 Linux サーバーで Python CGI を使う場合は、ファイル本体を `print()` で返さない。大きな PDF や動画を Python 経由で読み込むとメモリ負荷が高くなるため、実体配信は nginx に任せる。
-ローカル PC 上の Python CGI は本人の開発・個人利用環境を前提とするため、認証確認後にファイル本体を直接返してよい。
+Python CGI はローカル PC 上の本人利用を主対象とし、認証確認後にファイル本体を直接返す。
+大きなファイルは一定サイズの chunk に分けて返す。
 
 === Bash CGI の実装方式
 
-Bash 版でも同じ責務を持つ。`area` と `path` を検証し、許可された場合だけ `X-Accel-Redirect` を返す。
+Bash 版でも同じ責務を持つ。`area` と `path` を検証し、許可された場合だけ対象ファイルを直接ストリームする。
 
 [source,bash]
 ----
@@ -237,19 +220,17 @@ validate_relative_path() {
   return 0
 }
 
-send_accel() {
-  user_id="$1"
-  area="$2"
-  path="$3"
-  mime_type="$4"
-
+stream_file() {
+  target="$1"
+  mime_type="$2"
   printf 'Content-Type: %s\r\n' "$mime_type"
-  printf 'X-Accel-Redirect: /_wuwei2_data/%s/%s/%s\r\n' "$user_id" "$area" "$path"
+  printf 'Content-Disposition: inline\r\n'
   printf '\r\n'
+  cat "$target"
 }
 ----
 
-Bash CGI もファイル本体を `cat` で返さない。認証と `X-Accel-Redirect` の発行だけを担当する。
+Bash CGI は Python CGI と同じく、認証、対象ユーザー、`area + path`、ファイル存在確認、MIME 判定を行ったうえで `cat` によりファイル本文を返す。
 
 == JavaScript 側の実装方式
 
@@ -312,7 +293,7 @@ preview:
 
 == セキュリティ上の注意
 
-* `X-Accel-Redirect` に渡すパスは、必ず CGI 側で検証する。
+* CGI で配信するパスは、必ず CGI 側で検証する。
 * ユーザー UUID はクエリ文字列ではなく、ログインセッションから決定する。
 * `path` にユーザー UUID を含めない。
 * `..`、絶対パス、Windows パス区切り、空セグメントを拒否する。
@@ -322,13 +303,13 @@ preview:
 
 == ローカル Apache 環境での扱い
 
-ローカル環境では nginx の `internal` は使えない。開発確認では、次のいずれかで代替する。
+ローカル環境では nginx の `internal` は使えない。開発確認では、次の方式で扱う。
 
 * Python CGI が認証確認後にファイル本体を返す。
 * Apache の設定で `data/` を直接公開せず、CGI 経由に統一する。
 * 開発用に直接参照を許可する場合でも、本番とは異なることを明示する。
 
-ローカル Python CGI は、利用者本人の PC 上で実行する開発・個人利用環境を前提とする。このため、Linux サーバーのように複数利用者や外部アクセスを想定した `nginx internal` による強制的な非公開配信は必須ではない。
+ローカル Python CGI は、利用者本人の PC 上で実行する開発・個人利用環境を前提とする。このため、Linux サーバーのように複数利用者や外部アクセスを想定したサーバー側の強制的な非公開配信は必須ではない。
 
 ローカル環境では、通常はログイン不要で `guest` 利用者として操作できる。
 未ログイン時の保存先は固定の `wu_wei2/data/guest/` とする。
@@ -338,8 +319,8 @@ preview:
 
 ただし、ローカル Apache を LAN や外部ネットワークに公開する場合は本番サーバーと同等のリスクがある。その場合は `data/` の直接公開を避け、CGI 経由の配信に統一する。
 
-本番 Linux サーバーでは、ファイル本体の配信は nginx の `X-Accel-Redirect` に統一する。
-また、Bash CGI は Cookie の `wuwei_user_id` でログインを確認し、非ログイン時は `ERROR NOT LOGGED IN` で停止する。
+本番 Linux サーバーでは、`data/` の直接公開を禁止し、ファイル本体の配信は Bash CGI 経由に統一する。
+Bash CGI は Cookie の `wuwei_user_id` でログインを確認し、非ログイン時は `ERROR NOT LOGGED IN` で停止する。
 
 == 動作確認
 
@@ -361,10 +342,10 @@ curl -i \
   'https://www.sambuichi.jp/wu_wei2/server/load-file.cgi?area=upload&path=2026/04/29/{uploaded_uuid}/file.pdf'
 ----
 
-期待結果は `200 OK`。レスポンス本文は nginx が返す実ファイルになる。
+期待結果は `200 OK`。レスポンス本文は `load-file.cgi` が返す実ファイルになる。
 
 == まとめ
 
-`data/` を直接公開せず、WuWei CGI と nginx `internal` 配信に分離することで、URL を知っているだけではファイルを取得できない構成にできる。
+`data/` を直接公開せず、WuWei CGI 経由の配信に統一することで、URL を知っているだけではファイルを取得できない構成にできる。
 
-この方式では、Python/Bash CGI は認証・認可・パス検証を担当し、nginx は大きなファイルの高速・安定配信を担当する。JSON の保存形式は `area + path` に統一し、OS 絶対パスや公開 URL を永続化しない。
+この方式では、Python/Bash CGI は認証・認可・パス検証・ファイル本文の配信を担当する。JSON の保存形式は `area + path` に統一し、OS 絶対パスや公開 URL を永続化しない。

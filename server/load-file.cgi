@@ -1,7 +1,7 @@
 #!/bin/sh
 # load-file.cgi - protected file endpoint for WuWei managed data.
-# nginx should deny direct /wu_wei2/data/ access and expose /_wuwei2_data/
-# as an internal location. This CGI returns X-Accel-Redirect.
+# Keep this behavior aligned with cgi-bin/load-file.py: validate the request,
+# resolve the managed file, and stream the file body from the CGI process.
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "${SCRIPT_FILENAME:-$0}")" && pwd) || exit 1
 cd "$SCRIPT_DIR" || exit 1
@@ -92,6 +92,11 @@ mime_for_path() {
   esac
 }
 
+header_filename() {
+  # Avoid quotes, CR/LF, and backslashes in the response header filename.
+  printf '%s' "$1" | tr '\\' '/' | sed 's#.*/##; s/["\r\n]//g'
+}
+
 read_params
 session_user_id=$(is-login || true)
 req_user_id=$(nameread user_id "$CGIVARS" | strip_quotes || true)
@@ -107,9 +112,15 @@ rel=$(safe_rel "$path" || true)
 [ -n "$rel" ] || text_response 'ERROR INVALID PATH' '400 Bad Request'
 base=$(resolve_env_path "$area" "$user_id" || true)
 [ -n "$base" ] || text_response 'ERROR AREA NOT DEFINED' '404 Not Found'
-[ -f "$base/$rel" ] || text_response 'ERROR FILE NOT FOUND' '404 Not Found'
+target="$base/$rel"
+[ -f "$target" ] || text_response 'ERROR FILE NOT FOUND' '404 Not Found'
 
 printf 'Content-Type: %s\r\n' "$(mime_for_path "$rel")"
 printf 'Cache-Control: no-store\r\n'
-printf 'X-Accel-Redirect: /_wuwei2_data/%s/%s/%s\r\n' "$user_id" "$area" "$rel"
+printf 'Content-Disposition: inline; filename="%s"\r\n' "$(header_filename "$rel")"
+if command -v wc >/dev/null 2>&1; then
+  bytes=$(wc -c < "$target" | tr -d ' ')
+  [ -n "$bytes" ] && printf 'Content-Length: %s\r\n' "$bytes"
+fi
 printf '\r\n'
+cat "$target"

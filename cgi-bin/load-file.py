@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 """Serve managed WuWei files through CGI instead of public data/ URLs.
 
-Local Python CGI runs on the user's PC, so it can stream the file directly.
-The Linux shell CGI uses nginx X-Accel-Redirect for the same logical endpoint.
+Local Python CGI and the Linux shell CGI both stream the file after
+validating the user, area, and relative path.
 """
 
 from __future__ import annotations
