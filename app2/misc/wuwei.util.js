@@ -116,10 +116,12 @@ wuwei.util = (function () {
     getCurrentUserId,
     toStorageRelativePath,
     toPublicResourceUri,
-    getResourceFile,
-    getResourceFileUri,
-    getResourcePreviewUri,
-    getResourceOriginalUri,
+      getResourceFile,
+      getResourceFilePath,
+      getResourceFileUri,
+      getResourcePreviewUri,
+      getResourceOriginalPath,
+      getResourceOriginalUri,
     getResourceThumbnailUri,
     getThumbnailUri,
     getResource,
@@ -3749,15 +3751,24 @@ wuwei.util = (function () {
     var text = String(uriOrPath || '').replace(/\\/g, '/').trim();
     var uid = String(userId || getCurrentUserId() || '').trim();
     var areaName = String(area || '').replace(/^\/+|\/+$/g, '');
-    var idx, m;
+    var idx, m, parsedUrl, queryPath, queryArea;
 
     if (!text || /^(?:https?:)?\/\//i.test(text) && !/^https?:\/\/(?:localhost|127\.0\.0\.1|[^/]+)\/wu_wei2\//i.test(text)) {
       return text;
     }
 
     try {
-      if (/^https?:\/\//i.test(text)) {
-        text = (new URL(text, window.location.href)).pathname;
+      if (/^https?:\/\//i.test(text) || text.indexOf('?') >= 0) {
+        parsedUrl = new URL(text, window.location.href);
+        queryPath = parsedUrl.searchParams.get('path');
+        queryArea = parsedUrl.searchParams.get('area');
+        if (queryPath) {
+          if (!areaName && queryArea) {
+            areaName = queryArea;
+          }
+          return String(queryPath || '').replace(/\\/g, '/').replace(/^\/+/, '');
+        }
+        text = parsedUrl.pathname;
       }
     }
     catch (e) { /* keep the raw value */ }
@@ -3793,31 +3804,48 @@ wuwei.util = (function () {
     var areaName = String(area || '').replace(/^\/+|\/+$/g, '');
     var uid = String(userId || getCurrentUserId() || '').trim();
     var path = String(relativePath || '').replace(/\\/g, '/').trim();
+    var m, query;
 
     if (!path || /^https?:\/\//i.test(path)) {
       return path;
     }
-    if (path.indexOf('/wu_wei2/') >= 0) {
-      return path.replace(/^.*\/wu_wei2\//, '');
+    if (path.indexOf('/wu_wei2/data/') >= 0) {
+      path = path.replace(/^.*\/wu_wei2\/data\//, '');
+    } else if (path.indexOf('/wu_wei2/') >= 0) {
+      path = path.replace(/^.*\/wu_wei2\//, '');
     }
     path = path.replace(/^\/+/, '');
+    if (path.indexOf('data/') === 0) {
+      path = path.slice('data/'.length);
+    }
+    if (uid && path.indexOf(uid + '/') === 0) {
+      path = path.slice(uid.length + 1);
+    }
     if (!areaName) {
-      if (/^(upload|resource|note|thumbnail|content)\//.test(path)) {
+      m = path.match(/^(upload|resource|note|thumbnail|content)\/(.+)$/);
+      if (m) {
+        areaName = m[1];
+        path = m[2];
+      } else {
         return path;
       }
-      return path;
     }
     if (path.indexOf(areaName + '/') === 0) {
       path = path.slice(areaName.length + 1);
-      if (uid && path.indexOf(uid + '/') !== 0) {
-        return areaName + '/' + uid + '/' + path;
-      }
-      return areaName + '/' + path;
     }
     if (uid && path.indexOf(uid + '/') === 0) {
-      return areaName + '/' + path;
+      path = path.slice(uid.length + 1);
     }
-    return areaName + '/' + (uid ? uid + '/' : '') + path;
+    path = toStorageRelativePath(path, uid, areaName);
+    if (!path || path.indexOf('..') >= 0) {
+      return '';
+    }
+    query = '?area=' + encodeURIComponent(areaName) +
+      '&path=' + encodeURIComponent(path);
+    if (uid) {
+      query += '&user_id=' + encodeURIComponent(uid);
+    }
+    return getServerUrl('load-file') + query;
   };
 
   getResourceFile = function (resource, role) {
@@ -3835,15 +3863,45 @@ wuwei.util = (function () {
     return null;
   };
 
+  function chooseResourceFilePathValue(file) {
+    var candidates = [
+      file && file.path,
+      file && file.sourcePath,
+      file && file.uri,
+      file && file.url
+    ];
+    var fallback = '';
+    var text, i;
+
+    for (i = 0; i < candidates.length; i += 1) {
+      text = String(candidates[i] || '').replace(/\\/g, '/').trim();
+      if (!text) {
+        continue;
+      }
+      if (!fallback) {
+        fallback = text;
+      }
+      if (/^(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i.test(text) ||
+        /^\d{4}\/\d{2}(?:\/\d{2})?\//.test(text) ||
+        /\/wu_wei2\/data\//.test(text) ||
+        /\/wu_wei2\//.test(text) ||
+        /(?:^|\/)(upload|resource|note|thumbnail|content)\//.test(text)) {
+        return text;
+      }
+    }
+
+    return fallback;
+  }
+
   getResourceFileUri = function (resource, role, node) {
     var file = getResourceFile(resource, role);
-    var area, path, raw, uid;
+    var area, path, raw, uid, audit, rights;
 
     if (!file) {
       return '';
     }
 
-    raw = String(file.path || file.sourcePath || '').trim();
+    raw = chooseResourceFilePathValue(file);
     if (!raw) {
       return '';
     }
@@ -3853,11 +3911,53 @@ wuwei.util = (function () {
 
     area = String(file.area || '').trim();
     if (!area) {
-      area = (String(role || '').toLowerCase() === 'original') ? 'upload' : 'resource';
+      area = (String(role || '').toLowerCase() === 'original') ? 'upload' : 'note';
     }
-    uid = String((node && node.audit && node.audit.createdBy) || getCurrentUserId() || '').trim();
+    audit = (resource && resource.audit && 'object' === typeof resource.audit) ? resource.audit : {};
+    rights = (resource && resource.rights && 'object' === typeof resource.rights) ? resource.rights : {};
+    uid = String(
+      audit.owner ||
+      audit.createdBy ||
+      rights.owner ||
+      (node && node.audit && (node.audit.owner || node.audit.createdBy)) ||
+      getCurrentUserId() ||
+      ''
+    ).trim();
     path = toStorageRelativePath(raw, uid, area);
     return toPublicResourceUri(area, path, uid);
+  };
+
+  getResourceFilePath = function (resource, role, node) {
+    var file = getResourceFile(resource, role);
+    var area, raw, uid, audit, rights;
+
+    if (!file) {
+      return '';
+    }
+
+    raw = chooseResourceFilePathValue(file);
+    if (!raw) {
+      return '';
+    }
+    if (/^https?:\/\//i.test(raw) && raw.indexOf('/wu_wei2/') < 0) {
+      return raw;
+    }
+
+    area = String(file.area || '').trim();
+    if (!area) {
+      area = (String(role || '').toLowerCase() === 'original') ? 'upload' : 'note';
+    }
+    audit = (resource && resource.audit && 'object' === typeof resource.audit) ? resource.audit : {};
+    rights = (resource && resource.rights && 'object' === typeof resource.rights) ? resource.rights : {};
+    uid = String(
+      audit.owner ||
+      audit.createdBy ||
+      rights.owner ||
+      (node && node.audit && (node.audit.owner || node.audit.createdBy)) ||
+      getCurrentUserId() ||
+      ''
+    ).trim();
+    return toStorageRelativePath(raw, uid, area);
   };
 
   getResourcePreviewUri = function (node) {
@@ -3865,13 +3965,27 @@ wuwei.util = (function () {
     var viewer = (resource && resource.viewer && 'object' === typeof resource.viewer) ? resource.viewer : {};
     var embed = (viewer.embed && 'object' === typeof viewer.embed) ? viewer.embed : {};
     var snapshotSources = (resource && resource.snapshotSources && 'object' === typeof resource.snapshotSources) ? resource.snapshotSources : {};
+    var audit = (resource && resource.audit && 'object' === typeof resource.audit) ? resource.audit : {};
+    var rights = (resource && resource.rights && 'object' === typeof resource.rights) ? resource.rights : {};
+    var uid = String(
+      audit.owner ||
+      audit.createdBy ||
+      rights.owner ||
+      (node && node.audit && (node.audit.owner || node.audit.createdBy)) ||
+      getCurrentUserId() ||
+      ''
+    ).trim();
     function localUri(value, area) {
       var text = String(value || '').replace(/\\/g, '/').trim();
       if (!text || /^https?:\/\//i.test(text) && text.indexOf('/wu_wei2/') < 0) {
         return text;
       }
+      if (/^(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i.test(text) ||
+        /^\d{4}\/\d{2}\/\d{2}\//.test(text)) {
+        return toPublicResourceUri(area, toStorageRelativePath(text, uid, area), uid);
+      }
       if (text.indexOf(area + '/') === 0 || text.indexOf('/' + area + '/') >= 0) {
-        return toPublicResourceUri(area, toStorageRelativePath(text, null, area));
+        return toPublicResourceUri(area, toStorageRelativePath(text, uid, area), uid);
       }
       return text;
     }
@@ -3890,13 +4004,27 @@ wuwei.util = (function () {
   getResourceOriginalUri = function (node) {
     var resource = getResource(node);
     var snapshotSources = (resource && resource.snapshotSources && 'object' === typeof resource.snapshotSources) ? resource.snapshotSources : {};
+    var audit = (resource && resource.audit && 'object' === typeof resource.audit) ? resource.audit : {};
+    var rights = (resource && resource.rights && 'object' === typeof resource.rights) ? resource.rights : {};
+    var uid = String(
+      audit.owner ||
+      audit.createdBy ||
+      rights.owner ||
+      (node && node.audit && (node.audit.owner || node.audit.createdBy)) ||
+      getCurrentUserId() ||
+      ''
+    ).trim();
     function localUri(value) {
       var text = String(value || '').replace(/\\/g, '/').trim();
       if (!text || /^https?:\/\//i.test(text) && text.indexOf('/wu_wei2/') < 0) {
         return text;
       }
+      if (/^(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i.test(text) ||
+        /^\d{4}\/\d{2}\/\d{2}\//.test(text)) {
+        return toPublicResourceUri('upload', toStorageRelativePath(text, uid, 'upload'), uid);
+      }
       if (text.indexOf('upload/') === 0 || text.indexOf('/upload/') >= 0) {
-        return toPublicResourceUri('upload', toStorageRelativePath(text, null, 'upload'));
+        return toPublicResourceUri('upload', toStorageRelativePath(text, uid, 'upload'), uid);
       }
       return text;
     }
@@ -3909,17 +4037,66 @@ wuwei.util = (function () {
     );
   };
 
+  getResourceOriginalPath = function (node) {
+    var resource = getResource(node);
+    var path = getResourceFilePath(resource, 'original', node);
+    var text;
+    var audit = (resource && resource.audit && 'object' === typeof resource.audit) ? resource.audit : {};
+    var rights = (resource && resource.rights && 'object' === typeof resource.rights) ? resource.rights : {};
+    var uid = String(
+      audit.owner ||
+      audit.createdBy ||
+      rights.owner ||
+      (node && node.audit && (node.audit.owner || node.audit.createdBy)) ||
+      getCurrentUserId() ||
+      ''
+    ).trim();
+    if (path) {
+      return path;
+    }
+    text = String((resource && (resource.canonicalUri || resource.uri)) || '').replace(/\\/g, '/').trim();
+    if (!text || /^https?:\/\//i.test(text) && text.indexOf('/wu_wei2/') < 0) {
+      return text;
+    }
+    return toStorageRelativePath(text, uid, 'upload');
+  };
+
   getResourceThumbnailUri = function (node) {
     var resource = getResource(node);
     var viewer = (resource && resource.viewer && 'object' === typeof resource.viewer) ? resource.viewer : {};
     var embed = (viewer.embed && 'object' === typeof viewer.embed) ? viewer.embed : {};
     var snapshotSources = (resource && resource.snapshotSources && 'object' === typeof resource.snapshotSources) ? resource.snapshotSources : {};
+    var audit = (resource && resource.audit && 'object' === typeof resource.audit) ? resource.audit : {};
+    var rights = (resource && resource.rights && 'object' === typeof resource.rights) ? resource.rights : {};
+    var uid = String(
+      audit.owner ||
+      audit.createdBy ||
+      rights.owner ||
+      (node && node.audit && (node.audit.owner || node.audit.createdBy)) ||
+      getCurrentUserId() ||
+      ''
+    ).trim();
+    function localUri(value) {
+      var text = String(value || '').replace(/\\/g, '/').trim();
+      var area;
+      if (!text || /^https?:\/\//i.test(text) && text.indexOf('/wu_wei2/') < 0) {
+        return text;
+      }
+      area = (text.indexOf('note/') === 0 || text.indexOf('/note/') >= 0) ? 'note' : 'resource';
+      if (/^(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i.test(text) ||
+        /^\d{4}\/\d{2}\/\d{2}\//.test(text) ||
+        text.indexOf(area + '/') === 0 ||
+        text.indexOf('/' + area + '/') >= 0) {
+        return toPublicResourceUri(area, toStorageRelativePath(text, uid, area), uid);
+      }
+      return text;
+    }
     return String(
       getResourceFileUri(resource, 'thumbnail', node) ||
-      (node && node.thumbnailUri) ||
-      viewer.thumbnailUri ||
-      embed.thumbnailUri ||
-      snapshotSources.thumbnailUri ||
+      localUri(node && node.thumbnailUri) ||
+      localUri(viewer.thumbnailUri) ||
+      localUri(embed.thumbnailUri) ||
+      localUri(snapshotSources.thumbnailUri) ||
       ''
     );
   };
@@ -4064,10 +4241,12 @@ wuwei.util = (function () {
     getCurrentUserId: getCurrentUserId,
     toStorageRelativePath: toStorageRelativePath,
     toPublicResourceUri: toPublicResourceUri,
-    getResourceFile: getResourceFile,
-    getResourceFileUri: getResourceFileUri,
-    getResourcePreviewUri: getResourcePreviewUri,
-    getResourceOriginalUri: getResourceOriginalUri,
+      getResourceFile: getResourceFile,
+      getResourceFilePath: getResourceFilePath,
+      getResourceFileUri: getResourceFileUri,
+      getResourcePreviewUri: getResourcePreviewUri,
+      getResourceOriginalPath: getResourceOriginalPath,
+      getResourceOriginalUri: getResourceOriginalUri,
     getResourceThumbnailUri: getResourceThumbnailUri,
     getThumbnailUri: getThumbnailUri,
     getResource: getResource,
