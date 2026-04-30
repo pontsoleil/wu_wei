@@ -247,6 +247,7 @@ contenttype="$(
 fullname="$(mime-read fullname "$Tmp-cgivars" 2>/dev/null || true)"
 note_id="$(mime-read note_id "$Tmp-cgivars" 2>/dev/null || true)"
 note_id="$(trim "$(printf '%s' "$note_id" | tr -d '\r\n')")"
+[ -n "$note_id" ] || note_id="new_note"
 case "$note_id" in
   new_note|_[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]-*)
     ;;
@@ -304,6 +305,9 @@ resource_uri=""
 thumb_file="$resource_dir/thumbnail.jpg"
 thumb_area="resource"
 thumb_rel_root="$resource_root"
+if [ -z "$note_root" ]; then
+  note_root="$(cd "$upload_root/.." && pwd)/note"
+fi
 if [ "$note_id" = "new_note" ] && [ -n "$note_root" ]; then
   note_dir="$note_root/$year/$month/$day/$note_id"
   note_resource_dir="$note_root/$year/$month/$day/$note_id/resource/$uuid"

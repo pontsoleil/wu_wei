@@ -579,8 +579,8 @@ def main():
     upload_root = Path(upload_root_s)
     resource_root = Path(resource_root_s)
     thumbnail_root = Path(thumbnail_root_s)
-    note_root = Path(note_root_s) if note_root_s else None
-    note_id = safe_note_id(form.getfirst("note_id", ""))
+    note_root = Path(note_root_s) if note_root_s else upload_root.parent / "note"
+    note_id = safe_note_id(form.getfirst("note_id", "") or "new_note")
     pdf_preview_uri = None
     pdf_preview_url = None
 
