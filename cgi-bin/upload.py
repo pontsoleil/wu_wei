@@ -347,9 +347,8 @@ def note_relative_path(note_root: Path, path: Path) -> str:
 
 
 def safe_note_id(value: str) -> str:
-    value = trim(value)
-    if value == "new_note":
-        return value
+    # Uploads made before the first explicit note save belong to the fixed draft
+    # slot. Ignore stale browser-side UUIDs; save-note promotes new_note later.
     return "new_note"
 
 

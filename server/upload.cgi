@@ -247,15 +247,9 @@ contenttype="$(
 fullname="$(mime-read fullname "$Tmp-cgivars" 2>/dev/null || true)"
 note_id="$(mime-read note_id "$Tmp-cgivars" 2>/dev/null || true)"
 note_id="$(trim "$(printf '%s' "$note_id" | tr -d '\r\n')")"
-[ -n "$note_id" ] || note_id="new_note"
-case "$note_id" in
-  new_note|_[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]-*)
-    ;;
-  *)
-    note_id=""
-    ;;
-esac
-[ -n "$note_id" ] || note_id="new_note"
+# Uploads made before the first explicit note save belong to the fixed draft slot.
+# Do not trust a stale browser-side UUID here; save-note promotes new_note later.
+note_id="new_note"
 
 upload_file_uuid=""
 for d in "$file_dir"/_*; do
