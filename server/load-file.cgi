@@ -108,6 +108,16 @@ header_filename() {
   printf '%s' "$1" | tr '\\' '/' | sed 's#.*/##; s/["\r\n]//g'
 }
 
+url_path_escape() {
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe="/._-~"))' "$1"
+  elif command -v python >/dev/null 2>&1; then
+    python -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe="/._-~"))' "$1"
+  else
+    printf '%s' "$1" | sed 's/%/%25/g; s/ /%20/g'
+  fi
+}
+
 read_params
 session_user_id=$(is-login || true)
 req_user_id=$(nameread user_id "$CGIVARS" | strip_quotes || true)
@@ -140,9 +150,5 @@ fi
 printf 'Content-Type: %s\r\n' "$(mime_for_path "$rel")"
 printf 'Cache-Control: no-store\r\n'
 printf 'Content-Disposition: inline; filename="%s"\r\n' "$(header_filename "$rel")"
-if command -v wc >/dev/null 2>&1; then
-  bytes=$(wc -c < "$target" | tr -d ' ')
-  [ -n "$bytes" ] && printf 'Content-Length: %s\r\n' "$bytes"
-fi
+printf 'X-Accel-Redirect: %s\r\n' "$(url_path_escape "/_wuwei2_data/$user_id/$area/$rel")"
 printf '\r\n'
-cat "$target"

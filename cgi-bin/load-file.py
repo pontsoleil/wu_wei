@@ -11,6 +11,7 @@ from __future__ import annotations
 import mimetypes
 import sys
 from pathlib import Path
+from urllib.parse import quote
 
 from cgi_common import (
     environment_path,
@@ -82,15 +83,12 @@ def main() -> None:
     mime = mimetypes.guess_type(str(target))[0] or "application/octet-stream"
     print(f"Content-Type: {mime}")
     print("Cache-Control: no-store")
+    print(
+        "X-Accel-Redirect: "
+        + quote(f"/_wuwei2_data/{user_id}/{area}/{rel}", safe="/._-~")
+    )
     print()
     sys.stdout.flush()
-    with target.open("rb") as f:
-        while True:
-            chunk = f.read(1024 * 256)
-            if not chunk:
-                break
-            sys.stdout.buffer.write(chunk)
-    sys.stdout.buffer.flush()
 
 
 if __name__ == "__main__":
