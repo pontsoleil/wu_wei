@@ -2068,6 +2068,20 @@ wuwei.menu = wuwei.menu || {};
     else if ('info' === method) {
       node = resolveContextTargetRecord(state.hoveredNode);
       if (!node || !node.id) { return; }
+      if (isLocalPythonOfficeUpload([node])) {
+        const href = getDownloadUrl(node);
+        if (href) {
+          const a = document.createElement('a');
+          a.href = href;
+          a.rel = 'noopener';
+          a.setAttribute('download', getDownloadFilename(node, href));
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        }
+        closeContextMenu();
+        return;
+      }
       wuwei.info.open(node);
       closeContextMenu();
       return;

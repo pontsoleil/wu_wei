@@ -203,7 +203,39 @@ wuwei.info = wuwei.info || {};
   }
 
   function isUploadedNode(node) {
-    return !!(node && 'upload' === node.option);
+    var resource, origin, storage, files, uriText, kindText;
+    if (!node) {
+      return false;
+    }
+    if ('upload' === node.option) {
+      return true;
+    }
+    resource = util.getResource(node);
+    if (!resource || 'object' !== typeof resource) {
+      return false;
+    }
+    origin = (resource.origin && 'object' === typeof resource.origin) ? resource.origin : {};
+    storage = (resource.storage && 'object' === typeof resource.storage) ? resource.storage : {};
+    files = Array.isArray(storage.files) ? storage.files : [];
+    uriText = [
+      resource.uri,
+      resource.canonicalUri,
+      resource.previewUri,
+      node.thumbnailUri
+    ].join(' ').replace(/\\/g, '/');
+    kindText = [
+      origin.type,
+      origin.subtype,
+      resource.kind,
+      resource.media && resource.media.kind
+    ].join(' ').toLowerCase();
+    return (
+      kindText.indexOf('upload') >= 0 ||
+      files.some(function (file) {
+        return file && String(file.area || '').toLowerCase() === 'upload';
+      }) ||
+      /(?:^|\/)upload\//.test(uriText)
+    );
   }
 
   function hasGenericPreview(node) {
@@ -414,7 +446,17 @@ wuwei.info = wuwei.info || {};
   }
 
   function toOfficeViewerUrl(uri, base) {
-    return 'https://view.officeapps.live.com/op/view.aspx?src=https://www.wuwei.space/' + base + uri;
+    var absoluteUri = /^https?:\/\//i.test(uri)
+      ? uri
+      : window.location.origin + '/' + String(base || '') + String(uri || '').replace(/^\/+/, '');
+    if (wuwei.util && typeof wuwei.util.isLocalHost === 'function' && wuwei.util.isLocalHost()) {
+      return absoluteUri;
+    }
+    return 'https://view.officeapps.live.com/op/embed.aspx?src=' + encodeURIComponent(absoluteUri);
+  }
+
+  function isOfficeUri(uri) {
+    return /\.(doc|docx|xls|xlsx|ppt|pptx)$/i.test(String(uri || '').split('#')[0].split('?')[0]);
   }
 
   function normalizeOpenUri(uri) {
@@ -423,6 +465,10 @@ wuwei.info = wuwei.info || {};
 
     if (!uri) {
       return '';
+    }
+
+    if (/(?:^|\/)(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i.test(uri)) {
+      return uri;
     }
 
     if (!uri.match(/wikipedia/)) {
@@ -438,9 +484,7 @@ wuwei.info = wuwei.info || {};
       uri = '/' + base + uri;
     }
     else if (
-      uri.match(/.*\.docx$/) ||
-      uri.match(/.*\.pptx$/) ||
-      uri.match(/.*\.xlsx$/)
+      isOfficeUri(uri)
     ) {
       uri = toOfficeViewerUrl(uri, base);
     }
@@ -514,9 +558,7 @@ wuwei.info = wuwei.info || {};
     }
 
     if (
-      uri.match(/.*\.docx$/) ||
-      uri.match(/.*\.pptx$/) ||
-      uri.match(/.*\.xlsx$/)
+      isOfficeUri(uri)
     ) {
       uri = toOfficeViewerUrl(uri, base);
     }

@@ -19,8 +19,7 @@ wuwei.info.uploaded.markup = ( function () {
       common = wuwei.common,
       lang = common.nls.LANG,
       value = node.value,
-      creativeCommons = common.nls.creativeCommons[lang],
-      base_url = location.href.substr(0, location.href.lastIndexOf('/'));
+      creativeCommons = common.nls.creativeCommons[lang];
     let uri = resolveInfoUri(node);
     let label = (node && node.label) || "";
     let size;
@@ -32,17 +31,16 @@ wuwei.info.uploaded.markup = ( function () {
     } else {
       width = null; height = null;
     }
-    if ('upload' !== node.option) {
-      return '';
-    }
-    if (uri) {
-      uri = uri.toLowerCase().indexOf('pdf') > 0 && uri.toLowerCase().indexOf('http') < 0
-      ? `${base_url}/${uri}`
-      : uri.match(/upload\/[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}\/[0-9]{4}\/[0-9]{2}\/.*.docx/) ||
-        uri.match(/upload\/[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}\/[0-9]{4}\/[0-9]{2}\/.*.pptx/) ||
-        uri.match(/upload\/[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}\/[0-9]{4}\/[0-9]{2}\/.*.xlsx/)
-        ? 'https://view.officeapps.live.com/op/view.aspx?src=https%3A%2F%2Fwww.wuwei.space%2Fwu_wei2%2F' + encodeURIComponent(uri)
-        : uri;
+    uri = resolveFrameUri(node, uri);
+    // Info pane renders the resource body. Stored values may be plain
+    // YYYY/MM/DD/... paths, but iframe/video/img must receive a load-file URL.
+    if (uri && wuwei.util && typeof wuwei.util.toPublicResourceUri === 'function' &&
+      !/^https?:\/\//i.test(uri) && !isLoadFileUri(uri)) {
+      var area = inferStorageArea(uri, 'upload');
+      var ownerId = getResourceOwnerId(node);
+      uri = wuwei.util.toPublicResourceUri(area,
+        wuwei.util.toStorageRelativePath ? wuwei.util.toStorageRelativePath(uri, ownerId, area) : uri,
+        ownerId);
     }
     var html = `
 <form id="infoform" class="form-group info">
@@ -92,9 +90,21 @@ wuwei.info.uploaded.markup = ( function () {
 
   function resolveInfoUri(node) {
     var resource = (node && node.resource && 'object' === typeof node.resource) ? node.resource : {};
+    var media = (resource.media && 'object' === typeof resource.media) ? resource.media : {};
+    var mimeType = String(resource.mimeType || media.mimeType || '').toLowerCase();
     var viewer = (resource.viewer && 'object' === typeof resource.viewer) ? resource.viewer : {};
     var embed = (viewer.embed && 'object' === typeof viewer.embed) ? viewer.embed : {};
     var snapshotSources = (resource.snapshotSources && 'object' === typeof resource.snapshotSources) ? resource.snapshotSources : {};
+    if (isOfficeResource(resource, mimeType)) {
+      return resolveOfficeInfoUri(node, resource, viewer, embed, snapshotSources);
+    }
+    if (wuwei.util && typeof wuwei.util.getResourceOriginalUri === 'function' &&
+      (mimeType.indexOf('application/pdf') === 0 ||
+        mimeType.indexOf('image/') === 0 ||
+        mimeType.indexOf('video/') === 0 ||
+        mimeType.indexOf('audio/') === 0)) {
+      return wuwei.util.getResourceOriginalUri(node) || '';
+    }
     if (wuwei.util && typeof wuwei.util.getResourceUri === 'function') {
       return wuwei.util.getResourceUri(node) || '';
     }
@@ -106,6 +116,129 @@ wuwei.info.uploaded.markup = ( function () {
       snapshotSources.originalUri ||
       ''
     );
+  }
+
+  function resolveFrameUri(node, uri) {
+    var resource = (node && node.resource && 'object' === typeof node.resource) ? node.resource : {};
+    var media = (resource.media && 'object' === typeof resource.media) ? resource.media : {};
+    var mimeType = String(resource.mimeType || media.mimeType || '').toLowerCase();
+    if (isOfficeResource(resource, mimeType)) {
+      return uri;
+    }
+    return uri;
+  }
+
+  function resolveOfficeInfoUri(node, resource, viewer, embed, snapshotSources) {
+    var previewUri = getOfficePreviewUri(node, resource, viewer, embed, snapshotSources);
+    var originalUri;
+
+    if (previewUri) {
+      return previewUri;
+    }
+    originalUri = wuwei.util && typeof wuwei.util.getResourceOriginalUri === 'function'
+      ? wuwei.util.getResourceOriginalUri(node)
+      : (resource.canonicalUri || resource.uri || snapshotSources.originalUri || '');
+    if (canUseOfficeViewer(originalUri)) {
+      return 'https://view.officeapps.live.com/op/embed.aspx?src=' + encodeURIComponent(originalUri);
+    }
+    return originalUri || '';
+  }
+
+  function getOfficePreviewUri(node, resource, viewer, embed, snapshotSources) {
+    var candidates = [];
+    if (wuwei.util && typeof wuwei.util.getResourceFileUri === 'function') {
+      candidates.push(wuwei.util.getResourceFileUri(resource, 'preview', node));
+    }
+    candidates.push(
+      embed.previewUri,
+      embed.uri,
+      viewer.previewUri,
+      snapshotSources.previewUri,
+      resource.previewUri
+    );
+    return firstPdfLikeUri(candidates);
+  }
+
+  function firstPdfLikeUri(candidates) {
+    var i, uri;
+    for (i = 0; i < candidates.length; i += 1) {
+      uri = String(candidates[i] || '').trim();
+      if (uri && isPdfLikeUri(uri)) {
+        return uri;
+      }
+    }
+    return '';
+  }
+
+  function isOfficeResource(resource, mimeType) {
+    var text = String(mimeType || '').toLowerCase();
+    var uriText = [
+      resource && resource.uri,
+      resource && resource.canonicalUri,
+      resource && resource.name,
+      resource && resource.label
+    ].join(' ').toLowerCase();
+    if (wuwei.util && typeof wuwei.util.isOfficeDocument === 'function' &&
+      wuwei.util.isOfficeDocument(text)) {
+      return true;
+    }
+    return /(?:msword|ms-excel|ms-powerpoint|officedocument|\.docx?\b|\.xlsx?\b|\.pptx?\b)/.test(text + ' ' + uriText);
+  }
+
+  function isPdfLikeUri(uri) {
+    return /\.pdf(?:[?#].*)?$/i.test(String(uri || '')) ||
+      /[?&](?:mimeType|content_type)=application%2Fpdf/i.test(String(uri || ''));
+  }
+
+  function canUseOfficeViewer(uri) {
+    var parsed;
+    if (!/^https?:\/\//i.test(String(uri || ''))) {
+      return false;
+    }
+    try {
+      parsed = new URL(uri, window.location.href);
+      if (/^(?:localhost|127\.0\.0\.1|\[?::1\]?)$/i.test(parsed.hostname)) {
+        return false;
+      }
+      return true;
+    }
+    catch (e) {
+      return false;
+    }
+  }
+
+  function inferStorageArea(uri, fallback) {
+    var text = String(uri || '').replace(/\\/g, '/');
+    var m;
+    try {
+      m = text.match(/[?&]area=([^&]+)/);
+      if (m) {
+        return decodeURIComponent(m[1]) || fallback;
+      }
+    }
+    catch (e) { /* keep fallback */ }
+    m = text.match(/(?:^|\/)(upload|resource|note|thumbnail|content)\//);
+    return m ? m[1] : fallback;
+  }
+
+  function getResourceOwnerId(node) {
+    var resource = (node && node.resource && 'object' === typeof node.resource) ? node.resource : {};
+    var audit = (resource.audit && 'object' === typeof resource.audit) ? resource.audit : {};
+    var rights = (resource.rights && 'object' === typeof resource.rights) ? resource.rights : {};
+    var nodeAudit = (node && node.audit && 'object' === typeof node.audit) ? node.audit : {};
+    return String(
+      audit.owner ||
+      audit.createdBy ||
+      rights.owner ||
+      nodeAudit.owner ||
+      nodeAudit.createdBy ||
+      (wuwei.util && typeof wuwei.util.getCurrentUserId === 'function' ? wuwei.util.getCurrentUserId() : '') ||
+      ''
+    ).trim();
+  }
+
+  function isLoadFileUri(uri) {
+    return /(?:^|\/)(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i.test(String(uri || ''));
   }
 
   return {
