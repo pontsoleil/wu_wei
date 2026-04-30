@@ -53,6 +53,33 @@ Tmp="/tmp/${0##*/}.$$"
 
 trim(){ printf '%s' "$1" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'; }
 
+resolve_env_path() {
+  local tpl="$1"
+  case "$tpl" in
+    /*) printf '%s' "$tpl" ;;
+    wu_wei2) printf '%s' "$(dirname "$SCRIPT_DIR")" ;;
+    wu_wei2/*) printf '%s/%s' "$(dirname "$SCRIPT_DIR")" "${tpl#wu_wei2/}" ;;
+    *) printf '%s/%s' "$SCRIPT_DIR" "$tpl" ;;
+  esac
+}
+
+resolve_user_dir() {
+  local base="$1" candidate
+  base="$(resolve_env_path "$base")"
+  for candidate in \
+    "$base/user" \
+    "$base" \
+    "$(dirname "$base")/user" \
+    "$SCRIPT_DIR/user"
+  do
+    if [ -r "$candidate/member.name" ] && [ -r "$candidate/password" ]; then
+      printf '%s' "$candidate"
+      return 0
+    fi
+  done
+  printf '%s' "$base/user"
+}
+
 json_escape(){
   local s="$1"
   s="${s//\\/\\\\}"; s="${s//\"/\\\"}"
@@ -115,11 +142,9 @@ password="$(printf '%s' "$password" | tr -d '\r\n')"
 ntrd_pw=$(openssl passwd -crypt -salt wuwei "$password" 2>/dev/null || true)
 [ -z "$ntrd_pw" ] && fail_json "LOGIN FAILED (openssl error)"
 
-# --- FIX HERE: user files live under /wu_wei2/user -------------------
 user_dir=$(nameread user data/environment 2>/dev/null || true)
 user_dir="$(trim "${user_dir#\"}")"; user_dir="$(trim "${user_dir%\"}")"
-user_dir="${user_dir%/}/user"
-# --------------------------------------------------------------------
+user_dir="$(resolve_user_dir "$user_dir")"
 
 [ -z "$user_dir" ] && fail_json "LOGIN FAILED (environment user dir empty)"
 [ -r "$user_dir/member.name" ] || fail_json "LOGIN FAILED (missing member.name)"

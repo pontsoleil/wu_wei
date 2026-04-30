@@ -172,7 +172,26 @@ def resolve_path(value: str) -> Path:
     p = Path(value)
     if p.is_absolute():
         return p
+    text = value.replace("\\", "/").strip("/")
+    if text == "wu_wei2":
+        return SCRIPT_DIR.parent.resolve()
+    if text.startswith("wu_wei2/"):
+        return (SCRIPT_DIR.parent / text[len("wu_wei2/"):]).resolve()
     return (SCRIPT_DIR / p).resolve()
+
+
+def resolve_user_dir(base_user_dir: str) -> Path:
+    base = resolve_path(base_user_dir)
+    candidates = [
+        base / "user",
+        base,
+        base.parent / "user",
+        SCRIPT_DIR / "user",
+    ]
+    for candidate in candidates:
+        if (candidate / "member.name").exists() and (candidate / "password").exists():
+            return candidate
+    return base / "user"
 
 
 def openssl_crypt(password: str) -> str:
@@ -212,7 +231,7 @@ def main():
     if not base_user_dir:
         fail_json("LOGIN FAILED (environment user dir empty)")
 
-    user_dir = resolve_path(base_user_dir) / "user"
+    user_dir = resolve_user_dir(base_user_dir)
     member_name = user_dir / "member.name"
     password_file = user_dir / "password"
 

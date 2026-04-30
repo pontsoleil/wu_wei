@@ -32,7 +32,26 @@ def resolve_path(value: str) -> Path:
     p = Path(value)
     if p.is_absolute():
         return p
+    text = value.replace("\\", "/").strip("/")
+    if text == "wu_wei2":
+        return SCRIPT_DIR.parent.resolve()
+    if text.startswith("wu_wei2/"):
+        return (SCRIPT_DIR.parent / text[len("wu_wei2/"):]).resolve()
     return (SCRIPT_DIR / p).resolve()
+
+
+def resolve_user_dir(base_user_dir: str) -> Path:
+    base = resolve_path(base_user_dir)
+    candidates = [
+        base / "user",
+        base,
+        base.parent / "user",
+        SCRIPT_DIR / "user",
+    ]
+    for candidate in candidates:
+        if (candidate / "member.name").exists():
+            return candidate
+    return base / "user"
 
 
 def lookup_user(user_id: str) -> dict:
@@ -44,7 +63,7 @@ def lookup_user(user_id: str) -> dict:
     if not base_user_dir:
         return {}
 
-    member_name = resolve_path(base_user_dir) / "user" / "member.name"
+    member_name = resolve_user_dir(base_user_dir) / "member.name"
     if not member_name.exists():
         return {}
 
