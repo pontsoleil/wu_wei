@@ -1532,7 +1532,12 @@ wuwei.menu = wuwei.menu || {};
   getOpenUrl = function (node) {
     var resource = getNodeResource(node);
     var href = (resource && (resource.canonicalUri || resource.uri)) || '';
+    var officeUrl = getOfficeViewerOpenUrl(node);
     var base;
+
+    if (officeUrl) {
+      return officeUrl;
+    }
 
     href = String(href || '').trim();
     if (!href) {
@@ -1553,6 +1558,107 @@ wuwei.menu = wuwei.menu || {};
     base = location.href.substr(0, location.href.lastIndexOf('/') + 1);
     return new URL(href, base).href;
   };
+
+  function getOfficeViewerOpenUrl(node) {
+    var resource = getNodeResource(node);
+    var href, fetchUrl;
+
+    if (!resource || isLocalPythonOfficeUpload([node])) {
+      return '';
+    }
+
+    href = getDownloadUrl(node) || (resource.canonicalUri || resource.uri || '');
+    if (!isOfficeDocumentReference(resource, href)) {
+      return '';
+    }
+
+    fetchUrl = toOfficeViewerFetchUrl(href, node);
+    if (!canOfficeViewerFetch(fetchUrl)) {
+      return '';
+    }
+
+    return 'https://view.officeapps.live.com/op/embed.aspx?src=' + encodeURIComponent(fetchUrl);
+  }
+
+  function isOfficeDocumentReference(resource, href) {
+    var mime = String((resource && resource.mimeType) || '').toLowerCase();
+    var text = String(href || '').split('#')[0].split('?')[0].toLowerCase();
+
+    return /(?:msword|ms-excel|ms-powerpoint|officedocument)/.test(mime) ||
+      /\.(doc|docx|xls|xlsx|ppt|pptx)$/i.test(text);
+  }
+
+  function canOfficeViewerFetch(href) {
+    var parsed;
+    if (!/^https?:\/\//i.test(String(href || ''))) {
+      return false;
+    }
+    try {
+      parsed = new URL(href, window.location.href);
+      return !/^(?:localhost|127\.0\.0\.1|\[?::1\]?)$/i.test(parsed.hostname);
+    }
+    catch (e) {
+      return false;
+    }
+  }
+
+  function toOfficeViewerFetchUrl(href, node) {
+    var parsed, area, path, uid, basePath;
+    var text = String(href || '').trim();
+
+    try {
+      parsed = new URL(text, window.location.href);
+    }
+    catch (e) {
+      return text;
+    }
+
+    area = parsed.searchParams.get('area') || '';
+    path = parsed.searchParams.get('path') || '';
+    uid = parsed.searchParams.get('user_id') || getResourceOwnerIdForOpen(node);
+    if (!path || area !== 'upload' || !/(?:^|\/)(?:cgi-bin|server)\/load-file\.(?:py|cgi)$/i.test(parsed.pathname)) {
+      return parsed.href;
+    }
+
+    basePath = getAppBasePathForOpen();
+    return new URL(basePath + 'data/' + encodeURIComponent(uid) + '/upload/' + encodeStoragePathForOpen(path), window.location.origin).href;
+  }
+
+  function getAppBasePathForOpen() {
+    var path = (window.location && window.location.pathname) ? window.location.pathname : '/wu_wei2/';
+    var marker = '/wu_wei2/';
+    var idx = path.indexOf(marker);
+    if (idx >= 0) {
+      return path.slice(0, idx + marker.length);
+    }
+    return '/wu_wei2/';
+  }
+
+  function encodeStoragePathForOpen(path) {
+    return String(path || '')
+      .replace(/\\/g, '/')
+      .replace(/^\/+/, '')
+      .split('/')
+      .map(function (part) { return encodeURIComponent(part); })
+      .join('/');
+  }
+
+  function getResourceOwnerIdForOpen(node) {
+    var resource = getNodeResource(node) || {};
+    var audit = (resource.audit && 'object' === typeof resource.audit) ? resource.audit : {};
+    var rights = (resource.rights && 'object' === typeof resource.rights) ? resource.rights : {};
+    var nodeAudit = (node && node.audit && 'object' === typeof node.audit) ? node.audit : {};
+
+    return String(
+      audit.owner ||
+      audit.createdBy ||
+      rights.owner ||
+      nodeAudit.owner ||
+      nodeAudit.createdBy ||
+      (wuwei.util && typeof wuwei.util.getCurrentUserId === 'function' ? wuwei.util.getCurrentUserId() : '') ||
+      ''
+    ).trim();
+  }
 
   function basenameFromDownloadPath(value) {
     var text = String(value || '').trim();
