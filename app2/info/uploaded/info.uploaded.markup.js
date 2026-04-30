@@ -91,7 +91,7 @@ wuwei.info.uploaded.markup = ( function () {
   function resolveInfoUri(node) {
     var resource = (node && node.resource && 'object' === typeof node.resource) ? node.resource : {};
     var media = (resource.media && 'object' === typeof resource.media) ? resource.media : {};
-    var mimeType = String(resource.mimeType || media.mimeType || '').toLowerCase();
+    var mimeType = String(resource.mimeType || media.mimeType || (node && (node.contenttype || node.contentType)) || '').toLowerCase();
     var viewer = (resource.viewer && 'object' === typeof resource.viewer) ? resource.viewer : {};
     var embed = (viewer.embed && 'object' === typeof viewer.embed) ? viewer.embed : {};
     var snapshotSources = (resource.snapshotSources && 'object' === typeof resource.snapshotSources) ? resource.snapshotSources : {};
@@ -99,10 +99,8 @@ wuwei.info.uploaded.markup = ( function () {
       return resolveOfficeInfoUri(node, resource, viewer, embed, snapshotSources);
     }
     if (wuwei.util && typeof wuwei.util.getResourceOriginalUri === 'function' &&
-      (mimeType.indexOf('application/pdf') === 0 ||
-        mimeType.indexOf('image/') === 0 ||
-        mimeType.indexOf('video/') === 0 ||
-        mimeType.indexOf('audio/') === 0)) {
+      (isPdfResource(node, resource, mimeType) ||
+        isInlineMediaMime(mimeType))) {
       return wuwei.util.getResourceOriginalUri(node) || '';
     }
     if (wuwei.util && typeof wuwei.util.getResourceUri === 'function') {
@@ -121,7 +119,7 @@ wuwei.info.uploaded.markup = ( function () {
   function resolveFrameUri(node, uri) {
     var resource = (node && node.resource && 'object' === typeof node.resource) ? node.resource : {};
     var media = (resource.media && 'object' === typeof resource.media) ? resource.media : {};
-    var mimeType = String(resource.mimeType || media.mimeType || '').toLowerCase();
+    var mimeType = String(resource.mimeType || media.mimeType || (node && (node.contenttype || node.contentType)) || '').toLowerCase();
     if (isOfficeResource(resource, mimeType)) {
       return uri;
     }
@@ -183,6 +181,36 @@ wuwei.info.uploaded.markup = ( function () {
       return true;
     }
     return /(?:msword|ms-excel|ms-powerpoint|officedocument|\.docx?\b|\.xlsx?\b|\.pptx?\b)/.test(text + ' ' + uriText);
+  }
+
+  function isInlineMediaMime(mimeType) {
+    var text = String(mimeType || '').toLowerCase();
+    return text.indexOf('image/') === 0 ||
+      text.indexOf('video/') === 0 ||
+      text.indexOf('audio/') === 0;
+  }
+
+  function isPdfResource(node, resource, mimeType) {
+    var original = '';
+    var text;
+    if (String(mimeType || '').toLowerCase().indexOf('application/pdf') === 0) {
+      return true;
+    }
+    if (wuwei.util && typeof wuwei.util.getResourceOriginalUri === 'function') {
+      original = wuwei.util.getResourceOriginalUri(node) || '';
+    }
+    text = [
+      original,
+      resource && resource.uri,
+      resource && resource.canonicalUri,
+      resource && resource.name,
+      resource && resource.label,
+      resource && resource.title,
+      node && node.uri,
+      node && node.label,
+      node && node.name
+    ].join(' ');
+    return isPdfLikeUri(text);
   }
 
   function isPdfLikeUri(uri) {

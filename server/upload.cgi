@@ -174,6 +174,7 @@ base_dir="$(resolve_env_template "$(read_env user)")"
 upload_tpl="$(resolve_env_template "$(read_env upload)")"
 [ -z "${upload_tpl:-}" ] && die_json "ERROR: 'upload' is empty in data/environment"
 file_dir="${upload_tpl//\*/$user_id}"
+upload_root="$file_dir"
 
 resource_tpl="$(resolve_env_template "$(read_env resource)")"
 [ -z "${resource_tpl:-}" ] && die_json "ERROR: 'resource' is empty in data/environment"
