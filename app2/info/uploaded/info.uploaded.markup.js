@@ -42,6 +42,8 @@ wuwei.info.uploaded.markup = ( function () {
         wuwei.util.toStorageRelativePath ? wuwei.util.toStorageRelativePath(uri, ownerId, area) : uri,
         ownerId);
     }
+    var frameUri = escapeAttr(uri);
+    var jsUri = escapeJsString(uri);
     var html = `
 <form id="infoform" class="form-group info">
   ${label
@@ -52,12 +54,12 @@ wuwei.info.uploaded.markup = ( function () {
     : ''
   }
   ${uri
-    ? `<iframe id="infoFrame" onerror="wuwei.info.iframeError()" src="${encodeURI(uri)}"
+    ? `<iframe id="infoFrame" onerror="wuwei.info.iframeError()" src="${frameUri}"
         style="width:100%; min-height:480px; border:none; overflow:auto;"></iframe>`
     : ``
   }
   ${uri
-    ? `<span class="player w3-row" onclick="wuwei.info.openWindow('${uri}', 'wuwei', 'width=600, height=400')">
+    ? `<span class="player w3-row" onclick="wuwei.info.openWindow('${jsUri}', 'wuwei', 'width=600, height=400')">
         ${translate('Click to open window')}<i class="fas fa-external-link-alt"></i>
       </span>`
     : ``
@@ -86,6 +88,22 @@ wuwei.info.uploaded.markup = ( function () {
 
   function translate(str) {
     return wuwei.info.markup.translate(str);
+  }
+
+  function escapeAttr(value) {
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  function escapeJsString(value) {
+    return String(value || '')
+      .replace(/\\/g, '\\\\')
+      .replace(/'/g, "\\'")
+      .replace(/\r/g, '\\r')
+      .replace(/\n/g, '\\n');
   }
 
   function resolveInfoUri(node) {
