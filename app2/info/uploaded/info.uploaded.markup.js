@@ -155,7 +155,8 @@ wuwei.info.uploaded.markup = ( function () {
       ? wuwei.util.getResourceOriginalUri(node)
       : (resource.canonicalUri || resource.uri || snapshotSources.originalUri || '');
     if (canUseOfficeViewer(originalUri)) {
-      return 'https://view.officeapps.live.com/op/embed.aspx?src=' + encodeURIComponent(originalUri);
+      return 'https://view.officeapps.live.com/op/embed.aspx?src=' +
+        encodeURIComponent(toOfficeViewerFetchUri(originalUri, node));
     }
     return originalUri || '';
   }
@@ -251,6 +252,47 @@ wuwei.info.uploaded.markup = ( function () {
     catch (e) {
       return false;
     }
+  }
+
+  function toOfficeViewerFetchUri(uri, node) {
+    var parsed, area, path, uid, basePath;
+    var text = String(uri || '').trim();
+
+    try {
+      parsed = new URL(text, window.location.href);
+    }
+    catch (e) {
+      return text;
+    }
+
+    area = parsed.searchParams.get('area') || '';
+    path = parsed.searchParams.get('path') || '';
+    uid = parsed.searchParams.get('user_id') || getResourceOwnerId(node);
+    if (!path || area !== 'upload' || !isLoadFileUri(parsed.pathname + parsed.search)) {
+      return parsed.href;
+    }
+
+    basePath = getAppBasePath();
+    return new URL(basePath + 'data/' + encodeURIComponent(uid) + '/upload/' + encodeStoragePath(path), window.location.origin).href;
+  }
+
+  function getAppBasePath() {
+    var path = (window.location && window.location.pathname) ? window.location.pathname : '/wu_wei2/';
+    var marker = '/wu_wei2/';
+    var idx = path.indexOf(marker);
+    if (idx >= 0) {
+      return path.slice(0, idx + marker.length);
+    }
+    return '/wu_wei2/';
+  }
+
+  function encodeStoragePath(path) {
+    return String(path || '')
+      .replace(/\\/g, '/')
+      .replace(/^\/+/, '')
+      .split('/')
+      .map(function (part) { return encodeURIComponent(part); })
+      .join('/');
   }
 
   function inferStorageArea(uri, fallback) {
