@@ -89,6 +89,80 @@ wuwei.edit.generic.markup = ( function () {
     return '';
   }
 
+  function getEditableResourceUri(node) {
+    var uri = (node && node.resource && node.resource.uri) || '';
+    if (wuwei.util && typeof wuwei.util.getResourceOriginalPath === 'function') {
+      uri = wuwei.util.getResourceOriginalPath(node) || uri;
+    }
+    if (wuwei.util && typeof wuwei.util.toStorageRelativePath === 'function' &&
+      (/^(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i.test(String(uri || '')) ||
+        /^\/?upload\//.test(String(uri).replace(/^.*\/wu_wei2\//, '')) ||
+        /\/upload\//.test(String(uri || '')))) {
+      uri = wuwei.util.toStorageRelativePath(uri, null, 'upload');
+    }
+    return getSnapshotDisplayPath(node, 'original', uri);
+  }
+
+  function getEditableThumbnailUri(node) {
+    var uri = (node && (node.thumbnailUri || node.thumbnail)) || '';
+    if (wuwei.util && typeof wuwei.util.getResourceFilePath === 'function' &&
+      node && node.resource) {
+      uri = wuwei.util.getResourceFilePath(node.resource, 'thumbnail', node) || uri;
+    }
+    if (wuwei.util && typeof wuwei.util.toStorageRelativePath === 'function' &&
+      (/^(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i.test(String(uri || '')) ||
+        /^\/?(resource|note)\//.test(String(uri).replace(/^.*\/wu_wei2\//, '')) ||
+        /\/(resource|note)\//.test(String(uri || '')))) {
+      uri = wuwei.util.toStorageRelativePath(uri, null, /(?:^|\/)note\//.test(String(uri || '')) ? 'note' : 'resource');
+    }
+    return getSnapshotDisplayPath(node, 'thumbnail', uri);
+  }
+
+  function getSnapshotDisplayPath(node, role, current) {
+    var resource = node && node.resource;
+    var storage = resource && resource.storage;
+    var files = storage && Array.isArray(storage.files) ? storage.files : [];
+    var snapshotPath = String(storage && storage.snapshotPath || '').replace(/\\/g, '/');
+    var file, raw, path, uid, i;
+
+    if (/^\d{4}\/\d{2}\/\d{2}\//.test(String(current || ''))) {
+      return current;
+    }
+    if (!snapshotPath || !wuwei.util || typeof wuwei.util.toStorageRelativePath !== 'function') {
+      return current;
+    }
+    for (i = 0; i < files.length; i += 1) {
+      file = files[i] || {};
+      if (String(file.role || '').toLowerCase() !== String(role || '').toLowerCase()) {
+        continue;
+      }
+      raw = String(file.path || '').replace(/\\/g, '/').trim();
+      if (!raw || /^(?:https?:|cgi-bin\/|server\/|\d{4}\/\d{2}\/\d{2}\/)/i.test(raw)) {
+        return current;
+      }
+      uid = String(
+        (resource.audit && (resource.audit.owner || resource.audit.createdBy)) ||
+        (node.audit && (node.audit.owner || node.audit.createdBy)) ||
+        ''
+      ).trim();
+      path = wuwei.util.toStorageRelativePath(snapshotPath.replace(/\/+$/, '') + '/' + raw, uid, 'note');
+      return path || current;
+    }
+    return current;
+  }
+
+  function isManagedResourceNode(node) {
+    var resource = node && node.resource;
+    var storage = resource && resource.storage;
+    var files = storage && Array.isArray(storage.files) ? storage.files : [];
+
+    return !!(
+      files.length ||
+      (resource && resource.origin && resource.origin.type === 'upload') ||
+      node && node.option === 'upload'
+    );
+  }
+
   const template = function (param) {
     const
       common = wuwei.common,
@@ -111,6 +185,7 @@ wuwei.edit.generic.markup = ( function () {
     var fontSizeValue = normalizeFontSizeValue(font && font.size);
     var memoStyle = (style && style.memo && typeof style.memo === 'object') ? style.memo : {};
     var memoCorner = memoStyle.corner || 'bottom-right';
+    var storagePathAttrs = isManagedResourceNode(node) ? ' readonly aria-readonly="true"' : '';
     var html = [];
 
     html.push(
@@ -147,11 +222,11 @@ wuwei.edit.generic.markup = ( function () {
         '<div class="w3-row">',
         '  <label for="rUri" class="w3-col s2">URL:</label>',
         '  <input type="text" id="rUri" name="resource.uri" data-path="resource.uri" class="w3-col s10"',
-        '      value="' + (((node.resource && node.resource.uri) || '')) + '">',
+        storagePathAttrs + ' value="' + getEditableResourceUri(node) + '">',
         '</div>',
 
         '<div class="w3-row">',
-        '  <label for="resource_kind" data-path="resource.kind" class="w3-col s5">' + translate('Media type') + '</label>',
+        '  <label for="resource_kind" data-path="resource.kind" class="w3-col s6">' + translate('Media type') + '</label>',
         selectOptions('resource_kind',
           getMediaKindValue(node),
           [
@@ -163,13 +238,13 @@ wuwei.edit.generic.markup = ( function () {
             { value: 'audio', label: 'audio' }
           ],
           null,
-          's7').replace('name="resource_kind"', 'name="resource.kind" '),
+          's6').replace('name="resource_kind"', 'name="resource.kind" '),
         '</div>',
 
         '<div class="w3-row">',
         '  <label for="thumbnailUri" class="w3-col s5">' + translate('THUMBNAIL') + '</label>',
         '  <input type="text" id="thumbnailUri" name="thumbnailUri" data-path="thumbnailUri" class="w3-col s7"',
-        '      value="' + (node.thumbnailUri || node.thumbnail || '') + '">',
+        storagePathAttrs + ' value="' + getEditableThumbnailUri(node) + '">',
         '</div>'
       );
     }
