@@ -322,8 +322,21 @@ if is_office_file "$filename"; then
   office_bin="$(office_command || true)"
   if [ -n "${office_bin:-}" ]; then
     office_outdir="$Tmp-office"
+    office_profile="$Tmp-office-profile"
+    office_log="$Tmp-office.log"
     mkdir -p "$office_outdir"
-    if "$office_bin" --headless --convert-to pdf --outdir "$office_outdir" "$dest_file" >&2; then
+    mkdir -p "$office_profile"
+    if "$office_bin" \
+      --headless \
+      --nologo \
+      --nofirststartwizard \
+      --nodefault \
+      --nolockcheck \
+      --norestore \
+      "-env:UserInstallation=file://$office_profile" \
+      --convert-to pdf \
+      --outdir "$office_outdir" \
+      "$dest_file" >"$office_log" 2>&1; then
       stem="${filename%.*}"
       generated_pdf="$office_outdir/$stem.pdf"
       if [ -f "$generated_pdf" ]; then
@@ -331,7 +344,13 @@ if is_office_file "$filename"; then
         # The thumbnail/resource metadata stay under resource/.
         preview_pdf="$upload_file_dir/$stem.pdf"
         cp -f "$generated_pdf" "$preview_pdf" || preview_pdf=""
+      else
+        echo "office preview converted but pdf not found: expected=$generated_pdf" >&2
+        [ -s "$office_log" ] && sed 's/^/office preview: /' "$office_log" >&2
       fi
+    else
+      echo "office preview conversion failed: $filename" >&2
+      [ -s "$office_log" ] && sed 's/^/office preview: /' "$office_log" >&2
     fi
   else
     echo "office preview skipped: soffice/libreoffice not found" >&2
