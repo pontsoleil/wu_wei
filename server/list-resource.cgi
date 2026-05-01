@@ -92,6 +92,20 @@ file_rel_url() {
     "$(url_encode "$area")" "$(url_encode "$rel")" "$(url_encode "$uid")"
 }
 
+managed_file_exists() {
+  area=$1
+  rel=$2
+  [ -n "$rel" ] || return 1
+  case "$area" in
+    upload) [ -n "${upload_dir:-}" ] && [ -f "$upload_dir/$rel" ] ;;
+    resource) [ -n "${resource_dir:-}" ] && [ -f "$resource_dir/$rel" ] ;;
+    note) [ -n "${note_dir:-}" ] && [ -f "$note_dir/$rel" ] ;;
+    thumbnail) [ -n "${thumbnail_dir:-}" ] && [ -f "$thumbnail_dir/$rel" ] ;;
+    content) [ -n "${content_dir:-}" ] && [ -f "$content_dir/$rel" ] ;;
+    *) return 1 ;;
+  esac
+}
+
 json_string_field() {
   key=$1
   file=$2
@@ -269,10 +283,22 @@ emit_record() {
   preview_path=$(json_file_field_for_role preview path "$path")
   thumb_area=$(json_file_field_for_role thumbnail area "$path")
   thumb_path=$(json_file_field_for_role thumbnail path "$path")
-  original_dir=${original_path%/*}
+  case "$original_path" in
+    */*) original_dir=${original_path%/*} ;;
+    *) original_dir="" ;;
+  esac
+  if [ -n "$thumb_path" ] && ! managed_file_exists "${thumb_area:-note}" "$thumb_path"; then
+    thumb_area=
+    thumb_path=
+  fi
   if [ -n "${upload_dir:-}" ] && [ -n "$original_dir" ] && [ -f "$upload_dir/$original_dir/thumbnail.jpg" ]; then
     thumb_area=upload
     thumb_path="$original_dir/thumbnail.jpg"
+  fi
+  resource_thumb=${rel%/*}/thumbnail.jpg
+  if [ -z "$thumb_path" ] && [ -n "${resource_dir:-}" ] && [ -f "$resource_dir/$resource_thumb" ]; then
+    thumb_area=resource
+    thumb_path="$resource_thumb"
   fi
   original_file_url=$(file_rel_url "$uid" "${original_area:-upload}" "$original_path")
   preview_file_url=$(file_rel_url "$uid" "${preview_area:-note}" "$preview_path")
@@ -296,6 +322,7 @@ emit_record() {
   printf '"url":"%s",' "$(printf '%s' "$preview" | json_escape)"
   printf '"download_url":"%s",' "$(printf '%s' "$download_url" | json_escape)"
   printf '"preview_url":"%s",' "$(printf '%s' "$preview" | json_escape)"
+  printf '"thumbnail_url":"%s",' "$(printf '%s' "$thumb" | json_escape)"
   printf '"value":{'
   printf '"lastmodified":"%s",' "$(printf '%s' "$ts" | sed 's/T/ /' | json_escape)"
   printf '"totalsize":"",'
@@ -419,6 +446,9 @@ resource_dir=$(resolve_env_path resource "$user_id" || true)
 [ -n "${resource_dir:-}" ] || text_response 'ERROR RESOURCE DIR NOT DEFINED'
 [ -d "$resource_dir" ] || mkdir -p "$resource_dir"
 upload_dir=$(resolve_env_path upload "$user_id" || true)
+note_dir=$(resolve_env_path note "$user_id" || true)
+thumbnail_dir=$(resolve_env_path thumbnail "$user_id" || true)
+content_dir=$(resolve_env_path content "$user_id" || true)
 
 year=$(nameread year "$CGIVARS" | strip_quotes || true)
 month=$(nameread month "$CGIVARS" | strip_quotes || true)
