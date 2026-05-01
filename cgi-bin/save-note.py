@@ -41,10 +41,14 @@ def _ensure_note_json(value: str) -> dict:
     data = json.loads(text)
     if not isinstance(data, dict):
         raise ValueError("NOTE JSON MUST BE OBJECT")
+    if isinstance(data.get("pages"), dict):
+        data["pages"] = [data["pages"][key] for key in sorted(data["pages"].keys())]
     if "pages" not in data or not isinstance(data.get("pages"), list):
         raise ValueError("NOTE JSON PAGES MUST BE ARRAY")
-    if "resources" in data and not isinstance(data.get("resources"), list):
-        raise ValueError("NOTE JSON RESOURCES MUST BE ARRAY")
+    if "resources" in data and isinstance(data.get("resources"), dict):
+        data["resources"] = [data["resources"][key] for key in sorted(data["resources"].keys())]
+    elif "resources" in data and not isinstance(data.get("resources"), list):
+        data["resources"] = []
     return data
 
 

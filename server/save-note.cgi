@@ -292,10 +292,14 @@ def load_note(path):
     data = json.loads(text)
     if not isinstance(data, dict):
         raise ValueError("NOTE JSON MUST BE OBJECT")
+    if isinstance(data.get("pages"), dict):
+        data["pages"] = [data["pages"][key] for key in sorted(data["pages"].keys())]
     if "pages" not in data or not isinstance(data.get("pages"), list):
         raise ValueError("NOTE JSON PAGES MUST BE ARRAY")
-    if "resources" in data and not isinstance(data.get("resources"), list):
-        raise ValueError("NOTE JSON RESOURCES MUST BE ARRAY")
+    if "resources" in data and isinstance(data.get("resources"), dict):
+        data["resources"] = [data["resources"][key] for key in sorted(data["resources"].keys())]
+    elif "resources" in data and not isinstance(data.get("resources"), list):
+        data["resources"] = []
     return data
 
 
@@ -749,16 +753,20 @@ def restore_embedded_resource_files(note):
     note.pop("bundle", None)
 
 
-note = load_note(json_file)
-strip_legacy_runtime_fields(note)
-if note_id != DRAFT_NOTE_ID:
-    rewrite_draft_note_paths(note)
-if str(note.get("note_id") or "") == DRAFT_NOTE_ID or not note.get("note_id"):
-    note["note_id"] = note_id
-if str(note.get("note_uuid") or "") == DRAFT_NOTE_ID or note.get("note_uuid") is None:
-    note["note_uuid"] = note_id
-note["resources"] = note.get("resources") or []
-json_file.write_text(json.dumps(note, ensure_ascii=False, separators=(",", ":")), encoding="utf-8", newline="\n")
+try:
+    note = load_note(json_file)
+    strip_legacy_runtime_fields(note)
+    if note_id != DRAFT_NOTE_ID:
+        rewrite_draft_note_paths(note)
+    if str(note.get("note_id") or "") == DRAFT_NOTE_ID or not note.get("note_id"):
+        note["note_id"] = note_id
+    if str(note.get("note_uuid") or "") == DRAFT_NOTE_ID or note.get("note_uuid") is None:
+        note["note_uuid"] = note_id
+    note["resources"] = note.get("resources") if isinstance(note.get("resources"), list) else []
+    json_file.write_text(json.dumps(note, ensure_ascii=False, separators=(",", ":")), encoding="utf-8", newline="\n")
+except Exception as e:
+    print(f"note_json_process_error={type(e).__name__}: {e}", file=sys.stderr)
+    sys.exit(1)
 PY
   else
     save_note_resources "$json_file" "$resource_root" "$note_resource_dir"
