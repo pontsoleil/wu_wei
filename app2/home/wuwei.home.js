@@ -1354,6 +1354,11 @@ wuwei.home = (function () {
           cell.classList.toggle('selected', cellDate === date);
           cell.classList.toggle('in-range', cellDate >= dateRangeStart && cellDate <= dateRangeEnd);
         });
+        if (searchScope === 'all') {
+          findResource(searchTerm);
+          sidebarClose();
+          return;
+        }
         applyGalleryFilters();
         sidebarClose();
       });
@@ -1504,9 +1509,11 @@ wuwei.home = (function () {
     if (scopeEl) {
       scopeEl.addEventListener('change', function () {
         searchScope = scopeEl.value || 'current';
-        if (searchTerm) {
+        if (searchScope === 'all' || searchTerm) {
           findResource(searchTerm);
+          return;
         }
+        applyGalleryFilters();
       });
     }
     [startEl, endEl].forEach(function (el) {
@@ -1552,6 +1559,10 @@ wuwei.home = (function () {
     if (wuwei.home.markup && wuwei.home.markup.add_calendar) {
       wuwei.home.markup.add_calendar(year, month, days, months);
       bindCalendarDayEvents();
+    }
+    if (searchScope === 'all') {
+      listFile({ year: year, month: month, date: date, start: state.start || 0, count: state.count || 24 });
+      return;
     }
     applyGalleryFilters();
   };
