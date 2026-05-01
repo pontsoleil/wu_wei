@@ -412,28 +412,47 @@ wuwei.menu.note = wuwei.menu.note || {};
     wuwei.menu.publish.publish({ close: close });
   }
 
-  function makeFileName() {
+  function makeFileName(ext) {
     const current = wuwei.common.current || {};
     const base = String(current.note_name || current.note_id || 'wuwei-note')
       .replace(/[\\/:*?"<>|]+/g, '_')
       .replace(/\s+/g, '_')
       .replace(/^_+|_+$/g, '') || 'wuwei-note';
-    return `${base}.txt`;
+    return `${base}${ext || '.txt'}`;
   }
 
   function downloadFile() {
     try {
       const current = wuwei.common.current || {};
-      const canUseServerBundle = current.note_id && wuwei.common.state && wuwei.common.state.currentUser && wuwei.common.state.currentUser.user_id;
-      const noteTextPromise = canUseServerBundle
-        ? wuwei.note.saveNote().then(function () { return wuwei.note.exportPortableNoteText(); })
-        : Promise.resolve(wuwei.note.exportNoteText());
-      noteTextPromise.then(function (text) {
-        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+      const cu = wuwei.common.state && wuwei.common.state.currentUser;
+      const canUseServerBundle = current.note_id && cu && cu.user_id;
+      if (canUseServerBundle) {
+        wuwei.note.saveNote().then(function () {
+          const action = wuwei.util.getAction('export-note');
+          const url = `${action}?id=${encodeURIComponent(wuwei.common.current.note_id)}&user_id=${encodeURIComponent(cu.user_id)}`;
+          const anchor = document.createElement('a');
+          anchor.href = url;
+          anchor.download = makeFileName('.zip');
+          document.body.appendChild(anchor);
+          anchor.click();
+          anchor.remove();
+        }).catch(function (e) {
+          console.error(e);
+          wuwei.menu.snackbar.open({
+            type: 'error',
+            message: e && e.message ? e.message : 'ERROR Failed to download note file'
+          });
+        });
+        return;
+      }
+
+      const text = wuwei.note.exportNoteText();
+      Promise.resolve(text).then(function (noteText) {
+        const blob = new Blob([noteText], { type: 'text/plain;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement('a');
         anchor.href = url;
-        anchor.download = makeFileName();
+        anchor.download = makeFileName('.txt');
         document.body.appendChild(anchor);
         anchor.click();
         anchor.remove();
@@ -479,52 +498,75 @@ wuwei.menu.note = wuwei.menu.note || {};
     }
     input.value = '';
     input.onchange = importFile;
+    input.accept = '.zip,.txt,.json,.wuwei,.note,application/zip,application/json,text/plain';
     input.click();
     return false;
+  }
+
+  function applyImportedNote(noteJson) {
+    const current = wuwei.note.updateNote(noteJson);
+    const nameEl = document.querySelector('#note_name .name');
+    const descEl = document.querySelector('#note_name .description');
+    if (nameEl) { nameEl.textContent = current.note_name || ''; }
+    if (descEl) { descEl.textContent = current.description || ''; }
+    if (current.pages && Object.keys(current.pages).length > 1) {
+      wuwei.menu.refreshPagenation();
+    }
+    if ('simulation' === wuwei.common.graph.mode) {
+      wuwei.draw.restart();
+    }
+    else {
+      wuwei.draw.refresh();
+    }
+    wuwei.menu.checkPage();
+  }
+
+  function importZipFile(file) {
+    const cu = wuwei.common.state && wuwei.common.state.currentUser;
+    if (!cu || !cu.user_id) {
+      wuwei.menu.snackbar.open({ type: 'error', message: 'ERROR NOT LOGGED IN' });
+      return;
+    }
+    const form = new FormData();
+    form.append('user_id', cu.user_id);
+    form.append('file', file);
+    fetch(wuwei.util.getAction('import-note'), {
+      method: 'POST',
+      body: form,
+      credentials: 'same-origin'
+    }).then(function (response) {
+      return response.text();
+    }).then(function (text) {
+      text = String(text || '').replace(/^\uFEFF/, '').trim();
+      if (/^ERROR/.test(text)) {
+        throw new Error(text);
+      }
+      const noteJson = JSON.parse(text);
+      applyImportedNote(noteJson);
+      wuwei.menu.snackbar.open({ type: 'success', message: 'Imported note bundle' });
+    }).catch(function (e) {
+      console.error(e);
+      wuwei.menu.snackbar.open({
+        type: 'error',
+        message: e && e.message ? e.message : 'ERROR Failed to import note bundle'
+      });
+    });
   }
 
   function importFile(event) {
     const file = event && event.target && event.target.files && event.target.files[0];
     if (!file) { return; }
+    if (/\.zip$/i.test(file.name || '') || /zip/i.test(file.type || '')) {
+      importZipFile(file);
+      return;
+    }
     const reader = new FileReader();
     reader.onload = function () {
       try {
         const text = String(reader.result || '').replace(/^\uFEFF/, '').trim();
         const noteJson = JSON.parse(text);
-        const hasBundle = !!(
-          (noteJson.bundle && Array.isArray(noteJson.bundle.files)) ||
-          (noteJson.portable && Array.isArray(noteJson.portable.files)) ||
-          (noteJson.resourceBundle && Array.isArray(noteJson.resourceBundle.files))
-        );
-        const current = wuwei.note.updateNote(noteJson);
-        const nameEl = document.querySelector('#note_name .name');
-        const descEl = document.querySelector('#note_name .description');
-        if (nameEl) { nameEl.textContent = current.note_name || ''; }
-        if (descEl) { descEl.textContent = current.description || ''; }
-        if (current.pages && Object.keys(current.pages).length > 1) {
-          wuwei.menu.refreshPagenation();
-        }
-        if ('simulation' === wuwei.common.graph.mode) {
-          wuwei.draw.restart();
-        }
-        else {
-          wuwei.draw.refresh();
-        }
-        wuwei.menu.checkPage();
-        if (hasBundle) {
-          wuwei.note.importNote().then(function () {
-            wuwei.menu.snackbar.open({ type: 'success', message: 'Imported note file' });
-          }).catch(function (e) {
-            console.error(e);
-            wuwei.menu.snackbar.open({
-              type: 'warning',
-              message: e && e.message ? e.message : 'Imported note file, but resource restore failed'
-            });
-          });
-        }
-        else {
-          wuwei.menu.snackbar.open({ type: 'success', message: 'Imported note file' });
-        }
+        applyImportedNote(noteJson);
+        wuwei.menu.snackbar.open({ type: 'success', message: 'Imported note file' });
       }
       catch (e) {
         console.error(e);
