@@ -1,1440 +1,183 @@
-= WuWei データ設計書
-:toc: left
+= WuWei データ仕様
+:toc:
 :toclevels: 3
 :sectnums:
 
-== 2026-04-29 改訂: data 配下ファイルの保護配信と相対パス規約
-
-本節を、Resource ファイル参照と配信方式の正本とする。
-本節より後の節に `sourcePath`、OS 絶対パス、nginx alias 前提の公開 URL、`resource` area へのサムネイル保存などの古い説明が残る場合、本節の規約を優先する。
-ただし、文書内の保存場所は本節の規約に合わせて順次改訂し、物理的な保存先は常に `wu_wei2/data/{user_uuid}/...` 配下とする。
-
-== 2026-05-01 改訂: portable ZIP と保護ファイル配信
-
-本節は、ノートファイルのダウンロード/アップロード、および `data/` 配下ファイルの配信について、現行実装に合わせた正本である。
-旧記述に `load-note?bundle=1` が bundle 生成を担当する説明、`save-note` が bundle 復元を担当する説明、または `data/` 直接 URL を表示に使う説明が残る場合は、本節を優先する。
-
-=== ノートファイルのダウンロード
-
-ノートファイルのダウンロードは、まず現在の Note を `save-note` で保存し、その後 `export-note` が portable ZIP を生成する。
-portable ZIP 生成では、保存済み Note JSON に含まれる upload 参照を収集し、対応する `upload/YYYY/MM/DD/{upload_uuid}/...` ディレクトリを ZIP に同梱する。
-
-[cols="1,2,3"]
-|===
-|役務 |担当 |仕様
-
-|現在 Note の保存
-|`save-note`
-|Note JSON と Resource snapshot を保存する。通常保存では upload original を Note snapshot へ複製しない。
-
-|portable ZIP 生成
-|`export-note`
-|保存済み Note の `note.json` と参照先 upload ディレクトリを ZIP に同梱する。
-
-|ブラウザ側ファイル保存
-|`menu.note.js`
-|`export-note` のレスポンスを `.zip` ファイルとして保存する。
-|===
-
-=== ノートファイルのアップロード/復元
-
-ノートファイルのアップロードでは、ブラウザがローカル `.zip` または plain Note JSON を `import-note` に送る。
-ZIP の場合、`import-note` が ZIP 内の `upload/` ディレクトリを現在ユーザーの upload area に復元し、`note.json` を保存する。
-plain Note JSON の場合も `import-note` が通常の Note として保存する。
-
-[cols="1,2,3"]
-|===
-|役務 |担当 |仕様
-
-|ローカルファイル選択
-|`menu.note.js`
-|`<input type=file>` でノートファイルを選択する。
-
-|JSON 読み込み
-|`import-note`
-|plain Note JSON を検証し、`note/YYYY/MM/DD/{note_uuid}/note.json` に保存して画面へ返す。
-
-|bundle 復元保存
-|`import-note`
-|ZIP 内の `upload/YYYY/MM/DD/{upload_uuid}/...` を現在ユーザーの upload area に復元する。既存 upload ディレクトリは上書きしない。
-|===
-
-復元後の Note JSON / Resource JSON は、引き続き `area + path` 形式を使う。
-保存先ユーザーは実行時のログインユーザー、またはローカル開発環境の `guest` で決定する。
-
-=== portable ZIP 構造
-
-portable ZIP は次の構造を持つ。
-
-[source,text]
-----
-note.json
-upload/YYYY/MM/DD/{upload_uuid}/manifest.json
-upload/YYYY/MM/DD/{upload_uuid}/{original_file}
-upload/YYYY/MM/DD/{upload_uuid}/thumbnail.jpg
-upload/YYYY/MM/DD/{upload_uuid}/preview.pdf
-----
-
-`thumbnail.jpg` と `preview.pdf` は存在する場合だけ含める。
-ZIP はユーザー UUID を含まないため、インポート時に現在ユーザーの `data/{user_uuid}/upload/...` へ復元できる。
-
-=== 保護ファイル配信
-
-画面表示、ダウンロード、iframe 表示では `data/` 配下を直接参照せず、`load-file` に `area` と `path` を渡して取得する。
-`path` はユーザー UUID を含まない相対パスであり、`..`、絶対パス、空パス、NUL 文字を拒否する。
-`user_id` が指定された場合も、ログインセッションまたはローカル `guest` の実効ユーザーと一致する場合だけ許可する。
-
-[source,text]
-----
-server/load-file.cgi?area=upload&path=2026/04/29/_uploaded_uuid/document.pdf
-server/load-file.cgi?area=note&path=2026/04/29/_note_uuid/resource/_uploaded_uuid/preview.pdf
-----
-
-Linux サーバーでは、`load-file.cgi` が認証、area 検証、パス検証、存在確認を行ったうえで、`X-Accel-Redirect` により nginx の `internal` location から実ファイルを配信する。
-ローカル Python CGI も同じ入力検証とレスポンスヘッダーの形を保つ。
-ローカル Apache で確認する場合は、`data/` の直接公開を避け、CGI 経由の参照に統一する。
-
-=== 基本方針
-
-Note JSON および Resource JSON には、OS 依存の絶対パス、nginx alias 前提の公開 URL、`C:/...`、`/ebs/...` を保存しない。
-ファイル実体はすべて `wu_wei2/data/{user_uuid}/` 配下に保存し、JSON からは `area` と、ユーザー UUID を含まない日付配下の相対 `path` で参照する。
-`user_uuid` はログイン中の利用者または復元先利用者から実行時に決定する。
-ローカル Python CGI では、通常はログイン不要で操作できる。
-未ログイン時の保存先は固定の `wu_wei2/data/guest/` とし、portable ZIP の復元時も `guest` 利用者配下に展開する。
-ただし、`index.html?login=required`、`index.html?required-login`、または `index.html?force-login` で起動した場合は、機能確認用に登録ユーザーでのログインを必須とする。
-公開 Linux サーバーでは、非ログイン保存および非ログイン upload は原則禁止し、`guest` 保存は行わない。
-
-`data/` 配下のファイルは、JSON だけでなく、PDF、Office 文書、画像、映像、音声、テキスト、サムネイル、プレビューも直接 URL では公開しない。
-画面表示、ダウンロード、iframe 表示は WuWei のロード API を経由する。
-本番 Linux サーバーでは、WuWei CGI が認証・権限確認を行い、nginx の `internal` location と `X-Accel-Redirect` で実ファイルを配信する。
-
-ローカル Python CGI は利用者本人の PC 上で動く開発・個人利用環境を前提とするため、nginx `internal` は必須ではない。
-ただし、ローカル環境でも Python CGI が認証、実効ユーザー、area、相対 path を検証し、表示は WuWei のロード API 経由に統一する。
-ただし、ローカル Apache を LAN や外部ネットワークに公開する場合は、本番と同様に `data/` 直接公開を避ける。
-
-=== 実ファイル配置
-
-[source,text]
-----
-wu_wei2/data/{user_uuid}/note/YYYY/MM/DD/{note_uuid}/note.json
-
-wu_wei2/data/{user_uuid}/upload/YYYY/MM/DD/{uploaded_uuid}/manifest.json
-wu_wei2/data/{user_uuid}/upload/YYYY/MM/DD/{uploaded_uuid}/{uploaded_file}
-wu_wei2/data/{user_uuid}/upload/YYYY/MM/DD/{uploaded_uuid}/thumbnail.jpg
-wu_wei2/data/{user_uuid}/upload/YYYY/MM/DD/{uploaded_uuid}/preview.pdf
-----
-
-通常保存では、アップロード原本、サムネイル、プレビューを Note snapshot に複製しない。
-`role=original`、`role=thumbnail`、`role=preview` は `area=upload` のファイルを参照する。
-
-=== 画面表示と編集ペインでの扱い
-
-編集ペインに表示するアップロード済みリソースの URL と縮小画像 URL は、`area` を除いた日付配下の相対 `path` とする。
-たとえば原本は `2026/04/29/{uploaded_uuid}/document.docx`、サムネイルは `2026/04/29/{uploaded_uuid}/thumbnail.jpg` のように表示する。
-これらは保存データの参照情報であり、利用者が手入力で変更する項目ではないため read only とする。
-メディア種類も Resource の metadata から決まる管理項目であり、アップロード済みリソースの編集ペインでは read only とする。
-
-info ペインでは、PDF やアップロード済み Office 文書の原本を直接 iframe 表示するのではなく、`role=preview` の PDF を優先して表示する。
-preview がない場合は `role=thumbnail` を表示し、最後に `role=original` を WuWei のロード API 経由で参照する。
-ローカル環境では Office viewer が利用できないため、Office 原本に対する `newTab` / `newWindow` は表示せず、ダウンロード操作を使う。
-ダウンロード時の保存ファイル名は Resource の label/title ではなく、`storage.files[]` の `role=original` が指す元ファイル名を優先する。
-
-=== JSON に保存するファイル参照
-
-[source,json]
-----
-{
-  "storage": {
-    "managed": true,
-    "copyPolicy": "snapshot",
-    "files": [
-      {
-        "role": "original",
-        "area": "upload",
-        "path": "2026/04/29/_uploaded_uuid/document.pdf",
-        "mimeType": "application/pdf"
-      },
-      {
-        "role": "thumbnail",
-        "area": "note",
-        "path": "2026/04/29/_note_uuid/resource/_uploaded_uuid/thumbnail.jpg",
-        "mimeType": "image/jpeg"
-      },
-      {
-        "role": "preview",
-        "area": "note",
-        "path": "2026/04/29/_note_uuid/resource/_uploaded_uuid/preview.pdf",
-        "mimeType": "application/pdf"
-      }
-    ]
-  }
-}
-----
-
-`storage.sourcePath`、`storage.files[].sourcePath`、OS 絶対パスは保存データに持たせない。
-必要な実ファイルパスや URL は、実行時に `area`、`path`、ログインユーザー UUID、アプリケーション設置 URL から解決する。
-
-[cols="1,3,3"]
-|===
-|area |JSON の path |実ファイル
-
-|`upload`
-|`YYYY/MM/DD/{uploaded_uuid}/{filename}`
-|`wu_wei2/data/{user_uuid}/upload/YYYY/MM/DD/{uploaded_uuid}/{filename}`
-
-|`note`
-|`YYYY/MM/DD/{note_uuid}/resource/{uploaded_uuid}/{filename}`
-|`wu_wei2/data/{user_uuid}/note/YYYY/MM/DD/{note_uuid}/resource/{uploaded_uuid}/{filename}`
-
-|`resource`
-|`YYYY/MM/DD/{resource_uuid}/{filename}`
-|`wu_wei2/data/{user_uuid}/resource/YYYY/MM/DD/{resource_uuid}/{filename}`
-|===
-
-`resource` area は Resource library の metadata や将来の共有 snapshot 用に残せる。
-現行仕様では、Resource library の正本は `resource.json` とし、upload 原本は `upload` area、Note 表示用のサムネイルとプレビューは原則として `note` area に保存する。
-Uploaded Resource では `resource.id` と `uploaded_uuid` を同一 ID として扱う。
-この場合、Note snapshot 配下の `resource/{...}` ディレクトリ名も `uploaded_uuid` を使い、`resource_uuid` と別名を持たせない。
-
-=== 表示 URL
-
-画面表示では、`data/` への直接 URL を生成しない。
-JavaScript は `area + path` から WuWei のロード API URL を生成する。
-
-[source,text]
-----
-JSON:
-  area=upload
-  path=2026/04/29/_uploaded_uuid/document.pdf
-
-表示URL:
-  server/load-file.cgi?area=upload&path=2026/04/29/_uploaded_uuid/document.pdf
-
-nginx internal:
-  /_wuwei2_data/{user_uuid}/upload/2026/04/29/_uploaded_uuid/document.pdf
-----
-
-編集ペインに表示する文書 URI は、`area=upload` を別属性として扱い、欄には `2026/04/29/_uploaded_uuid/document.pdf` のようなユーザー UUID を含まない日付配下の相対 `path` を表示する。
-実際の表示時は WuWei のロード API URL に変換する。
-
-=== portable ZIP
-
-通常保存では、original、thumbnail、preview は `upload` を参照し、Note snapshot には標準ではファイル実体を作成しない。
-ノートファイルを portable ZIP としてダウンロードするときだけ、持ち運びに必要な upload ディレクトリを ZIP に同梱する。
-
-portable ZIP の `path` もユーザー UUID を含まない論理パスとする。
-
-[source,text]
-----
-upload/YYYY/MM/DD/{uploaded_uuid}/{filename}
-upload/YYYY/MM/DD/{uploaded_uuid}/manifest.json
-upload/YYYY/MM/DD/{uploaded_uuid}/thumbnail.jpg
-upload/YYYY/MM/DD/{uploaded_uuid}/preview.pdf
-----
-
-インポート時は、ZIP 内の `upload/` を現在ユーザーの `wu_wei2/data/{current_user_uuid}/upload/...` に復元する。
-ローカル未ログイン時の `{current_user_uuid}` は固定値 `guest` とする。
-復元後も Note JSON / Resource JSON は `area + path` 形式を維持し、OS 絶対パスには変換しない。
-
-// 2026-04-29 update:
-// Resource file references are stored as area + user-independent relative path.
-// Absolute OS paths such as C:/... or /ebs/... and public URLs are runtime values
-// and must not be persisted in Note JSON or Resource JSON.
-
-== 2026-04-29 補足: Resource ファイル参照の相対パス規約
-
-Note JSON および Resource JSON には、OS 依存の絶対パスや公開 URL を保存しない。
-ファイル実体は `area` と、ユーザー UUID を含まない日付配下の相対 `path` で参照する。
-
-[source,json]
-----
-{
-  "storage": {
-    "managed": true,
-    "copyPolicy": "snapshot",
-    "files": [
-      {
-        "role": "original",
-        "area": "upload",
-        "path": "2026/04/29/_uploaded_file_uuid/document.pdf",
-        "mimeType": "application/pdf"
-      },
-      {
-        "role": "thumbnail",
-        "area": "note",
-        "path": "2026/04/29/_note_uuid/resource/_uploaded_uuid/thumbnail.jpg",
-        "mimeType": "image/jpeg"
-      },
-      {
-        "role": "preview",
-        "area": "note",
-        "path": "2026/04/29/_note_uuid/resource/_uploaded_uuid/preview.pdf",
-        "mimeType": "application/pdf"
-      }
-    ]
-  }
-}
-----
-
-`area` は保存領域を表す。
-
-[cols="1,3,3"]
-|===
-|area |JSON 内の path |実体パス
-
-|`upload`
-|`YYYY/MM/DD/{uploaded_file_uuid}/{filename}`
-|`wu_wei2/data/{user_uuid}/upload/YYYY/MM/DD/{uploaded_file_uuid}/{filename}`
-
-|`resource`
-|`YYYY/MM/DD/{resource_uuid}/{filename}`
-|`wu_wei2/data/{user_uuid}/resource/YYYY/MM/DD/{resource_uuid}/{filename}`
-
-|`note`
-|`YYYY/MM/DD/{note_uuid}/resource/{uploaded_uuid}/{filename}`
-|`wu_wei2/data/{user_uuid}/note/YYYY/MM/DD/{note_uuid}/resource/{uploaded_uuid}/{filename}`
-|===
-
-画面表示や iframe 表示では、実行時に次のように変換する。
-
-[source,text]
-----
-JSON:        area=upload, path=2026/04/29/_file_uuid/document.pdf
-表示URL:     server/load-file.cgi?area=upload&path=2026/04/29/_file_uuid/document.pdf
-実体パス:    wu_wei2/data/{user_uuid}/upload/2026/04/29/_file_uuid/document.pdf
-----
-
-編集ペインに表示する文書 URI は、`area=upload` を別属性として扱い、欄には `2026/04/29/_uploaded_file_uuid/document.pdf` のような日付配下の相対 `path` を表示する。
-ユーザー UUID を含む公開 URL、`C:/...`、`/ebs/...` は保存データには書き込まない。
-
-通常保存では、`role=original`、`role=thumbnail`、`role=preview` の upload 実体は Note snapshot に複製しない。
-portable note download では、持ち運びに必要な upload ディレクトリを `export-note` が ZIP に同梱する。
-portable note upload / import では、`import-note` が ZIP 内の `upload/` を現在ユーザーの `upload` area へ復元し、`storage.files[]` は復元後も同じ `area + path` 形式で管理する。
-
-== 目的
-
-この文書は、WuWei app2 で扱う Note、Page、Node、Link、Group、Resource のデータモデル、保存時のファイル配置、入出力 API、メニュー操作との対応を一体として定義する。
-
-`manual/data` 配下のデータ関連仕様は、この `data.adoc` を正本とする。
-旧来の `data_model.adoc` と `data_design.adoc` に分かれていた内容は、本書に統合する。
-
-旧バージョンの Note データは `wuwei.note` が読み込む時点で新モデルへ変換する。
-変換後の実行時データおよび保存データには、旧モデル由来の属性を残さない。
-旧モデル属性が残っている場合は互換処理を行わず、エラーとして扱う。
+この文書は、2026-05-01 時点の WuWei の保存データ仕様を定義します。
 
 == 基本方針
 
-* Note は `resources[]` と `pages[]` を持つ。
-* Page は `nodes`、`links`、`groups` を持つ。
-* Content ノードは Resource 本体を直接保持せず、`resourceRef` で `resources[].id` を参照する。
-* 同じ Resource は複数の Content ノードから参照できる。
-* 同一 Resource の参照ページ、シート、時刻範囲、fragment などの違いは Content 側の `resourceView` に保持する。
-* 外部 Web Resource は原則として実体コピーせず、メタデータ、URI、埋め込み情報を保持する。
-* 自己アップロード Resource は Resource ライブラリに登録し、必要に応じて Note snapshot にコピーする。
-* Page ID は `_page_uuid` とし、ページ番号は `pages[]` の表示順から計算する。
-* Link の矢印は `routing.startArrow` と `routing.endArrow` で表す。
-* Group 種別は `simple`、`horizontal`、`vertical`、`timeline` とする。
-* Group の表示/非表示は、Group 全体を一括で制御する。
-* 新規 Note は作成時点で `note_id` を確定する。
-* Note の「新規」と「破棄」は別操作として扱う。
+WuWei のデータは、次の考え方で単純化します。
 
-== 識別子
+* アップロードされたファイル本体、サムネイル、Office 変換 PDF は `upload/` を正本とします。
+* ノート保存ではアップロード済みファイルをコピーせず、ノート JSON に参照を保存します。
+* ノートのダウンロード時に、ノート JSON が参照するアップロードディレクトリを収集して ZIP 化します。
+* 開発途中の旧形式データは一覧表示の対象外とします。
+* 保存 JSON には OS の絶対パスを保存しません。`data/{user_uuid}` 配下からの相対パス、`area`、`role` を保存します。
 
-ID は UUID 文字列を基本とし、WuWei 内では先頭に `_` を付ける。
+== ディレクトリ構成
 
 [source,text]
 ----
-_xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+data/{user_uuid}/
+  upload/YYYY/MM/DD/{upload_uuid}/
+    manifest.json
+    {original_file}
+    thumbnail.jpg
+    preview.pdf
+
+  note/YYYY/MM/DD/{note_uuid}/
+    note.json
+    thumbnail.jpg
+
+  trash/
 ----
 
-主な ID は次のとおりである。
+`{upload_uuid}` と `{note_uuid}` は先頭に `_` を付けた UUID 文字列です。
 
-[cols="1,3"]
-|===
-|ID |用途
+== アップロードコンテンツ
 
-|`note_id`
-|Note を識別する。
-
-|`page.id`
-|Page を識別する恒久 ID。ページ番号ではない。
-
-|`node.id`
-|Node を識別する。
-
-|`link.id`
-|Link を識別する。
-
-|`group.id`
-|Group を識別する。
-
-|`resource.id`
-|Resource を識別する。
-|===
-
-== 共通型
-
-=== Audit
+アップロードコンテンツは `upload/YYYY/MM/DD/{upload_uuid}/manifest.json` を正本メタデータとします。
 
 [source,json]
 ----
 {
-  "owner": "sambuichi",
-  "createdBy": "_user_uuid",
-  "createdAt": "2026-04-27T12:00:00+09:00",
-  "lastModifiedBy": "",
-  "lastModifiedAt": ""
-}
-----
-
-=== RichText
-
-説明、注釈、Memo 本文などの文字列は、形式と本文を分けて保持する。
-
-[source,json]
-----
-{
-  "format": "asciidoc",
-  "body": "== TITLE"
-}
-----
-
-`format` は `plain/text`、`asciidoc`、`markdown`、`html` などを指定できる。
-表示時は `format` に従ってレンダリングする。
-検索時は markup 制御文字を除いた本文相当の文字列を対象にする。
-
-=== Transform
-
-Page または描画キャンバスの表示位置と倍率を表す。
-
-[source,json]
-----
-{
-  "x": 0,
-  "y": 0,
-  "scale": 1
-}
-----
-
-=== Style
-
-[source,json]
-----
-{
-  "fill": "#FEFEFE",
-  "font": {
-    "family": "sans-serif",
-    "size": 14,
-    "color": "#000000",
-    "align": "center"
+  "id": "_c2908f10-e2bb-4935-8655-275ccc9f3735",
+  "type": "UploadResource",
+  "version": 1,
+  "created_at": "2026-05-01T15:51:00+0900",
+  "created_by": "2f754971-e1b3-436c-9148-29c4a18a100f",
+  "title": "XBRL GL Next Vision Statement",
+  "kind": "document",
+  "original": {
+    "file": "XBRL_GL_Next_Vision_Statement_2026-04-02.docx",
+    "display_name": "XBRL GL Next Vision Statement",
+    "mime": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "size": 41725,
+    "sha256": "3ecc93c8e79291ad90a62ed20ba81df02b74f66ca51402413499c19d0b9dce8d"
   },
-  "line": {
-    "kind": "SOLID",
-    "color": "#666666",
-    "width": 1
+  "thumbnail": {
+    "file": "thumbnail.jpg",
+    "mime": "image/jpeg",
+    "size": 10998,
+    "sha256": "1b05dfb943af9037796fbb990d7d813b4a796e69360221d6a0f78f8bf4c79ff7",
+    "display_size": "141x200"
+  },
+  "preview": {
+    "file": "preview.pdf",
+    "mime": "application/pdf",
+    "size": 46918,
+    "sha256": "c2b6e773df6097004bfac3007264fa5c82001e396b6c126b0f8e4bbb01fdc18c",
+    "generated_by": "libreoffice"
   }
 }
 ----
 
-編集画面の HTML id や変数名では、階層名を `_` で連結した形式を用いる。
-例: `style.fill` は `style_fill`、`style.font.size` は `style_font_size`。
+=== SHA-256
 
-== Note
+`original.sha256` はアップロードされた元ファイル本体の SHA-256 です。
 
-Note はページ、参照 Resource 定義、監査情報を持つ。
-Note 単体をファイルとして受け渡しても再現できるように、参照 Resource の定義コピーを `resources[]` に保持する。
+同じ `sha256` のファイルは同一コンテンツとみなし、原則として重複保存しません。再アップロード時は既存の `upload_uuid` を再利用できます。
 
-[source,json]
-----
-{
-  "note_id": "_note_uuid",
-  "note_name": "Note label",
-  "description": "Note description",
-  "currentPage": "_page_uuid",
-  "resources": [],
-  "pages": [],
-  "audit": {}
-}
-----
+`thumbnail.sha256` と `preview.sha256` は、派生ファイルの検証用です。重複判定の主キーには使いません。
 
-[cols="1,3"]
-|===
-|項目 |説明
+=== サムネイル
 
-|`note_id`
-|Note ID。
+`thumbnail.jpg` はアップロードコンテンツの表示用サムネイルです。
 
-|`note_name`
-|Note 名。
+* PDF は先頭ページから生成します。
+* 画像は画像本体から生成します。
+* Office 文書は LibreOffice で `preview.pdf` を生成し、その先頭ページから `thumbnail.jpg` を生成します。
+* 生成できない場合は UI 側でアイコン表示にフォールバックします。
 
-|`description`
-|Note 全体の説明。
+== ノート
 
-|`currentPage`
-|現在表示している Page ID。ページ番号ではなく `_page_uuid` を保存する。
+ノートは `note/YYYY/MM/DD/{note_uuid}/note.json` を正本とします。
 
-|`resources`
-|この Note が参照する Resource 定義のコピー。
-
-|`pages`
-|表示順に並ぶ Page 配列。
-
-|`audit`
-|監査情報。
-|===
-
-=== Note ライフサイクル
-
-Note は、次のいずれかの状態から編集を開始する。
-
-[cols="1,3"]
-|===
-|開始方法 |仕様
-
-|新規 Note
-|`wuwei.note.newNote()` が空の Note を作成し、その時点で新しい `note_id` を割り当てる。編集中だった Note に対して保存、削除、破棄などの副作用は行わない。
-
-|保存済み Note の読み込み
-|`load-note` で保存済み `note.json` を読み込み、保存されている `note_id` を引き継ぐ。
-
-|portable ZIP のインポート
-|ブラウザがノート ZIP または plain Note JSON を `import-note` に送信する。`import-note` が ZIP 内の `upload/` を復元し、Note JSON を保存する。復元後の保存先ユーザーは現在ログイン中のユーザー、またはローカル未ログイン時の `guest` とする。
-|===
-
-`note_id` は Note 作成時または読み込み時に必ず確定しているものとして扱う。
-これにより、アップロード Resource の Note snapshot 保存先を決定できる。
-
-Note メニューの「新規」は、現在編集中の Note を保存も削除もせず、新しい空 Note に切り替える操作である。
-編集中 Note を明示的に捨てる操作は「破棄」として別に定義する。
-「破棄」は確認後に現在の編集状態を破棄し、新しい空 Note を作成する。
-保存済み Note のサーバー上の実体や Resource ライブラリは削除しない。
-
-== Page
-
-Page は、1 枚の作業面を表す。
-Page は Node、Link、Group、表示位置、thumbnail、監査情報を持つ。
-
-Page にはページ番号を恒久 ID として持たせない。
-Page の恒久 ID は `id` に保持する `_page_uuid` である。
-ページ番号は Note の `pages[]` 内の順序から 1 始まりで計算される表示用番号である。
-ページの追加、削除、並べ替えにより、同じ Page ID でも表示用ページ番号は変わり得る。
+ノート JSON はグループ、ノード、リンク、ノート自身のメタデータを保存します。アップロードコンテンツのファイル本体は保存しません。
 
 [source,json]
 ----
 {
-  "id": "_page_uuid",
-  "label": "Page label",
-  "description": {
-    "format": "plain/text",
-    "body": ""
-  },
-  "nodes": [],
-  "links": [],
-  "groups": [],
-  "transform": {
-    "x": 0,
-    "y": 0,
-    "scale": 1
-  },
-  "thumbnail": null,
-  "audit": {}
-}
-----
-
-[cols="1,3"]
-|===
-|項目 |説明
-
-|`id`
-|Page の恒久 ID。
-
-|`label`
-|Page 名。画面表示や Page 一覧で使用する。
-
-|`description`
-|Page の説明。
-
-|`nodes`
-|Page 上に配置される Node の配列。
-
-|`links`
-|Page 上の Node 間を結ぶ Link の配列。
-
-|`groups`
-|Page 上の Group 定義の配列。
-
-|`transform`
-|Page の表示位置と倍率。
-
-|`thumbnail`
-|Page 一覧用の縮小表示。
-
-|`audit`
-|監査情報。
-|===
-
-=== Page 番号
-
-ページ番号は保存値ではなく、`pages[]` の現在の順序から求める。
-
-[source,text]
-----
-pageNumber = pages.indexOf(page) + 1
-----
-
-Page 一覧、draw 上の表示、ページ操作 UI ではこの表示番号を使う。
-保存データの参照や `currentPage` には Page ID を使う。
-
-=== Page 追加
-
-Page メニューの「新規ページ」は、新しい Page ID を採番し、`pages[]` の末尾に空の Page を追加する。
-追加直後は、新しく作成された Page を `currentPage` に設定する。
-
-[source,json]
-----
-{
-  "id": "_new_page_uuid",
-  "label": "",
-  "description": {
-    "format": "plain/text",
-    "body": ""
-  },
-  "nodes": [],
-  "links": [],
-  "groups": [],
-  "transform": {
-    "x": 0,
-    "y": 0,
-    "scale": 1
-  },
-  "thumbnail": null,
-  "audit": {}
-}
-----
-
-ページ追加時に既存 Page の番号を ID として再利用してはならない。
-削除された Page の表示番号が空いていても、Page ID は常に新しい UUID とする。
-
-=== Page 削除
-
-Page 削除では、対象 Page を `pages[]` から取り除く。
-削除後のページ番号は残った `pages[]` の順序から再計算する。
-削除対象が `currentPage` の場合は、残っている先頭 Page を新しい `currentPage` とする。
-すべての Page が削除される場合は、空の Page を 1 件作成する。
-
-=== Page 複製
-
-Page 複製では、Page ID、Node ID、Link ID、Group ID を新しく採番する。
-複製元 Page の Node/Link/Group をそのまま ID 付きで共有してはならない。
-Content が参照する Resource は同じ Resource ID を共有してよい。
-
-== Resource
-
-Resource は Content ノードから参照される再利用可能なコンテンツ定義である。
-Resource は大きく、外部 Web Resource と Uploaded Resource に分ける。
-
-[cols="1,3"]
-|===
-|分類 |説明
-
-|外部 Web Resource
-|Web page、blog、YouTube、Vimeo、Entity site、公開 PDF URL など、他者の公開情報を参照する。
-
-|Uploaded Resource
-|PDF、Office、text、video、audio、photo など、ユーザーがアップロードした自己登録情報。
-|===
-
-=== Resource 定義
-
-[source,json]
-----
-{
-  "id": "_resource_uuid",
-  "type": "Resource",
-  "origin": {
-    "type": "userRegistered",
-    "subtype": "",
-    "provider": ""
-  },
-  "identity": {
-    "title": "Document title",
-    "uri": "",
-    "canonicalUri": ""
-  },
-  "media": {
-    "kind": "document",
-    "mimeType": "application/pdf",
-    "downloadable": true,
-    "duration": null
-  },
-  "viewer": {
-    "supportedModes": ["infoPane", "newTab", "newWindow", "download"],
-    "defaultMode": "infoPane",
-    "embed": {
-      "uri": "",
-      "html": ""
-    }
-  },
-  "storage": {
-    "managed": true,
-    "copyPolicy": "snapshot",
-    "files": [
-      {
-        "role": "original",
-        "area": "upload",
-        "path": "yyyy/mm/dd/{uploaded_file_uuid}/original.pdf",
-        "mimeType": "application/pdf"
-      },
-      {
-        "role": "thumbnail",
-        "area": "note",
-        "path": "yyyy/mm/dd/{note_uuid}/resource/{uploaded_uuid}/thumbnail.jpg",
-        "mimeType": "image/jpeg"
-      }
-    ]
-  },
-  "rights": {
-    "owner": "",
-    "copyright": "",
-    "license": "",
-    "attribution": ""
-  },
-  "audit": {}
-}
-----
-
-=== media.kind
-
-[cols="1,3"]
-|===
-|値 |説明
-
-|`webpage`
-|通常の Web ページ。
-
-|`video`
-|YouTube、Vimeo、アップロード動画。
-
-|`audio`
-|音声。
-
-|`document`
-|PDF、Office、text などの文書。
-
-|`image`
-|画像。
-
-|`general`
-|特定の viewer を持たない一般 Resource。
-|===
-
-YouTube と Vimeo は `webpage` ではなく `video` として扱う。
-
-=== Resource URI の解決順序
-
-info ペイン、外部ウィンドウ表示、Resource 追加処理で表示 URI を求めるときは、次の順序で解決する。
-
-[source,text]
-----
-resource.identity.uri
-resource.viewer.embed.uri
-resource.identity.canonicalUri
-storage.files[].role = "preview"
-storage.files[].role = "original"
-----
-
-`identity.uri` は通常表示 URL である。
-YouTube や Vimeo など、通常 URL と iframe 埋め込み URL が異なる場合は、通常 URL を `identity.uri`、iframe 用 URL を `viewer.embed.uri` に保持する。
-PDF、Office、画像などの管理ファイルは `storage.files[]` の `area + path` から WuWei のロード API URL に変換して表示する。
-
-URI が完全に空の Resource は、info ペインに表示対象を持たない。
-表示側は URL を推測してはならない。
-
-=== iframe 表示
-
-info ペインで Web page、YouTube、Vimeo などを表示する場合、PHP proxy は使用しない。
-`server/proxy.php` などの PHP スクリプトを iframe の src に設定してはならない。
-サーバー CGI は shell script を基本とし、PHP 実行環境を前提にしない。
-
-Web page は URI を直接 iframe に設定する。
-対象サイトが `X-Frame-Options` や CSP により iframe 表示を拒否する場合は、iframe を隠し、URL と拒否メッセージを表示する。
-この場合でも、新しいタブまたは別ウィンドウで開くリンクを提供する。
-
-=== storage
-
-`storage` は Resource の保存場所とコピー方針を定義する。
-
-[cols="1,3"]
-|===
-|項目 |説明
-
-|`managed`
-|WuWei がローカルファイルを管理する場合は `true`。
-
-|`copyPolicy`
-|`snapshot` または `metadataOnly`。
-
-|`sourcePath`
-|廃止。互換処理として読み込まない。実行時データに残っていればエラーとする。
-
-|`primaryPath`
-|廃止。必要な配置は `storage.files[].area` と `storage.files[].path` から解決する。
-
-|`snapshotPath`
-|廃止。Note snapshot は `area=note` の `path` で表す。
-
-|`files`
-|Resource に関連するファイル一覧。
-|===
-
-`storage.files[]` の例:
-
-[source,json]
-----
-[
-  {
-    "role": "original",
-    "area": "upload",
-    "path": "yyyy/mm/dd/{uploaded_file_uuid}/original.pdf",
-    "mimeType": "application/pdf",
-    "size": 123456,
-    "sha256": "..."
-  },
-  {
-    "role": "thumbnail",
-    "area": "note",
-    "path": "yyyy/mm/dd/{note_uuid}/resource/{uploaded_uuid}/thumbnail.png",
-    "mimeType": "image/png",
-    "size": 12345,
-    "sha256": "..."
-  },
-  {
-    "role": "preview",
-    "area": "note",
-    "path": "yyyy/mm/dd/{note_uuid}/resource/{uploaded_uuid}/preview.pdf",
-    "mimeType": "application/pdf",
-    "size": 123456,
-    "sha256": "..."
-  }
-]
-----
-
-=== Resource の同一判定
-
-Resource ライブラリでは、同じ実体を重複保存しない。
-同一判定は次の優先順位で行う。
-
-[source,text]
-----
-resource.identity.canonicalUri
-resource.identity.uri
-resource.storage.files[].area + resource.storage.files[].path
-----
-
-upload ファイルでは、`yyyy/mm/dd/{uploaded_file_uuid}/{filename}` に実体を保存する。
-同一日付内で同じ `{filename}` が再アップロードされた場合は、既存の `{uploaded_file_uuid}` 配下を更新し、sha256 が異なっても同じファイルの更新とみなす。
-Note snapshot 配下では、同じ Resource であっても Note ごとにコピーを持ってよい。
-Note 単体を受け渡しても再現可能にするためである。
-
-=== 空 URI による上書き禁止
-
-既存 Resource に URI が定義されている場合、Note 保存または Resource 更新で渡された Resource 定義の URI が空であっても、既存 URI を空で上書きしてはならない。
-
-保護対象は次の項目である。
-
-[source,text]
-----
-resource.identity.uri
-resource.identity.canonicalUri
-resource.viewer.embed.uri
-storage.files[].area
-storage.files[].path
-----
-
-== Content と ResourceView
-
-Content は Resource を参照する Node である。
-Resource の実体や定義を Content ノードに展開して永続保存しない。
-
-[source,json]
-----
-{
-  "id": "_content_uuid",
-  "type": "Content",
-  "resourceRef": "_resource_uuid",
-  "resourceView": {
-    "mode": "documentPage",
-    "page": 12,
-    "fragment": "#page=12",
-    "time": {
-      "start": "",
-      "end": ""
-    }
-  },
-  "x": 0,
-  "y": 0,
-  "shape": "RECTANGLE",
-  "size": {
-    "width": 120,
-    "height": 100
-  },
-  "visible": true,
-  "label": "Content label",
-  "description": {
-    "format": "asciidoc",
-    "body": ""
-  },
-  "style": {},
-  "audit": {}
-}
-----
-
-`label` と `description` は Note 上の解釈や注釈であり、Resource の `identity.title` とは独立している。
-
-== Node
-
-=== 共通 Node
-
-[source,json]
-----
-{
-  "id": "_node_uuid",
-  "type": "Topic",
-  "x": 0,
-  "y": 0,
-  "shape": "RECTANGLE",
-  "size": {
-    "width": 120,
-    "height": 40
-  },
-  "visible": true,
-  "label": "",
-  "description": {
-    "format": "asciidoc",
-    "body": ""
-  },
-  "style": {},
-  "audit": {}
-}
-----
-
-=== Topic
-
-Topic は概念、タグ、話題を表す Node である。
-
-=== Content
-
-Content は Resource を参照する Node である。
-`resourceRef` は必須である。
-
-=== Memo
-
-Memo は付箋紙として表示する Node である。
-本文は `description.body` に保存し、`description.format` に従ってレンダリングする。
-
-== Link
-
-Link は Node 間の接続を表す。
-
-[source,json]
-----
-{
-  "id": "_link_uuid",
-  "type": "Link",
-  "from": "_source_node_uuid",
-  "to": "_target_node_uuid",
-  "shape": "NORMAL",
-  "x": 0,
-  "y": 0,
-  "x2": 0,
-  "y2": 0,
-  "visible": true,
-  "label": "",
-  "description": {
-    "format": "plain/text",
-    "body": ""
-  },
-  "style": {},
-  "routing": {
-    "startArrow": {
-      "kind": "NONE",
-      "size": 12
-    },
-    "endArrow": {
-      "kind": "ARROW",
-      "size": 12
-    }
-  },
-  "audit": {}
-}
-----
-
-`shape` は `NORMAL`、`HORIZONTAL`、`HORIZONTAL2`、`VERTICAL`、`VERTICAL2` などを使用できる。
-`x` と `y` は第 1 制御点である。
-`HORIZONTAL2` と `VERTICAL2` は第 2 制御点として `x2` と `y2` を保存する。
-`NORMAL`、`HORIZONTAL`、`VERTICAL` では通常 `x2` と `y2` は使用しない。
-
-== Group
-
-Group は複数の Node、Link、または Group 軸をまとめて扱うための定義である。
-
-[source,json]
-----
-{
-  "id": "_group_uuid",
-  "type": "simple",
-  "visible": true,
-  "members": [
+  "note_id": "_925f3c6a-8fc1-4565-9d59-e4d4242ff1d1",
+  "note_name": "test20260501",
+  "description": "",
+  "currentPage": "_999ffe90-6536-425a-a63c-b2c36cd0126a",
+  "resources": [
     {
-      "nodeId": "_node_uuid",
-      "role": "member",
-      "order": 1
+      "id": "_c2908f10-e2bb-4935-8655-275ccc9f3735",
+      "kind": "document",
+      "title": "XBRL GL Next Vision Statement",
+      "area": "upload",
+      "base": "2026/05/01/_c2908f10-e2bb-4935-8655-275ccc9f3735",
+      "manifest": "2026/05/01/_c2908f10-e2bb-4935-8655-275ccc9f3735/manifest.json",
+      "original": "2026/05/01/_c2908f10-e2bb-4935-8655-275ccc9f3735/XBRL_GL_Next_Vision_Statement_2026-04-02.docx",
+      "thumbnail": "2026/05/01/_c2908f10-e2bb-4935-8655-275ccc9f3735/thumbnail.jpg",
+      "preview": "2026/05/01/_c2908f10-e2bb-4935-8655-275ccc9f3735/preview.pdf"
     }
   ],
-  "spine": {},
-  "style": {},
-  "audit": {}
+  "pages": []
 }
 ----
 
-Group 種別は次のいずれかとする。
+ノードは `resourceRef` または同等の `resource.id` で `resources[]` のエントリを参照します。
 
-* `simple`
-* `horizontal`
-* `vertical`
-* `timeline`
+== 未保存ノート
 
-Group の表示/非表示は Group 全体に対して適用する。
-Group のメンバー Node のいずれかを Group 操作として非表示にする場合、その Group 全体を非表示にする。
-同じ規則は timeline Group にも適用する。
+新規ノートの未保存状態では、ブラウザ上のノート ID と一時保存先として固定値 `new_note` を使えます。
 
-=== simple Group
+ただし、アップロードコンテンツ本体、サムネイル、プレビュー PDF は `note/new_note/resource/` に置かず、常に `upload/YYYY/MM/DD/{upload_uuid}/` に置きます。
 
-simple Group はメンバー全体を囲むグループである。
-囲み線はメンバーの現在位置に追従して描画する。
+保存時に新しい `{note_uuid}` を発行し、ノート JSON 内の `note_id` を更新します。アップロードコンテンツへの参照は `upload/` のまま維持します。
 
-=== horizontal / vertical Group
+== ホーム画面とリソース検索
 
-horizontal Group と vertical Group は軸を持つグループである。
-軸は表示対象であり、ドラッグ操作により移動できる。
-simulation モードでは、Group の形状を不用意に変形しない。
+ホーム画面、`list-resource.cgi`、`search-resource.cgi`、`find-resource.cgi` は `upload/**/manifest.json` のみをリソース一覧の入力とします。
 
-=== timeline Group
+旧形式の `resource/YYYY/MM/DD/{resource_uuid}/resource.json` だけを持つデータは、今後の一覧には表示しません。
 
-timeline Group は時間軸を持つグループである。
-開始時刻、終了時刻、軸方向、表示位置、対象 media への参照を保持する。
-timeline Group も Group 一括表示/非表示の対象である。
+検索条件は次の通りです。
 
-== 保存ファイル構造
+* `year`
+* `month`
+* `date`
+* `start_date`
+* `end_date`
+* `term`
 
-=== Note
+`term` はタイトル、元ファイル名、コメント等の検索に使います。
 
-[source,text]
-----
-wu_wei2/data/{user_uuid}/note/YYYY/MM/DD/{note_uuid}/note.json
-wu_wei2/data/{user_uuid}/note/YYYY/MM/DD/{note_uuid}/resource/{uploaded_uuid}/resource.json
-wu_wei2/data/{user_uuid}/note/YYYY/MM/DD/{note_uuid}/resource/{uploaded_uuid}/thumbnail.*
-wu_wei2/data/{user_uuid}/note/YYYY/MM/DD/{note_uuid}/resource/{uploaded_uuid}/preview.pdf
-----
+== ファイル配信
 
-`note.json` は metadata と Note JSON 本体を保持する。
-Note JSON 本体は `json_base64` として保存できる。
+ブラウザから `data/` 配下へ直接アクセスさせません。
+
+ファイル表示は `load-file.cgi` に `area` と `path` を渡して行います。
 
 [source,text]
 ----
-format_version 2
-id _note_uuid
-user_id _user_uuid
-name Note label
-description Note description
-thumbnail ...
-saved_at 2026-04-27T12:00:00+0900
-json_encoding base64
-json_base64 eyJub3RlX2lkIjoiX25vdGVfdXVpZCJ9...
+/wu_wei2/server/load-file.cgi?area=upload&path=2026%2F05%2F01%2F_c2908f10...%2Fthumbnail.jpg&user_id=...
 ----
 
-`json_base64` を decode した Note 本体は、この文書の Note 定義に従う。
+Linux/nginx 環境では `X-Accel-Redirect` を使い、認可確認後に内部パスから配信します。
 
-=== Resource library
+== ノートのダウンロードとアップロード
 
-[source,text]
-----
-wu_wei2/data/{user_uuid}/resource/YYYY/MM/DD/{resource_uuid}/resource.json
-----
+ノート保存とノートダウンロードは分けて考えます。
 
-Resource library では、Resource のメタデータ正本として `resource.json` を保存する。
-upload 原本は `upload` area を参照し、Resource library 配下には標準では `original.*` を複製しない。
-Note 表示を維持するための `thumbnail.jpg` と `preview.pdf` は、標準では upload area に保存し、Resource JSON の `storage.files[]` から `area=upload` と相対 `path` で参照する。
-同じ Resource は Resource library では重複登録しない。
-Note snapshot 配下に表示用ファイルを複製するのは互換または将来拡張用であり、通常保存の標準経路では行わない。
+* ノート保存: `note.json` に参照を保存します。
+* ノートダウンロード: `note.json` が参照する `upload/` ディレクトリを収集して ZIP 化します。
+* ノートアップロード: ZIP 内の `upload/` ディレクトリを復元し、`note.json` の参照を復元先に合わせます。
 
-=== Upload
+通常保存時にアップロードコンテンツをノートディレクトリへコピーしないことで、保存処理を軽く保ちます。
 
-upload 済みファイルの実体は次の場所にある。
+== 旧データの扱い
 
-[source,text]
-----
-wu_wei2/data/{user_uuid}/upload/YYYY/MM/DD/{uploaded_file_uuid}/{filename}
-wu_wei2/data/{user_uuid}/upload/YYYY/MM/DD/{uploaded_file_uuid}/manifest.json
-wu_wei2/data/{user_uuid}/upload/YYYY/MM/DD/{uploaded_file_uuid}/thumbnail.jpg
-wu_wei2/data/{user_uuid}/upload/YYYY/MM/DD/{uploaded_file_uuid}/preview.pdf
-----
+開発途中で作成された次のようなデータは、整合性が保証できないため一覧表示から除外します。
 
-Resource は upload 実体を直接複製するのではなく、`storage.files[]` の `area=upload` と `path` で参照する。
-標準では Note snapshot に upload 実体、`thumbnail.jpg`、`preview.pdf` を作成しない。
+* `manifest.json` を持たないアップロードディレクトリ
+* `resource.json` だけを持つ旧リソースディレクトリ
+* 空のノートディレクトリ
+* `note.json` が存在しないノートディレクトリ
+* `new_note` のまま保存完了していない作業ディレクトリ
 
-== save-note / load-note
-
-=== save-note
-
-`save-note` は Note 保存時に、Note 内で新規作成または更新された Resource も保存する。
-既存 Resource を参照するだけの場合でも、Note 側には Resource 定義コピーを `resources[]` として保持する。
-
-自己アップロードファイルは Resource library と Note snapshot の両方に必要なファイルを持てる。
-外部 Web URL は原則コピーせず、metadata と embed 情報のみを保持する。
-
-=== load-note
-
-`load-note` は Note ファイルを解決して読み込む。
-Note snapshot 配下の `resource.json` は Note 一覧の対象に含めない。
-
-読込後、`wuwei.note` は `resources[]` を `id` で索引化し、各 Content ノードの `resourceRef` に対応する Resource を実行時用 `node.resource` として復元する。
-復元された `node.resource` は実行時専用であり、保存時の Note JSON には残さない。
-
-== wuwei.home
-
-`wuwei.home` は Resource library に登録された Resource の一覧を表示し、選択した Resource を Note に追加するための画面である。
-対象は `wu_wei2/data/{user_uuid}/resource/YYYY/MM/DD/{resource_uuid}/resource.json` とする。
-upload ディレクトリやテストデータを直接一覧対象にしない。
-
-ギャラリーと選択中コンテンツ preview は次の順序で表示 URI を解決する。
-
-[source,text]
-----
-storage.files[].role = "preview"
-storage.files[].role = "thumbnail"
-resource.viewer.embed.uri
-resource.identity.uri
-resource.identity.canonicalUri
-----
-
-`storage.files[]` に保存されている `area + path` は、表示時に `load-file.py` または `load-file.cgi` への保護 URL へ変換する。
-`wuwei.home` は `wu_wei2/data/` への直接 URL や nginx alias 前提の URL を生成してはならない。
-
-`Add to note` は、選択中 Resource を編集中 Note に Content ノードとして追加する。
-`新規ノート` は、新しい Note を作成してから選択中 Resource を Content ノードとして追加する。
-
-ギャラリーのカードには Resource の thumbnail または preview を表示する。
-Note の一覧やギャラリーで Note を表示する場合は、Note の `currentPage` に対応する Page を優先して thumbnail 表示する。
-
-== 検索対象
-
-Resource 検索の初期対象は次の項目とする。
-
-* `resource.label`
-* `resource.description.body`
-* `resource.identity.title`
-* `resource.storage.files[].area`
-* `resource.storage.files[].path`
-* `resource.identity.uri`
-* `resource.identity.canonicalUri`
-
-`media.kind`、`media.mimeType`、`rights.owner`、`rights.copyright`、`rights.license`、`rights.attribution` は将来の検索対象候補とし、初期実装では検索対象外とする。
-
-== 禁止する旧モデル属性
-
-`wuwei.note` の読み込み変換後、次の属性は実行時データおよび保存データに残してはならない。
-
-* `node.name`
-* `node.resource`
-* `node.media`
-* `node.uri`
-* `node.url`
-* `node.format`
-* `node.hidden`
-* `node.view`
-* `link.source`
-* `link.target`
-* `link.hidden`
-* `link.view`
-* `note.resources` がオブジェクト map である構造
-* `page.pp`
-* ページ番号を Page ID として扱う構造
-* `associations`
-* `idx`
-* `owner_id`
-* `ownerId`
-* `userId`
-* `userID`
-* `nFont_size`
-* `nFont_color`
-* `background`
-
-対応する新モデルの保存先は次のとおりである。
-
-[cols="1,2"]
-|===
-|旧属性 |新モデル
-
-|`node.name`
-|`node.label`
-
-|`node.media.kind`
-|`resource.media.kind`
-
-|`node.media.mimeType`
-|`resource.media.mimeType`
-
-|`node.url` / `node.uri`
-|`resource.identity.uri`、`resource.identity.canonicalUri`
-
-|`node.format`
-|`node.description.format`
-
-|`node.content`
-|`node.description.body`
-
-|`nFont_size`
-|`node.style.font.size`
-
-|`nFont_color`
-|`node.style.font.color`
-
-|`background`
-|`node.style.fill`
-|===
-
-== 公開 Note と閲覧専用モード
-
-Publish は、編集中の Note を公開 URL から閲覧できるようにする操作である。
-Publish 成功後は、画面にモーダルメッセージを表示し、利用者が次の操作を選択できるようにする。
-
-* 公開完了を確認する。
-* 公開 URL を確認する。
-* 公開 URL をコピーする。
-* 利用者が明示的に選択した場合だけ、公開 URL を新規タブで開く。
-
-新規タブを開く処理は、利用者が「新規タブで開く」を押したときだけ `window.open(publicUrl, '_blank', 'noopener')` を実行する。
-Publish 成功だけで自動的に新規タブを開いてはならない。
-
-公開 URL で読み込まれた Note は、URL パラメータまたは読み込みモードにより `published/viewOnly` と判定する。
-実行時状態は次のように扱う。
-
-[cols="1,2"]
-|===
-|状態 |意味
-
-|`state.published`
-|公開 URL から読み込まれた Note であることを示す。
-
-|`state.viewOnly`
-|編集不可、保存不可、ダウンロード不可の閲覧専用であることを示す。
-
-|`graph.mode = "view"`
-|描画グラフを閲覧モードとして操作する。
-|===
-
-閲覧専用モードでは、次の操作を無効化する。
-
-* Node、Link、Group、Timeline、Page の作成、編集、削除。
-* Note の保存。
-* Note の Publish。
-* Note または Resource のダウンロード。
-* 編集系コンテキストメニュー。
-* ヘッダーメニューの編集系アイコン。
-
-`published` および `viewOnly` は実行時の表示・操作制御であり、Note JSON の恒久属性として保存しない。
-公開された Note のデータ構造は通常の Note と同一である。
-
-== Page thumbnail の運用
-
-Page は、一覧表示、ページ番号ホバー、Note 選択表示のために `page.thumbnail` を持つ。
-`page.thumbnail` は、右上の縮小図と同じ内容を表す 200 x 200 の SVG として保存する。
-
-thumbnail の更新タイミングは次のとおりとする。
-
-* Page を切り替える直前。
-* Page を追加する直前または直後。
-* Page をコピーする直前または直後。
-* Note を保存する直前。
-* Page 一覧を開く前。
-
-Page 一覧画面と左下のページ番号ホバー時のサムネイル表示は、画面上の SVG をその場で縮小表示するのではなく、保存済みの `page.thumbnail` を利用する。
-これにより、Page 切り替え後や Page 追加後でも、一覧表示の形状と背景が安定する。
-
-Note の代表 thumbnail が必要な場合は、`currentPage` が指す Page の `thumbnail` を利用する。
-Note 直下に Page と重複する thumbnail を保存することは必須ではない。
-
-== Home 画面の Resource 表示
-
-`wuwei.home` は、`wu_wei2/data/{user_uuid}/resource/YYYY/MM/DD/{resource_uuid}/resource.json` に登録された Resource を対象とする。
-テスト用の固定データではなく、Resource library の `resource.json` を読み込み、表示に必要な thumbnail、preview、original は `resource.storage.files[]` の `area + path` から WuWei のロード API URL へ変換して表示する。
-`wuwei.home` は `wu_wei2/data/` 配下の実ファイル URL を直接生成しない。
-
-ギャラリーには、Resource の種別に応じて次の内容を表示する。
-
-[cols="1,2"]
-|===
-|Resource 種別 |表示内容
-
-|PDF、Office、画像などのファイル
-|`storage.files[]` の `thumbnail` または `preview` を優先して表示する。
-
-|Web page
-|`identity.uri` または `identity.canonicalUri` を iframe で表示する。
-
-|YouTube、Vimeo
-|動画用 iframe として表示する。ホスト名から YouTube または Vimeo と判定できる場合、`webpage` ではなく `video` として扱う。
-
-|iframe 表示を拒否する外部サイト
-|拒否されたことを示すメッセージと URL を表示する。
-|===
-
-選択中のコンテンツ欄には、ギャラリーで選択した Resource の preview、label、description、credit、source URL を表示する。
-description は `description.format` に応じて、asciidoc、markdown、html、plain text の表示を切り替える。
-
-Home 画面の検索対象は、初期仕様では次の属性とする。
-
-* `resource.label`
-* `resource.description.body`
-* `resource.identity.title`
-* `resource.storage.files[].area`
-* `resource.storage.files[].path`
-* `resource.identity.uri`
-* `resource.identity.canonicalUri`
-
-`media.kind`、`media.mimeType`、`rights.owner`、`rights.copyright`、`rights.license`、`rights.attribution` は、今後の検索対象候補とする。
-
-== ヘッダーメニュー操作とデータ更新
-
-ヘッダーメニューは、現在の Note、Page、選択状態、閲覧モードに応じて操作可能な項目を切り替える。
-
-=== Note メニュー
-
-[cols="1,2"]
-|===
-|操作 |データ更新
-
-|新規
-|新しい Note を作成する。現在編集中の Note には保存、削除、破棄などの処理を行わない。
-
-|開く
-|保存済み Note 一覧から Note を読み込む。
-
-|保存
-|Note JSON、Page thumbnail、Note 内 Resource snapshot、Resource library への新規または更新 Resource を保存する。
-
-|破棄
-|確認後、現在の編集状態を破棄して新しい空 Note を作成する。保存済み Note の実体は削除しない。
-
-|ノートファイルをダウンロード
-|最新状態を保存した上で `export-note` が portable ZIP を生成し、ZIP ファイルとしてダウンロードする。
-
-|ノートファイルをアップロード
-|portable ZIP または plain Note JSON を `import-note` に送り、upload 実体と Note JSON を復元する。
-
-|Publish
-|公開用 Note を保存し、公開 URL を返す。公開 URL で読み込まれた Note は閲覧専用モードになる。
-
-|ログアウト
-|ログイン状態を解除する。ログインが必要な保存、公開、アップロード操作は利用できなくなる。
-|===
-
-=== Page メニュー
-
-[cols="1,2"]
-|===
-|操作 |データ更新
-
-|一覧
-|Page 一覧画面を表示する。コマンドリストメニューは閉じる。
-
-|名前
-|現在編集中の Page の名称を定義または変更する。
-
-|コピー
-|現在編集中の Page と同じ内容を持つ Page を、最終 Page として追加する。コピーされた Page には新しい Page ID を割り当てる。
-
-|ページ作成
-|白紙の Page を最終 Page として追加する。新しい Page ID を割り当てる。
-|===
-
-Page 番号は `pages[]` の表示順序から決まる。
-Page ID は `_page_uuid` であり、Page の追加、削除、並べ替えによって Page 番号が変わっても同じ Page を識別する。
-
-=== New メニュー
-
-New メニューは、現在の Page に新しい Content、Topic、Memo を追加する。
-追加された Node は、本書で定義する新モデル属性のみを持つ。
-旧モデル属性を併せ持つ互換データとして生成してはならない。
-
-=== Group メニュー
-
-Group メニューは、選択中 Node の整列、Group 定義、Group 解除、コピー、編集を行う。
-Group の表示、非表示、bloom、wilt は Group 全体を単位として扱う。
-Timeline Group も同じ一括表示ルールに従う。
-== Portable Note ZIP と Resource 実体の扱い
-
-通常保存では、upload 済み original、thumbnail、preview を Note snapshot に複製しない。
-`role=original`、`role=thumbnail`、`role=preview` は次の upload 領域を参照する。
-
-[source,text]
-----
-wu_wei2/data/{user_uuid}/upload/YYYY/MM/DD/{uploaded_file_uuid}/manifest.json
-wu_wei2/data/{user_uuid}/upload/YYYY/MM/DD/{uploaded_file_uuid}/{filename}
-wu_wei2/data/{user_uuid}/upload/YYYY/MM/DD/{uploaded_file_uuid}/thumbnail.jpg
-wu_wei2/data/{user_uuid}/upload/YYYY/MM/DD/{uploaded_file_uuid}/preview.pdf
-----
-
-ノートを ZIP ファイルとしてダウンロードするときは、持ち運びに必要な upload ディレクトリを `export-note` が ZIP に同梱する。ZIP 内の `path` はユーザーUUIDを含まない論理パスとする。
-
-[source,text]
-----
-upload/YYYY/MM/DD/{uploaded_file_uuid}/{filename}
-upload/YYYY/MM/DD/{uploaded_file_uuid}/manifest.json
-upload/YYYY/MM/DD/{uploaded_file_uuid}/thumbnail.jpg
-upload/YYYY/MM/DD/{uploaded_file_uuid}/preview.pdf
-----
-
-インポート時は `import-note` が ZIP 内の `upload/...` を `wu_wei2/data/{current_user_uuid}/upload/...` に展開する。復元後も `resource.storage.files[]` は `area + path` の形式を維持し、OS 絶対パスには更新しない。
-
-== 2026-04-29 補足: ノート入出力 API とメニューコマンド
-
-ノート入出力では、通常保存、保存済みノートの読み込み、ノートファイルのダウンロード、ノートファイルのアップロード/復元を分ける。
-portable ZIP の復元保存は `import-note` が受け付ける。
-
-[cols="1,2,2,2"]
-|===
-|メニュー/操作 |JavaScript |ローカル Python |Linux CGI
-
-|ノート > 保存
-|`wuwei.note.saveNote()`
-|`cgi-bin/save-note.py`
-|`server/save-note.cgi`
-
-|ノート > 開く
-|`wuwei.note.loadNote()`
-|`cgi-bin/load-note.py`
-|`server/load-note.cgi`
-
-|ノート > ノートファイルをダウンロード
-|`wuwei.menu.note.downloadFile()` -> `saveNote()` -> `export-note`
-|`save-note.py` 後、`export-note.py`
-|`save-note.cgi` 後、`export-note.cgi`
-
-|ノート > ノートファイルをアップロード
-|`wuwei.menu.note.importZipFile()` / `importFile()`
-|`cgi-bin/import-note.py`
-|`server/import-note.cgi`
-
-|ノート > Publish
-|`wuwei.menu.publish.publish()` -> `saveNote()` -> `publishNote()`
-|`save-note.py` 後、`publish-note.py`
-|`save-note.cgi` 後、`publish-note.cgi`
-|===
-
-`load-note` は保存済み `note.json` を読み込む API である。
-ノートファイルのダウンロードでは、`export-note` が保存済み `note.json` と参照先 upload ディレクトリを ZIP に同梱する。
-
-`save-note` は通常保存専用であり、利用者がアップロードした portable ZIP の復元は行わない。
-`import-note` は ZIP 内の `upload/...` を `wu_wei2/data/{current_user_uuid}/upload/...` に展開し、`note.json` を現在ユーザーの Note として保存する。
+必要な場合のみ手作業で移行します。通常のコードでは旧形式救済のための複雑な分岐を増やしません。

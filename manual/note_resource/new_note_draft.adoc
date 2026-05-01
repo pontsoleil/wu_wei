@@ -76,6 +76,8 @@ If editing is interrupted before save, the upload files may still exist under `u
 
 Draft recovery can use `list-note` with the option that includes `new_note` only when a valid draft `note.json` exists. Broken or empty note directories must not appear in the normal note list.
 
+The home gallery does not read `note/YYYY/MM/DD/new_note/resource/`. Home resource search uses only manifest-backed resources under `upload/YYYY/MM/DD/{upload_uuid}/manifest.json`.
+
 == Implementations
 
 * Browser model: `app2/model/wuwei.note.js`

@@ -1,196 +1,145 @@
-= Note / Resource CGI 役割分担
+= WuWei CGI 役割仕様
 :toc:
-:toclevels: 2
+:toclevels: 3
+:sectnums:
 
-WuWei の Note 保存とファイル受け渡しは、次の方針で分離する。
+この文書は、ノートとリソースを扱う CGI の役割分担を定義します。
 
-* ノート保存 = Note JSON と参照情報を保存する。
-* ノート読み込み = 保存済み Note JSON を返す。
-* ノートダウンロード = 保存済み Note JSON の参照先 upload ディレクトリを収集して ZIP 化する。
-* ノートアップロード = ZIP 内の upload ディレクトリを復元し、Note JSON を保存する。
+== 基本方針
 
-この分離により、通常の `save-note` は大きなファイルコピーを行わず、アップロード済みコンテンツの実体は `upload/` 配下の正本を参照する。
+CGI はシェルスクリプトを中心に保守します。
 
-== 共通の CGI 入口
+通常のノート保存では、アップロード済みファイルをノート配下へコピーしません。保存するのはノート JSON と参照です。
 
-JavaScript は実行環境により CGI の配置を切り替える。
+== CGI 一覧
 
-* ローカル: `/wu_wei2/cgi-bin/{name}.py`
-* Linux サーバー: `/wu_wei2/server/{name}.cgi`
-
-たとえば `save-note` は、ローカルでは `cgi-bin/save-note.py`、Linux サーバーでは `server/save-note.cgi` を呼ぶ。
-
-== ノート保存
-
-[cols="1,2,2,2,4", options="header"]
+[cols="1,2"]
 |===
-|役務 |JavaScript |ローカル Python |Linux CGI |概要
+|CGI |役割
 
-|通常保存
-|`wuwei.note.saveNote()`
-|`cgi-bin/save-note.py`
-|`server/save-note.cgi`
-|現在の Note JSON を `note/YYYY/MM/DD/{note_uuid}/note.json` に保存する。upload 本体やサムネイルを note 配下へ複製しない。
+|`upload.cgi`
+|アップロードファイルを `upload/YYYY/MM/DD/{upload_uuid}/` に保存し、`manifest.json`、`thumbnail.jpg`、必要に応じて `preview.pdf` を作成します。
 
-|保存メニュー
-|`menu.note.js save()`
-|同上
-|同上
-|UI の保存処理。保存成功後にノート名表示と snackbar を更新する。
+|`list-resource.cgi`
+|`upload/**/manifest.json` を読み、ホーム画面用の一覧 JSON を返します。
 
-|公開前保存
-|`menu.publish.js`
-|同上
-|同上
-|Publish 前に `saveNote()` を実行し、古い版の公開を防ぐ。
+|`search-resource.cgi`
+|日付範囲とキーワードで `upload/**/manifest.json` を検索します。
+
+|`find-resource.cgi`
+|`search-resource.cgi` と同じ仕様の互換入口です。
+
+|`update-resource.cgi`
+|コメント、説明、表示用メタデータを更新します。ファイル本体は移動しません。
+
+|`save-note.cgi`
+|ノート JSON を `note/YYYY/MM/DD/{note_uuid}/note.json` に保存します。resource は参照保存です。
+
+|`load-note.cgi`
+|保存済みノート JSON を読み込みます。
+
+|`list-note.cgi`
+|`note.json` が存在する保存済みノートだけを一覧します。`ERROR NOTE NOT FOUND` になるディレクトリは表示しません。
+
+|`remove-note.cgi`
+|ノートを削除または trash へ移動します。参照先 upload resource は削除しません。
+
+|`export-note.cgi`
+|ノート JSON が参照する upload resource を収集し、ZIP 化します。
+
+|`import-note.cgi`
+|ZIP からノート JSON と upload resource を復元します。
+
+|`load-file.cgi`
+|`area` と `path` を検証し、認可済みファイルを配信します。
 |===
 
-保存される Note JSON には、ノード、リンク、グループ、ページ、`resources[]` の参照定義を含める。アップロード済み Resource は `storage.files[]` の `area` と `path` で実体を参照する。
+== upload.cgi
+
+`upload.cgi` はアップロードコンテンツの正本ディレクトリを作成します。
 
 [source,text]
 ----
-data/{user_uuid}/note/YYYY/MM/DD/{note_uuid}/note.json
+data/{user_uuid}/upload/YYYY/MM/DD/{upload_uuid}/
+  manifest.json
+  original-file.ext
+  thumbnail.jpg
+  preview.pdf
+----
+
+`manifest.json` には元ファイルの SHA-256 を `original.sha256` として保存します。
+
+Office 文書では LibreOffice を使って `preview.pdf` を生成し、その先頭ページから `thumbnail.jpg` を作成します。
+
+== save-note.cgi
+
+`save-note.cgi` はノート保存の責務だけを持ちます。
+
+保存対象は次の通りです。
+
+* ノート ID
+* ノート名
+* 説明
+* ページ
+* グループ
+* ノード
+* リンク
+* resource 参照
+* ノートサムネイル
+
+アップロードファイル本体、アップロードサムネイル、Office preview PDF はコピーしません。
+
+== list-resource.cgi / search-resource.cgi
+
+リソース一覧は manifest backed resource だけを返します。
+
+[source,text]
+----
 data/{user_uuid}/upload/YYYY/MM/DD/{upload_uuid}/manifest.json
-data/{user_uuid}/upload/YYYY/MM/DD/{upload_uuid}/{original_file}
-data/{user_uuid}/upload/YYYY/MM/DD/{upload_uuid}/thumbnail.jpg
-data/{user_uuid}/upload/YYYY/MM/DD/{upload_uuid}/preview.pdf
 ----
 
-`preview.pdf` は Office 文書から LibreOffice/OpenOffice が生成する PDF プレビューであり、存在する場合だけ作成する。`thumbnail.jpg` は PDF、画像、または `preview.pdf` の先頭ページから作成する。
+旧形式の `resource.json` だけを持つデータは返しません。
 
-== ノート読み込み
+== list-note.cgi
 
-[cols="1,2,2,2,4", options="header"]
-|===
-|役務 |JavaScript |ローカル Python |Linux CGI |概要
+ノート一覧は `note.json` が存在し、読み込み可能なノートだけを返します。
 
-|ノート読込
-|`wuwei.note.loadNote()`
-|`cgi-bin/load-note.py`
-|`server/load-note.cgi`
-|保存済み `note.json` を探し、`json_base64` をデコードして plain Note JSON を返す。
+空ディレクトリ、保存失敗ディレクトリ、`new_note` は通常一覧に含めません。
 
-|ノート一覧
-|`wuwei.note.listNote()`
-|`cgi-bin/list-note.py`
-|`server/list-note.cgi`
-|`json_base64` または `json` を持つ有効な `note.json` だけを一覧対象にする。
+救済表示が必要な場合は、明示的なオプションでのみ `new_note` を対象にします。
 
-|ノート削除
-|`wuwei.note.removeNote()`
-|`cgi-bin/remove-note.py`
-|`server/remove-note.cgi`
-|指定 Note を削除または trash へ移動する。存在しない Note は一覧に出さない。
-|===
+== export-note.cgi
 
-`load-note` は ZIP や Base64 bundle を生成しない。通常の画面復元に必要な Note JSON だけを返す。
+ノートダウンロードでは、次を ZIP 化します。
 
-== ノートダウンロード
+* `note/YYYY/MM/DD/{note_uuid}/note.json`
+* ノートサムネイル
+* `note.json` が参照する `upload/YYYY/MM/DD/{upload_uuid}/` ディレクトリ
 
-[cols="1,2,2,2,4", options="header"]
-|===
-|役務 |JavaScript |ローカル Python |Linux CGI |概要
+通常保存時にコピーしない代わりに、ダウンロード時に参照先を収集します。
 
-|ダウンロード開始
-|`menu.note.js downloadFile()`
-|`cgi-bin/export-note.py`
-|`server/export-note.cgi`
-|現在ノートを保存してから、保存済み Note を ZIP として取得する。
+== import-note.cgi
 
-|ZIP 生成
-|`export-note`
-|`cgi-bin/export-note.py`
-|`server/export-note.cgi`
-|`note.json` と、Note JSON が参照する `upload/YYYY/MM/DD/{upload_uuid}/...` を ZIP に収集する。
-|===
+ノートアップロードでは、ZIP 内の upload resource を復元してから note JSON を保存します。
 
-ZIP の基本構造は次の通り。
+同じ SHA-256 の upload resource が既に存在する場合は、既存ディレクトリを再利用できます。
+
+== load-file.cgi
+
+`load-file.cgi` は、ブラウザから `data/` へ直接アクセスさせないための認可付き配信入口です。
+
+指定形式は次の通りです。
 
 [source,text]
 ----
-note.json
-upload/YYYY/MM/DD/{upload_uuid}/manifest.json
-upload/YYYY/MM/DD/{upload_uuid}/{original_file}
-upload/YYYY/MM/DD/{upload_uuid}/thumbnail.jpg
-upload/YYYY/MM/DD/{upload_uuid}/preview.pdf
+load-file.cgi?area=upload&path=YYYY/MM/DD/{upload_uuid}/thumbnail.jpg&user_id={user_uuid}
 ----
 
-ダウンロード時だけ参照先ファイルを収集するため、通常保存時に重いコピー処理を行わない。
+`area` は許可された値だけを受け付けます。
 
-== ノートアップロード/インポート
+* `upload`
+* `note`
+* `thumbnail`
+* `resource`（旧互換が必要な場合のみ）
 
-[cols="1,2,2,2,4", options="header"]
-|===
-|役務 |JavaScript |ローカル Python |Linux CGI |概要
-
-|ファイル選択
-|`menu.note.js openFile()`
-|なし
-|なし
-|`<input type=file>` で `.zip`、`.json`、`.txt` などを選択する。
-
-|ZIP インポート
-|`menu.note.js importZipFile()`
-|`cgi-bin/import-note.py`
-|`server/import-note.cgi`
-|ZIP 内の `upload/` を現在ユーザーの upload 配下へ復元し、`note.json` を保存して画面に展開する。
-
-|JSON インポート
-|`menu.note.js importFile()`
-|`cgi-bin/import-note.py` またはブラウザ読込
-|`server/import-note.cgi`
-|plain Note JSON を受け取り、Note として保存する。
-|===
-
-インポート時は Note JSON 内の `user_uuid` を保存データの正本として扱わない。保存先ユーザーは実行時のログインユーザー、またはローカル開発環境の `guest` で決定する。
-
-== アップロード Resource の manifest.json
-
-アップロードごとの `manifest.json` は、アップロードディレクトリ内の実ファイル一覧と検証情報を持つ。
-
-[source,json]
-----
-{
-  "id": "_upload_uuid",
-  "type": "UploadManifest",
-  "title": "表示名",
-  "created_at": "2026-05-01T12:34:56+0900",
-  "original": {
-    "file": "original.docx",
-    "display_name": "original.docx",
-    "mime": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "size": 41725,
-    "sha256": "..."
-  },
-  "thumbnail": {
-    "file": "thumbnail.jpg",
-    "mime": "image/jpeg",
-    "size": 10998,
-    "sha256": "...",
-    "display_size": "141x200"
-  },
-  "preview": {
-    "file": "preview.pdf",
-    "mime": "application/pdf",
-    "size": 46918,
-    "sha256": "...",
-    "generated_by": "LibreOffice"
-  }
-}
-----
-
-`original.sha256` は同一ファイル判定に使う。既に同じ sha256 の upload が存在する場合、新しい upload 本体を重複保存せず、既存 upload ディレクトリを再利用する。
-
-Resource JSON 側にも `storage.files[]` として同じ `sha256`、`area`、`path` を保存する。画面描画やダウンロードは Resource JSON を主に参照し、`manifest.json` は upload ディレクトリ単位の正本メタデータとして扱う。
-
-== 保護ファイル配信
-
-画面表示、Office/PDF プレビュー、サムネイル表示、ダウンロードは `data/` を直接公開せず、`load-file` を経由する。
-
-[source,text]
-----
-server/load-file.cgi?area=upload&path=YYYY/MM/DD/{upload_uuid}/thumbnail.jpg
-cgi-bin/load-file.py?area=upload&path=YYYY/MM/DD/{upload_uuid}/preview.pdf
-----
-
-Linux サーバーでは `load-file.cgi` が認証、`area` 検証、相対パス検証、存在確認を行い、`X-Accel-Redirect` で nginx の internal location から実ファイルを配信する。
+Linux/nginx では `X-Accel-Redirect` により内部パスから配信します。
