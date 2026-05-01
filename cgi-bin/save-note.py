@@ -134,7 +134,7 @@ def _local_file_from_uri(uri: str, *, base_root: Path | None = None, user_id: st
     return candidate if candidate.is_file() else None
 
 
-def _storage_file_from_item(item: dict, *, base_root: Path, user_id: str) -> Path | None:
+def _storage_file_from_item(item: dict, *, base_root: Path, user_id: str, note_id: str = "") -> Path | None:
     area = str(item.get("area") or "").strip().strip("/")
     rel = str(item.get("path") or "").replace("\\", "/").strip("/")
     if not rel:
@@ -148,7 +148,14 @@ def _storage_file_from_item(item: dict, *, base_root: Path, user_id: str) -> Pat
     path = Path(rel)
     if path.is_absolute():
         return path
-    return base_root / area / rel
+    candidate = base_root / area / rel
+    if area == "note" and not candidate.is_file() and note_id and note_id != DRAFT_NOTE_ID:
+        alt_rel = rel.replace(f"/{note_id}/", f"/{DRAFT_NOTE_ID}/", 1)
+        if alt_rel != rel:
+            alt_candidate = base_root / area / alt_rel
+            if alt_candidate.is_file():
+                return alt_candidate
+    return candidate
 
 
 def _promote_local_resource_snapshot(resource: dict) -> None:
@@ -332,7 +339,11 @@ def _copy_resource_snapshot(resource: dict, *, base_root: Path, user_id: str, no
 
     snapshot = note_resource_dir / rid
 
-    snapshot.mkdir(parents=True, exist_ok=True)
+    try:
+        snapshot.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        debug_kv(snapshot_skip="mkdir failed", resource_id=rid, path=str(snapshot), error=str(e))
+        return
     snapshot_files = []
     snapshot_sources = resource.get("snapshotSources") if isinstance(resource.get("snapshotSources"), dict) else {}
     if not isinstance(resource.get("snapshotSources"), dict):
@@ -355,24 +366,43 @@ def _copy_resource_snapshot(resource: dict, *, base_root: Path, user_id: str, no
         rel = str(item.get("path") or "").replace("\\", "/").strip("/")
         if not rel:
             continue
-        src = _storage_file_from_item(item, base_root=base_root, user_id=user_id)
+        src = _storage_file_from_item(item, base_root=base_root, user_id=user_id, note_id=note_id)
         if src is None:
             src = Path()
         if not src.is_file():
             debug_kv(snapshot_skip="file missing", resource_id=rid, src=str(src))
             snapshot_files.append(dict(item))
             continue
-        dst = snapshot / _snapshot_filename(item, src)
-        shutil.copy2(src, dst)
-        snapshot_item = dict(item)
-        snapshot_item["area"] = "note"
-        snapshot_item["path"] = _note_area_path(dst)
-        snapshot_files.append(snapshot_item)
+        try:
+            dst = snapshot / _snapshot_filename(item, src)
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                same_file = src.resolve() == dst.resolve()
+            except Exception:
+                same_file = False
+            if not same_file:
+                shutil.copy2(src, dst)
+            snapshot_item = dict(item)
+            snapshot_item["area"] = "note"
+            snapshot_item["path"] = _note_area_path(dst)
+            snapshot_files.append(snapshot_item)
+        except OSError as e:
+            debug_kv(
+                snapshot_skip="copy failed",
+                resource_id=rid,
+                role=role,
+                src=str(src),
+                error=str(e),
+            )
+            snapshot_files.append(dict(item))
     if snapshot_files:
         storage["files"] = snapshot_files
 
     resource_json = snapshot / "resource.json"
-    resource_json.write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+    try:
+        resource_json.write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+    except OSError as e:
+        debug_kv(snapshot_skip="resource json write failed", resource_id=rid, path=str(resource_json), error=str(e))
 
 
 def _safe_bundle_filename(value: str, fallback: str) -> str:
@@ -575,16 +605,25 @@ def main():
         )
         for resource in note_json.get("resources") or []:
             if isinstance(resource, dict):
-                _save_primary_resource_definition(resource, resource_root=resource_root_path, now=now)
-                _promote_local_resource_snapshot(resource)
-                _save_primary_resource_definition(resource, resource_root=resource_root_path, now=now)
-                _copy_resource_snapshot(
-                    resource,
-                    base_root=base_root,
-                    user_id=user_id,
-                    note_id=note_id,
-                    note_resource_dir=note_resource_dir,
-                )
+                try:
+                    try:
+                        _save_primary_resource_definition(resource, resource_root=resource_root_path, now=now)
+                    except OSError as e:
+                        debug_kv(primary_resource_skip="write failed", resource_id=str(resource.get("id") or ""), error=str(e))
+                    _promote_local_resource_snapshot(resource)
+                    try:
+                        _save_primary_resource_definition(resource, resource_root=resource_root_path, now=now)
+                    except OSError as e:
+                        debug_kv(primary_resource_skip="write failed after promote", resource_id=str(resource.get("id") or ""), error=str(e))
+                    _copy_resource_snapshot(
+                        resource,
+                        base_root=base_root,
+                        user_id=user_id,
+                        note_id=note_id,
+                        note_resource_dir=note_resource_dir,
+                    )
+                except Exception as e:
+                    debug_kv(resource_snapshot_skip="unexpected error", resource_id=str(resource.get("id") or ""), error=str(e))
     except Exception as e:
         debug_kv(snapshot_error=str(e))
         script_error("ERROR RESOURCE SNAPSHOT FAILED")

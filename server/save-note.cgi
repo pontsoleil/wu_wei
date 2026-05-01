@@ -436,7 +436,14 @@ def storage_file_from_item(item, base_root):
     path = Path(rel)
     if path.is_absolute():
         return path
-    return base_root / area / rel
+    candidate = base_root / area / rel
+    if area == "note" and not candidate.is_file() and note_id and note_id != DRAFT_NOTE_ID:
+        alt_rel = rel.replace(f"/{note_id}/", f"/{DRAFT_NOTE_ID}/", 1)
+        if alt_rel != rel:
+            alt_candidate = base_root / area / alt_rel
+            if alt_candidate.is_file():
+                return alt_candidate
+    return candidate
 
 
 def promote_local_resource_snapshot(resource):
@@ -614,7 +621,11 @@ def copy_resource_snapshot(resource, base_root):
         return
 
     snapshot = note_resource_dir / rid
-    snapshot.mkdir(parents=True, exist_ok=True)
+    try:
+        snapshot.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        print(f"snapshot_skip='mkdir failed' resource_id={rid!r} path={str(snapshot)!r} error={str(e)!r}", file=sys.stderr)
+        return
     snapshot_files = []
     snapshot_sources = resource.get("snapshotSources") if isinstance(resource.get("snapshotSources"), dict) else {}
     if not isinstance(resource.get("snapshotSources"), dict):
@@ -643,17 +654,30 @@ def copy_resource_snapshot(resource, base_root):
         if not src.is_file():
             snapshot_files.append(dict(item))
             continue
-        dst = snapshot / snapshot_filename(item, src)
-        shutil.copy2(src, dst)
-        snapshot_item = dict(item)
-        snapshot_item["area"] = "note"
-        snapshot_item["path"] = note_area_path(dst)
-        snapshot_files.append(snapshot_item)
+        try:
+            dst = snapshot / snapshot_filename(item, src)
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                same_file = src.resolve() == dst.resolve()
+            except Exception:
+                same_file = False
+            if not same_file:
+                shutil.copy2(src, dst)
+            snapshot_item = dict(item)
+            snapshot_item["area"] = "note"
+            snapshot_item["path"] = note_area_path(dst)
+            snapshot_files.append(snapshot_item)
+        except OSError as e:
+            print(f"snapshot_skip='copy failed' resource_id={rid!r} role={role!r} src={str(src)!r} error={str(e)!r}", file=sys.stderr)
+            snapshot_files.append(dict(item))
 
     if snapshot_files:
         storage["files"] = snapshot_files
 
-    (snapshot / "resource.json").write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+    try:
+        (snapshot / "resource.json").write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+    except OSError as e:
+        print(f"snapshot_skip='resource json write failed' resource_id={rid!r} path={str(snapshot / 'resource.json')!r} error={str(e)!r}", file=sys.stderr)
 
 
 def safe_bundle_filename(value, fallback):
@@ -776,10 +800,19 @@ restore_embedded_resource_files(note)
 for resource in note.get("resources") or []:
     if not isinstance(resource, dict):
         continue
-    save_primary_resource_definition(resource)
-    promote_local_resource_snapshot(resource)
-    save_primary_resource_definition(resource)
-    copy_resource_snapshot(resource, base_root)
+    try:
+        try:
+            save_primary_resource_definition(resource)
+        except OSError as e:
+            print(f"primary_resource_skip='write failed' resource_id={str(resource.get('id') or '')!r} error={str(e)!r}", file=sys.stderr)
+        promote_local_resource_snapshot(resource)
+        try:
+            save_primary_resource_definition(resource)
+        except OSError as e:
+            print(f"primary_resource_skip='write failed after promote' resource_id={str(resource.get('id') or '')!r} error={str(e)!r}", file=sys.stderr)
+        copy_resource_snapshot(resource, base_root)
+    except Exception as e:
+        print(f"resource_snapshot_skip='unexpected error' resource_id={str(resource.get('id') or '')!r} error={str(e)!r}", file=sys.stderr)
 
 json_file.write_text(json.dumps(note, ensure_ascii=False, separators=(",", ":")), encoding="utf-8", newline="\n")
 PY
