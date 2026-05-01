@@ -60,6 +60,31 @@ wuwei.menu.note = wuwei.menu.note || {};
     }
   }
 
+  function noteSearchFilters() {
+    let startDate = (document.getElementById('note-date-start')?.value || '').trim();
+    let endDate = (document.getElementById('note-date-end')?.value || '').trim();
+    if (startDate && endDate && endDate < startDate) {
+      const tmp = startDate;
+      startDate = endDate;
+      endDate = tmp;
+    }
+    return {
+      term: (document.getElementById('search-text')?.value || '').trim(),
+      start_date: startDate,
+      end_date: endDate || startDate
+    };
+  }
+
+  function restoreNoteSearchFilters(filters) {
+    filters = filters || {};
+    const termEl = document.getElementById('search-text');
+    const startEl = document.getElementById('note-date-start');
+    const endEl = document.getElementById('note-date-end');
+    if (termEl) termEl.value = filters.term || '';
+    if (startEl) startEl.value = filters.start_date || '';
+    if (endEl) endEl.value = filters.end_date || '';
+  }
+
   function open() {
     const
       util = wuwei.util,
@@ -97,8 +122,8 @@ wuwei.menu.note = wuwei.menu.note || {};
    * search notes
    */
   function search(start, count) {
-    const term = (document.getElementById('search-text')?.value || '').trim();
-    if (!term) return;
+    const filters = noteSearchFilters();
+    const term = filters.term;
 
     const state = wuwei.common.state;
     const noteEl = document.getElementById('note');
@@ -125,10 +150,12 @@ wuwei.menu.note = wuwei.menu.note || {};
     };
 
     const req = {
-      term: encodeURIComponent(term),
       start: _start,
       count: _count
     };
+    if (term) req.term = term;
+    if (filters.start_date) req.start_date = filters.start_date;
+    if (filters.end_date) req.end_date = filters.end_date;
 
     wuwei.note.searchNote(req)
       .then(responseText => {
@@ -196,6 +223,7 @@ wuwei.menu.note = wuwei.menu.note || {};
 
         return {
           term,
+          filters,
           total,
           count_org,
           start: _start,
@@ -206,10 +234,10 @@ wuwei.menu.note = wuwei.menu.note || {};
       .then(result => {
         if (!result) return;
 
-        const { term, total, count_org, start, notes } = result;
+        const { total, count_org, start, notes } = result;
 
         noteEl.innerHTML = wuwei.menu.note.markup.list_template(notes);
-        document.getElementById('search-text').value = term;
+        restoreNoteSearchFilters(result.filters);
         noteEl.style.display = 'block';
 
         const elements = noteEl.querySelectorAll('div.note');
@@ -363,6 +391,11 @@ wuwei.menu.note = wuwei.menu.note || {};
         if (page_div) page_div.classList.add('active');
       })
       .catch(error => notifyError(error));
+  }
+
+  function clearSearch() {
+    restoreNoteSearchFilters({ term: '', start_date: '', end_date: '' });
+    list(1, _count || 12);
   }
 
   /**
@@ -740,6 +773,7 @@ wuwei.menu.note = wuwei.menu.note || {};
   ns.open = open;
   ns.close = close;
   ns.search = search;
+  ns.clearSearch = clearSearch;
   ns.list = list;
   ns.load = load;
   ns.save = save;

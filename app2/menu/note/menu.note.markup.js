@@ -111,10 +111,13 @@ wuwei.menu.note.markup = ( function () {
     <h2 class="w3-wide w3-margin-bottom">${translate('List of Notebooks')}</h2>
     <i onclick="wuwei.menu.note.close()"
         class="fas fa-times w3-right w3-button w3-transparent w3-large w3-margin-bottom"></i>
-    <p onchange="wuwei.menu.note.search()"
-        class="w3-left w3-transparent w3-large w3-margin-bottom">
-        <input type="text" id="search-text" class="search">
-    </p>
+    <div class="w3-left w3-transparent w3-large w3-margin-bottom note-search-filter">
+        <input type="text" id="search-text" class="search" placeholder="${translate('Search')}">
+        <input type="date" id="note-date-start" title="${translate('Start date')}">
+        <input type="date" id="note-date-end" title="${translate('End date')}">
+        <button type="button" onclick="wuwei.menu.note.search(); return false;">${translate('Search')}</button>
+        <button type="button" onclick="wuwei.menu.note.clearSearch(); return false;">${translate('Clear')}</button>
+    </div>
     <div id="pagination" class="w3-right w3-transparent w3-large w3-margin-bottom"></div>
     <div class="ajax_result"></div>
   </header>

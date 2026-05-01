@@ -1333,6 +1333,11 @@ wuwei.note = (function () {
     if (includeNewNote) {
       data.include_new_note = 1;
     }
+    ['term', 'year', 'month', 'date', 'start_date', 'end_date'].forEach(function (key) {
+      if (options && options[key]) {
+        data[key] = options[key];
+      }
+    });
     return ajaxRequest(action, data, 'POST', 30000);
   }
 
@@ -1349,18 +1354,26 @@ wuwei.note = (function () {
       count = 12;
     }
     if (!term) {
-      return;
+      term = '';
     } else if (term.match('/ /')) {
       term = term.replace(/ /g, '+');
     }
     const cu = state.currentUser || {};
-    const action = util.getAction('find-note')
-    return ajaxRequest(action, {
+    const action = util.getAction('list-note')
+    const data = {
       start: start || 1,
       count: count || 12,
-      term: term,
       user_id: cu.user_id
-    }, 'POST', 30000);
+    };
+    if (term) {
+      data.term = term;
+    }
+    ['year', 'month', 'date', 'start_date', 'end_date', 'include_new_note'].forEach(function (key) {
+      if (param && param[key]) {
+        data[key] = param[key];
+      }
+    });
+    return ajaxRequest(action, data, 'POST', 30000);
   }
 
   function loadNote(node_id) {

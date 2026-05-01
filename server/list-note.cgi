@@ -206,6 +206,47 @@ fi
 include_new_note=$(nameread include_new_note "$CGIVARS" | strip_quotes || true)
 [ -n "$include_new_note" ] || include_new_note=$(nameread include_draft "$CGIVARS" | strip_quotes || true)
 [ -n "$include_new_note" ] || include_new_note=$(nameread draft "$CGIVARS" | strip_quotes || true)
+term=$(nameread term "$CGIVARS" | strip_quotes || true)
+year=$(nameread year "$CGIVARS" | strip_quotes || true)
+month=$(nameread month "$CGIVARS" | strip_quotes || true)
+date_filter=$(nameread date "$CGIVARS" | strip_quotes || true)
+start_date=$(nameread start_date "$CGIVARS" | strip_quotes || true)
+end_date=$(nameread end_date "$CGIVARS" | strip_quotes || true)
+month_key=""
+if [ -n "${year:-}" ] && [ -n "${month:-}" ]; then
+  month_key=$(printf '%04d-%02d' "$year" "$month" 2>/dev/null || true)
+fi
+
+note_date_from_relpath() {
+  rel=$1
+  y=$(printf '%s' "$rel" | awk -F/ '{print $1}')
+  m=$(printf '%s' "$rel" | awk -F/ '{print $2}')
+  d=$(printf '%s' "$rel" | awk -F/ '{print $3}')
+  case "$y-$m-$d" in
+    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) printf '%s-%s-%s\n' "$y" "$m" "$d" ;;
+    *) printf '\n' ;;
+  esac
+}
+
+note_matches_term() {
+  file=$1
+  keyword=$2
+  [ -n "$keyword" ] || return 0
+  {
+    read_meta id "$file" || true
+    read_meta name "$file" || true
+    read_meta description "$file" || true
+    read_meta saved_at "$file" || true
+  } | grep -Fqi -- "$keyword" && return 0
+
+  json_value=$(read_meta json "$file" || true)
+  [ -n "$json_value" ] && printf '%s\n' "$json_value" | grep -Fqi -- "$keyword" && return 0
+
+  json_b64=$(read_meta json_base64 "$file" || true)
+  [ -n "$json_b64" ] && printf '%s' "$json_b64" | base64 -d 2>/dev/null | grep -Fqi -- "$keyword" && return 0
+
+  return 1
+}
 
 {
   find "$note_dir" -type f -name note.json -printf '%T+\t%P\t%s\n'
@@ -218,8 +259,16 @@ include_new_note=$(nameread include_new_note "$CGIVARS" | strip_quotes || true)
   fi
 } | while IFS="$(printf '\t')" read -r timestamp relpath size; do
   [ -n "${relpath:-}" ] || continue
+  note_date=$(note_date_from_relpath "$relpath")
+  [ -n "$month_key" ] && [ -z "$date_filter" ] && [ -z "$start_date" ] && [ -z "$end_date" ] && case "$note_date" in "$month_key"-*) ;; *) continue ;; esac
+  [ -n "$date_filter" ] && [ "$note_date" != "$date_filter" ] && continue
+  [ -n "$start_date" ] && { [ -n "$note_date" ] || continue; [ "$note_date" \< "$start_date" ] && continue; }
+  [ -n "$end_date" ] && { [ -n "$note_date" ] || continue; [ "$note_date" \> "$end_date" ] && continue; }
   load_id=$(note_id_from_relpath "$relpath")
   if is_listable_note_file "$note_dir/$relpath" "$load_id"; then
+    if ! note_matches_term "$note_dir/$relpath" "$term"; then
+      continue
+    fi
     printf '%s\t%s\t%s\n' "$timestamp" "$relpath" "$size"
   fi
 done | sort -r > "$FOUND"
@@ -256,6 +305,12 @@ fi
   printf '$.start %s\n' "$start"
   printf '$.count_org %s\n' "$count_org"
   printf '$.count %s\n' "$count"
+  printf '$.term %s\n' "$term"
+  printf '$.year %s\n' "$year"
+  printf '$.month %s\n' "$month"
+  printf '$.date %s\n' "$date_filter"
+  printf '$.start_date %s\n' "$start_date"
+  printf '$.end_date %s\n' "$end_date"
 
   i=0
   if [ "$count" -gt 0 ] 2>/dev/null; then
