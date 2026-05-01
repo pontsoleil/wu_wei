@@ -243,33 +243,33 @@ contenttype="$(
 )"
 
 fullname="$(mime-read fullname "$Tmp-cgivars" 2>/dev/null || true)"
-note_id="$(mime-read note_id "$Tmp-cgivars" 2>/dev/null || true)"
-note_id="$(trim "$(printf '%s' "$note_id" | tr -d '\r\n')")"
-# Uploads made before the first explicit note save belong to the fixed draft slot.
-# Do not trust a stale browser-side UUID here; save-note promotes new_note later.
 note_id="new_note"
 
+original_sha="$(sha256sum "$Tmp-uploadfile" 2>/dev/null | awk '{print $1}')"
+[ -n "$original_sha" ] || die_json "ERROR: cannot calculate upload sha256"
+sha_index_dir="$upload_root/_index/sha256"
+sha_index_file="$sha_index_dir/$original_sha.json"
+
 upload_file_uuid=""
-for d in "$file_dir"/_*; do
-  [ -d "$d" ] || continue
-  if [ -f "$d/$filename" ]; then
-    upload_file_uuid="${d##*/}"
-    break
-  fi
-done
+upload_file_date="$year/$month/$day"
+if [ -f "$sha_index_file" ]; then
+  upload_file_uuid="$(sed -n 's/.*"upload_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$sha_index_file" | head -n 1)"
+  upload_file_date="$(sed -n 's/.*"date"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$sha_index_file" | head -n 1)"
+  [ -n "$upload_file_date" ] || upload_file_date="$year/$month/$day"
+fi
+
 [ -n "$upload_file_uuid" ] || upload_file_uuid="_$(uuidgen | tr 'A-Z' 'a-z')"
-upload_file_dir="$file_dir/$upload_file_uuid"
+upload_file_dir="$upload_root/$upload_file_date/$upload_file_uuid"
 mkdir -p "$upload_file_dir" || die_json "ERROR: cannot mkdir $upload_file_dir"
 
-# full path to save uploaded file
+# full path to save uploaded file. If this sha is already known, reuse the
+# existing upload bundle and avoid duplicating the uploaded payload.
 dest_file="$upload_file_dir/$filename"
-cp -- "$Tmp-uploadfile" "$dest_file" || die_json "ERROR: cannot save upload to $dest_file"
-
-upload_relpath="$year/$month/$day/$upload_file_uuid/$filename"
-original_sha=""
-if [ "$note_id" != "new_note" ]; then
-  original_sha="$(sha256sum "$dest_file" 2>/dev/null | awk '{print $1}')"
+if [ ! -f "$dest_file" ]; then
+  cp -- "$Tmp-uploadfile" "$dest_file" || die_json "ERROR: cannot save upload to $dest_file"
 fi
+
+upload_relpath="$upload_file_date/$upload_file_uuid/$filename"
 
 find_existing_resource_dir() {
   local sha="$1" rel="$2" rf
@@ -284,9 +284,6 @@ find_existing_resource_dir() {
 
 # --- ids / uri mapping -----------------------------------------------
 existing_resource_dir=""
-if [ "$note_id" != "new_note" ]; then
-  existing_resource_dir="$(find_existing_resource_dir "$original_sha" "$upload_relpath" || true)"
-fi
 if [ -n "$existing_resource_dir" ]; then
   uuid="${existing_resource_dir##*/}"
 else
@@ -299,29 +296,12 @@ escaped_base="$(printf '%s' "$base_dir" | sed 's/\//\\\//g')"
 resource_dir="${existing_resource_dir:-$resource_day_dir/$uuid}"
 mkdir -p "$resource_dir" || die_json "ERROR: cannot mkdir $resource_dir"
 resource_file="$resource_dir/resource.json"
+manifest_file="$upload_file_dir/manifest.json"
 resource_uri=""
 
-thumb_file="$resource_dir/thumbnail.jpg"
-thumb_area="resource"
-thumb_rel_root="$resource_root"
-if [ -z "$note_root" ]; then
-  note_root="$(cd "$upload_root/.." && pwd)/note"
-fi
-if [ "$note_id" = "new_note" ] && [ -n "$note_root" ]; then
-  note_dir="$note_root/$year/$month/$day/$note_id"
-  note_resource_dir="$note_root/$year/$month/$day/$note_id/resource/$uuid"
-  mkdir -p "$note_dir" || die_json "ERROR: cannot mkdir $note_dir"
-  mkdir -p "$note_resource_dir" || die_json "ERROR: cannot mkdir $note_resource_dir"
-  if [ ! -f "$note_dir/note.json" ]; then
-    printf 'format_version 2\nid new_note\nuser_id %s\nname \ndescription \nthumbnail \nsaved_at %s\njson_encoding base64\njson_base64 %s\n' \
-      "$user_id" "$(date '+%Y-%m-%dT%H:%M:%S%z')" \
-      "$(printf '{"note_id":"new_note","note_uuid":"new_note","note_name":"","description":"","currentPage":null,"resources":[],"pages":[]}' | base64 | tr -d '\n')" \
-      > "$note_dir/note.json" || die_json "ERROR: cannot write draft note.json"
-  fi
-  thumb_file="$note_resource_dir/thumbnail.jpg"
-  thumb_area="note"
-  thumb_rel_root="$note_root"
-fi
+thumb_file="$upload_file_dir/thumbnail.jpg"
+thumb_area="upload"
+thumb_rel_root="$upload_root"
 thumbnail_uri=""
 
 url_encode() {
@@ -375,7 +355,7 @@ if is_office_file "$filename"; then
       if [ -f "$generated_pdf" ]; then
         # Keep the uploaded Office document and its PDF rendition together.
         # The thumbnail/resource metadata stay under resource/.
-        preview_pdf="$upload_file_dir/$stem.pdf"
+        preview_pdf="$upload_file_dir/preview.pdf"
         cp -f "$generated_pdf" "$preview_pdf" || preview_pdf=""
       else
         echo "office preview converted but pdf not found: expected=$generated_pdf" >&2
@@ -453,9 +433,6 @@ fi
 
 [ -f "$thumb_file" ] && thumbnail_uri="$(protected_file_uri "$thumb_area" "${thumb_file#$thumb_rel_root/}")"
 [ -n "$thumbnail_uri" ] && thumbnail="$thumbnail_uri"
-if [ "$thumb_area" = "note" ] && [ -f "$thumb_file" ]; then
-  cp -- "$thumb_file" "$resource_dir/thumbnail.jpg" 2>/dev/null || true
-fi
 
 # --- identify (optional) --------------------------------------------
 identify_out=""
@@ -479,9 +456,6 @@ lastmodified="$(stat -c %y -- "$dest_file" 2>/dev/null || true)"
 
 # --- write resource file --------------------------------------------
 created_at="$(date '+%Y-%m-%dT%H:%M:%S%z')"
-if [ -z "$original_sha" ] && [ "$note_id" != "new_note" ]; then
-  original_sha="$(sha256sum "$dest_file" 2>/dev/null | awk '{print $1}')"
-fi
 thumb_sha=""
 [ -f "$thumb_file" ] && thumb_sha="$(sha256sum "$thumb_file" 2>/dev/null | awk '{print $1}')"
 preview_sha=""
@@ -494,6 +468,34 @@ case "$content_type" in
   text/*|application/pdf*) media_kind="document" ;;
 esac
 if is_office_file "$filename"; then media_kind="document"; fi
+
+mkdir -p "$sha_index_dir" || die_json "ERROR: cannot mkdir $sha_index_dir"
+cat >"$manifest_file" <<JSON || die_json "ERROR: cannot write manifest file $manifest_file"
+{
+  "id": "$(json_escape "$uuid")",
+  "type": "UploadResource",
+  "version": 1,
+  "created_at": "$(json_escape "$created_at")",
+  "created_by": "$(json_escape "$user_id")",
+  "title": "$(json_escape "$name")",
+  "kind": "$(json_escape "$media_kind")",
+  "original": {
+    "file": "$(json_escape "$filename")",
+    "display_name": "$(json_escape "$name")",
+    "mime": "$(json_escape "$content_type")",
+    "size": ${totalsize:-0},
+    "sha256": "$(json_escape "$original_sha")"
+  }$(if [ -f "$thumb_file" ]; then printf ',\n  "thumbnail": {\n    "file": "thumbnail.jpg",\n    "mime": "image/jpeg",\n    "size": %s,\n    "sha256": "%s",\n    "display_size": "%s"\n  }' "$(stat -c %s -- "$thumb_file" 2>/dev/null || echo 0)" "$(json_escape "$thumb_sha")" "$(json_escape "${w}x${h}")"; fi)$(if [ -n "$preview_pdf" ] && [ -f "$preview_pdf" ]; then printf ',\n  "preview": {\n    "file": "preview.pdf",\n    "mime": "application/pdf",\n    "size": %s,\n    "sha256": "%s",\n    "generated_by": "LibreOffice"\n  }' "$(stat -c %s -- "$preview_pdf" 2>/dev/null || echo 0)" "$(json_escape "$preview_sha")"; fi)
+}
+JSON
+cat >"$sha_index_file" <<JSON || die_json "ERROR: cannot write sha index $sha_index_file"
+{
+  "sha256": "$(json_escape "$original_sha")",
+  "upload_id": "$(json_escape "$uuid")",
+  "date": "$(json_escape "$upload_file_date")",
+  "file": "$(json_escape "$filename")"
+}
+JSON
 
 cat >"$resource_file" <<JSON || die_json "ERROR: cannot write resource file $resource_file"
 {
@@ -525,7 +527,11 @@ cat >"$resource_file" <<JSON || die_json "ERROR: cannot write resource file $res
   },
   "storage": {
     "managed": true,
-    "copyPolicy": "snapshot",
+    "copyPolicy": "reference",
+    "manifest": {
+      "area": "upload",
+      "path": "$(json_escape "$upload_file_date/$upload_file_uuid/manifest.json")"
+    },
     "files": [
       {
         "role": "original",
@@ -534,7 +540,7 @@ cat >"$resource_file" <<JSON || die_json "ERROR: cannot write resource file $res
         "mimeType": "$(json_escape "$content_type")",
         "size": ${totalsize:-0},
         "sha256": "$(json_escape "$original_sha")"
-      }$(if [ -f "$thumb_file" ]; then printf ',\n      {\n        "role": "thumbnail",\n        "area": "%s",\n        "path": "%s",\n        "mimeType": "image/jpeg",\n        "size": %s,\n        "sha256": "%s"\n      }' "$(json_escape "$thumb_area")" "$(json_escape "${thumb_file#$thumb_rel_root/}")" "$(stat -c %s -- "$thumb_file" 2>/dev/null || echo 0)" "$(json_escape "$thumb_sha")"; fi)$(if [ -n "$preview_pdf" ] && [ -f "$preview_pdf" ]; then printf ',\n      {\n        "role": "preview",\n        "area": "upload",\n        "path": "%s",\n        "mimeType": "application/pdf",\n        "size": %s,\n        "sha256": "%s"\n      }' "$(json_escape "${preview_pdf#$upload_root/}")" "$(stat -c %s -- "$preview_pdf" 2>/dev/null || echo 0)" "$(json_escape "$preview_sha")"; fi)
+      }$(if [ -f "$thumb_file" ]; then printf ',\n      {\n        "role": "thumbnail",\n        "area": "upload",\n        "path": "%s",\n        "mimeType": "image/jpeg",\n        "size": %s,\n        "sha256": "%s"\n      }' "$(json_escape "${thumb_file#$upload_root/}")" "$(stat -c %s -- "$thumb_file" 2>/dev/null || echo 0)" "$(json_escape "$thumb_sha")"; fi)$(if [ -n "$preview_pdf" ] && [ -f "$preview_pdf" ]; then printf ',\n      {\n        "role": "preview",\n        "area": "upload",\n        "path": "%s",\n        "mimeType": "application/pdf",\n        "size": %s,\n        "sha256": "%s"\n      }' "$(json_escape "${preview_pdf#$upload_root/}")" "$(stat -c %s -- "$preview_pdf" 2>/dev/null || echo 0)" "$(json_escape "$preview_sha")"; fi)
     ]
   },
   "rights": {

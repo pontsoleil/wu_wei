@@ -567,10 +567,6 @@ def main():
 
     note_dir = Path(note_root) / year / month / day / note_id
     note_resource_dir = note_dir / "resource"
-    if requested_note_id == DRAFT_NOTE_ID:
-        draft_dir = Path(note_root) / year / month / day / DRAFT_NOTE_ID
-        if draft_dir.is_dir() and draft_dir != note_dir:
-            shutil.copytree(draft_dir, note_dir, dirs_exist_ok=True)
     note_dir.mkdir(parents=True, exist_ok=True)
 
     name = _single_line_meta(params.get("name", "") or "")
@@ -584,9 +580,6 @@ def main():
         debug_kv(json_error=str(e))
         script_error(f"ERROR {e}")
 
-    base_root = Path(note_root).parent
-    resource_root_path = Path(resource_root)
-    upload_root_path = Path(upload_root)
     if note_id != DRAFT_NOTE_ID:
         _rewrite_draft_note_paths(note_json, note_id)
     if str(note_json.get("note_id") or "") == DRAFT_NOTE_ID or not note_json.get("note_id"):
@@ -594,39 +587,6 @@ def main():
     if str(note_json.get("note_uuid") or "") == DRAFT_NOTE_ID or note_json.get("note_uuid") is None:
         note_json["note_uuid"] = note_id
     note_json["resources"] = note_json.get("resources") or []
-
-    try:
-        _restore_embedded_resource_files(
-            note_json,
-            resource_root=resource_root_path,
-            upload_root=upload_root_path,
-            note_resource_dir=note_resource_dir,
-            now=now,
-        )
-    except Exception as e:
-        debug_kv(resource_restore_skip="unexpected error", error=str(e))
-
-    for resource in note_json.get("resources") or []:
-        if isinstance(resource, dict):
-            try:
-                try:
-                    _save_primary_resource_definition(resource, resource_root=resource_root_path, now=now)
-                except OSError as e:
-                    debug_kv(primary_resource_skip="write failed", resource_id=str(resource.get("id") or ""), error=str(e))
-                _promote_local_resource_snapshot(resource)
-                try:
-                    _save_primary_resource_definition(resource, resource_root=resource_root_path, now=now)
-                except OSError as e:
-                    debug_kv(primary_resource_skip="write failed after promote", resource_id=str(resource.get("id") or ""), error=str(e))
-                _copy_resource_snapshot(
-                    resource,
-                    base_root=base_root,
-                    user_id=user_id,
-                    note_id=note_id,
-                    note_resource_dir=note_resource_dir,
-                )
-            except Exception as e:
-                debug_kv(resource_snapshot_skip="unexpected error", resource_id=str(resource.get("id") or ""), error=str(e))
 
     json_text = json.dumps(note_json, ensure_ascii=False, separators=(",", ":"))
 

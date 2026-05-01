@@ -246,47 +246,10 @@ copy_resource_files() {
 }
 
 save_note_resources() {
-  json_file=$1
-  resource_root=$2
-  note_resource_dir=$3
-  RESOURCE_TMP="${Tmp}-resources"
-  mkdir -p "$RESOURCE_TMP" "$resource_root" "$note_resource_dir" || return 1
-  extract_note_resources "$json_file" "$RESOURCE_TMP"
-  for rf in "$RESOURCE_TMP"/resource_*.json; do
-    [ -f "$rf" ] || continue
-    rid=$(json_string_field id "$rf")
-    [ -n "$rid" ] || continue
-    key=$(resource_identity_key "$rf")
-    primary=""
-    if [ -n "$key" ]; then
-      primary=$(find "$resource_root" -type f -name resource.json -exec awk -v key="$key" '
-        BEGIN { RS=""; found=0 }
-        index($0, key) > 0 { found=1 }
-        END { exit found ? 0 : 1 }
-      ' {} \; -print | head -n 1)
-      [ -n "$primary" ] && primary=${primary%/resource.json}
-    fi
-    if [ -z "$primary" ] && [ -z "$key" ]; then
-      if [ -f "$resource_root/$year/$month/$day/$rid/resource.json" ]; then
-        primary="$resource_root/$year/$month/$day/$rid"
-      else
-        primary=$(find "$resource_root" -path "*/$rid/resource.json" -type f | head -n 1)
-        [ -n "$primary" ] && primary=${primary%/resource.json}
-      fi
-    fi
-    if [ -z "$primary" ]; then
-      primary="$resource_root/$year/$month/$day/$rid"
-      mkdir -p "$primary" || return 1
-      cp "$rf" "$primary/resource.json" || return 1
-    elif [ -z "$key" ] && [ -f "$primary/resource.json" ] && [ -n "$(resource_identity_key "$primary/resource.json")" ]; then
-      # Do not overwrite an existing Resource URI with a note-local blank URI.
-      rf="$primary/resource.json"
-    fi
-    snapshot="$note_resource_dir/$rid"
-    mkdir -p "$snapshot" || return 1
-    copy_resource_files "$rf" "$primary" "$snapshot"
-    cp "$rf" "$snapshot/resource.json" || return 1
-  done
+  # Note save stores references only. Upload bodies, thumbnails and previews
+  # remain under upload/YYYY/MM/DD/{upload_uuid}/ and are collected only during
+  # explicit note export/download.
+  return 0
 }
 
 process_note_json() {
@@ -795,28 +758,6 @@ if str(note.get("note_id") or "") == DRAFT_NOTE_ID or not note.get("note_id"):
 if str(note.get("note_uuid") or "") == DRAFT_NOTE_ID or note.get("note_uuid") is None:
     note["note_uuid"] = note_id
 note["resources"] = note.get("resources") or []
-base_root = note_root.parent
-try:
-    restore_embedded_resource_files(note)
-except Exception as e:
-    print(f"resource_restore_skip='unexpected error' error={str(e)!r}", file=sys.stderr)
-for resource in note.get("resources") or []:
-    if not isinstance(resource, dict):
-        continue
-    try:
-        try:
-            save_primary_resource_definition(resource)
-        except OSError as e:
-            print(f"primary_resource_skip='write failed' resource_id={str(resource.get('id') or '')!r} error={str(e)!r}", file=sys.stderr)
-        promote_local_resource_snapshot(resource)
-        try:
-            save_primary_resource_definition(resource)
-        except OSError as e:
-            print(f"primary_resource_skip='write failed after promote' resource_id={str(resource.get('id') or '')!r} error={str(e)!r}", file=sys.stderr)
-        copy_resource_snapshot(resource, base_root)
-    except Exception as e:
-        print(f"resource_snapshot_skip='unexpected error' resource_id={str(resource.get('id') or '')!r} error={str(e)!r}", file=sys.stderr)
-
 json_file.write_text(json.dumps(note, ensure_ascii=False, separators=(",", ":")), encoding="utf-8", newline="\n")
 PY
   else
@@ -891,16 +832,10 @@ debug_preview "json" "$json"
 note_dir="$note_base/$year/$month/$day/$id"
 note_resource_dir="$note_dir/resource"
 mkdir -p "$note_dir" || error_response 'ERROR NOTE DIRECTORY CREATE FAILED'
-if [ "$requested_id" = "$DRAFT_NOTE_ID" ]; then
-  draft_dir="$note_base/$year/$month/$day/$DRAFT_NOTE_ID"
-  if [ -d "$draft_dir" ] && [ "$draft_dir" != "$note_dir" ]; then
-    cp -a "$draft_dir"/. "$note_dir"/ || error_response 'ERROR NOTE DRAFT COPY FAILED'
-  fi
-fi
 
 JSON_FILE="${Tmp}-note.json"
 printf '%s' "$json" > "$JSON_FILE"
-process_note_json "$JSON_FILE" "$note_base" "$resource_base" "$note_resource_dir" "$user_id" "$id" || error_response 'ERROR RESOURCE SNAPSHOT FAILED'
+process_note_json "$JSON_FILE" "$note_base" "$resource_base" "$note_resource_dir" "$user_id" "$id" || error_response 'ERROR NOTE JSON PROCESS FAILED'
 json=$(cat "$JSON_FILE")
 
 json_base64=$(printf '%s' "$json" | base64 | tr -d '\n')

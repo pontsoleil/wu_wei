@@ -265,6 +265,47 @@ wuwei.note = (function () {
     var embed = (viewer.embed && typeof viewer.embed === 'object') ? viewer.embed : {};
     var snapshotSources = (src.snapshotSources && typeof src.snapshotSources === 'object') ? src.snapshotSources : {};
     var uri = String(src.uri || embed.uri || snapshotSources.previewUri || src.canonicalUri || snapshotSources.originalUri || '');
+    var uploadId, uploadDate, uploadBase, uploadPreview, uploadThumbnail;
+    if (src.kind === 'upload' && src.id && src.date) {
+      uploadId = String(src.id || '');
+      uploadDate = String(src.date || '').replace(/\\/g, '/').replace(/^\/|\/$/g, '');
+      uploadBase = uploadDate + '/' + uploadId + '/';
+      uploadPreview = util.toPublicResourceUri('upload', uploadBase + 'preview.pdf', state.currentUser && state.currentUser.user_id);
+      uploadThumbnail = util.toPublicResourceUri('upload', uploadBase + 'thumbnail.jpg', state.currentUser && state.currentUser.user_id);
+      return {
+        id: uploadId,
+        kind: 'upload',
+        uri: uploadPreview,
+        canonicalUri: '',
+        mimeType: '',
+        title: String(src.title || (node && node.label) || ''),
+        owner: '',
+        copyright: '',
+        license: '',
+        attribution: '',
+        rights: { owner: '', copyright: '', license: '', attribution: '' },
+        viewer: {
+          supportedModes: ['infoPane', 'newTab', 'newWindow', 'download'],
+          defaultMode: 'infoPane',
+          embed: { enabled: true, uri: uploadPreview, thumbnailUri: uploadThumbnail },
+          thumbnailUri: uploadThumbnail
+        },
+        storage: {
+          managed: true,
+          copyPolicy: 'reference',
+          manifest: { area: 'upload', path: uploadBase + 'manifest.json' },
+          files: [
+            { role: 'thumbnail', area: 'upload', path: uploadBase + 'thumbnail.jpg', mimeType: 'image/jpeg' },
+            { role: 'preview', area: 'upload', path: uploadBase + 'preview.pdf', mimeType: 'application/pdf' }
+          ]
+        },
+        snapshotSources: {
+          previewUri: uploadPreview,
+          thumbnailUri: uploadThumbnail
+        },
+        thumbnailUri: uploadThumbnail
+      };
+    }
     return {
       id: String(src.id || ''),
       kind: src.kind || (src.mimeType && /^image\//i.test(src.mimeType) ? 'image' : (src.mimeType && /^video\//i.test(src.mimeType) ? 'video' : ((util.isOfficeDocument && util.isOfficeDocument(src.uri || '')) ? 'office' : 'general'))),
@@ -737,6 +778,69 @@ wuwei.note = (function () {
     });
   }
 
+  function uploadRefFromResource(resource) {
+    var storage = (resource && resource.storage && typeof resource.storage === 'object') ? resource.storage : {};
+    var manifest = (storage.manifest && typeof storage.manifest === 'object') ? storage.manifest : {};
+    var files = Array.isArray(storage.files) ? storage.files : [];
+    var id = String((resource && resource.id) || '').trim();
+    var date = '';
+    var i, file, path, match;
+
+    if (manifest.path) {
+      match = String(manifest.path || '').replace(/\\/g, '/').match(/^(\d{4}\/\d{2}\/\d{2})\/([^/]+)\//);
+      if (match) {
+        date = match[1];
+        id = id || match[2];
+      }
+    }
+    for (i = 0; !date && i < files.length; i += 1) {
+      file = files[i] || {};
+      if (String(file.area || '') !== 'upload') {
+        continue;
+      }
+      path = String(file.path || '').replace(/\\/g, '/');
+      match = path.match(/^(\d{4}\/\d{2}\/\d{2})\/([^/]+)\//);
+      if (match) {
+        date = match[1];
+        id = id || match[2];
+      }
+    }
+    if (!id || !date) {
+      return null;
+    }
+    return {
+      kind: 'upload',
+      id: id,
+      date: date
+    };
+  }
+
+  function compactResourceForSave(node) {
+    var src = node.resource || {};
+    var uploadRef = uploadRefFromResource(src);
+    var uri;
+    if (uploadRef) {
+      return uploadRef;
+    }
+    uri = String(src.uri || src.canonicalUri || node.uri || node.url || '').trim();
+    if (/^https?:\/\//i.test(uri)) {
+      return {
+        kind: 'url',
+        url: uri,
+        title: String(src.title || node.label || '')
+      };
+    }
+    if (uri) {
+      return {
+        kind: String(src.kind || resourceKindFromMime(src.mimeType || node.format || '', uri)),
+        uri: uri,
+        title: String(src.title || node.label || ''),
+        mimeType: String(src.mimeType || node.format || '')
+      };
+    }
+    return null;
+  }
+
   function stripRuntimeNode(node) {
     var out = util.clone(node) || {};
     delete out.vx;
@@ -754,24 +858,19 @@ wuwei.note = (function () {
 
   function stripRuntimeNodeForSave(node, resources) {
     var out = stripRuntimeNode(node);
+    var compactResource;
     if (out.type === 'Content') {
-      if (!out.resourceRef && out.resource && out.resource.id) {
-        out.resourceRef = out.resource.id;
+      compactResource = compactResourceForSave(out);
+      if (compactResource) {
+        out.resource = compactResource;
       }
-      if (!out.resourceRef && out.resource) {
-        var resource = resourceFromContentNode(out);
-        out.resourceRef = resource.id;
-        upsertResource(resources, resource);
-      }
-      else if (out.resourceRef && out.resource) {
-        var merged = resourceFromContentNode(out);
-        merged.id = out.resourceRef;
-        upsertResource(resources, merged);
+      else {
+        delete out.resource;
       }
       if (!out.resourceView) {
         out.resourceView = { mode: 'default' };
       }
-      delete out.resource;
+      delete out.resourceRef;
       delete out.uri;
       delete out.url;
       delete out.format;
@@ -1092,14 +1191,10 @@ wuwei.note = (function () {
       note_name: current.note_name,
       description: current.description,
       currentPage: (findPageByRef(current, current.currentPage) || current.page || {}).id || current.currentPage,
-      resources: cloneArray(current.resources).map(normalizeResourceDefinition),
+      resources: [],
       pages: [],
       audit: normalizeAudit(current.audit, state.currentUser)
     };
-    const portableBundle = current.bundle || current.portable;
-    if (portableBundle && portableBundle.files) {
-      noteToSave.bundle = portableBundle;
-    }
 
     pagesAsArray(current).forEach(function (page, index) {
       if (!page) { return; }
