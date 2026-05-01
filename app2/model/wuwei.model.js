@@ -945,12 +945,31 @@ wuwei.model = (function () {
     // 必要な node 生成側で明示的に設定する。
 
     if ('Content' === self.type) {
+      var contentResourceTitle, contentOriginalFile, contentPathName, contentLabel;
+      function contentBasename(value) {
+        return String(value || '')
+          .replace(/\\/g, '/')
+          .split(/[?#]/)[0]
+          .split('/')
+          .pop();
+      }
       self.resource = (self.resource && 'object' === typeof self.resource) ? self.resource : {};
       self.resource.kind = self.resource.kind || 'general';
       self.resource.uri = self.resource.uri || '';
       self.resource.canonicalUri = self.resource.canonicalUri || '';
       self.resource.mimeType = self.resource.mimeType || 'text/plain';
-      self.resource.title = self.resource.title || self.label || '';
+      contentResourceTitle = (self.resource.identity && self.resource.identity.title) || self.resource.title || self.label || '';
+      self.resource.title = contentResourceTitle;
+      contentOriginalFile = self.resource.storage && Array.isArray(self.resource.storage.files)
+        ? self.resource.storage.files.find(function (item) {
+          return item && String(item.role || '').toLowerCase() === 'original';
+        })
+        : null;
+      contentPathName = contentBasename((contentOriginalFile && contentOriginalFile.path) || self.resource.uri || self.resource.canonicalUri);
+      contentLabel = String(self.label || '').trim();
+      if (contentResourceTitle && (!contentLabel || contentLabel.toLowerCase() === contentPathName.toLowerCase())) {
+        self.label = contentResourceTitle;
+      }
       self.resource.owner = self.resource.owner || '';
       self.resource.copyright = self.resource.copyright || '';
       self.resource.viewer = (self.resource.viewer && 'object' === typeof self.resource.viewer)
@@ -2831,9 +2850,42 @@ wuwei.model = (function () {
     const resourceEmbed = resourceViewer && resourceViewer.embed ? resourceViewer.embed : {};
     const resourceSnapshots = resourceDef && resourceDef.snapshotSources ? resourceDef.snapshotSources : {};
     const resourceIdentity = resourceDef && resourceDef.identity ? resourceDef.identity : {};
+    const resourceStorage = resourceDef && resourceDef.storage && 'object' === typeof resourceDef.storage ? resourceDef.storage : {};
+    const resourceFiles = Array.isArray(resourceStorage.files) ? resourceStorage.files : [];
+    const originalFile = resourceFiles.find(function (item) {
+      return item && String(item.role || '').toLowerCase() === 'original';
+    }) || {};
 
     function isIconThumbnail(value) {
       return /^fa-/.test(String(value || ''));
+    }
+
+    function uploadRefFromStorage() {
+      const manifest = resourceStorage && resourceStorage.manifest && 'object' === typeof resourceStorage.manifest
+        ? resourceStorage.manifest
+        : {};
+      const candidates = [manifest.path].concat(resourceFiles.map(function (item) {
+        return item && item.path;
+      }));
+      let match;
+      for (let i = 0; i < candidates.length; i++) {
+        match = String(candidates[i] || '').replace(/\\/g, '/').match(/^(\d{4}\/\d{2}\/\d{2})\/([^/]+)\//);
+        if (match) {
+          return {
+            kind: 'upload',
+            id: (resourceDef && resourceDef.id) || match[2],
+            date: match[1]
+          };
+        }
+      }
+      return null;
+    }
+
+    function uploadFileUri(uploadRef, filename) {
+      if (!uploadRef || !filename || !util.toPublicResourceUri) {
+        return '';
+      }
+      return util.toPublicResourceUri('upload', uploadRef.date + '/' + uploadRef.id + '/' + filename, state.currentUser && state.currentUser.user_id);
     }
 
     function resolveUploadedThumbnail() {
@@ -2908,30 +2960,73 @@ wuwei.model = (function () {
     let
       node,
       shape,
-      label = response.label || response.name;
+      label = response.label || response.name || resourceIdentity.title || resourceDef && resourceDef.title;
 
     if (!label) {
       label = uri.split('/').pop();
     }
 
-    const runtimeResourceUri = resourceIdentity.uri || resourceEmbed.uri || resourceSnapshots.previewUri || nodeUrl || uri || resourceIdentity.canonicalUri || resourceSnapshots.originalUri || '';
+    const runtimeResourceUri = originalFile.path || resourceIdentity.uri || resourceEmbed.uri || resourceSnapshots.previewUri || nodeUrl || uri || resourceIdentity.canonicalUri || resourceSnapshots.originalUri || '';
     const snapshotThumbnailUri = thumbnail && !isIconThumbnail(thumbnail) ? thumbnail : '';
-    const runtimeResource = resourceDef ? Object.assign({}, resourceDef, {
+    const uploadRef = uploadRefFromStorage();
+    const uploadPreviewUri = uploadFileUri(uploadRef, 'preview.pdf') || nodeUrl || runtimeResourceUri;
+    const uploadThumbnailUri = uploadFileUri(uploadRef, 'thumbnail.jpg') || snapshotThumbnailUri;
+    const runtimeResource = uploadRef ? {
+      kind: 'upload',
+      id: uploadRef.id,
+      date: uploadRef.date,
+      title: resourceIdentity.title || resourceDef && resourceDef.title || label || '',
+      mimeType: (resourceDef && resourceDef.media && resourceDef.media.mimeType) || resourceDef && resourceDef.mimeType || format || '',
+      uri: uploadPreviewUri,
+      thumbnailUri: uploadThumbnailUri,
+      storage: {
+        managed: true,
+        copyPolicy: 'reference',
+        manifest: {
+          area: 'upload',
+          path: uploadRef.date + '/' + uploadRef.id + '/manifest.json'
+        },
+        files: [
+          {
+            role: 'thumbnail',
+            area: 'upload',
+            path: uploadRef.date + '/' + uploadRef.id + '/thumbnail.jpg',
+            mimeType: 'image/jpeg'
+          },
+          {
+            role: 'preview',
+            area: 'upload',
+            path: uploadRef.date + '/' + uploadRef.id + '/preview.pdf',
+            mimeType: 'application/pdf'
+          }
+        ]
+      },
+      viewer: {
+        supportedModes: ['infoPane', 'newTab', 'newWindow', 'download'],
+        defaultMode: 'infoPane',
+        embed: {
+          enabled: true,
+          uri: uploadPreviewUri,
+          thumbnailUri: uploadThumbnailUri
+        },
+        thumbnailUri: uploadThumbnailUri
+      }
+    } : (resourceDef ? Object.assign({}, resourceDef, {
       id: resourceDef.id || content_id,
       kind: (resourceDef.media && resourceDef.media.kind) || resourceDef.kind || 'general',
       uri: runtimeResourceUri,
-      canonicalUri: resourceIdentity.canonicalUri || resourceDef.canonicalUri || runtimeResourceUri,
+      canonicalUri: resourceIdentity.canonicalUri || resourceDef.canonicalUri || originalFile.path || runtimeResourceUri,
       mimeType: (resourceDef.media && resourceDef.media.mimeType) || resourceDef.mimeType || format || 'text/plain',
       title: resourceIdentity.title || resourceDef.title || label || '',
       owner: (resourceDef.rights && resourceDef.rights.owner) || resourceDef.owner || '',
       copyright: (resourceDef.rights && resourceDef.rights.copyright) || resourceDef.copyright || '',
       snapshotSources: Object.assign({}, resourceSnapshots, {
-        originalUri: resourceIdentity.canonicalUri || resourceSnapshots.originalUri || downloadUrl || '',
+        originalUri: originalFile.path || resourceIdentity.canonicalUri || resourceSnapshots.originalUri || downloadUrl || '',
         previewUri: resourceEmbed.uri || resourceIdentity.uri || resourceSnapshots.previewUri || nodeUrl || uri || '',
         thumbnailUri: snapshotThumbnailUri || resourceSnapshots.thumbnailUri || ''
       }),
       viewer: resourceViewer
-    }) : null;
+    }) : null);
 
     let iw, ih, w, h;
     w = defaultSize.content;
@@ -2968,7 +3063,7 @@ wuwei.model = (function () {
         format: 'asciidoc',
         body: ''
       },
-      resourceRef: (resourceDef && resourceDef.id) || content_id,
+      resourceRef: uploadRef ? uploadRef.id : ((resourceDef && resourceDef.id) || content_id),
       resource: runtimeResource || {
         kind: isVideo ? 'video' : (isOffice ? 'office' : (isTextPlain ? 'document' : ('webpage' === response.option ? 'webpage' : 'general'))),
         uri: nodeUrl || uri || '',
