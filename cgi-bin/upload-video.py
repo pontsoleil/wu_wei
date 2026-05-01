@@ -7,12 +7,14 @@ import cgi
 import hashlib
 import json
 import mimetypes
+import os
 import shutil
 import subprocess
 import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+from urllib.parse import quote
 
 from cgi_common import (
     ENV_FILE,
@@ -20,7 +22,9 @@ from cgi_common import (
     debug_exception,
     debug_kv,
     environment_path,
+    get_effective_user_id,
     get_session_user_id,
+    is_local_host,
     json_response,
     read_named_value,
     script_error,
@@ -235,7 +239,7 @@ def write_resource_file(
         "value.file ",
     ]
     resource_file.parent.mkdir(parents=True, exist_ok=True)
-    resource_file.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    resource_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def file_entry(role: str, path: Path, mime_type: str, size_text: str = "") -> dict:
@@ -263,6 +267,18 @@ def resource_relative_path(resource_root: Path, path: Path) -> str:
         return path.relative_to(resource_root).as_posix()
     except Exception:
         return path.name
+
+
+def protected_file_url(user_id: str, area: str, rel_path: str) -> str:
+    area = trim(area).lower()
+    rel_path = str(rel_path or "").replace("\\", "/").strip("/")
+    if not area or not rel_path:
+        return ""
+    return (
+        f"cgi-bin/load-file.py?area={quote(area, safe='')}"
+        f"&path={quote(rel_path, safe='')}"
+        f"&user_id={quote(user_id, safe='')}"
+    )
 
 
 def sha256_file(path: Path) -> str:
@@ -299,30 +315,31 @@ def find_existing_resource(resource_root: Path, *, original_hash: str, canonical
         identity = resource.get("identity") if isinstance(resource.get("identity"), dict) else {}
         storage = resource.get("storage") if isinstance(resource.get("storage"), dict) else {}
         existing_uri = str(identity.get("canonicalUri") or identity.get("uri") or "").strip()
-        existing_primary = str(storage.get("primaryPath") or "").replace("\\", "/").strip()
-        existing_source = str(storage.get("sourcePath") or "").replace("\\", "/").strip()
+        existing_source = ""
+        for item in storage.get("files") or []:
+            if isinstance(item, dict) and item.get("role") == "original":
+                existing_source = str(item.get("path") or "").replace("\\", "/").strip()
+                break
         if original_hash and resource_original_hash(resource) == original_hash:
             return resource, "sha256"
         if canonical_uri and existing_uri == canonical_uri:
             return resource, "canonicalUri"
-        if source_path and (existing_source == source_path or existing_primary == source_path):
-            return resource, "sourcePath"
+        if source_path and existing_source == source_path:
+            return resource, "originalPath"
     return None, ""
 
 
-def response_from_resource(resource: dict, *, base_dir: Path, warning: str = "") -> dict:
+def response_from_resource(resource: dict, *, user_id: str, warning: str = "") -> dict:
     identity = resource.get("identity") if isinstance(resource.get("identity"), dict) else {}
     media = resource.get("media") if isinstance(resource.get("media"), dict) else {}
     storage = resource.get("storage") if isinstance(resource.get("storage"), dict) else {}
     files = [item for item in (storage.get("files") or []) if isinstance(item, dict)]
-    primary = Path(str(storage.get("primaryPath") or ""))
 
     def file_uri(role: str) -> str:
         for item in files:
             if item.get("role") == role and item.get("path"):
-                p = Path(str(item.get("sourcePath") or "")) if item.get("sourcePath") else primary / str(item.get("path"))
-                if p.exists():
-                    return rel_uri_from_abs(base_dir, p, role, "")
+                area = str(item.get("area") or ("upload" if role == "original" else "resource"))
+                return protected_file_url(user_id, area, str(item.get("path")))
         return ""
 
     original_uri = file_uri("original") or str(identity.get("canonicalUri") or identity.get("uri") or "")
@@ -370,7 +387,11 @@ def rel_uri_from_abs(base_dir: Path, target: Path, kind: str, user_id: str) -> s
 def main():
     debug("script begin")
 
-    user_id = get_session_user_id()
+    form = cgi.FieldStorage()
+    requested_user_id = trim(form.getfirst("user_id", ""))
+    user_id = get_effective_user_id()
+    if requested_user_id == "guest" and is_local_host(os.environ.get("HTTP_HOST", "")):
+        user_id = "guest"
     debug_kv(user_id=user_id)
     if not user_id:
         script_error("ERROR NOT LOGGED IN")
@@ -421,8 +442,6 @@ def main():
     resource_dir.mkdir(parents=True, exist_ok=True)
     thumbnail_dir.mkdir(parents=True, exist_ok=True)
 
-    form = cgi.FieldStorage()
-
     if "file" not in form:
         script_error("ERROR FILE NOT FOUND IN MULTIPART")
 
@@ -453,24 +472,18 @@ def main():
         canonical_uri="",
         source_path=upload_relpath,
     )
-    if existing_resource and dedupe_reason != "sourcePath":
+    if existing_resource and dedupe_reason != "originalPath":
         debug_kv(dedupe="resource reused", resource_id=existing_resource.get("id"), sha256=original_hash)
-        json_response(response_from_resource(existing_resource, base_dir=base_dir, warning="resource reused"))
+        json_response(response_from_resource(existing_resource, user_id=user_id, warning="resource reused"))
 
-    if existing_resource and dedupe_reason == "sourcePath":
+    if existing_resource and dedupe_reason == "originalPath":
         resource_id = str(existing_resource.get("id") or "")
-        existing_storage = existing_resource.get("storage") if isinstance(existing_resource.get("storage"), dict) else {}
-        if existing_storage.get("primaryPath"):
-            primary_dir = Path(str(existing_storage.get("primaryPath") or ""))
-            if not primary_dir.is_absolute():
-                primary_dir = resource_root / primary_dir
-        else:
-            primary_dir = resource_dir / resource_id
-        debug_kv(dedupe="resource updated by same sourcePath", resource_id=resource_id, source_path=upload_relpath)
-    else:
-        rid = str(uuid.uuid4())
-        resource_id = f"_{rid}"
         primary_dir = resource_dir / resource_id
+        debug_kv(dedupe="resource updated by same original path", resource_id=resource_id, source_path=upload_relpath)
+    else:
+        resource_id = f"_{uuid.uuid4()}"
+        primary_dir = resource_dir / resource_id
+    rid = resource_id.lstrip("_")
     primary_dir.mkdir(parents=True, exist_ok=True)
 
     resource_file = primary_dir / "resource.json"
@@ -486,10 +499,10 @@ def main():
     if (content_type or "").startswith("video/"):
         _, thumbnail_size = make_video_thumbnail(dest_file, thumb_file, duration)
         if thumb_file.exists():
-            thumbnail_uri = rel_uri_from_abs(base_dir, thumb_file, "thumbnail", user_id)
+            thumbnail_uri = protected_file_url(user_id, "resource", resource_relative_path(resource_root, thumb_file))
 
-    file_uri = rel_uri_from_abs(base_dir, dest_file, "upload", user_id)
-    resource_uri = rel_uri_from_abs(base_dir, primary_dir, "resource", user_id)
+    file_uri = protected_file_url(user_id, "upload", upload_relpath)
+    resource_uri = ""
 
     name = fullname or filename
     totalsize = dest_file.stat().st_size
@@ -527,8 +540,8 @@ def main():
         },
         "identity": {
             "title": name,
-            "canonicalUri": file_uri,
-            "uri": file_uri,
+            "canonicalUri": "",
+            "uri": "",
         },
         "media": {
             "kind": "video",
@@ -541,15 +554,12 @@ def main():
             "defaultMode": "infoPane",
             "embed": {
                 "enabled": True,
-                "uri": file_uri,
+                "uri": "",
             },
         },
         "storage": {
             "managed": True,
             "copyPolicy": "snapshot",
-            "sourcePath": upload_relpath,
-            "primaryPath": resource_relative_path(resource_root, primary_dir),
-            "snapshotPath": "",
             "files": files,
         },
         "rights": {
@@ -566,7 +576,7 @@ def main():
             "lastModifiedAt": "",
         },
     }
-    resource_file.write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+    resource_file.write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     warning = ""
     if not thumbnail_uri:
