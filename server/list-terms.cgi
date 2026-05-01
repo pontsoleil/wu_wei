@@ -22,8 +22,6 @@ type command >/dev/null 2>&1 && type getconf >/dev/null 2>&1 &&
 export LANG=ja_JP.UTF-8
 export LC_ALL=ja_JP.utf8
 # export LC_ALL=C
-# required by Pyton to avoid 'ascii' codec can't encode character
-export PYTHONIOENCODING=UTF-8
 export PATH=".:./bin:$(command -p getconf PATH)${PATH+:}${PATH-}"
 export UNIX_STD=2003  # to make HP-UX conform to POSIX
 # === Log ============================================================

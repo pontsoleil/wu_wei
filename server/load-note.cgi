@@ -1,5 +1,9 @@
 #!/bin/sh
-# WW_CGI_BOOTSTRAP: stabilise cwd under fcgiwrap and capture stderr
+# load-note.cgi
+#
+# EC2 server CGI policy: shell/coreutils only. Portable/bundled note export is
+# intentionally not assembled here; plain note JSON is returned.
+
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "${SCRIPT_FILENAME:-$0}")" && pwd) || exit 1
 cd "$SCRIPT_DIR" || exit 1
 mkdir -p log
@@ -7,7 +11,6 @@ exec 2>>"$SCRIPT_DIR/log/cgi.err"
 
 set -eu
 export LC_ALL=C
-
 type command >/dev/null 2>&1 && type getconf >/dev/null 2>&1 &&
 export PATH=".:./bin:$(command -p getconf PATH)${PATH+:}${PATH-}"
 export UNIX_STD=2003
@@ -19,8 +22,6 @@ cleanup() {
   rm -f "$CGIVARS"
 }
 trap cleanup EXIT HUP INT TERM
-
-exec 2>"$SCRIPT_DIR/log/${0##*/}.$$.log"
 
 error_response() {
   printf '%s\r\n' 'Content-Type: text/plain; charset=UTF-8'
@@ -55,24 +56,27 @@ resolve_env_path() {
   esac
 }
 
-# --- Collect CGI params from QUERY_STRING + POST body -------------------
-qs=${QUERY_STRING:-}
-body=""
-cl=${CONTENT_LENGTH:-0}
+read_request_params() {
+  qs=${QUERY_STRING:-}
+  body=""
+  cl=${CONTENT_LENGTH:-0}
 
-if [ "${cl:-0}" -gt 0 ] 2>/dev/null; then
-  body=$(cat || true)
-fi
+  if [ "${cl:-0}" -gt 0 ] 2>/dev/null; then
+    body=$(cat || true)
+  fi
 
-if [ -n "$qs" ] && [ -n "$body" ]; then
-  printf '%s&%s' "$qs" "$body" | cgi-name > "$CGIVARS"
-elif [ -n "$qs" ]; then
-  printf '%s' "$qs" | cgi-name > "$CGIVARS"
-elif [ -n "$body" ]; then
-  printf '%s' "$body" | cgi-name > "$CGIVARS"
-else
-  : > "$CGIVARS"
-fi
+  if [ -n "$qs" ] && [ -n "$body" ]; then
+    printf '%s&%s' "$qs" "$body" | cgi-name > "$CGIVARS"
+  elif [ -n "$qs" ]; then
+    printf '%s' "$qs" | cgi-name > "$CGIVARS"
+  elif [ -n "$body" ]; then
+    printf '%s' "$body" | cgi-name > "$CGIVARS"
+  else
+    : > "$CGIVARS"
+  fi
+}
+
+read_request_params
 
 session_user_id=$(is-login || true)
 user_id=$(nameread user_id "$CGIVARS" | strip_quotes || true)
@@ -87,7 +91,6 @@ else
   if [ -z "${session_user_id:-}" ] || [ -z "${user_id:-}" ] || [ "$user_id" != "$session_user_id" ]; then
     error_response 'ERROR NOT LOGGED IN'
   fi
-
   note_dir=$(resolve_env_path note "$user_id" || true)
   [ -d "$note_dir" ] || error_response 'ERROR NOTE DIRECTORY NOT FOUND'
 fi
@@ -98,177 +101,14 @@ if [ ! -f "$file" ]; then
 fi
 [ -f "$file" ] || error_response 'ERROR NOTE FILE NOT FOUND'
 
-# New format: json_base64
 json_base64=$(nameread json_base64 "$file" | strip_quotes || true)
 if [ -n "${json_base64:-}" ]; then
   json=$(printf '%s' "$json_base64" | base64 -d 2>/dev/null || true)
   [ -n "${json:-}" ] || error_response 'ERROR JSON DECODE FAILED'
-  bundle=$(nameread bundle "$CGIVARS" | strip_quotes || true)
-  portable=$(nameread portable "$CGIVARS" | strip_quotes || true)
-  if [ "$bundle" = 1 ] || [ "$bundle" = true ] || [ "$portable" = 1 ] || [ "$portable" = true ]; then
-    if command -v python3 >/dev/null 2>&1; then
-      bundled=$(printf '%s' "$json" | python3 - "$file" <<'PY' || true
-import base64
-import hashlib
-import json
-import mimetypes
-import sys
-from pathlib import Path
-
-note_file = Path(sys.argv[1])
-text = sys.stdin.read()
-note = json.loads(text)
-note_dir = note_file.parent
-snapshot_root = note_dir / "resource"
-upload_root = None
-for parent in note_file.parents:
-    if parent.name == "note":
-        upload_root = parent.parent / "upload"
-        break
-files = []
-resources = note.get("resources") if isinstance(note.get("resources"), list) else []
-for resource in resources:
-    if not isinstance(resource, dict):
-        continue
-    rid = str(resource.get("id") or "").strip()
-    if not rid:
-        continue
-    resource_dir = snapshot_root / rid
-    try:
-        resource_doc = json.loads((resource_dir / "resource.json").read_text(encoding="utf-8", errors="strict"))
-    except Exception:
-        resource_doc = resource
-    storage = resource_doc.get("storage") if isinstance(resource_doc.get("storage"), dict) else {}
-    storage_files = storage.get("files") if isinstance(storage.get("files"), list) else []
-    for item in storage_files:
-        if not isinstance(item, dict):
-            continue
-        role = str(item.get("role") or "original").strip() or "original"
-        rel = str(item.get("path") or "").replace("\\", "/").strip("/")
-        source_path = str(item.get("sourcePath") or "").strip()
-        if role == "original":
-            if not rel:
-                continue
-            bundle_path = rel if rel.startswith("upload/") else f"upload/{rel}"
-            if source_path:
-                path = Path(source_path)
-            elif upload_root is not None:
-                path = upload_root / (rel[7:] if rel.startswith("upload/") else rel)
-            else:
-                continue
-        elif role in {"thumbnail", "preview"}:
-            name = Path(rel).name or ("preview.pdf" if role == "preview" else "thumbnail")
-            bundle_path = f"note/resource/{rid}/{name}"
-            path = Path(source_path) if source_path else resource_dir / name
-        else:
-            continue
-        if not path.is_file():
-            continue
-        payload = path.read_bytes()
-        files.append({
-            "resourceId": rid,
-            "role": role,
-            "path": bundle_path,
-            "mimeType": mimetypes.guess_type(path.name)[0] or "application/octet-stream",
-            "size": len(payload),
-            "sha256": hashlib.sha256(payload).hexdigest(),
-            "base64": base64.b64encode(payload).decode("ascii"),
-        })
-note["bundle"] = {"type": "wuwei.note.bundle", "version": 1, "files": files}
-print(json.dumps(note, ensure_ascii=False, indent=2), end="")
-PY
-)
-      [ -n "${bundled:-}" ] && json=$bundled
-    fi
-  fi
   json_response "$json"
 fi
 
-# Backward compatibility: old raw json line
 json=$(nameread json "$file" | strip_quotes || true)
 [ -n "${json:-}" ] || error_response 'ERROR JSON NOT FOUND'
-
-# Repair old files that preserved ACK(0x06) in place of spaces.
 json=$(printf '%s' "$json" | tr '\006' ' ' | tr -d '\000-\010\013\014\016-\037')
-bundle=$(nameread bundle "$CGIVARS" | strip_quotes || true)
-portable=$(nameread portable "$CGIVARS" | strip_quotes || true)
-if [ "$bundle" = 1 ] || [ "$bundle" = true ] || [ "$portable" = 1 ] || [ "$portable" = true ]; then
-  if command -v python3 >/dev/null 2>&1; then
-    bundled=$(printf '%s' "$json" | python3 - "$file" <<'PY' || true
-import base64
-import hashlib
-import json
-import mimetypes
-import sys
-from pathlib import Path
-
-note_file = Path(sys.argv[1])
-text = sys.stdin.read()
-note = json.loads(text)
-note_dir = note_file.parent
-snapshot_root = note_dir / "resource"
-upload_root = None
-for parent in note_file.parents:
-    if parent.name == "note":
-        upload_root = parent.parent / "upload"
-        break
-files = []
-resources = note.get("resources") if isinstance(note.get("resources"), list) else []
-for resource in resources:
-    if not isinstance(resource, dict):
-        continue
-    rid = str(resource.get("id") or "").strip()
-    if not rid:
-        continue
-    resource_dir = snapshot_root / rid
-    try:
-        resource_doc = json.loads((resource_dir / "resource.json").read_text(encoding="utf-8", errors="strict"))
-    except Exception:
-        resource_doc = resource
-    storage = resource_doc.get("storage") if isinstance(resource_doc.get("storage"), dict) else {}
-    storage_files = storage.get("files") if isinstance(storage.get("files"), list) else []
-    for item in storage_files:
-        if not isinstance(item, dict):
-            continue
-        role = str(item.get("role") or "original").strip() or "original"
-        rel = str(item.get("path") or "").replace("\\", "/").strip("/")
-        source_path = str(item.get("sourcePath") or "").strip()
-        if role == "original":
-            if not rel:
-                continue
-            bundle_path = rel if rel.startswith("upload/") else f"upload/{rel}"
-            if source_path:
-                path = Path(source_path)
-            elif upload_root is not None:
-                path = upload_root / (rel[7:] if rel.startswith("upload/") else rel)
-            else:
-                continue
-        elif role in {"thumbnail", "preview"}:
-            name = Path(rel).name or ("preview.pdf" if role == "preview" else "thumbnail")
-            bundle_path = f"note/resource/{rid}/{name}"
-            path = Path(source_path) if source_path else resource_dir / name
-        else:
-            continue
-        if not path.is_file():
-            continue
-        payload = path.read_bytes()
-        files.append({
-            "resourceId": rid,
-            "role": role,
-            "path": bundle_path,
-            "mimeType": mimetypes.guess_type(path.name)[0] or "application/octet-stream",
-            "size": len(payload),
-            "sha256": hashlib.sha256(payload).hexdigest(),
-            "base64": base64.b64encode(payload).decode("ascii"),
-        })
-note["bundle"] = {"type": "wuwei.note.bundle", "version": 1, "files": files}
-print(json.dumps(note, ensure_ascii=False, indent=2), end="")
-PY
-)
-    [ -n "${bundled:-}" ] && json=$bundled
-  fi
-fi
 json_response "$json"
-
-rm -f "$Tmp" "$Tmp"-*
-exit 0

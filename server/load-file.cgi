@@ -109,13 +109,7 @@ header_filename() {
 }
 
 url_path_escape() {
-  if command -v python3 >/dev/null 2>&1; then
-    python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe="/._-~"))' "$1"
-  elif command -v python >/dev/null 2>&1; then
-    python -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe="/._-~"))' "$1"
-  else
-    printf '%s' "$1" | sed 's/%/%25/g; s/ /%20/g'
-  fi
+  printf '%s' "$1" | sed 's/%/%25/g; s/ /%20/g'
 }
 
 read_params
