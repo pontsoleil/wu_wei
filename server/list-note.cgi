@@ -90,6 +90,13 @@ normalise_posint() {
   esac
 }
 
+is_truthy() {
+  case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in
+    1|true|yes|on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 read_meta() {
   key=$1
   file=$2
@@ -169,9 +176,19 @@ fi
 [ -n "${note_dir:-}" ] || error_response 'ERROR NOTE DIR NOT DEFINED'
 [ -d "$note_dir" ] || error_response 'ERROR NOTE DIR NOT DEFINED'
 
+include_new_note=$(nameread include_new_note "$CGIVARS" | strip_quotes || true)
+[ -n "$include_new_note" ] || include_new_note=$(nameread include_draft "$CGIVARS" | strip_quotes || true)
+[ -n "$include_new_note" ] || include_new_note=$(nameread draft "$CGIVARS" | strip_quotes || true)
+
 {
   find "$note_dir" -type f -name note.json -printf '%T+\t%P\t%s\n'
   find "$note_dir" -maxdepth 1 -type f -printf '%T+\t%P\t%s\n'
+} | {
+  if is_truthy "$include_new_note"; then
+    cat
+  else
+    awk -F "$(printf '\t')" '$2 !~ /(^|\/)new_note\/note\.json$/ && $2 != "new_note"'
+  fi
 } | sort -r > "$FOUND"
 
 total=$(wc -l < "$FOUND" | tr -d '[:space:]')

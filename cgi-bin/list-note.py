@@ -20,6 +20,10 @@ from cgi_common import (
     script_error,
 )
 
+def truthy(value: object) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def main():
     debug("main() start")
     params = merge_query_and_body_params()
@@ -51,9 +55,14 @@ def main():
         script_error("ERROR NOTE DIR NOT DEFINED")
 
     root = Path(note_dir)
-    files = list_note_files(root)
+    include_new_note = (
+        truthy(params.get("include_new_note", "")) or
+        truthy(params.get("include_draft", "")) or
+        truthy(params.get("draft", ""))
+    )
+    files = list_note_files(root, include_new_note=include_new_note)
     total = len(files)
-    debug_kv(root=str(root), total=total)
+    debug_kv(root=str(root), total=total, include_new_note=include_new_note)
 
     start = normalise_posint(params.get("start", ""), 1)
     count = normalise_posint(params.get("count", ""), 12)

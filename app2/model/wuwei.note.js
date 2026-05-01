@@ -1186,17 +1186,22 @@ wuwei.note = (function () {
     return ajaxRequest(action, data, 'POST', 30000);
   }
 
-  function listNote(start, count) {
+  function listNote(start, count, options) {
     // list note from server from start to (start + count)
     start = +start || 1;
     count = +count || 12;
     const cu = state.currentUser || {};
+    const includeNewNote = options && (options.include_new_note || options.includeDraft || options.draft);
     const action = util.getAction('list-note')
-    return ajaxRequest(action, {
+    const data = {
       start: start,
       count: count,
       user_id: cu.user_id
-    }, 'POST', 30000);
+    };
+    if (includeNewNote) {
+      data.include_new_note = 1;
+    }
+    return ajaxRequest(action, data, 'POST', 30000);
   }
 
   function searchNote(param) {

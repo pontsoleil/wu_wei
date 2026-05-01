@@ -436,10 +436,16 @@ def note_record_id(note_root: Path, file_path: Path) -> str:
     return relpath
 
 
-def list_note_files(note_root: Path) -> List[Path]:
+def list_note_files(note_root: Path, include_new_note: bool = False) -> List[Path]:
     if not note_root.exists():
         return []
-    files = [p for p in note_root.rglob("*") if is_note_file(p)]
+    files = []
+    for p in note_root.rglob("*"):
+        if not is_note_file(p):
+            continue
+        if not include_new_note and "new_note" in p.relative_to(note_root).parts:
+            continue
+        files.append(p)
     files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
     return files
 
