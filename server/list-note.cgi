@@ -53,7 +53,7 @@ SELECTED="${Tmp}-selected.tsv"
 NOTES="${Tmp}-notes.json"
 
 cleanup() {
-  rm -f "$CGIVARS" "$FOUND" "$SELECTED" "$NOTES"
+  rm -f "$CGIVARS" "$FOUND" "$SELECTED" "$NOTES" "$Tmp"-*
 }
 trap cleanup EXIT HUP INT TERM
 
@@ -73,6 +73,11 @@ json_response_file() {
 
 strip_quotes() {
   sed 's/^"\(.*\)"$/\1/'
+}
+
+json_escape() {
+  sed 's/\\/\\\\/g; s/"/\\"/g; s/\r/\\r/g; s/\t/\\t/g' |
+  awk '{ if (NR > 1) printf "\\n"; printf "%s", $0 }'
 }
 
 normalise_posint() {
@@ -355,16 +360,14 @@ if [ "$count" -gt 0 ] 2>/dev/null; then
 fi
 
 {
-  printf '$.total %s\n' "$total"
-  printf '$.start %s\n' "$start"
-  printf '$.count_org %s\n' "$count_org"
-  printf '$.count %s\n' "$count"
-  printf '$.term %s\n' "$term"
-  printf '$.year %s\n' "$year"
-  printf '$.month %s\n' "$month"
-  printf '$.date %s\n' "$date_filter"
-  printf '$.start_date %s\n' "$start_date"
-  printf '$.end_date %s\n' "$end_date"
+  printf '{"total":%s,"start":%s,"count_org":%s,"count":%s,' "$total" "$start" "$count_org" "$count"
+  printf '"term":"%s",' "$(printf '%s' "$term" | json_escape)"
+  printf '"year":"%s",' "$(printf '%s' "$year" | json_escape)"
+  printf '"month":"%s",' "$(printf '%s' "$month" | json_escape)"
+  printf '"date":"%s",' "$(printf '%s' "$date_filter" | json_escape)"
+  printf '"start_date":"%s",' "$(printf '%s' "$start_date" | json_escape)"
+  printf '"end_date":"%s",' "$(printf '%s' "$end_date" | json_escape)"
+  printf '"note":['
 
   i=0
   if [ "$count" -gt 0 ] 2>/dev/null; then
@@ -394,20 +397,21 @@ fi
         fi
       fi
 
-      printf '$.note[%s].id %s\n' "$i" "$note_id"
-      printf '$.note[%s].user_id %s\n' "$i" "$note_user_id"
-      printf '$.note[%s].note_name %s\n' "$i" "$note_name"
-      printf '$.note[%s].dir %s\n' "$i" "$dir"
-      printf '$.note[%s].size %s\n' "$i" "$size"
-      printf '$.note[%s].timestamp %s\n' "$i" "$timestamp"
-      printf '$.note[%s].file %s\n' "$i" "$file"
-      printf '$.note[%s].thumbnail %s\n' "$i" "$note_thumbnail"
-      printf '$.note[%s].description %s\n' "$i" "$note_description"
-
+      [ "$i" -gt 0 ] && printf ','
+      printf '{"id":"%s",' "$(printf '%s' "$note_id" | json_escape)"
+      printf '"user_id":"%s",' "$(printf '%s' "$note_user_id" | json_escape)"
+      printf '"note_name":"%s",' "$(printf '%s' "$note_name" | json_escape)"
+      printf '"dir":"%s",' "$(printf '%s' "$dir" | json_escape)"
+      printf '"size":%s,' "${size:-0}"
+      printf '"timestamp":"%s",' "$(printf '%s' "$timestamp" | json_escape)"
+      printf '"file":"%s",' "$(printf '%s' "$file" | json_escape)"
+      printf '"thumbnail":"%s",' "$(printf '%s' "$note_thumbnail" | json_escape)"
+      printf '"description":"%s"}' "$(printf '%s' "$note_description" | json_escape)"
       i=$((i + 1))
     done < "$SELECTED"
   fi
-} | makrj.sh | sed 's/^\("[^":,]*":\),/\1null,/' > "$NOTES"
+  printf ']}'
+} > "$NOTES"
 
 json_response_file "$NOTES"
 
