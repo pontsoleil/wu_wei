@@ -48,15 +48,22 @@ wuwei.resource = (function () {
   function search(param) {
     param = param || {};
     const term = String(param.term || '').trim();
-    if (!term) {
-      return Promise.resolve({ r: [], count: 0, count_org: 0, start: param.start || 0 });
+    if (!term && !param.date && !param.start_date && !param.end_date && !param.year && !param.month) {
+      return Promise.resolve(JSON.stringify({ r: [], count: 0, count_org: 0, start: param.start || 0 }));
     }
     const data = currentAuthData({
       start: param.start || 0,
-      count: param.count || 24,
-      term: term
+      count: param.count || 24
     });
-    return ajaxRequest(util.getServerUrl('find-resource'), data, 'POST', 30000);
+    if (term) {
+      data.term = term;
+    }
+    ['year', 'month', 'date', 'start_date', 'end_date', 'scope'].forEach(function (key) {
+      if (param[key]) {
+        data[key] = param[key];
+      }
+    });
+    return ajaxRequest(util.getServerUrl('search-resource'), data, 'POST', 30000);
   }
 
   function encodeBase64Json(value) {

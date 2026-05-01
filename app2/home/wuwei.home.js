@@ -503,9 +503,11 @@ wuwei.home = (function () {
       safeDecode(value && value.label ? value.label : ''),
       safeDecode(descriptionBody),
       safeDecode(identity.title || ''),
-      safeDecode(storage.sourcePath || ''),
       storageFiles.map(function (item) {
-        return item && item.path ? safeDecode(item.path) : '';
+        if (!item) {
+          return '';
+        }
+        return [safeDecode(item.area || ''), safeDecode(item.path || '')].join(' ');
       }).join(' '),
       safeDecode(identity.uri || ''),
       safeDecode(identity.canonicalUri || ''),
@@ -1363,7 +1365,7 @@ wuwei.home = (function () {
     const term = String(searchTerm || '').trim().toLowerCase();
     const startDate = dateRangeStart || date || '';
     const endDate = dateRangeEnd || dateRangeStart || date || '';
-    const hasRange = !!(startDate && endDate && !(term && searchScope === 'all'));
+    const hasRange = !!(startDate && endDate);
     let filtered = source.filter(function (file) {
       const resourceDate = getResourceDate(file);
       if (hasRange) {
@@ -1534,6 +1536,10 @@ wuwei.home = (function () {
       wuwei.home.markup.add_calendar(year, month, days, months);
       bindCalendarDayEvents();
     }
+    if (searchScope === 'all') {
+      findResource(searchTerm);
+      return;
+    }
     applyGalleryFilters();
   };
 
@@ -1569,7 +1575,7 @@ wuwei.home = (function () {
           if (homeDiv) { homeDiv.style.display = 'flex' };
           refreshLoginStatus().then(function () {
             const currentUser = state.currentUser || {};
-            if (currentUser.user_id && util.isUUID(currentUser.user_id)) {
+            if (currentUser.user_id) {
               listFile({ year: year, month: month, date: date, start: state.start, count: state.count });
             }
             else {
@@ -2062,18 +2068,39 @@ wuwei.home = (function () {
     searchScope = scopeEl && scopeEl.value ? scopeEl.value : searchScope || 'current';
     if (!term) {
       searchTerm = '';
-      applyGalleryFilters();
-      return;
+      if (searchScope === 'all') {
+        if (!dateRangeStart && !dateRangeEnd && !date) {
+          listFile({ year: year, month: month, date: date, start: start, count: count });
+          return;
+        }
+      }
+      else {
+        applyGalleryFilters();
+        return;
+      }
     }
     if (searchScope !== 'all') {
       applyGalleryFilters();
       return;
     }
-    wuwei.resource.search({
+    const request = {
       term: searchTerm,
       start: start,
-      count: count
-    })
+      count: count,
+      scope: searchScope
+    };
+    if (dateRangeStart || dateRangeEnd) {
+      request.start_date = dateRangeStart || dateRangeEnd;
+      request.end_date = dateRangeEnd || dateRangeStart;
+    }
+    else if (date) {
+      request.date = date;
+    }
+    else {
+      request.year = year;
+      request.month = month;
+    }
+    wuwei.resource.search(request)
       .then(function (responseText) {
         const response = parseResourceListResponse(responseText);
         populateFile(response);
@@ -2099,7 +2126,7 @@ wuwei.home = (function () {
     refreshLoginStatus()
       .then(function () {
         const currentUser = state.currentUser || {};
-        if (currentUser.user_id && util.isUUID(currentUser.user_id)) {
+        if (currentUser.user_id) {
           listFile({ year: year, month: month, date: date, start: state.start, count: state.count });
         }
         else {

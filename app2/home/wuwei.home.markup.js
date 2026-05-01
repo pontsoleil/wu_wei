@@ -585,7 +585,7 @@ wuwei.home.markup = (function () {
           </button>
           <div class="home-title-block">
             <div class="home-title">${escapeHtml(translate('WuWei Home'))}</div>
-            <div class="home-subtitle">${escapeHtml(translate('Browse uploaded content and saved webpages, add comments, and start note editing from the selected content.'))}</div>
+            <div class="home-subtitle">${escapeHtml(translate('Browse uploaded files, saved webpages, PDFs, and other registered resources. Add comments, insert selected content into the current note, or start a new note from it.'))}</div>
           </div>
         </div>
       </div>

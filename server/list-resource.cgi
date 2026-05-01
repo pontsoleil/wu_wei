@@ -302,6 +302,8 @@ resource_dir=$(resolve_env_path resource "$user_id" || true)
 year=$(nameread year "$CGIVARS" | strip_quotes || true)
 month=$(nameread month "$CGIVARS" | strip_quotes || true)
 date_filter=$(nameread date "$CGIVARS" | strip_quotes || true)
+start_date=$(nameread start_date "$CGIVARS" | strip_quotes || true)
+end_date=$(nameread end_date "$CGIVARS" | strip_quotes || true)
 term=$(nameread term "$CGIVARS" | strip_quotes || true)
 month_key=""
 if [ -n "${year:-}" ] && [ -n "${month:-}" ]; then
@@ -326,6 +328,8 @@ while IFS= read -r path; do
   d=$(resource_date_from_rel "$rel")
   [ -n "$month_key" ] && case "$d" in "$month_key"-*) ;; *) continue ;; esac
   [ -n "$date_filter" ] && [ "$d" != "$date_filter" ] && continue
+  [ -n "$start_date" ] && { [ -n "$d" ] || continue; [ "$d" \< "$start_date" ] && continue; }
+  [ -n "$end_date" ] && { [ -n "$d" ] || continue; [ "$d" \> "$end_date" ] && continue; }
   [ -n "$term" ] && ! grep -Fqi -- "$term" "$path" && continue
   [ -n "$d" ] && case "_${days}_" in *"_$d_"*) ;; *) days="${days}${days:+_}$d" ;; esac
   m=${d%-*}
@@ -335,7 +339,7 @@ while IFS= read -r path; do
   count=$((count + 1))
 done < "$FOUND"
 
-printf '%s,"count":%s,"year":"%s","month":"%s","date":"%s","days":"%s","months":[' "$count" "$count" "$(printf '%s' "$year" | json_escape)" "$(printf '%s' "$month" | json_escape)" "$(printf '%s' "$date_filter" | json_escape)" "$(printf '%s' "$days" | json_escape)"
+printf '%s,"count":%s,"year":"%s","month":"%s","date":"%s","start_date":"%s","end_date":"%s","days":"%s","months":[' "$count" "$count" "$(printf '%s' "$year" | json_escape)" "$(printf '%s' "$month" | json_escape)" "$(printf '%s' "$date_filter" | json_escape)" "$(printf '%s' "$start_date" | json_escape)" "$(printf '%s' "$end_date" | json_escape)" "$(printf '%s' "$days" | json_escape)"
 mi=0
 for m in $months; do
   [ "$mi" -gt 0 ] && printf ','
