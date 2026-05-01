@@ -566,7 +566,7 @@ def save_primary_resource_definition(resource):
                 merge_resource_uri_fields(resource, existing_resource)
         except Exception:
             pass
-    resource_json.write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+    resource_json.write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def note_area_path(path):
@@ -642,7 +642,7 @@ def copy_resource_snapshot(resource, base_root):
         storage["files"] = snapshot_files
 
     try:
-        (snapshot / "resource.json").write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+        (snapshot / "resource.json").write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     except OSError as e:
         print(f"snapshot_skip='resource json write failed' resource_id={rid!r} path={str(snapshot / 'resource.json')!r} error={str(e)!r}", file=sys.stderr)
 
@@ -746,8 +746,8 @@ def restore_embedded_resource_files(note):
             "sha256": sha256,
         })
         storage["files"] = files
-        (primary / "resource.json").write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
-        (snapshot / "resource.json").write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+        (primary / "resource.json").write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        (snapshot / "resource.json").write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     note.pop("portable", None)
     note.pop("resourceBundle", None)
     note.pop("bundle", None)
@@ -763,7 +763,7 @@ try:
     if str(note.get("note_uuid") or "") == DRAFT_NOTE_ID or note.get("note_uuid") is None:
         note["note_uuid"] = note_id
     note["resources"] = note.get("resources") if isinstance(note.get("resources"), list) else []
-    json_file.write_text(json.dumps(note, ensure_ascii=False, separators=(",", ":")), encoding="utf-8", newline="\n")
+    json_file.write_text(json.dumps(note, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 except Exception as e:
     print(f"note_json_process_error={type(e).__name__}: {e}", file=sys.stderr)
     sys.exit(1)

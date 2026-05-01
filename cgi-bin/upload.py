@@ -284,7 +284,7 @@ def write_resource_file(
         "value.file ",
     ]
     resource_file.parent.mkdir(parents=True, exist_ok=True)
-    resource_file.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    resource_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def media_kind(content_type: str, filename: str) -> str:
@@ -363,7 +363,7 @@ def write_upload_manifest(
             "sha256": preview_sha or sha256_file(preview_file),
             "generated_by": "LibreOffice",
         }
-    manifest_file.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+    manifest_file.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def read_sha_index(index_file: Path) -> dict | None:
@@ -931,7 +931,7 @@ def main():
         created_at=now.isoformat(),
     )
     write_sha_index(sha_index_file, sha256=original_hash, upload_id=resource_id, date=upload_date, filename=dest_file.name)
-    resource_file.write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+    resource_file.write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     response = {
         "id": resource_id,

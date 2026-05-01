@@ -319,7 +319,7 @@ def _save_primary_resource_definition(resource: dict, *, resource_root: Path, no
                 _merge_resource_uri_fields(resource, existing_resource)
         except Exception:
             pass
-    resource_json.write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+    resource_json.write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def _note_area_path(path: Path) -> str:
@@ -404,7 +404,7 @@ def _copy_resource_snapshot(resource: dict, *, base_root: Path, user_id: str, no
 
     resource_json = snapshot / "resource.json"
     try:
-        resource_json.write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+        resource_json.write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     except OSError as e:
         debug_kv(snapshot_skip="resource json write failed", resource_id=rid, path=str(resource_json), error=str(e))
 
@@ -516,8 +516,8 @@ def _restore_embedded_resource_files(note_json: dict, *, resource_root: Path, up
         })
         storage["files"] = files
 
-        (primary / "resource.json").write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
-        (snapshot / "resource.json").write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+        (primary / "resource.json").write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        (snapshot / "resource.json").write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     note_json.pop("portable", None)
     note_json.pop("resourceBundle", None)
