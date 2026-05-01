@@ -349,13 +349,14 @@ wuwei.home.markup = (function () {
     const previewKind = getInfoPreviewKind(file);
     const previewSrc = getInfoPreviewSrc(file);
     const thumbUri = toCurrentLocalOrigin(
-      value.thumbnail && value.thumbnail.uri
+      safeDecode(file.thumbnail_url || '') ||
+      (value.thumbnail && value.thumbnail.uri
         ? value.thumbnail.uri
         : (
           (previewKind === 'image' || previewKind === 'thumbnail') && previewSrc
             ? previewSrc
             : ''
-        )
+        ))
     );
 
     if (thumbUri && thumbUri.indexOf('undefined') < 0) {
