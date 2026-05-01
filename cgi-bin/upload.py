@@ -301,13 +301,13 @@ def media_kind(content_type: str, filename: str) -> str:
     return "general"
 
 
-def file_entry(role: str, path: Path, mime_type: str, size_text: str = "") -> dict:
+def file_entry(role: str, path: Path, mime_type: str, size_text: str = "", sha256: str | None = None) -> dict:
     item = {
         "role": role,
         "path": path.name,
         "mimeType": mime_type or "application/octet-stream",
         "size": path.stat().st_size if path.exists() else 0,
-        "sha256": sha256_file(path) if path.exists() else "",
+        "sha256": sha256 if sha256 is not None else (sha256_file(path) if path.exists() else ""),
     }
     if size_text:
         item["displaySize"] = size_text
@@ -625,14 +625,18 @@ def main():
         shutil.copyfileobj(fileitem.file, f)
 
     content_type = detect_content_type(dest_file, declared_contenttype)
-    original_hash = sha256_file(dest_file)
     upload_relpath = upload_relative_path(upload_root, dest_file)
-    existing_resource, dedupe_reason = find_existing_resource(
-        resource_root,
-        original_hash=original_hash,
-        canonical_uri="",
-        source_path=upload_relpath,
-    )
+    existing_resource, dedupe_reason = (None, "")
+    if note_id != "new_note":
+        original_hash = sha256_file(dest_file)
+        existing_resource, dedupe_reason = find_existing_resource(
+            resource_root,
+            original_hash=original_hash,
+            canonical_uri="",
+            source_path=upload_relpath,
+        )
+    else:
+        original_hash = ""
     if existing_resource and dedupe_reason != "originalPath" and not note_id:
         if not office_resource_needs_preview(existing_resource, filename, resource_root, upload_root):
             debug_kv(dedupe="resource reused", resource_id=existing_resource.get("id"), sha256=original_hash)
@@ -740,7 +744,7 @@ def main():
         pdf_preview_url=pdf_preview_url or "",
     )
 
-    files = [file_entry("original", dest_file, content_type, resource_size or "")]
+    files = [file_entry("original", dest_file, content_type, resource_size or "", original_hash)]
     files[0]["area"] = "upload"
     files[0]["path"] = upload_relpath
     if thumb_file.exists():

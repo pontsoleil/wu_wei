@@ -223,8 +223,6 @@ mime-read file "$Tmp-cgivars" > "$Tmp-uploadfile" || die_json "ERROR: mime-read 
 echo "after mime-read file" >&2
 ls -l "$Tmp-uploadfile" >&2
 
-mime-read file "$Tmp-cgivars" > "$Tmp-uploadfile"
-
 # filename from multipart header
 echo "before parse filename" >&2
 
@@ -268,7 +266,10 @@ dest_file="$upload_file_dir/$filename"
 cp -- "$Tmp-uploadfile" "$dest_file" || die_json "ERROR: cannot save upload to $dest_file"
 
 upload_relpath="$year/$month/$day/$upload_file_uuid/$filename"
-original_sha="$(sha256sum "$dest_file" 2>/dev/null | awk '{print $1}')"
+original_sha=""
+if [ "$note_id" != "new_note" ]; then
+  original_sha="$(sha256sum "$dest_file" 2>/dev/null | awk '{print $1}')"
+fi
 
 find_existing_resource_dir() {
   local sha="$1" rel="$2" rf
@@ -282,7 +283,10 @@ find_existing_resource_dir() {
 }
 
 # --- ids / uri mapping -----------------------------------------------
-existing_resource_dir="$(find_existing_resource_dir "$original_sha" "$upload_relpath" || true)"
+existing_resource_dir=""
+if [ "$note_id" != "new_note" ]; then
+  existing_resource_dir="$(find_existing_resource_dir "$original_sha" "$upload_relpath" || true)"
+fi
 if [ -n "$existing_resource_dir" ]; then
   uuid="${existing_resource_dir##*/}"
 else
@@ -475,7 +479,9 @@ lastmodified="$(stat -c %y -- "$dest_file" 2>/dev/null || true)"
 
 # --- write resource file --------------------------------------------
 created_at="$(date '+%Y-%m-%dT%H:%M:%S%z')"
-original_sha="$(sha256sum "$dest_file" 2>/dev/null | awk '{print $1}')"
+if [ -z "$original_sha" ] && [ "$note_id" != "new_note" ]; then
+  original_sha="$(sha256sum "$dest_file" 2>/dev/null | awk '{print $1}')"
+fi
 thumb_sha=""
 [ -f "$thumb_file" ] && thumb_sha="$(sha256sum "$thumb_file" 2>/dev/null | awk '{print $1}')"
 preview_sha=""

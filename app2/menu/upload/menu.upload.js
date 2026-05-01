@@ -22,11 +22,17 @@ wuwei.menu.upload = wuwei.menu.upload || {};
 
   function open() {
     console.log('wuwei.menu.upload.open()');
+    if (common.state && common.state.loggedIn && common.state.currentUser && common.state.currentUser.user_id) {
+      const uploadEl = document.getElementById('upload');
+      uploadEl.innerHTML = menu.upload.markup.template();
+      uploadEl.style.display = 'block';
+      return;
+    }
     wuwei.menu.login.check().then(param => {
       console.log(param);
-      const loginEl = document.getElementById('upload');
-      loginEl.innerHTML = menu.upload.markup.template();
-      loginEl.style.display = 'block';
+      const uploadEl = document.getElementById('upload');
+      uploadEl.innerHTML = menu.upload.markup.template();
+      uploadEl.style.display = 'block';
     })
       .catch(error => {
         console.log(error);
