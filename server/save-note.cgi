@@ -299,17 +299,17 @@ def load_note(path):
     return data
 
 
-def assert_no_legacy_runtime_fields(value, path="$"):
+def strip_legacy_runtime_fields(value):
     legacy = {"sourcePath", "primaryPath", "snapshotPath"}
     if isinstance(value, dict):
-        for key, child in value.items():
-            child_path = f"{path}.{key}"
+        for key in list(value.keys()):
             if key in legacy:
-                raise ValueError(f"LEGACY FIELD NOT ALLOWED: {child_path}")
-            assert_no_legacy_runtime_fields(child, child_path)
+                value.pop(key, None)
+            else:
+                strip_legacy_runtime_fields(value[key])
     elif isinstance(value, list):
-        for index, child in enumerate(value):
-            assert_no_legacy_runtime_fields(child, f"{path}[{index}]")
+        for child in value:
+            strip_legacy_runtime_fields(child)
 
 
 def rewrite_draft_note_paths(value):
@@ -750,7 +750,7 @@ def restore_embedded_resource_files(note):
 
 
 note = load_note(json_file)
-assert_no_legacy_runtime_fields(note)
+strip_legacy_runtime_fields(note)
 if note_id != DRAFT_NOTE_ID:
     rewrite_draft_note_paths(note)
 if str(note.get("note_id") or "") == DRAFT_NOTE_ID or not note.get("note_id"):

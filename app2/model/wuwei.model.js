@@ -2888,6 +2888,14 @@ wuwei.model = (function () {
       return util.toPublicResourceUri('upload', uploadRef.date + '/' + uploadRef.id + '/' + filename, state.currentUser && state.currentUser.user_id);
     }
 
+    function uploadRoleFileName(role, fallback) {
+      const found = resourceFiles.find(function (item) {
+        return item && String(item.role || '').toLowerCase() === role && String(item.area || '') === 'upload' && item.path;
+      });
+      const path = found ? String(found.path || '').replace(/\\/g, '/') : '';
+      return path ? path.split('/').pop() : fallback;
+    }
+
     function resolveUploadedThumbnail() {
       const candidates = [
         resourceDef && util.getResourceFileUri ? util.getResourceFileUri(resourceDef, 'thumbnail') : '',
@@ -2969,8 +2977,10 @@ wuwei.model = (function () {
     const runtimeResourceUri = originalFile.path || resourceIdentity.uri || resourceEmbed.uri || resourceSnapshots.previewUri || nodeUrl || uri || resourceIdentity.canonicalUri || resourceSnapshots.originalUri || '';
     const snapshotThumbnailUri = thumbnail && !isIconThumbnail(thumbnail) ? thumbnail : '';
     const uploadRef = uploadRefFromStorage();
-    const uploadPreviewUri = uploadFileUri(uploadRef, 'preview.pdf') || nodeUrl || runtimeResourceUri;
-    const uploadThumbnailUri = uploadFileUri(uploadRef, 'thumbnail.jpg') || snapshotThumbnailUri;
+    const uploadPreviewName = uploadRoleFileName('preview', 'preview.pdf');
+    const uploadThumbnailName = uploadRoleFileName('thumbnail', 'thumbnail.jpg');
+    const uploadPreviewUri = uploadFileUri(uploadRef, uploadPreviewName) || nodeUrl || runtimeResourceUri;
+    const uploadThumbnailUri = uploadFileUri(uploadRef, uploadThumbnailName) || snapshotThumbnailUri;
     const runtimeResource = uploadRef ? {
       kind: 'upload',
       id: uploadRef.id,
@@ -2990,13 +3000,13 @@ wuwei.model = (function () {
           {
             role: 'thumbnail',
             area: 'upload',
-            path: uploadRef.date + '/' + uploadRef.id + '/thumbnail.jpg',
+            path: uploadRef.date + '/' + uploadRef.id + '/' + uploadThumbnailName,
             mimeType: 'image/jpeg'
           },
           {
             role: 'preview',
             area: 'upload',
-            path: uploadRef.date + '/' + uploadRef.id + '/preview.pdf',
+            path: uploadRef.date + '/' + uploadRef.id + '/' + uploadPreviewName,
             mimeType: 'application/pdf'
           }
         ]

@@ -48,17 +48,17 @@ def _ensure_note_json(value: str) -> dict:
     return data
 
 
-def _assert_no_legacy_runtime_fields(value, path: str = "$") -> None:
+def _strip_legacy_runtime_fields(value) -> None:
     legacy = {"sourcePath", "primaryPath", "snapshotPath"}
     if isinstance(value, dict):
-        for key, child in value.items():
-            child_path = f"{path}.{key}"
+        for key in list(value.keys()):
             if key in legacy:
-                raise ValueError(f"LEGACY FIELD NOT ALLOWED: {child_path}")
-            _assert_no_legacy_runtime_fields(child, child_path)
+                value.pop(key, None)
+            else:
+                _strip_legacy_runtime_fields(value[key])
     elif isinstance(value, list):
-        for index, child in enumerate(value):
-            _assert_no_legacy_runtime_fields(child, f"{path}[{index}]")
+        for child in value:
+            _strip_legacy_runtime_fields(child)
 
 
 def _rewrite_draft_note_paths(value, note_id: str):
@@ -575,7 +575,7 @@ def main():
 
     try:
         note_json = _ensure_note_json(params.get("json", "") or "")
-        _assert_no_legacy_runtime_fields(note_json)
+        _strip_legacy_runtime_fields(note_json)
     except ValueError as e:
         debug_kv(json_error=str(e))
         script_error(f"ERROR {e}")

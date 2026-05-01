@@ -770,8 +770,7 @@ def main():
     rid = resource_id.lstrip("_")
     primary_dir.mkdir(parents=True, exist_ok=True)
 
-    thumb_ext = ".png" if content_type.lower().startswith("application/pdf") else ".jpg"
-    thumb_file = dest_file.parent / f"thumbnail{thumb_ext}"
+    thumb_file = dest_file.parent / "thumbnail.jpg"
     thumb_area = "upload"
     thumb_root = upload_root
     resource_file = primary_dir / "resource.json"
