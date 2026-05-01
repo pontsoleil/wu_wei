@@ -75,13 +75,6 @@ url_encode() {
   printf '%s' "$1" | sed 's/%/%25/g; s/ /%20/g; s#/#%2F#g; s/&/%26/g; s/?/%3F/g; s/=/%3D/g'
 }
 
-resource_rel_url() {
-  uid=$1
-  rel=$2
-  printf '/wu_wei2/server/load-file.cgi?area=resource&path=%s&user_id=%s' \
-    "$(url_encode "$rel")" "$(url_encode "$uid")"
-}
-
 file_rel_url() {
   uid=$1
   area=$2
@@ -90,20 +83,6 @@ file_rel_url() {
   [ -n "$rel" ] || return 0
   printf '/wu_wei2/server/load-file.cgi?area=%s&path=%s&user_id=%s' \
     "$(url_encode "$area")" "$(url_encode "$rel")" "$(url_encode "$uid")"
-}
-
-managed_file_exists() {
-  area=$1
-  rel=$2
-  [ -n "$rel" ] || return 1
-  case "$area" in
-    upload) [ -n "${upload_dir:-}" ] && [ -f "$upload_dir/$rel" ] ;;
-    resource) [ -n "${resource_dir:-}" ] && [ -f "$resource_dir/$rel" ] ;;
-    note) [ -n "${note_dir:-}" ] && [ -f "$note_dir/$rel" ] ;;
-    thumbnail) [ -n "${thumbnail_dir:-}" ] && [ -f "$thumbnail_dir/$rel" ] ;;
-    content) [ -n "${content_dir:-}" ] && [ -f "$content_dir/$rel" ] ;;
-    *) return 1 ;;
-  esac
 }
 
 json_string_field() {
@@ -185,46 +164,6 @@ json_nested_string_field() {
   '
 }
 
-json_file_field_for_role() {
-  role=$1
-  key=$2
-  file=$3
-  awk -v role="$role" -v key="$key" '
-    BEGIN { RS=""; ORS="" }
-    {
-      role_pat = "\"role\"[ \t\r\n]*:[ \t\r\n]*\"" role "\""
-      if (!match($0, role_pat)) exit
-
-      prefix = substr($0, 1, RSTART)
-      start = 0
-      for (i = length(prefix); i >= 1; i--) {
-        if (substr(prefix, i, 1) == "{") { start = i; break }
-      }
-      if (!start) exit
-
-      rest = substr($0, start)
-      end = index(rest, "}")
-      if (!end) exit
-      obj = substr(rest, 1, end)
-
-      key_pat = "\"" key "\"[ \t\r\n]*:[ \t\r\n]*\""
-      if (match(obj, key_pat)) {
-        s = substr(obj, RSTART + RLENGTH)
-        out = ""; esc2 = 0
-        for (j = 1; j <= length(s); j++) {
-          d = substr(s, j, 1)
-          if (esc2) { out = out d; esc2 = 0; continue }
-          if (d == "\\") { out = out d; esc2 = 1; continue }
-          if (d == "\"") break
-          out = out d
-        }
-        print out
-        exit
-      }
-    }
-  ' "$file"
-}
-
 resource_date_from_rel() {
   rel=$1
   y=$(printf '%s' "$rel" | awk -F/ '{print $1}')
@@ -234,107 +173,6 @@ resource_date_from_rel() {
     [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) printf '%s-%s-%s\n' "$y" "$m" "$d" ;;
     *) printf '\n' ;;
   esac
-}
-
-emit_record() {
-  root=$1
-  path=$2
-  uid=$3
-  rel=${path#"$root"/}
-  id=$(json_string_field id "$path")
-  [ -n "$id" ] || id=$(basename "$(dirname "$path")")
-  label=$(json_string_field label "$path")
-  title=$(json_string_field title "$path")
-  name=${label:-${title:-$id}}
-  canonical=$(json_string_field canonicalUri "$path")
-  uri=$(json_string_field uri "$path")
-  source_uri=${canonical:-$uri}
-  mime=$(json_string_field mimeType "$path")
-  kind=$(json_string_field kind "$path")
-  desc=$(json_object_field description "$path")
-  desc_format=$(json_string_field format "$path")
-  desc_body=$(json_string_field body "$path")
-  [ -n "$desc" ] || desc='{}'
-
-  option=upload
-  viewer=
-  case "$source_uri" in
-    *youtube.com*|*youtu.be*) option=video; viewer=youtube ;;
-    *vimeo.com*) option=video; viewer=vimeo ;;
-    http://*|https://*) option=webpage; viewer=iframe ;;
-  esac
-  case "$kind:$mime" in
-    video:*|*:video/*) option=video; [ -n "$viewer" ] || viewer=video ;;
-    image:*|*:image/*) [ -n "$viewer" ] || viewer=image ;;
-    *:application/pdf) [ -n "$viewer" ] || viewer=pdf ;;
-  esac
-  [ -n "$viewer" ] || viewer=iframe
-
-  date=$(resource_date_from_rel "$rel")
-  lastmod=$(json_string_field lastModifiedAt "$path")
-  created=$(json_string_field createdAt "$path")
-  ts=${lastmod:-${created:-${date}T00:00:00}}
-  preview="$source_uri"
-  thumb=$(json_string_field thumbnailUri "$path")
-  res_url=$(resource_rel_url "$uid" "$rel")
-  original_area=$(json_file_field_for_role original area "$path")
-  original_path=$(json_file_field_for_role original path "$path")
-  preview_area=$(json_file_field_for_role preview area "$path")
-  preview_path=$(json_file_field_for_role preview path "$path")
-  thumb_area=$(json_file_field_for_role thumbnail area "$path")
-  thumb_path=$(json_file_field_for_role thumbnail path "$path")
-  case "$original_path" in
-    */*) original_dir=${original_path%/*} ;;
-    *) original_dir="" ;;
-  esac
-  if [ -n "$thumb_path" ] && ! managed_file_exists "${thumb_area:-note}" "$thumb_path"; then
-    thumb_area=
-    thumb_path=
-  fi
-  if [ -n "${upload_dir:-}" ] && [ -n "$original_dir" ] && [ -f "$upload_dir/$original_dir/thumbnail.jpg" ]; then
-    thumb_area=upload
-    thumb_path="$original_dir/thumbnail.jpg"
-  fi
-  resource_thumb=${rel%/*}/thumbnail.jpg
-  if [ -z "$thumb_path" ] && [ -n "${resource_dir:-}" ] && [ -f "$resource_dir/$resource_thumb" ]; then
-    thumb_area=resource
-    thumb_path="$resource_thumb"
-  fi
-  original_file_url=$(file_rel_url "$uid" "${original_area:-upload}" "$original_path")
-  preview_file_url=$(file_rel_url "$uid" "${preview_area:-note}" "$preview_path")
-  thumb_file_url=$(file_rel_url "$uid" "${thumb_area:-note}" "$thumb_path")
-  [ -n "$preview_file_url" ] && preview="$preview_file_url"
-  [ -z "$preview" ] && preview="$original_file_url"
-  [ -n "$thumb_file_url" ] && thumb="$thumb_file_url"
-  download_url=${original_file_url:-$source_uri}
-
-  printf '{'
-  printf '"id":"%s",' "$(printf '%s' "$id" | json_escape)"
-  printf '"resource":'
-  cat "$path"
-  printf ','
-  printf '"label":"%s",' "$(printf '%s' "$label" | json_escape)"
-  printf '"description":%s,' "$desc"
-  printf '"name":"%s",' "$(printf '%s' "$name" | json_escape)"
-  printf '"option":"%s",' "$option"
-  printf '"contenttype":"%s",' "$(printf '%s' "$mime" | json_escape)"
-  printf '"uri":"%s",' "$(printf '%s' "$uri" | json_escape)"
-  printf '"url":"%s",' "$(printf '%s' "$preview" | json_escape)"
-  printf '"download_url":"%s",' "$(printf '%s' "$download_url" | json_escape)"
-  printf '"preview_url":"%s",' "$(printf '%s' "$preview" | json_escape)"
-  printf '"thumbnail_url":"%s",' "$(printf '%s' "$thumb" | json_escape)"
-  printf '"value":{'
-  printf '"lastmodified":"%s",' "$(printf '%s' "$ts" | sed 's/T/ /' | json_escape)"
-  printf '"totalsize":"",'
-  printf '"viewerType":"%s",' "$viewer"
-  printf '"previewUri":"%s",' "$(printf '%s' "$preview" | json_escape)"
-  printf '"resource":{"uri":"%s","url":"%s"},' "$(printf '%s' "$res_url" | json_escape)" "$(printf '%s' "$res_url" | json_escape)"
-  if [ -n "$thumb" ]; then
-    printf '"thumbnail":{"uri":"%s"},' "$(printf '%s' "$thumb" | json_escape)"
-  fi
-  printf '"comment":"%s","file":""' "$(printf '%s' "$desc_body" | json_escape)"
-  printf '}'
-  printf '}'
 }
 
 emit_upload_manifest_record() {
@@ -442,13 +280,9 @@ if [ -n "${req_user_id:-}" ] && [ "$req_user_id" != "$session_user_id" ]; then
   text_response 'ERROR USER MISMATCH'
 fi
 user_id=$session_user_id
-resource_dir=$(resolve_env_path resource "$user_id" || true)
-[ -n "${resource_dir:-}" ] || text_response 'ERROR RESOURCE DIR NOT DEFINED'
-[ -d "$resource_dir" ] || mkdir -p "$resource_dir"
 upload_dir=$(resolve_env_path upload "$user_id" || true)
-note_dir=$(resolve_env_path note "$user_id" || true)
-thumbnail_dir=$(resolve_env_path thumbnail "$user_id" || true)
-content_dir=$(resolve_env_path content "$user_id" || true)
+[ -n "${upload_dir:-}" ] || text_response 'ERROR UPLOAD DIR NOT DEFINED'
+[ -d "$upload_dir" ] || mkdir -p "$upload_dir"
 
 year=$(nameread year "$CGIVARS" | strip_quotes || true)
 month=$(nameread month "$CGIVARS" | strip_quotes || true)
@@ -465,7 +299,6 @@ fi
 if [ -n "${upload_dir:-}" ] && [ -d "$upload_dir" ]; then
   find "$upload_dir" -type f -name manifest.json -printf '%T@ upload %p\n' 2>/dev/null >> "$FOUND"
 fi
-find "$resource_dir" -type f -name resource.json -printf '%T@ resource %p\n' 2>/dev/null >> "$FOUND"
 sort -rn "$FOUND" > "$FOUND.sorted" && mv "$FOUND.sorted" "$FOUND"
 : > "$SEEN"
 
@@ -483,11 +316,8 @@ records_tmp="${Tmp}-records"
 while IFS= read -r found_line; do
   source_type=$(printf '%s' "$found_line" | awk '{print $2}')
   path=$(printf '%s' "$found_line" | awk '{sub(/^[^ ]+ [^ ]+ /,""); print}')
-  if [ "$source_type" = "upload" ]; then
-    root=$upload_dir
-  else
-    root=$resource_dir
-  fi
+  [ "$source_type" = "upload" ] || continue
+  root=$upload_dir
   rel=${path#"$root"/}
   d=$(resource_date_from_rel "$rel")
   [ -n "$month_key" ] && case "$d" in "$month_key"-*) ;; *) continue ;; esac
@@ -505,11 +335,7 @@ while IFS= read -r found_line; do
   m=${d%-*}
   [ -n "$m" ] && case " $months " in *" $m "*) ;; *) months="${months}${months:+ }$m" ;; esac
   [ "$count" -gt 0 ] && printf ',' >> "$records_tmp"
-  if [ "$source_type" = "upload" ]; then
-    emit_upload_manifest_record "$upload_dir" "$path" "$user_id" >> "$records_tmp"
-  else
-    emit_record "$resource_dir" "$path" "$user_id" >> "$records_tmp"
-  fi
+  emit_upload_manifest_record "$upload_dir" "$path" "$user_id" >> "$records_tmp"
   count=$((count + 1))
 done < "$FOUND"
 
