@@ -266,12 +266,13 @@ wuwei.note = (function () {
     var snapshotSources = (src.snapshotSources && typeof src.snapshotSources === 'object') ? src.snapshotSources : {};
     var uri = String(src.uri || embed.uri || snapshotSources.previewUri || src.canonicalUri || snapshotSources.originalUri || '');
     var uploadId, uploadDate, uploadBase, uploadPreview, uploadThumbnail;
+    var currentUserId = String((state.currentUser && state.currentUser.user_id) || '');
     if (src.kind === 'upload' && src.id && src.date) {
       uploadId = String(src.id || '');
       uploadDate = String(src.date || '').replace(/\\/g, '/').replace(/^\/|\/$/g, '');
       uploadBase = uploadDate + '/' + uploadId + '/';
-      uploadPreview = util.toPublicResourceUri('upload', uploadBase + 'preview.pdf', state.currentUser && state.currentUser.user_id);
-      uploadThumbnail = util.toPublicResourceUri('upload', uploadBase + 'thumbnail.jpg', state.currentUser && state.currentUser.user_id);
+      uploadPreview = util.toPublicResourceUri('upload', uploadBase + 'preview.pdf', currentUserId);
+      uploadThumbnail = util.toPublicResourceUri('upload', uploadBase + 'thumbnail.jpg', currentUserId);
       var uploadOriginalFile = String(src.file || src.filename || src.name || '').replace(/\\/g, '/').split('/').pop();
       return {
         id: uploadId,
@@ -281,11 +282,18 @@ wuwei.note = (function () {
         mimeType: '',
         title: String(src.title || (node && node.label) || ''),
         file: uploadOriginalFile,
-        owner: '',
+        owner: currentUserId,
         copyright: '',
         license: '',
         attribution: '',
-        rights: { owner: '', copyright: '', license: '', attribution: '' },
+        rights: { owner: currentUserId, copyright: '', license: '', attribution: '' },
+        audit: {
+          owner: currentUserId,
+          createdBy: currentUserId,
+          createdAt: '',
+          lastModifiedBy: '',
+          lastModifiedAt: ''
+        },
         viewer: {
           supportedModes: ['infoPane', 'newTab', 'newWindow', 'download'],
           defaultMode: 'infoPane',

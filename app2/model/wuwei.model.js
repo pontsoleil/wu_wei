@@ -2852,6 +2852,7 @@ wuwei.model = (function () {
     const resourceIdentity = resourceDef && resourceDef.identity ? resourceDef.identity : {};
     const resourceStorage = resourceDef && resourceDef.storage && 'object' === typeof resourceDef.storage ? resourceDef.storage : {};
     const resourceFiles = Array.isArray(resourceStorage.files) ? resourceStorage.files : [];
+    const currentUserId = String((state.currentUser && state.currentUser.user_id) || '');
     const originalFile = resourceFiles.find(function (item) {
       return item && String(item.role || '').toLowerCase() === 'original';
     }) || {};
@@ -2992,6 +2993,20 @@ wuwei.model = (function () {
       uri: uploadPreviewUri,
       canonicalUri: uploadFileUri(uploadRef, uploadOriginalName) || downloadUrl || '',
       thumbnailUri: uploadThumbnailUri,
+      owner: currentUserId,
+      rights: {
+        owner: currentUserId,
+        copyright: '',
+        license: '',
+        attribution: ''
+      },
+      audit: {
+        owner: currentUserId,
+        createdBy: currentUserId,
+        createdAt: new Date().toISOString(),
+        lastModifiedBy: '',
+        lastModifiedAt: ''
+      },
       storage: {
         managed: true,
         copyPolicy: 'reference',

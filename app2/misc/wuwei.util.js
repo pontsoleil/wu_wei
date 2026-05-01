@@ -3893,9 +3893,39 @@ wuwei.util = (function () {
     return fallback;
   }
 
+  function getResourceOwnerUserId(resource, node) {
+    var audit = (resource && resource.audit && 'object' === typeof resource.audit) ? resource.audit : {};
+    var rights = (resource && resource.rights && 'object' === typeof resource.rights) ? resource.rights : {};
+    var storage = (resource && resource.storage && 'object' === typeof resource.storage) ? resource.storage : {};
+    var files = Array.isArray(storage.files) ? storage.files : [];
+    var currentUid = String(getCurrentUserId() || '').trim();
+    var kind = String(resource && resource.kind || '').toLowerCase();
+    var isManagedUpload = kind === 'upload';
+    var i;
+
+    for (i = 0; !isManagedUpload && i < files.length; i += 1) {
+      if (files[i] && String(files[i].area || '').toLowerCase() === 'upload') {
+        isManagedUpload = true;
+      }
+    }
+
+    if (isManagedUpload && currentUid) {
+      return currentUid;
+    }
+
+    return String(
+      audit.owner ||
+      audit.createdBy ||
+      rights.owner ||
+      (node && node.audit && (node.audit.owner || node.audit.createdBy)) ||
+      currentUid ||
+      ''
+    ).trim();
+  }
+
   getResourceFileUri = function (resource, role, node) {
     var file = getResourceFile(resource, role);
-    var area, path, raw, uid, audit, rights;
+    var area, path, raw, uid;
 
     if (!file) {
       return '';
@@ -3913,23 +3943,14 @@ wuwei.util = (function () {
     if (!area) {
       area = (String(role || '').toLowerCase() === 'original') ? 'upload' : 'note';
     }
-    audit = (resource && resource.audit && 'object' === typeof resource.audit) ? resource.audit : {};
-    rights = (resource && resource.rights && 'object' === typeof resource.rights) ? resource.rights : {};
-    uid = String(
-      audit.owner ||
-      audit.createdBy ||
-      rights.owner ||
-      (node && node.audit && (node.audit.owner || node.audit.createdBy)) ||
-      getCurrentUserId() ||
-      ''
-    ).trim();
+    uid = getResourceOwnerUserId(resource, node);
     path = toStorageRelativePath(raw, uid, area);
     return toPublicResourceUri(area, path, uid);
   };
 
   getResourceFilePath = function (resource, role, node) {
     var file = getResourceFile(resource, role);
-    var area, raw, uid, audit, rights;
+    var area, raw, uid;
 
     if (!file) {
       return '';
@@ -3947,16 +3968,7 @@ wuwei.util = (function () {
     if (!area) {
       area = (String(role || '').toLowerCase() === 'original') ? 'upload' : 'note';
     }
-    audit = (resource && resource.audit && 'object' === typeof resource.audit) ? resource.audit : {};
-    rights = (resource && resource.rights && 'object' === typeof resource.rights) ? resource.rights : {};
-    uid = String(
-      audit.owner ||
-      audit.createdBy ||
-      rights.owner ||
-      (node && node.audit && (node.audit.owner || node.audit.createdBy)) ||
-      getCurrentUserId() ||
-      ''
-    ).trim();
+    uid = getResourceOwnerUserId(resource, node);
     return toStorageRelativePath(raw, uid, area);
   };
 
@@ -3965,16 +3977,7 @@ wuwei.util = (function () {
     var viewer = (resource && resource.viewer && 'object' === typeof resource.viewer) ? resource.viewer : {};
     var embed = (viewer.embed && 'object' === typeof viewer.embed) ? viewer.embed : {};
     var snapshotSources = (resource && resource.snapshotSources && 'object' === typeof resource.snapshotSources) ? resource.snapshotSources : {};
-    var audit = (resource && resource.audit && 'object' === typeof resource.audit) ? resource.audit : {};
-    var rights = (resource && resource.rights && 'object' === typeof resource.rights) ? resource.rights : {};
-    var uid = String(
-      audit.owner ||
-      audit.createdBy ||
-      rights.owner ||
-      (node && node.audit && (node.audit.owner || node.audit.createdBy)) ||
-      getCurrentUserId() ||
-      ''
-    ).trim();
+    var uid = getResourceOwnerUserId(resource, node);
     function localUri(value, area) {
       var text = String(value || '').replace(/\\/g, '/').trim();
       if (!text || /^https?:\/\//i.test(text) && text.indexOf('/wu_wei2/') < 0) {
@@ -4004,16 +4007,7 @@ wuwei.util = (function () {
   getResourceOriginalUri = function (node) {
     var resource = getResource(node);
     var snapshotSources = (resource && resource.snapshotSources && 'object' === typeof resource.snapshotSources) ? resource.snapshotSources : {};
-    var audit = (resource && resource.audit && 'object' === typeof resource.audit) ? resource.audit : {};
-    var rights = (resource && resource.rights && 'object' === typeof resource.rights) ? resource.rights : {};
-    var uid = String(
-      audit.owner ||
-      audit.createdBy ||
-      rights.owner ||
-      (node && node.audit && (node.audit.owner || node.audit.createdBy)) ||
-      getCurrentUserId() ||
-      ''
-    ).trim();
+    var uid = getResourceOwnerUserId(resource, node);
     function localUri(value) {
       var text = String(value || '').replace(/\\/g, '/').trim();
       if (!text || /^https?:\/\//i.test(text) && text.indexOf('/wu_wei2/') < 0) {
@@ -4041,16 +4035,7 @@ wuwei.util = (function () {
     var resource = getResource(node);
     var path = getResourceFilePath(resource, 'original', node);
     var text;
-    var audit = (resource && resource.audit && 'object' === typeof resource.audit) ? resource.audit : {};
-    var rights = (resource && resource.rights && 'object' === typeof resource.rights) ? resource.rights : {};
-    var uid = String(
-      audit.owner ||
-      audit.createdBy ||
-      rights.owner ||
-      (node && node.audit && (node.audit.owner || node.audit.createdBy)) ||
-      getCurrentUserId() ||
-      ''
-    ).trim();
+    var uid = getResourceOwnerUserId(resource, node);
     if (path) {
       return path;
     }
@@ -4066,16 +4051,7 @@ wuwei.util = (function () {
     var viewer = (resource && resource.viewer && 'object' === typeof resource.viewer) ? resource.viewer : {};
     var embed = (viewer.embed && 'object' === typeof viewer.embed) ? viewer.embed : {};
     var snapshotSources = (resource && resource.snapshotSources && 'object' === typeof resource.snapshotSources) ? resource.snapshotSources : {};
-    var audit = (resource && resource.audit && 'object' === typeof resource.audit) ? resource.audit : {};
-    var rights = (resource && resource.rights && 'object' === typeof resource.rights) ? resource.rights : {};
-    var uid = String(
-      audit.owner ||
-      audit.createdBy ||
-      rights.owner ||
-      (node && node.audit && (node.audit.owner || node.audit.createdBy)) ||
-      getCurrentUserId() ||
-      ''
-    ).trim();
+    var uid = getResourceOwnerUserId(resource, node);
     function localUri(value) {
       var text = String(value || '').replace(/\\/g, '/').trim();
       var area;
