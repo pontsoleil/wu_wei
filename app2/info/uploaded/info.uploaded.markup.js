@@ -44,6 +44,9 @@ wuwei.info.uploaded.markup = ( function () {
     }
     var frameUri = escapeAttr(uri);
     var jsUri = escapeJsString(uri);
+    var rights = getResourceRights(node);
+    var credit = rights.attribution || rights.credit || '';
+    var license = rights.license || '';
     var html = `
 <form id="infoform" class="form-group info">
   ${label
@@ -71,6 +74,20 @@ wuwei.info.uploaded.markup = ( function () {
       </div>`
     : ''
   }
+  ${credit
+    ? `<div class="w3-row">
+        <label class="w3-col s4">${translate('Credit')}</label>
+        <input type="text" class="w3-col s8" value="${escapeAttr(credit)}" disabled>
+      </div>`
+    : ''
+  }
+  ${license
+    ? `<div class="w3-row">
+        <label class="w3-col s4">${translate('License')}</label>
+        <input type="text" class="w3-col s8" value="${escapeAttr(license)}" disabled>
+      </div>`
+    : ''
+  }
 </form>
 `;
     return html;
@@ -88,6 +105,16 @@ wuwei.info.uploaded.markup = ( function () {
 
   function translate(str) {
     return wuwei.info.markup.translate(str);
+  }
+
+  function getResourceRights(node) {
+    var resource = (node && node.resource && 'object' === typeof node.resource) ? node.resource : {};
+    var rights = (resource.rights && 'object' === typeof resource.rights) ? resource.rights : {};
+    return {
+      attribution: String(rights.attribution || resource.attribution || ''),
+      credit: String(rights.credit || resource.credit || ''),
+      license: String(rights.license || resource.license || '')
+    };
   }
 
   function escapeAttr(value) {

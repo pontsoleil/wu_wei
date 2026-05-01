@@ -245,6 +245,18 @@ wuwei.edit.generic.markup = ( function () {
         '  <label for="thumbnailUri" class="w3-col s5">' + translate('THUMBNAIL') + '</label>',
         '  <input type="text" id="thumbnailUri" name="thumbnailUri" data-path="thumbnailUri" class="w3-col s7"',
         storagePathAttrs + ' value="' + getEditableThumbnailUri(node) + '">',
+        '</div>',
+
+        '<div class="w3-row">',
+        '  <label for="resourceRightsAttribution" class="w3-col s5">' + translate('Credit') + '</label>',
+        '  <input type="text" id="resourceRightsAttribution" name="resource.rights.attribution" data-path="resource.rights.attribution" class="w3-col s7"',
+        ' value="' + ((node.resource && node.resource.rights && node.resource.rights.attribution) || (node.resource && node.resource.attribution) || '') + '">',
+        '</div>',
+
+        '<div class="w3-row">',
+        '  <label for="resourceRightsLicense" class="w3-col s5">' + translate('License') + '</label>',
+        '  <input type="text" id="resourceRightsLicense" name="resource.rights.license" data-path="resource.rights.license" class="w3-col s7"',
+        ' value="' + ((node.resource && node.resource.rights && node.resource.rights.license) || (node.resource && node.resource.license) || '') + '">',
         '</div>'
       );
     }

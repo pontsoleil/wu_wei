@@ -18,6 +18,9 @@ wuwei.info.generic.markup = (function () {
     let uri = resolveInfoUri(node);
     let label = node.label || '';
     let value = '';
+    let rights = getResourceRights(node);
+    let credit = rights.attribution || rights.credit || '';
+    let license = rights.license || '';
     let fontSize = (node.style && node.style.font && node.style.font.size) || 14;
     let fontClass = 'font-size-M';
     let thumbnailUri = resolveThumbnailUri(node);
@@ -78,6 +81,14 @@ wuwei.info.generic.markup = (function () {
           )}</p>`
         : ``
       }
+      ${credit
+        ? `<p class="credit"><strong>${translate('Credit')}:</strong> ${wuwei.util.encodeHtml(credit)}</p>`
+        : ``
+      }
+      ${license
+        ? `<p class="license"><strong>${translate('License')}:</strong> ${wuwei.util.encodeHtml(license)}</p>`
+        : ``
+      }
     </div>
   <!--/.Card content-->
 </div>
@@ -88,6 +99,18 @@ wuwei.info.generic.markup = (function () {
 
   function translate(str) {
     return wuwei.nls.translate(str);
+  }
+
+  function getResourceRights(node) {
+    var util = wuwei.util || {};
+    var resource = (util.getResource && util.getResource(node)) ||
+      ((node && node.resource && 'object' === typeof node.resource) ? node.resource : {});
+    var rights = (resource && resource.rights && 'object' === typeof resource.rights) ? resource.rights : {};
+    return {
+      attribution: String(rights.attribution || resource.attribution || ''),
+      credit: String(rights.credit || resource.credit || ''),
+      license: String(rights.license || resource.license || '')
+    };
   }
 
   function resolveInfoUri(node) {

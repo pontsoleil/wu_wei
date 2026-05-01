@@ -274,6 +274,14 @@ wuwei.note = (function () {
       title: String(src.title || (node && node.label) || (node && node.name) || ''),
       owner: String(src.owner || ''),
       copyright: String(src.copyright || ''),
+      license: String((src.rights && src.rights.license) || src.license || ''),
+      attribution: String((src.rights && src.rights.attribution) || src.attribution || ''),
+      rights: {
+        owner: String((src.rights && src.rights.owner) || src.owner || ''),
+        copyright: String((src.rights && src.rights.copyright) || src.copyright || ''),
+        license: String((src.rights && src.rights.license) || src.license || ''),
+        attribution: String((src.rights && src.rights.attribution) || src.attribution || '')
+      },
       viewer: normalizeViewer(src.viewer),
       storage: src.storage && typeof src.storage === 'object' ? util.clone(src.storage) : {},
       snapshotSources: util.clone(snapshotSources)
@@ -295,6 +303,14 @@ wuwei.note = (function () {
       title: String(src.identity.title || (node && node.label) || ''),
       owner: String(src.rights.owner || ''),
       copyright: String(src.rights.copyright || ''),
+      license: String(src.rights.license || ''),
+      attribution: String(src.rights.attribution || ''),
+      rights: {
+        owner: String(src.rights.owner || ''),
+        copyright: String(src.rights.copyright || ''),
+        license: String(src.rights.license || ''),
+        attribution: String(src.rights.attribution || '')
+      },
       viewer: normalizeViewer(src.viewer),
       storage: util.clone(src.storage || {}),
       snapshotSources: util.clone(src.snapshotSources || {}),
@@ -713,7 +729,9 @@ wuwei.note = (function () {
       }),
       rights: {
         owner: src.owner || '',
-        copyright: src.copyright || ''
+        copyright: src.copyright || '',
+        license: (src.rights && src.rights.license) || src.license || '',
+        attribution: (src.rights && src.rights.attribution) || src.attribution || ''
       },
       audit: src.audit || node.audit
     });
