@@ -130,6 +130,9 @@ wuwei.menu.upload = wuwei.menu.upload || {};
         menu.snackbar.open({ type: 'success', message: name + ' uploaded' });
 
         const logData = model.addUploadedContent(response);
+        if (wuwei.home && typeof wuwei.home.addResource === 'function') {
+          wuwei.home.addResource(response);
+        }
         wuwei.log.storeLog({ operation: scriptName});
 
         setTimeout(() => {
