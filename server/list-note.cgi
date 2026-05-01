@@ -118,6 +118,17 @@ read_meta() {
   ' "$file"
 }
 
+is_listable_note_file() {
+  file=$1
+  [ -s "$file" ] || return 1
+  id_value=$(read_meta id "$file" || true)
+  [ -n "$id_value" ] || return 1
+  json_value=$(read_meta json_base64 "$file" || true)
+  [ -n "$json_value" ] || json_value=$(read_meta json "$file" || true)
+  [ -n "$json_value" ] || return 1
+  return 0
+}
+
 resolve_env_path() {
   key=$1
   uid=${2:-}
@@ -189,7 +200,12 @@ include_new_note=$(nameread include_new_note "$CGIVARS" | strip_quotes || true)
   else
     awk -F "$(printf '\t')" '$2 !~ /(^|\/)new_note\/note\.json$/ && $2 != "new_note"'
   fi
-} | sort -r > "$FOUND"
+} | while IFS="$(printf '\t')" read -r timestamp relpath size; do
+  [ -n "${relpath:-}" ] || continue
+  if is_listable_note_file "$note_dir/$relpath"; then
+    printf '%s\t%s\t%s\n' "$timestamp" "$relpath" "$size"
+  fi
+done | sort -r > "$FOUND"
 
 total=$(wc -l < "$FOUND" | tr -d '[:space:]')
 total=${total:-0}
