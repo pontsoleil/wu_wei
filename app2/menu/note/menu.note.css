@@ -15,6 +15,21 @@
   top: 46px;
   left: 16px;
 }
+#note header .note-search-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+#note header .note-search-filter input[type="text"] {
+  display: inline-block;
+  width: 16rem;
+  max-width: 32vw;
+  box-sizing: border-box;
+  padding: 4px 8px;
+  border: 1px solid #808080;
+  background: #fff;
+}
 #note header .pagination {
   position: absolute;
   text-align: right;

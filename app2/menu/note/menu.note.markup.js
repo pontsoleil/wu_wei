@@ -112,7 +112,7 @@ wuwei.menu.note.markup = ( function () {
     <i onclick="wuwei.menu.note.close()"
         class="fas fa-times w3-right w3-button w3-transparent w3-large w3-margin-bottom"></i>
     <div class="w3-left w3-transparent w3-large w3-margin-bottom note-search-filter">
-        <input type="text" id="search-text" class="search" placeholder="${translate('Search')}">
+        <input type="text" id="search-text" class="note-search-text" placeholder="${translate('Keyword')}">
         <input type="date" id="note-date-start" title="${translate('Start date')}">
         <input type="date" id="note-date-end" title="${translate('End date')}">
         <button type="button" onclick="wuwei.menu.note.search(); return false;">${translate('Search')}</button>

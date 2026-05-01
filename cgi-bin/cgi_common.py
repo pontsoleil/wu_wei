@@ -404,6 +404,31 @@ def decode_note_json(meta: Dict[str, str]) -> str:
     raise ValueError("JSON NOT FOUND")
 
 
+def note_thumbnail_from_json(meta: Dict[str, str]) -> str:
+    try:
+        note = json.loads(decode_note_json(meta))
+    except Exception:
+        return ""
+
+    pages = note.get("pages") if isinstance(note, dict) else None
+    current_page = str(note.get("currentPage") or "") if isinstance(note, dict) else ""
+    candidates = []
+
+    if isinstance(pages, list):
+        if current_page:
+            candidates.extend(
+                page for page in pages
+                if isinstance(page, dict) and str(page.get("id") or page.get("pp") or "") == current_page
+            )
+        candidates.extend(page for page in pages if isinstance(page, dict))
+
+    for page in candidates:
+        thumbnail = str(page.get("thumbnail") or "").strip()
+        if thumbnail.startswith("<svg"):
+            return thumbnail
+    return ""
+
+
 def note_timestamp(path: Path) -> str:
     return (
         datetime.fromtimestamp(path.stat().st_mtime)
@@ -415,6 +440,7 @@ def note_timestamp(path: Path) -> str:
 def collect_note_record(note_root: Path, file_path: Path) -> Dict[str, object]:
     relpath = note_record_id(note_root, file_path)
     meta = read_note_meta(file_path)
+    thumbnail = meta.get("thumbnail", "") or note_thumbnail_from_json(meta)
     parent = relpath.rsplit("/", 1)[0] if "/" in relpath else "."
     name = relpath.rsplit("/", 1)[-1]
     return {
@@ -426,7 +452,7 @@ def collect_note_record(note_root: Path, file_path: Path) -> Dict[str, object]:
         "size": file_path.stat().st_size,
         "timestamp": note_timestamp(file_path),
         "file": name,
-        "thumbnail": meta.get("thumbnail", ""),
+        "thumbnail": thumbnail,
     }
 
 

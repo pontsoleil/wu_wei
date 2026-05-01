@@ -84,6 +84,24 @@ def _rewrite_draft_note_paths(value, note_id: str):
     return value
 
 
+def _thumbnail_from_note_json(note_json: dict) -> str:
+    pages = note_json.get("pages") if isinstance(note_json, dict) else None
+    current_page = str(note_json.get("currentPage") or "") if isinstance(note_json, dict) else ""
+    candidates = []
+    if isinstance(pages, list):
+        if current_page:
+            candidates.extend(
+                page for page in pages
+                if isinstance(page, dict) and str(page.get("id") or page.get("pp") or "") == current_page
+            )
+        candidates.extend(page for page in pages if isinstance(page, dict))
+    for page in candidates:
+        thumbnail = str(page.get("thumbnail") or "").strip()
+        if thumbnail.startswith("<svg"):
+            return thumbnail
+    return ""
+
+
 def _storage_path_from_public_path(path_text: str, *, base_root: Path, user_id: str) -> Path | None:
     path_text = (path_text or "").replace("\\", "/").strip()
     if not path_text:
@@ -591,6 +609,8 @@ def main():
     if str(note_json.get("note_uuid") or "") == DRAFT_NOTE_ID or note_json.get("note_uuid") is None:
         note_json["note_uuid"] = note_id
     note_json["resources"] = note_json.get("resources") or []
+    if not thumbnail:
+        thumbnail = _single_line_meta(_thumbnail_from_note_json(note_json))
 
     json_text = json.dumps(note_json, ensure_ascii=False, separators=(",", ":"))
 

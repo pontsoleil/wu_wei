@@ -188,6 +188,60 @@ json_string_values() {
   ' "$file"
 }
 
+json_svg_thumbnail() {
+  file=$1
+  awk '
+    BEGIN { RS=""; ORS="" }
+    function unescape_json(s,    i,c,out,esc,u) {
+      out = ""; esc = 0
+      for (i = 1; i <= length(s); i++) {
+        c = substr(s, i, 1)
+        if (esc) {
+          if (c == "\"" || c == "\\" || c == "/") out = out c
+          else if (c == "n") out = out "\n"
+          else if (c == "r") out = out "\r"
+          else if (c == "t") out = out "\t"
+          else if (c == "u") {
+            u = substr(s, i + 1, 4)
+            if (u == "003c") out = out "<"
+            else if (u == "003e") out = out ">"
+            else if (u == "0026") out = out "&"
+            else out = out "\\u" u
+            i += 4
+          }
+          else out = out c
+          esc = 0
+          continue
+        }
+        if (c == "\\") { esc = 1; continue }
+        out = out c
+      }
+      return out
+    }
+    {
+      rest = $0
+      pat = "\"thumbnail\"[ \t\r\n]*:[ \t\r\n]*\""
+      while (match(rest, pat)) {
+        s = substr(rest, RSTART + RLENGTH)
+        out = ""; esc = 0
+        for (i = 1; i <= length(s); i++) {
+          c = substr(s, i, 1)
+          if (esc) { out = out "\\" c; esc = 0; continue }
+          if (c == "\\") { esc = 1; continue }
+          if (c == "\"") break
+          out = out c
+        }
+        value = unescape_json(out)
+        if (value ~ /^<svg/) {
+          print value
+          exit
+        }
+        rest = substr(s, i + 1)
+      }
+    }
+  ' "$file"
+}
+
 extract_note_resources() {
   json_file=$1
   out_dir=$2
@@ -358,6 +412,9 @@ JSON_FILE="${Tmp}-note.json"
 printf '%s' "$json" > "$JSON_FILE"
 process_note_json "$JSON_FILE" "$id" || error_response 'ERROR NOTE JSON PROCESS FAILED'
 json=$(cat "$JSON_FILE")
+if [ -z "${thumbnail:-}" ]; then
+  thumbnail=$(json_svg_thumbnail "$JSON_FILE" | single_line_meta || true)
+fi
 
 json_base64=$(printf '%s' "$json" | base64 | tr -d '\n')
 [ -n "${json_base64:-}" ] || error_response 'ERROR JSON ENCODE FAILED'

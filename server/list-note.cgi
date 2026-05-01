@@ -118,6 +118,60 @@ read_meta() {
   ' "$file"
 }
 
+json_svg_thumbnail() {
+  file=$1
+  awk '
+    BEGIN { RS=""; ORS="" }
+    function unescape_json(s,    i,c,out,esc,u) {
+      out = ""; esc = 0
+      for (i = 1; i <= length(s); i++) {
+        c = substr(s, i, 1)
+        if (esc) {
+          if (c == "\"" || c == "\\" || c == "/") out = out c
+          else if (c == "n") out = out "\n"
+          else if (c == "r") out = out "\r"
+          else if (c == "t") out = out "\t"
+          else if (c == "u") {
+            u = substr(s, i + 1, 4)
+            if (u == "003c") out = out "<"
+            else if (u == "003e") out = out ">"
+            else if (u == "0026") out = out "&"
+            else out = out "\\u" u
+            i += 4
+          }
+          else out = out c
+          esc = 0
+          continue
+        }
+        if (c == "\\") { esc = 1; continue }
+        out = out c
+      }
+      return out
+    }
+    {
+      rest = $0
+      pat = "\"thumbnail\"[ \t\r\n]*:[ \t\r\n]*\""
+      while (match(rest, pat)) {
+        s = substr(rest, RSTART + RLENGTH)
+        out = ""; esc = 0
+        for (i = 1; i <= length(s); i++) {
+          c = substr(s, i, 1)
+          if (esc) { out = out "\\" c; esc = 0; continue }
+          if (c == "\\") { esc = 1; continue }
+          if (c == "\"") break
+          out = out c
+        }
+        value = unescape_json(out)
+        if (value ~ /^<svg/) {
+          print value
+          exit
+        }
+        rest = substr(s, i + 1)
+      }
+    }
+  ' "$file"
+}
+
 note_id_from_relpath() {
   rel=$1
   case "$rel" in
@@ -327,6 +381,18 @@ fi
       note_name=$(read_meta name "$abs_file" || true)
       note_description=$(read_meta description "$abs_file" || true)
       note_thumbnail=$(read_meta thumbnail "$abs_file" || true)
+      if [ -z "${note_thumbnail:-}" ]; then
+        json_b64=$(read_meta json_base64 "$abs_file" || true)
+        if [ -n "${json_b64:-}" ] && printf '%s' "$json_b64" | base64 -d > "$Tmp-note-json" 2>/dev/null; then
+          note_thumbnail=$(json_svg_thumbnail "$Tmp-note-json" || true)
+        else
+          json_value=$(read_meta json "$abs_file" || true)
+          if [ -n "${json_value:-}" ]; then
+            printf '%s' "$json_value" > "$Tmp-note-json"
+            note_thumbnail=$(json_svg_thumbnail "$Tmp-note-json" || true)
+          fi
+        fi
+      fi
 
       printf '$.note[%s].id %s\n' "$i" "$note_id"
       printf '$.note[%s].user_id %s\n' "$i" "$note_user_id"
