@@ -474,7 +474,7 @@ while IFS= read -r found_line; do
     continue
   fi
   printf '%s\n' "$record_id" >> "$SEEN"
-  [ -n "$d" ] && case "_${days}_" in *"_$d_"*) ;; *) days="${days}${days:+_}$d" ;; esac
+  [ -n "$d" ] && case "_${days}_" in *"_${d}_"*) ;; *) days="${days}${days:+_}$d" ;; esac
   m=${d%-*}
   [ -n "$m" ] && case " $months " in *" $m "*) ;; *) months="${months}${months:+ }$m" ;; esac
   [ "$count" -gt 0 ] && printf ',' >> "$records_tmp"
