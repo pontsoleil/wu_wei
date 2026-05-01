@@ -796,7 +796,10 @@ if str(note.get("note_uuid") or "") == DRAFT_NOTE_ID or note.get("note_uuid") is
     note["note_uuid"] = note_id
 note["resources"] = note.get("resources") or []
 base_root = note_root.parent
-restore_embedded_resource_files(note)
+try:
+    restore_embedded_resource_files(note)
+except Exception as e:
+    print(f"resource_restore_skip='unexpected error' error={str(e)!r}", file=sys.stderr)
 for resource in note.get("resources") or []:
     if not isinstance(resource, dict):
         continue

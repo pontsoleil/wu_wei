@@ -603,30 +603,30 @@ def main():
             note_resource_dir=note_resource_dir,
             now=now,
         )
-        for resource in note_json.get("resources") or []:
-            if isinstance(resource, dict):
-                try:
-                    try:
-                        _save_primary_resource_definition(resource, resource_root=resource_root_path, now=now)
-                    except OSError as e:
-                        debug_kv(primary_resource_skip="write failed", resource_id=str(resource.get("id") or ""), error=str(e))
-                    _promote_local_resource_snapshot(resource)
-                    try:
-                        _save_primary_resource_definition(resource, resource_root=resource_root_path, now=now)
-                    except OSError as e:
-                        debug_kv(primary_resource_skip="write failed after promote", resource_id=str(resource.get("id") or ""), error=str(e))
-                    _copy_resource_snapshot(
-                        resource,
-                        base_root=base_root,
-                        user_id=user_id,
-                        note_id=note_id,
-                        note_resource_dir=note_resource_dir,
-                    )
-                except Exception as e:
-                    debug_kv(resource_snapshot_skip="unexpected error", resource_id=str(resource.get("id") or ""), error=str(e))
     except Exception as e:
-        debug_kv(snapshot_error=str(e))
-        script_error("ERROR RESOURCE SNAPSHOT FAILED")
+        debug_kv(resource_restore_skip="unexpected error", error=str(e))
+
+    for resource in note_json.get("resources") or []:
+        if isinstance(resource, dict):
+            try:
+                try:
+                    _save_primary_resource_definition(resource, resource_root=resource_root_path, now=now)
+                except OSError as e:
+                    debug_kv(primary_resource_skip="write failed", resource_id=str(resource.get("id") or ""), error=str(e))
+                _promote_local_resource_snapshot(resource)
+                try:
+                    _save_primary_resource_definition(resource, resource_root=resource_root_path, now=now)
+                except OSError as e:
+                    debug_kv(primary_resource_skip="write failed after promote", resource_id=str(resource.get("id") or ""), error=str(e))
+                _copy_resource_snapshot(
+                    resource,
+                    base_root=base_root,
+                    user_id=user_id,
+                    note_id=note_id,
+                    note_resource_dir=note_resource_dir,
+                )
+            except Exception as e:
+                debug_kv(resource_snapshot_skip="unexpected error", resource_id=str(resource.get("id") or ""), error=str(e))
 
     json_text = json.dumps(note_json, ensure_ascii=False, separators=(",", ":"))
 
