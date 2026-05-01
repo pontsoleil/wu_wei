@@ -43,6 +43,7 @@ PUBLIC_USER_IDS = {
     "dd99d0a5-566b-41cf-934d-127a89e13ba1",
     "0dbfa104-accd-4188-8b1b-f2e25d38e638",
 }
+GUEST_USER_ID = "guest"
 
 DEBUG_ENABLED = True
 
@@ -94,7 +95,7 @@ def trim(s: str) -> str:
 
 def is_local_host(host: str) -> bool:
     host = (host or "").split(":", 1)[0].lower()
-    return host in {"localhost", "127.0.0.1", "::1", ""}
+    return host in {"localhost", "127.0.0.1", "::1"}
 
 
 def cookie_domain_attr() -> str:
@@ -260,7 +261,19 @@ def get_session_user_id() -> str:
     if not morsel:
         return ""
     user_id = trim(morsel.value)
+    if user_id == GUEST_USER_ID and is_local_host(os.environ.get("HTTP_HOST", "")):
+        return GUEST_USER_ID
     return user_id if UUID_RE.match(user_id) else ""
+
+
+def get_effective_user_id() -> str:
+    """Return the authenticated user, or local-only guest storage user."""
+    session_user_id = get_session_user_id()
+    if session_user_id:
+        return session_user_id
+    if is_local_host(os.environ.get("HTTP_HOST", "")):
+        return GUEST_USER_ID
+    return ""
 
 
 def read_named_value(path: Path, key: str) -> str:
@@ -311,6 +324,8 @@ def environment_path(name: str, user_id: str | None = None) -> str:
         upload_base = environment_path("upload", user_id)
         if upload_base:
             return str(Path(upload_base).parent / "note")
+    if not base:
+        base = ENV.get(name, "")
     expanded = resolve_user_template(base, user_id)
 
     if not expanded:
@@ -418,8 +433,6 @@ def collect_note_record(note_root: Path, file_path: Path) -> Dict[str, object]:
 def is_note_file(path: Path) -> bool:
     if not path.is_file():
         return False
-    if path.name == "note.json":
-        return True
     if "resource" in path.parts:
         return False
     try:
@@ -483,4 +496,4 @@ def safe_read_text(path: Path) -> str:
 
 def write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8", newline="\n")
+    path.write_text(text, encoding="utf-8")
