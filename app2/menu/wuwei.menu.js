@@ -1567,7 +1567,7 @@ wuwei.menu = wuwei.menu || {};
       return '';
     }
 
-    href = getDownloadUrl(node) || (resource.canonicalUri || resource.uri || '');
+    href = getOfficeOriginalHref(node, resource) || getDownloadUrl(node) || (resource.canonicalUri || resource.uri || '');
     if (!isOfficeDocumentReference(resource, href)) {
       return '';
     }
@@ -1580,12 +1580,32 @@ wuwei.menu = wuwei.menu || {};
     return 'https://view.officeapps.live.com/op/embed.aspx?src=' + encodeURIComponent(fetchUrl);
   }
 
+  function getOfficeOriginalHref(node, resource) {
+    var uploadPath, uid, file;
+    if (wuwei.util && typeof wuwei.util.getResourceOriginalUri === 'function') {
+      uploadPath = wuwei.util.getResourceOriginalUri(node);
+      if (uploadPath) {
+        return uploadPath;
+      }
+    }
+    if (resource && String(resource.kind || '').toLowerCase() === 'upload' && resource.id && resource.date) {
+      file = String(resource.file || resource.filename || '').replace(/\\/g, '/').split('/').pop();
+      if (file) {
+        uid = getResourceOwnerIdForOpen(node);
+        return wuwei.util.toPublicResourceUri('upload', String(resource.date).replace(/^\/+|\/+$/g, '') + '/' + resource.id + '/' + file, uid);
+      }
+    }
+    return '';
+  }
+
   function isOfficeDocumentReference(resource, href) {
     var mime = String((resource && resource.mimeType) || '').toLowerCase();
     var text = String(href || '').split('#')[0].split('?')[0].toLowerCase();
+    var file = String((resource && (resource.file || resource.filename)) || '').toLowerCase();
 
     return /(?:msword|ms-excel|ms-powerpoint|officedocument)/.test(mime) ||
-      /\.(doc|docx|xls|xlsx|ppt|pptx)$/i.test(text);
+      /\.(doc|docx|xls|xlsx|ppt|pptx)$/i.test(text) ||
+      /\.(doc|docx|xls|xlsx|ppt|pptx)$/i.test(file);
   }
 
   function canOfficeViewerFetch(href) {
