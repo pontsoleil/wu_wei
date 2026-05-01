@@ -272,13 +272,15 @@ wuwei.note = (function () {
       uploadBase = uploadDate + '/' + uploadId + '/';
       uploadPreview = util.toPublicResourceUri('upload', uploadBase + 'preview.pdf', state.currentUser && state.currentUser.user_id);
       uploadThumbnail = util.toPublicResourceUri('upload', uploadBase + 'thumbnail.jpg', state.currentUser && state.currentUser.user_id);
+      var uploadOriginalFile = String(src.file || src.filename || src.name || '').replace(/\\/g, '/').split('/').pop();
       return {
         id: uploadId,
         kind: 'upload',
         uri: uploadPreview,
-        canonicalUri: '',
+        canonicalUri: uploadOriginalFile ? util.toPublicResourceUri('upload', uploadBase + uploadOriginalFile, state.currentUser && state.currentUser.user_id) : '',
         mimeType: '',
         title: String(src.title || (node && node.label) || ''),
+        file: uploadOriginalFile,
         owner: '',
         copyright: '',
         license: '',
@@ -295,9 +297,10 @@ wuwei.note = (function () {
           copyPolicy: 'reference',
           manifest: { area: 'upload', path: uploadBase + 'manifest.json' },
           files: [
+            uploadOriginalFile ? { role: 'original', area: 'upload', path: uploadBase + uploadOriginalFile, mimeType: 'application/octet-stream' } : null,
             { role: 'thumbnail', area: 'upload', path: uploadBase + 'thumbnail.jpg', mimeType: 'image/jpeg' },
             { role: 'preview', area: 'upload', path: uploadBase + 'preview.pdf', mimeType: 'application/pdf' }
-          ]
+          ].filter(Boolean)
         },
         snapshotSources: {
           previewUri: uploadPreview,
@@ -784,7 +787,7 @@ wuwei.note = (function () {
     var files = Array.isArray(storage.files) ? storage.files : [];
     var id = String((resource && resource.id) || '').trim();
     var date = '';
-    var i, file, path, match;
+    var i, file, path, match, originalFile;
 
     if (manifest.path) {
       match = String(manifest.path || '').replace(/\\/g, '/').match(/^(\d{4}\/\d{2}\/\d{2})\/([^/]+)\//);
@@ -805,13 +808,21 @@ wuwei.note = (function () {
         id = id || match[2];
       }
     }
+    for (i = 0; i < files.length; i += 1) {
+      file = files[i] || {};
+      if (String(file.role || '').toLowerCase() === 'original' && file.path) {
+        originalFile = String(file.path || '').replace(/\\/g, '/').split('/').pop();
+        break;
+      }
+    }
     if (!id || !date) {
       return null;
     }
     return {
       kind: 'upload',
       id: id,
-      date: date
+      date: date,
+      file: originalFile || String(resource.file || resource.filename || '').replace(/\\/g, '/').split('/').pop()
     };
   }
 

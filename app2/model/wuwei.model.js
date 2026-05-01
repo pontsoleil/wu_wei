@@ -2977,6 +2977,7 @@ wuwei.model = (function () {
     const runtimeResourceUri = originalFile.path || resourceIdentity.uri || resourceEmbed.uri || resourceSnapshots.previewUri || nodeUrl || uri || resourceIdentity.canonicalUri || resourceSnapshots.originalUri || '';
     const snapshotThumbnailUri = thumbnail && !isIconThumbnail(thumbnail) ? thumbnail : '';
     const uploadRef = uploadRefFromStorage();
+    const uploadOriginalName = uploadRoleFileName('original', originalFile.path ? String(originalFile.path).replace(/\\/g, '/').split('/').pop() : String(downloadUrl || uri || '').replace(/\\/g, '/').split(/[?#]/)[0].split('/').pop());
     const uploadPreviewName = uploadRoleFileName('preview', 'preview.pdf');
     const uploadThumbnailName = uploadRoleFileName('thumbnail', 'thumbnail.jpg');
     const uploadPreviewUri = uploadFileUri(uploadRef, uploadPreviewName) || nodeUrl || runtimeResourceUri;
@@ -2985,9 +2986,11 @@ wuwei.model = (function () {
       kind: 'upload',
       id: uploadRef.id,
       date: uploadRef.date,
+      file: uploadOriginalName,
       title: resourceIdentity.title || resourceDef && resourceDef.title || label || '',
       mimeType: (resourceDef && resourceDef.media && resourceDef.media.mimeType) || resourceDef && resourceDef.mimeType || format || '',
       uri: uploadPreviewUri,
+      canonicalUri: uploadFileUri(uploadRef, uploadOriginalName) || downloadUrl || '',
       thumbnailUri: uploadThumbnailUri,
       storage: {
         managed: true,
@@ -2997,6 +3000,12 @@ wuwei.model = (function () {
           path: uploadRef.date + '/' + uploadRef.id + '/manifest.json'
         },
         files: [
+          {
+            role: 'original',
+            area: 'upload',
+            path: uploadRef.date + '/' + uploadRef.id + '/' + uploadOriginalName,
+            mimeType: (resourceDef && resourceDef.media && resourceDef.media.mimeType) || resourceDef && resourceDef.mimeType || format || 'application/octet-stream'
+          },
           {
             role: 'thumbnail',
             area: 'upload',
