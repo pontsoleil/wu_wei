@@ -541,7 +541,15 @@ wuwei.menu.note = wuwei.menu.note || {};
       if (/^ERROR/.test(text)) {
         throw new Error(text);
       }
-      const noteJson = JSON.parse(text);
+      let noteJson;
+      try {
+        noteJson = JSON.parse(text);
+      }
+      catch (e) {
+        console.error('import bundle JSON parse error:', e);
+        console.log('import response:', text);
+        throw new Error('ERROR Invalid imported note JSON');
+      }
       applyImportedNote(noteJson);
       wuwei.menu.snackbar.open({ type: 'success', message: 'Imported note bundle' });
     }).catch(function (e) {

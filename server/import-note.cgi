@@ -102,18 +102,6 @@ single_line_meta() {
   tr '\r\n\t' '   ' | sed 's/  */ /g; s/^ //; s/ $//'
 }
 
-rewrite_note_json_for_user() {
-  file=$1
-  uid=$2
-  tmp="${file}.tmp"
-  sed \
-    -e "s#user_id=[^&\"<>]*#user_id=${uid}#g" \
-    -e "s#\"owner\"[[:space:]]*:[[:space:]]*\"[^\"]*\"#\"owner\":\"${uid}\"#g" \
-    -e "s#\"createdBy\"[[:space:]]*:[[:space:]]*\"[^\"]*\"#\"createdBy\":\"${uid}\"#g" \
-    "$file" > "$tmp" &&
-    mv "$tmp" "$file"
-}
-
 cl=${CONTENT_LENGTH:-0}
 [ "${cl:-0}" -gt 0 ] 2>/dev/null || error_response 'ERROR FILE NOT SPECIFIED'
 
@@ -158,7 +146,6 @@ else
 fi
 
 sed -i '1s/^\xEF\xBB\xBF//' "$NOTE_JSON"
-rewrite_note_json_for_user "$NOTE_JSON" "$user_id"
 
 note_id=$(json_string_field note_id "$NOTE_JSON")
 [ -n "$note_id" ] || note_id=$(json_string_field note_uuid "$NOTE_JSON")
