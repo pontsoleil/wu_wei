@@ -118,11 +118,27 @@ read_meta() {
   ' "$file"
 }
 
+note_id_from_relpath() {
+  rel=$1
+  case "$rel" in
+    */note.json)
+      dir=${rel%/*}
+      basename "$dir"
+      ;;
+    *)
+      basename "$rel"
+      ;;
+  esac
+}
+
 is_listable_note_file() {
   file=$1
+  load_id=$2
   [ -s "$file" ] || return 1
-  id_value=$(read_meta id "$file" || true)
-  [ -n "$id_value" ] || return 1
+  [ -n "$load_id" ] || return 1
+  case "$load_id" in
+    ERROR*|*/*|*..*) return 1 ;;
+  esac
   json_value=$(read_meta json_base64 "$file" || true)
   [ -n "$json_value" ] || json_value=$(read_meta json "$file" || true)
   [ -n "$json_value" ] || return 1
@@ -202,7 +218,8 @@ include_new_note=$(nameread include_new_note "$CGIVARS" | strip_quotes || true)
   fi
 } | while IFS="$(printf '\t')" read -r timestamp relpath size; do
   [ -n "${relpath:-}" ] || continue
-  if is_listable_note_file "$note_dir/$relpath"; then
+  load_id=$(note_id_from_relpath "$relpath")
+  if is_listable_note_file "$note_dir/$relpath" "$load_id"; then
     printf '%s\t%s\t%s\n' "$timestamp" "$relpath" "$size"
   fi
 done | sort -r > "$FOUND"
@@ -249,8 +266,7 @@ fi
       dir=${relpath%/*}
       [ "$dir" = "$relpath" ] && dir='.'
       file=${relpath##*/}
-      note_id=$(read_meta id "$abs_file" || true)
-      [ -n "$note_id" ] || note_id=$(basename "$(dirname "$abs_file")")
+      note_id=$(note_id_from_relpath "$relpath")
 
       note_user_id=$(read_meta user_id "$abs_file" || true)
       note_name=$(read_meta name "$abs_file" || true)
