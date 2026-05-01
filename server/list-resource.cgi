@@ -178,42 +178,34 @@ json_file_field_for_role() {
   awk -v role="$role" -v key="$key" '
     BEGIN { RS=""; ORS="" }
     {
-      for (i = 1; i <= length($0); i++) {
-        c = substr($0, i, 1)
-        if (in_s) {
-          if (esc) esc = 0
-          else if (c == "\\") esc = 1
-          else if (c == "\"") in_s = 0
-          continue
+      role_pat = "\"role\"[ \t\r\n]*:[ \t\r\n]*\"" role "\""
+      if (!match($0, role_pat)) exit
+
+      prefix = substr($0, 1, RSTART)
+      start = 0
+      for (i = length(prefix); i >= 1; i--) {
+        if (substr(prefix, i, 1) == "{") { start = i; break }
+      }
+      if (!start) exit
+
+      rest = substr($0, start)
+      end = index(rest, "}")
+      if (!end) exit
+      obj = substr(rest, 1, end)
+
+      key_pat = "\"" key "\"[ \t\r\n]*:[ \t\r\n]*\""
+      if (match(obj, key_pat)) {
+        s = substr(obj, RSTART + RLENGTH)
+        out = ""; esc2 = 0
+        for (j = 1; j <= length(s); j++) {
+          d = substr(s, j, 1)
+          if (esc2) { out = out d; esc2 = 0; continue }
+          if (d == "\\") { out = out d; esc2 = 1; continue }
+          if (d == "\"") break
+          out = out d
         }
-        if (c == "\"") { in_s = 1; continue }
-        if (c == "{") {
-          if (depth == 0) start = i
-          depth++
-          continue
-        }
-        if (c == "}") {
-          depth--
-          if (depth == 0 && start > 0) {
-            obj = substr($0, start, i - start + 1)
-            role_pat = "\"role\"[ \t\r\n]*:[ \t\r\n]*\"" role "\""
-            key_pat = "\"" key "\"[ \t\r\n]*:[ \t\r\n]*\""
-            if (obj ~ role_pat && match(obj, key_pat)) {
-              s = substr(obj, RSTART + RLENGTH)
-              out = ""; esc2 = 0
-              for (j = 1; j <= length(s); j++) {
-                d = substr(s, j, 1)
-                if (esc2) { out = out d; esc2 = 0; continue }
-                if (d == "\\") { out = out d; esc2 = 1; continue }
-                if (d == "\"") break
-                out = out d
-              }
-              print out
-              exit
-            }
-            start = 0
-          }
-        }
+        print out
+        exit
       }
     }
   ' "$file"
@@ -277,6 +269,11 @@ emit_record() {
   preview_path=$(json_file_field_for_role preview path "$path")
   thumb_area=$(json_file_field_for_role thumbnail area "$path")
   thumb_path=$(json_file_field_for_role thumbnail path "$path")
+  original_dir=${original_path%/*}
+  if [ -n "${upload_dir:-}" ] && [ -n "$original_dir" ] && [ -f "$upload_dir/$original_dir/thumbnail.jpg" ]; then
+    thumb_area=upload
+    thumb_path="$original_dir/thumbnail.jpg"
+  fi
   original_file_url=$(file_rel_url "$uid" "${original_area:-upload}" "$original_path")
   preview_file_url=$(file_rel_url "$uid" "${preview_area:-note}" "$preview_path")
   thumb_file_url=$(file_rel_url "$uid" "${thumb_area:-note}" "$thumb_path")
