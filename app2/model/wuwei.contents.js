@@ -629,7 +629,8 @@ wuwei.contents = wuwei.contents || {};
       return appendPageFragment(pdfUri, page);
     }
     return new URL(
-      getAppBasePath() + 'lib/pdfjs/web/viewer.html?file=' + encodeURIComponent(pdfUri) + '#page=' + encodeURIComponent(page),
+      getAppBasePath() + 'lib/pdfjs/web/viewer.html?file=' + encodeURIComponent(pdfUri) +
+        '&wuwei_embed=1#page=' + encodeURIComponent(page),
       window.location.origin
     ).href;
   }

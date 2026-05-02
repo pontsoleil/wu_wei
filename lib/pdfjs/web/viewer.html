@@ -26,6 +26,32 @@ http://sourceforge.net/adobe/cmap/wiki/License/
 <!--#endif-->
     <title>PDF.js viewer</title>
 
+    <script>
+      (function () {
+        if (/[?&]wuwei_embed=1(?:&|$)/.test(window.location.search || '')) {
+          document.documentElement.className += ' wuwei-embed';
+        }
+      }());
+    </script>
+    <style>
+      html.wuwei-embed #sidebarContainer,
+      html.wuwei-embed .toolbar,
+      html.wuwei-embed #secondaryToolbar,
+      html.wuwei-embed #findbar {
+        display: none !important;
+      }
+      html.wuwei-embed #mainContainer,
+      html.wuwei-embed #viewerContainer {
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+      }
+      html.wuwei-embed #outerContainer.sidebarOpen #mainContainer {
+        left: 0 !important;
+      }
+    </style>
+
 <!--#if FIREFOX || MOZCENTRAL-->
 <!--#include viewer-snippet-firefox-extension.html-->
 <!--#endif-->
