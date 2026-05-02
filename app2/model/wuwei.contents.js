@@ -630,7 +630,7 @@ wuwei.contents = wuwei.contents || {};
     }
     return new URL(
       getAppBasePath() + 'lib/pdfjs/web/viewer.html?file=' + encodeURIComponent(pdfUri) +
-        '#page=' + encodeURIComponent(page),
+        '&page=' + encodeURIComponent(page) + '#page=' + encodeURIComponent(page),
       window.location.origin
     ).href;
   }
