@@ -2143,10 +2143,14 @@ wuwei.menu = wuwei.menu || {};
       return;
     }
     else if ('addContentsEntry' === method) {
+      var entryDraft;
       node = resolveContextTargetRecord(state.hoveredNode);
-      if (!node || !wuwei.contents || typeof wuwei.contents.addEntry !== 'function') { return; }
-      wuwei.contents.addEntry(node);
+      if (!node || !wuwei.contents || typeof wuwei.contents.createEntryDraft !== 'function') { return; }
+      entryDraft = wuwei.contents.createEntryDraft(node);
       closeContextMenu();
+      if (entryDraft && wuwei.edit && typeof wuwei.edit.open === 'function') {
+        wuwei.edit.open(entryDraft, { pendingContentsEntry: true });
+      }
       return;
     }
     else if ('deleteContentsTarget' === method) {

@@ -213,6 +213,12 @@ wuwei.edit.generic.markup = ( function () {
         '<div class="w3-row">',
         '  <textarea id="rValue" name="description.body" data-path="description.body" class="w3-col s12" rows="' + rowcount(value || '') + '">' + (value || '') + '</textarea>',
         '</div>',
+        (node && (node.topicKind === 'contents-page' || option.entry)
+          ? '<div class="w3-row">' +
+            '  <label for="contentsPageNumber" class="w3-col s4">&#12506;&#12540;&#12472;&#30058;&#21495;:</label>' +
+            '  <input type="text" id="contentsPageNumber" name="pageNumber" data-path="pageNumber" class="w3-col s8" value="' + (node.pageNumber || '') + '">' +
+            '</div>'
+          : ''),
         '<hr>'
       );
     }

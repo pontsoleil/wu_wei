@@ -215,6 +215,39 @@ wuwei.contents = wuwei.contents || {};
     return node;
   }
 
+  function clampPageNumber(group, pageNumber) {
+    var maxPage = Math.max(1, Number(group && (group.pageCount || group.axis && group.axis.end) || 1));
+    var value = Math.floor(Number(pageNumber || 1));
+    if (!Number.isFinite(value)) { value = 1; }
+    if (value < 1) { value = 1; }
+    if (value > maxPage) { value = maxPage; }
+    return value;
+  }
+
+  function entryComment(node) {
+    return (node && node.description && 'string' === typeof node.description.body)
+      ? node.description.body
+      : '';
+  }
+
+  function syncEntryRecord(group, node) {
+    var entries, record;
+    if (!group || !node) { return null; }
+    group.entries = Array.isArray(group.entries) ? group.entries : [];
+    entries = group.entries;
+    record = entries.find(function (item) { return memberId(item) === node.id; });
+    if (!record) {
+      record = { role: 'entry', nodeId: node.id };
+      entries.push(record);
+    }
+    node.pageNumber = clampPageNumber(group, node.pageNumber);
+    record.role = record.role || 'entry';
+    record.nodeId = node.id;
+    record.pageNumber = node.pageNumber;
+    record.comment = entryComment(node);
+    return record;
+  }
+
   function layoutAxisGroup(group) {
     var axis, pageCount, length, orientation, anchor, members, range;
     if (!group) { return null; }
@@ -320,6 +353,7 @@ wuwei.contents = wuwei.contents || {};
       if (!node.documentRef && group.documentRef) {
         node.documentRef = group.documentRef;
       }
+      syncEntryRecord(group, node);
     });
     if (!group.entries.length && group.members.length) {
       var firstMember = group.members[0];
@@ -456,34 +490,67 @@ wuwei.contents = wuwei.contents || {};
     var spec = getPageTargetSpec(groupOrTarget);
     var page = getCurrentPage();
     var group = spec && spec.group;
-    var used, next, node, pageInput, commentInput, maxPage;
+    var used, next, node;
     entryOption = entryOption || {};
     if (!page || !group) { return null; }
+    ensurePageCollections(page);
+    group.members = Array.isArray(group.members) ? group.members : [];
     used = getMemberNodes(group).map(function (n) { return Number(n.pageNumber || 0); });
     next = Math.max.apply(null, used.concat([0])) + 1;
-    maxPage = Math.max(1, Number(group.pageCount || group.axis && group.axis.end || 1));
-    if ((pageNumber == null || pageNumber === '') && !entryOption.silent &&
-      typeof window !== 'undefined' && typeof window.prompt === 'function') {
-      pageInput = window.prompt('\u30da\u30fc\u30b8\u756a\u53f7:', String(Math.min(next, maxPage)));
-      if (pageInput === null) { return null; }
-      pageNumber = pageInput;
-      commentInput = window.prompt('\u30b3\u30e1\u30f3\u30c8:', '');
-      entryOption.comment = (commentInput === null) ? '' : commentInput;
-    }
-    pageNumber = Math.floor(Number(pageNumber || next));
-    if (!Number.isFinite(pageNumber)) { pageNumber = next; }
-    pageNumber = Math.max(1, pageNumber);
-    if (pageNumber > maxPage) {
-      pageNumber = maxPage;
-    }
+    pageNumber = clampPageNumber(group, pageNumber || next);
     node = createPageNode(group, pageNumber, { axisRole: 'entry', comment: entryOption.comment || '' });
     page.nodes.push(node);
     group.members.push(node.id);
-    group.entries = Array.isArray(group.entries) ? group.entries : [];
-    group.entries.push({ role: 'entry', nodeId: node.id, pageNumber: pageNumber, comment: entryOption.comment || '' });
+    syncEntryRecord(group, node);
     normalizeAxisGroup(group);
     rebuildGraphAndRefresh();
     return node;
+  }
+
+  function createEntryDraft(groupOrTarget) {
+    var spec = getPageTargetSpec(groupOrTarget);
+    var group = spec && spec.group;
+    var used, next, node;
+    if (!group) { return null; }
+    used = getMemberNodes(group).map(function (n) { return Number(n.pageNumber || 0); });
+    next = Math.max.apply(null, used.concat([0])) + 1;
+    node = createPageNode(group, clampPageNumber(group, next), {
+      axisRole: 'entry',
+      label: '',
+      comment: ''
+    });
+    node.pendingContentsEntry = true;
+    node.contentsEntryDraft = true;
+    return node;
+  }
+
+  function commitEntryDraft(node) {
+    var page = getCurrentPage();
+    var group = node && model.findGroupById(node.contentsRef);
+    if (!page || !group || !isContentsGroup(group)) { return false; }
+    ensurePageCollections(page);
+    group.members = Array.isArray(group.members) ? group.members : [];
+    delete node.pendingContentsEntry;
+    delete node.contentsEntryDraft;
+    ensurePageNodeDefaults(group, node, group.members.length);
+    node.pageNumber = clampPageNumber(group, node.pageNumber);
+    page.nodes.push(node);
+    group.members.push(node.id);
+    syncEntryRecord(group, node);
+    normalizeAxisGroup(group);
+    rebuildGraphAndRefresh();
+    return true;
+  }
+
+  function updateEntryFromNode(node) {
+    var group = node && model.findGroupById(node.contentsRef);
+    if (!group || !isContentsGroup(group)) { return false; }
+    ensurePageNodeDefaults(group, node, 0);
+    node.pageNumber = clampPageNumber(group, node.pageNumber);
+    syncEntryRecord(group, node);
+    normalizeAxisGroup(group);
+    rebuildGraphAndRefresh();
+    return true;
   }
 
   function deleteTarget(target) {
@@ -590,6 +657,9 @@ wuwei.contents = wuwei.contents || {};
   ns.createAxisGroup = createAxisGroup;
   ns.updateAxisGroup = updateAxisGroup;
   ns.addEntry = addEntry;
+  ns.createEntryDraft = createEntryDraft;
+  ns.commitEntryDraft = commitEntryDraft;
+  ns.updateEntryFromNode = updateEntryFromNode;
   ns.deleteTarget = deleteTarget;
   ns.normalizeAxisGroup = normalizeAxisGroup;
   ns.normalizeAllAxisGroups = normalizeAllAxisGroups;

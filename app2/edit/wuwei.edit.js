@@ -615,6 +615,13 @@ wuwei.edit = wuwei.edit || {};
               setNodePath(stateMap.node, path, value);
             }
             if ('resource.uri' === path && stateMap.node.resource) {
+              if (wuwei.util && typeof wuwei.util.toStorageRelativePath === 'function' &&
+                (String(value || '').match(/^(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i) ||
+                  String(value || '').match(/(?:^|\/)upload\//))) {
+                value = wuwei.util.toStorageRelativePath(value, null, 'upload');
+                target.value = value;
+                setNodePath(stateMap.node, path, value);
+              }
               var detectedMedia = detectMediaFromUrl(value || '');
               if (!stateMap.node.resource.kind ||
                 detectedMedia.kind === 'video' ||
@@ -625,6 +632,15 @@ wuwei.edit = wuwei.edit || {};
                 if (kindEl && detectedMedia.kind) {
                   kindEl.value = detectedMedia.kind;
                 }
+              }
+            }
+            if ('thumbnailUri' === path && stateMap.node) {
+              if (wuwei.util && typeof wuwei.util.toStorageRelativePath === 'function' &&
+                (String(value || '').match(/^(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i) ||
+                  String(value || '').match(/(?:^|\/)(resource|note)\//))) {
+                value = wuwei.util.toStorageRelativePath(value, null, /(?:^|\/)note\//.test(String(value || '')) ? 'note' : 'resource');
+                target.value = value;
+                setNodePath(stateMap.node, path, value);
               }
             }
             if ('shape' === path) {
@@ -963,10 +979,14 @@ wuwei.edit = wuwei.edit || {};
       else if (param.link && param.link.id) {
         resolve(wuwei.edit.link.open(param));
       }
+      else if (param.node && param.node.topicKind === 'contents-page' &&
+        wuwei.edit.entry && typeof wuwei.edit.entry.open === 'function') {
+        resolve(wuwei.edit.entry.open(param));
+      }
       else if (param.node && ['Topic', 'Memo'].includes(param.node.type)) {
         resolve(wuwei.edit.generic.open(param));
       }
-      else if ('upload' === param.node.option) {
+      else if (isUploadedContentNode(param.node)) {
         resolve(wuwei.edit.uploaded.open(param));
       }
       else if ('video' === param.node.option) {
@@ -976,6 +996,49 @@ wuwei.edit = wuwei.edit || {};
         resolve(wuwei.edit.generic.open(param));
       }
     });
+  }
+
+  function isUploadBackedResource(resource) {
+    var storage = resource && resource.storage;
+    var files = storage && Array.isArray(storage.files) ? storage.files : [];
+    var text, file, i;
+
+    for (i = 0; i < files.length; i += 1) {
+      file = files[i] || {};
+      if (String(file.role || '').toLowerCase() !== 'original') {
+        continue;
+      }
+      if (String(file.area || '').toLowerCase() === 'upload') {
+        return true;
+      }
+      text = String(file.path || file.uri || file.url || '').replace(/\\/g, '/');
+      if (/^(?:upload\/|\d{4}\/\d{2}\/\d{2}\/)/.test(text) ||
+        /[?&]area=upload(?:&|$)/.test(text)) {
+        return true;
+      }
+    }
+
+    text = String(
+      (resource && (
+        resource.uri ||
+        resource.canonicalUri ||
+        (resource.snapshotSources && resource.snapshotSources.originalUri)
+      )) || ''
+    ).replace(/\\/g, '/');
+
+    return /^(?:upload\/|\d{4}\/\d{2}\/\d{2}\/)/.test(text) ||
+      /[?&]area=upload(?:&|$)/.test(text);
+  }
+
+  function isUploadedContentNode(node) {
+    return !!(
+      node &&
+      node.type === 'Content' &&
+      (
+        node.option === 'upload' ||
+        isUploadBackedResource(node.resource)
+      )
+    );
   }
 
   function isTimelinePointNode(node) {
@@ -1301,6 +1364,19 @@ wuwei.edit = wuwei.edit || {};
       return false;
     }
 
+    if (stateMap.option && stateMap.option.pendingContentsEntry &&
+      stateMap.node && wuwei.contents && typeof wuwei.contents.commitEntryDraft === 'function') {
+      committed = wuwei.contents.commitEntryDraft(stateMap.node);
+    }
+    else if (stateMap.node && stateMap.node.topicKind === 'contents-page' &&
+      wuwei.contents && typeof wuwei.contents.updateEntryFromNode === 'function') {
+      committed = wuwei.contents.updateEntryFromNode(stateMap.node);
+    }
+
+    if (false === committed) {
+      return false;
+    }
+
     snapshotTaken = false;
     // Store the log after timeline graph rebuild has been confirmed.
     log.storeLog({ operation: 'edit' });
@@ -1324,7 +1400,7 @@ wuwei.edit = wuwei.edit || {};
       if ('generic' === stateMap.node.option) {
         wuwei.edit.generic.close();
       }
-      else if ('upload' === stateMap.node.option) {
+      else if (isUploadedContentNode(stateMap.node)) {
         wuwei.edit.uploaded.close();
       }
       else if ('video' === stateMap.node.option) {
