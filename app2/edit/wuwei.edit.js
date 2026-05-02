@@ -1404,6 +1404,13 @@ wuwei.edit = wuwei.edit || {};
   function infoOpen() {
     var targetNode = stateMap.node;
     var targetOption = stateMap.option;
+    flushContentsEntryFields();
+    if (targetNode && targetNode.topicKind === 'contents-page' &&
+      wuwei.contents && typeof wuwei.contents.openPageInInfo === 'function') {
+      close();
+      wuwei.contents.openPageInInfo(targetNode);
+      return;
+    }
     close();
     wuwei.info.open(targetNode, targetOption);
   }

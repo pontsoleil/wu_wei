@@ -385,24 +385,18 @@ def read_note_meta(path: Path) -> Dict[str, str]:
         "saved_at",
         "json_encoding",
         "json_base64",
-        "json",
     ]
     return {k: read_named_value(path, k) for k in keys}
 
 
 def decode_note_json(meta: Dict[str, str]) -> str:
     json_b64 = meta.get("json_base64", "")
-    if json_b64:
-        try:
-            return base64.b64decode(json_b64).decode("utf-8", errors="strict")
-        except Exception as e:
-            raise ValueError(f"JSON DECODE FAILED: {e}")
-    raw = meta.get("json", "")
-    if raw:
-        raw = raw.replace("\x06", " ")
-        raw = re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F]", "", raw)
-        return raw
-    raise ValueError("JSON NOT FOUND")
+    if not json_b64:
+        raise ValueError("JSON NOT FOUND")
+    try:
+        return base64.b64decode(json_b64).decode("utf-8", errors="strict")
+    except Exception as e:
+        raise ValueError(f"JSON DECODE FAILED: {e}")
 
 
 def note_thumbnail_from_json(meta: Dict[str, str]) -> str:
@@ -469,7 +463,7 @@ def is_note_file(path: Path) -> bool:
         return False
     try:
         meta = read_note_meta(path)
-        return bool(meta.get("json_base64") or meta.get("json"))
+        return bool(meta.get("json_base64"))
     except Exception:
         return False
 

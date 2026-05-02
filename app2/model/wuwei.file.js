@@ -127,7 +127,7 @@ wuwei.file = (function () {
       count: count || 12,
       term: term
     };
-    return ajaxRequest('server/find-resource.cgi', data, 'POST', 30000);
+    return ajaxRequest('server/search-resource.cgi', data, 'POST', 30000);
   }
   /**
    * 

@@ -199,7 +199,6 @@ is_listable_note_file() {
     ERROR*|*/*|*..*) return 1 ;;
   esac
   json_value=$(read_meta json_base64 "$file" || true)
-  [ -n "$json_value" ] || json_value=$(read_meta json "$file" || true)
   [ -n "$json_value" ] || return 1
   return 0
 }
@@ -298,9 +297,6 @@ note_matches_term() {
     read_meta saved_at "$file" || true
   } | grep -Fqi -- "$keyword" && return 0
 
-  json_value=$(read_meta json "$file" || true)
-  [ -n "$json_value" ] && printf '%s\n' "$json_value" | grep -Fqi -- "$keyword" && return 0
-
   json_b64=$(read_meta json_base64 "$file" || true)
   [ -n "$json_b64" ] && printf '%s' "$json_b64" | base64 -d 2>/dev/null | grep -Fqi -- "$keyword" && return 0
 
@@ -388,12 +384,6 @@ fi
         json_b64=$(read_meta json_base64 "$abs_file" || true)
         if [ -n "${json_b64:-}" ] && printf '%s' "$json_b64" | base64 -d > "$Tmp-note-json" 2>/dev/null; then
           note_thumbnail=$(json_svg_thumbnail "$Tmp-note-json" || true)
-        else
-          json_value=$(read_meta json "$abs_file" || true)
-          if [ -n "${json_value:-}" ]; then
-            printf '%s' "$json_value" > "$Tmp-note-json"
-            note_thumbnail=$(json_svg_thumbnail "$Tmp-note-json" || true)
-          fi
         fi
       fi
 

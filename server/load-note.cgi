@@ -102,13 +102,7 @@ fi
 [ -f "$file" ] || error_response 'ERROR NOTE FILE NOT FOUND'
 
 json_base64=$(nameread json_base64 "$file" | strip_quotes || true)
-if [ -n "${json_base64:-}" ]; then
-  json=$(printf '%s' "$json_base64" | base64 -d 2>/dev/null || true)
-  [ -n "${json:-}" ] || error_response 'ERROR JSON DECODE FAILED'
-  json_response "$json"
-fi
-
-json=$(nameread json "$file" | strip_quotes || true)
-[ -n "${json:-}" ] || error_response 'ERROR JSON NOT FOUND'
-json=$(printf '%s' "$json" | tr '\006' ' ' | tr -d '\000-\010\013\014\016-\037')
+[ -n "${json_base64:-}" ] || error_response 'ERROR JSON NOT FOUND'
+json=$(printf '%s' "$json_base64" | base64 -d 2>/dev/null || true)
+[ -n "${json:-}" ] || error_response 'ERROR JSON DECODE FAILED'
 json_response "$json"

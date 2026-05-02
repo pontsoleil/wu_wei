@@ -82,14 +82,8 @@ read_request_params() {
 read_note_json() {
   note_file=$1
   json_base64=$(nameread json_base64 "$note_file" | strip_quotes || true)
-  if [ -n "${json_base64:-}" ]; then
-    printf '%s' "$json_base64" | base64 -d 2>/dev/null || return 1
-    return 0
-  fi
-
-  json=$(nameread json "$note_file" | strip_quotes || true)
-  [ -n "${json:-}" ] || return 1
-  printf '%s' "$json" | tr '\006' ' ' | tr -d '\000-\010\013\014\016-\037'
+  [ -n "${json_base64:-}" ] || return 1
+  printf '%s' "$json_base64" | base64 -d 2>/dev/null || return 1
 }
 
 archive_create() {
