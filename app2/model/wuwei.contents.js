@@ -616,9 +616,49 @@ wuwei.contents = wuwei.contents || {};
 
   function appendPageFragment(uri, pageNumber) {
     var page = Math.max(1, Math.floor(Number(pageNumber || 1)));
-    var base = String(uri || '').replace(/#.*$/, '');
+    var base = toDirectUploadPdfUri(String(uri || '').replace(/#.*$/, ''));
     if (!base) { return ''; }
     return base + '#page=' + encodeURIComponent(page);
+  }
+
+  function encodeStoragePath(path) {
+    return String(path || '')
+      .replace(/\\/g, '/')
+      .replace(/^\/+/, '')
+      .split('/')
+      .map(function (part) { return encodeURIComponent(part); })
+      .join('/');
+  }
+
+  function getAppBasePath() {
+    var path = (window.location && window.location.pathname) ? window.location.pathname : '/wu_wei2/';
+    var marker = '/wu_wei2/';
+    var idx = path.indexOf(marker);
+    if (idx >= 0) {
+      return path.slice(0, idx + marker.length);
+    }
+    return '/wu_wei2/';
+  }
+
+  function toDirectUploadPdfUri(uri) {
+    var parsed, area, path, uid;
+    if (!uri || typeof window === 'undefined' || !window.location) { return uri; }
+    try {
+      parsed = new URL(uri, window.location.href);
+    }
+    catch (e) {
+      return uri;
+    }
+    area = parsed.searchParams.get('area') || '';
+    path = parsed.searchParams.get('path') || '';
+    uid = parsed.searchParams.get('user_id') || '';
+    if (area !== 'upload' || !path || !uid) { return uri; }
+    if (!/(?:^|\/)(?:cgi-bin|server)\/load-file\.(?:py|cgi)$/i.test(parsed.pathname)) { return uri; }
+    if (!/\.pdf$/i.test(path)) { return uri; }
+    return new URL(
+      getAppBasePath() + 'data/' + encodeURIComponent(uid) + '/upload/' + encodeStoragePath(path),
+      window.location.origin
+    ).href;
   }
 
   function getDocumentViewerUrl(documentNode, pageNumber) {
