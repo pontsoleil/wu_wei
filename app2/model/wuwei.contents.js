@@ -464,10 +464,10 @@ wuwei.contents = wuwei.contents || {};
     maxPage = Math.max(1, Number(group.pageCount || group.axis && group.axis.end || 1));
     if ((pageNumber == null || pageNumber === '') && !entryOption.silent &&
       typeof window !== 'undefined' && typeof window.prompt === 'function') {
-      pageInput = window.prompt('ページ番号:', String(Math.min(next, maxPage)));
+      pageInput = window.prompt('\u30da\u30fc\u30b8\u756a\u53f7:', String(Math.min(next, maxPage)));
       if (pageInput === null) { return null; }
       pageNumber = pageInput;
-      commentInput = window.prompt('コメント:', '');
+      commentInput = window.prompt('\u30b3\u30e1\u30f3\u30c8:', '');
       entryOption.comment = (commentInput === null) ? '' : commentInput;
     }
     pageNumber = Math.floor(Number(pageNumber || next));

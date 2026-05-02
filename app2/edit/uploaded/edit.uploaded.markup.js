@@ -170,6 +170,10 @@ wuwei.edit.uploaded.markup = ( function () {
           placeholder="${translate('Comment')}\nAsciiDoc\n**text** Bold Text\n*text* Italic Text\n+text+ Underline Text\n~~text~~ Strikethrough Text\n^text^ Superscript\n~text~ Subscript\n* text <ul>\n. text <ol>\n= text <h1>\n====== text <h6>\n----\nsource code\n----">${value}</textarea>
   </div>
   <div class="w3-row">
+    <label for="pdfPage" class="w3-col s4">&#12506;&#12540;&#12472;&#30058;&#21495;:</label>
+    <input type="text" id="pdfPage" name="pdfPage" class="w3-col s8" value="${page ? page : ''}">
+  </div>
+  <div class="w3-row">
   <label for="rUri" class="w3-col s2">URL:</label>
   <input type="text" id="rUri" name="resource.uri" data-path="resource.uri" class="w3-col s10" readonly aria-readonly="true"
       value="${resourceUri || ''}">
@@ -178,10 +182,6 @@ wuwei.edit.uploaded.markup = ( function () {
     <label for="resource_kind" data-path="resource.kind" class="w3-col s6">${translate('Media type')}</label>
     <input type="text" id="resource_kind" name="resource.kind" data-path="resource.kind" class="w3-col s6" readonly aria-readonly="true"
       value="${getMediaKindValue(node) || 'auto'}">
-  </div>
-  <div class="w3-row">
-    <label for="pdfPage" class="w3-col s4">ページ番号:</label>
-    <input type="text" id="pdfPage" name="pdfPage" class="w3-col s8" value="${page ? page : ''}">
   </div>
   <div class="w3-row">
   <label for="thumbnailUri" class="w3-col s4">${translate('THUMBNAIL')}</label>

@@ -474,10 +474,24 @@ wuwei.menu = wuwei.menu || {};
     return wuwei.menu.timeline.getTimelineTargetSpec(target);
   }
 
+  function getContentsTargetSpecForMenu(target) {
+    if (!target || !wuwei.contents || typeof wuwei.contents.getPageTargetSpec !== 'function') {
+      return null;
+    }
+    return wuwei.contents.getPageTargetSpec(target);
+  }
+
   function isTimelineInfoTarget(node, link) {
     return !!(
       (node && getTimelineTargetSpecForMenu(node)) ||
       (link && getTimelineTargetSpecForMenu(link))
+    );
+  }
+
+  function isContentsInfoTarget(node, link) {
+    return !!(
+      (node && getContentsTargetSpecForMenu(node)) ||
+      (link && getContentsTargetSpecForMenu(link))
     );
   }
 
@@ -1111,7 +1125,8 @@ wuwei.menu = wuwei.menu || {};
             )
           );
           var hasTimelineInfoTarget = isTimelineInfoTarget(node, link);
-          if (hasNormalInfoTarget || hasTimelineInfoTarget) {
+          var hasContentsInfoTarget = isContentsInfoTarget(node, link);
+          if (hasNormalInfoTarget || hasTimelineInfoTarget || hasContentsInfoTarget) {
             info
               .text('\uf05a')
               .attr('font-weight', '900')
@@ -2103,6 +2118,15 @@ wuwei.menu = wuwei.menu || {};
       closeContextMenu();
       return;
     }
+    else if ('createContentsAxis' === method) {
+      node = resolveContextTargetRecord(state.hoveredNode);
+      if (!node || !wuwei.contents || typeof wuwei.contents.createAxisGroup !== 'function') { return; }
+
+      wuwei.contents.createAxisGroup('horizontal', node, { silent: false });
+
+      closeContextMenu();
+      return;
+    }
     else if ('editTimelineAxisProps' === method) {
       node = resolveContextTargetRecord(state.hoveredNode);
       if (!node) { return; }
@@ -2115,6 +2139,20 @@ wuwei.menu = wuwei.menu || {};
 
       wuwei.edit.timeline.openAxisProperties(axisSpec.group);
 
+      closeContextMenu();
+      return;
+    }
+    else if ('addContentsEntry' === method) {
+      node = resolveContextTargetRecord(state.hoveredNode);
+      if (!node || !wuwei.contents || typeof wuwei.contents.addEntry !== 'function') { return; }
+      wuwei.contents.addEntry(node);
+      closeContextMenu();
+      return;
+    }
+    else if ('deleteContentsTarget' === method) {
+      node = resolveContextTargetRecord(state.hoveredNode);
+      if (!node || !wuwei.contents || typeof wuwei.contents.deleteTarget !== 'function') { return; }
+      wuwei.contents.deleteTarget(node);
       closeContextMenu();
       return;
     }
@@ -2194,6 +2232,13 @@ wuwei.menu = wuwei.menu || {};
     else if ('info' === method) {
       node = resolveContextTargetRecord(state.hoveredNode);
       if (!node || !node.id) { return; }
+      if (wuwei.contents &&
+        typeof wuwei.contents.isContentsPageNode === 'function' &&
+        wuwei.contents.isContentsPageNode(node)) {
+        wuwei.contents.openPageInInfo(node);
+        closeContextMenu();
+        return;
+      }
       if (isLocalPythonOfficeUpload([node])) {
         const href = getDownloadUrl(node);
         if (href) {
@@ -2289,6 +2334,16 @@ wuwei.menu = wuwei.menu || {};
       node = resolveContextTargetRecord(state.hoveredNode);
       if (!node || !node.id) { return; }
 
+      var contentsSpecForWindow = getContentsTargetSpecForMenu(node);
+      if (contentsSpecForWindow && contentsSpecForWindow.point && wuwei.contents) {
+        var contentsWindowUrl = wuwei.contents.getPageOpenUrl(contentsSpecForWindow.point);
+        if (contentsWindowUrl) {
+          window.open(contentsWindowUrl, 'contentsDocument', 'width=900,height=680,noopener,resizable=yes,scrollbars=yes');
+        }
+        closeContextMenu();
+        return;
+      }
+
       var timelineSpecForWindow = getTimelineTargetSpecForMenu(node);
       if (timelineSpecForWindow) {
         openTimelineSpecInNewWindow(timelineSpecForWindow);
@@ -2313,6 +2368,16 @@ wuwei.menu = wuwei.menu || {};
     else if ('openNewTab' === method) {
       node = resolveContextTargetRecord(state.hoveredNode);
       if (!node || !node.id) { return; }
+
+      var contentsSpecForTab = getContentsTargetSpecForMenu(node);
+      if (contentsSpecForTab && contentsSpecForTab.point && wuwei.contents) {
+        var contentsTabUrl = wuwei.contents.getPageOpenUrl(contentsSpecForTab.point);
+        if (contentsTabUrl) {
+          window.open(contentsTabUrl, '_blank', 'noopener');
+        }
+        closeContextMenu();
+        return;
+      }
 
       var timelineSpecForTab = getTimelineTargetSpecForMenu(node);
       if (timelineSpecForTab) {
@@ -2356,6 +2421,16 @@ wuwei.menu = wuwei.menu || {};
       node = resolveContextTargetRecord(state.hoveredNode);
       if (!node) { return; }
 
+      var contentsHorizontalSpec = getContentsTargetSpecForMenu(node);
+      if (contentsHorizontalSpec && contentsHorizontalSpec.group && wuwei.contents &&
+        typeof wuwei.contents.updateAxisGroup === 'function') {
+        wuwei.contents.updateAxisGroup(contentsHorizontalSpec.group, {
+          orientation: 'horizontal'
+        });
+        closeContextMenu();
+        return;
+      }
+
       var horizontalSpec = getTimelineTargetSpecForMenu(node);
       if (horizontalSpec && horizontalSpec.group) {
         wuwei.timeline.updateAxisGroup(horizontalSpec.group, {
@@ -2368,6 +2443,16 @@ wuwei.menu = wuwei.menu || {};
     else if ('vertical' === method) {
       node = resolveContextTargetRecord(state.hoveredNode);
       if (!node) { return; }
+
+      var contentsVerticalSpec = getContentsTargetSpecForMenu(node);
+      if (contentsVerticalSpec && contentsVerticalSpec.group && wuwei.contents &&
+        typeof wuwei.contents.updateAxisGroup === 'function') {
+        wuwei.contents.updateAxisGroup(contentsVerticalSpec.group, {
+          orientation: 'vertical'
+        });
+        closeContextMenu();
+        return;
+      }
 
       var verticalSpec = getTimelineTargetSpecForMenu(node);
       if (verticalSpec && verticalSpec.group) {
@@ -3192,11 +3277,13 @@ wuwei.menu = wuwei.menu || {};
       'EditNode': [
         'edit',
         'createTimelineAxis',
+        'createContentsAxis',
         'editTimelineAxisProps',
         'addTimelineSegmentFromPlayer',
         'editTimelineSegmentProps',
         'editTimelineSegmentFromPlayer',
         'deleteTimelineSegment',
+        'addContentsEntry',
         'addContent',
         'addTopic',
         'addMemo',
@@ -3210,6 +3297,8 @@ wuwei.menu = wuwei.menu || {};
         'edit',
         'editTimelineAxisProps',
         'addTimelineSegmentFromPlayer',
+        'addContentsEntry',
+        'deleteContentsTarget',
         'reverse',
         'normal',
         'horizontal',
@@ -3364,6 +3453,14 @@ wuwei.menu = wuwei.menu || {};
     return getTimelineTargetSpecForMenu(target);
   }
 
+  function getContextContentsSpec(allNodes) {
+    var target = getContextTarget(allNodes);
+    if (util.isEmpty(target)) {
+      return null;
+    }
+    return getContentsTargetSpecForMenu(target);
+  }
+
   function isContextLink(allNodes) {
     var target = getContextTarget(allNodes);
     return !!(target && util.isLink(target));
@@ -3379,14 +3476,16 @@ wuwei.menu = wuwei.menu || {};
     return !!(
       target &&
       target.type === 'Content' &&
-      !getContextTimelineSpec(allNodes)
+      !getContextTimelineSpec(allNodes) &&
+      !getContextContentsSpec(allNodes)
     );
   }
 
   function isContextOpenableTarget(allNodes) {
     return (
       isContextRegularContent(allNodes) ||
-      isContextTimelinePlayable(allNodes)
+      isContextTimelinePlayable(allNodes) ||
+      isContextContentsPage(allNodes)
     );
   }
 
@@ -3417,6 +3516,33 @@ wuwei.menu = wuwei.menu || {};
 
   function isContextTimelinePlayable(allNodes) {
     return !!getContextTimelineSpec(allNodes);
+  }
+
+  function isContextContentsPage(allNodes) {
+    var spec = getContextContentsSpec(allNodes);
+    return !!(spec && spec.point);
+  }
+
+  function isContextContentsAxis(allNodes) {
+    var spec = getContextContentsSpec(allNodes);
+    return !!(spec && spec.group && !spec.point);
+  }
+
+  function isContextContentsTarget(allNodes) {
+    return !!getContextContentsSpec(allNodes);
+  }
+
+  function isContextPdfContent(allNodes) {
+    var target = getContextTarget(allNodes);
+    return !!(
+      target &&
+      target.type === 'Content' &&
+      wuwei.contents &&
+      typeof wuwei.contents.isPdfResourceNode === 'function' &&
+      wuwei.contents.isPdfResourceNode(target) &&
+      !getContextTimelineSpec(allNodes) &&
+      !getContextContentsSpec(allNodes)
+    );
   }
 
   function hasContextDownloadUrl(allNodes) {
@@ -3783,7 +3909,7 @@ wuwei.menu = wuwei.menu || {};
 
     'reverse': ['Reverse',
       function (allNodes) {
-        if (isContextTimelineAxis(allNodes)) { return false; }
+        if (isContextTimelineAxis(allNodes) || isContextContentsTarget(allNodes)) { return false; }
         var node = getContextTarget(allNodes);
         if (allNodes.length === 1 &&
           util.notEmpty(node) &&
@@ -3799,7 +3925,7 @@ wuwei.menu = wuwei.menu || {};
 
     'normal': ['NORMAL',
       function (allNodes) {
-        if (isContextTimelineAxis(allNodes)) { return false; }
+        if (isContextTimelineAxis(allNodes) || isContextContentsTarget(allNodes)) { return false; }
         var node = getContextTarget(allNodes);
         if (allNodes.length === 1 &&
           util.notEmpty(node) &&
@@ -3816,6 +3942,10 @@ wuwei.menu = wuwei.menu || {};
 
     'horizontal': ['HORIZONTAL',
       function (allNodes) {
+        if (isContextContentsTarget(allNodes)) {
+          var contentsSpec = getContextContentsSpec(allNodes);
+          return !!(contentsSpec && contentsSpec.group && contentsSpec.group.orientation !== 'horizontal');
+        }
         var node = getContextTarget(allNodes);
         if (allNodes.length === 1 &&
           util.notEmpty(node) &&
@@ -3833,6 +3963,10 @@ wuwei.menu = wuwei.menu || {};
 
     'vertical': ['VERTICAL',
       function (allNodes) {
+        if (isContextContentsTarget(allNodes)) {
+          var contentsSpec = getContextContentsSpec(allNodes);
+          return !!(contentsSpec && contentsSpec.group && contentsSpec.group.orientation !== 'vertical');
+        }
         var node = getContextTarget(allNodes);
         if (allNodes.length === 1 &&
           util.notEmpty(node) &&
@@ -4099,6 +4233,36 @@ wuwei.menu = wuwei.menu || {};
       },
       null,
       'fas fa-stream fa-lg fa-fw'
+    ],
+
+    'createContentsAxis': ['Create contents axis',
+      function (allNodes) {
+        return !state.Selecting &&
+          !state.Connecting &&
+          isContextPdfContent(allNodes);
+      },
+      null,
+      'fa fa-comment fa-lg fa-fw'
+    ],
+
+    'addContentsEntry': ['Add entry',
+      function (allNodes) {
+        return !state.Selecting &&
+          !state.Connecting &&
+          isContextContentsTarget(allNodes);
+      },
+      null,
+      'fas fa-plus-circle fa-lg fa-fw'
+    ],
+
+    'deleteContentsTarget': ['Delete',
+      function (allNodes) {
+        return !state.Selecting &&
+          !state.Connecting &&
+          isContextContentsTarget(allNodes);
+      },
+      'danger',
+      'far fa-trash-alt fa-lg fa-fw'
     ],
 
     'editTimelineAxisProps': ['Axis properties',
