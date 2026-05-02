@@ -2375,10 +2375,6 @@ wuwei.menu = wuwei.menu || {};
 
       var contentsSpecForTab = getContentsTargetSpecForMenu(node);
       if (contentsSpecForTab && contentsSpecForTab.point && wuwei.contents) {
-        var contentsTabUrl = wuwei.contents.getPageOpenUrl(contentsSpecForTab.point);
-        if (contentsTabUrl) {
-          window.open(contentsTabUrl, '_blank', 'noopener');
-        }
         closeContextMenu();
         return;
       }
@@ -3579,6 +3575,7 @@ wuwei.menu = wuwei.menu || {};
           return false;
         }
         return isContextOpenableTarget(allNodes) &&
+          !isContextContentsTarget(allNodes) &&
           !isLocalPythonOfficeUpload(allNodes);
       },
       null,

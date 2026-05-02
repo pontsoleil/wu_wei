@@ -31,7 +31,15 @@ wuwei.info.uploaded.markup = ( function () {
     } else {
       width = null; height = null;
     }
-    uri = resolveFrameUri(node, uri);
+    if (option && option.pdfjsUri) {
+      uri = String(option.pdfjsUri || '');
+    }
+    else {
+      uri = resolveFrameUri(node, uri);
+      if (option && option.page) {
+        uri = appendPageFragment(uri, option.page);
+      }
+    }
     // Info pane renders the resource body. Stored values may be plain
     // YYYY/MM/DD/... paths, but iframe/video/img must receive a load-file URL.
     if (uri && wuwei.util && typeof wuwei.util.toPublicResourceUri === 'function' &&
@@ -354,6 +362,12 @@ wuwei.info.uploaded.markup = ( function () {
 
   function isLoadFileUri(uri) {
     return /(?:^|\/)(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i.test(String(uri || ''));
+  }
+
+  function appendPageFragment(uri, page) {
+    var n = Math.max(1, Math.floor(Number(page || 1)));
+    var text = String(uri || '').replace(/#.*$/, '');
+    return text ? (text + '#page=' + encodeURIComponent(n)) : '';
   }
 
   return {

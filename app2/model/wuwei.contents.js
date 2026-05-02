@@ -621,6 +621,19 @@ wuwei.contents = wuwei.contents || {};
     return base + '#page=' + encodeURIComponent(page);
   }
 
+  function buildPdfJsViewerUrl(uri, pageNumber) {
+    var page = Math.max(1, Math.floor(Number(pageNumber || 1)));
+    var pdfUri = toDirectUploadPdfUri(String(uri || '').replace(/#.*$/, ''));
+    if (!pdfUri) { return ''; }
+    if (!/\.pdf(?:[?#].*)?$/i.test(pdfUri)) {
+      return appendPageFragment(pdfUri, page);
+    }
+    return new URL(
+      getAppBasePath() + 'lib/pdfjs/web/viewer.html?file=' + encodeURIComponent(pdfUri) + '#page=' + encodeURIComponent(page),
+      window.location.origin
+    ).href;
+  }
+
   function encodeStoragePath(path) {
     return String(path || '')
       .replace(/\\/g, '/')
@@ -670,7 +683,7 @@ wuwei.contents = wuwei.contents || {};
     if (!uri && util && typeof util.getResourceOriginalUri === 'function') {
       uri = util.getResourceOriginalUri(documentNode) || '';
     }
-    return appendPageFragment(uri, pageNumber);
+    return buildPdfJsViewerUrl(uri, pageNumber);
   }
 
   function getPageOpenUrl(point) {
@@ -684,7 +697,11 @@ wuwei.contents = wuwei.contents || {};
     if (!spec || !spec.documentNode || !wuwei.info || typeof wuwei.info.open !== 'function') {
       return false;
     }
-    wuwei.info.open(spec.documentNode, { page: spec.pageNumber, contentsPage: true });
+    wuwei.info.open(spec.documentNode, {
+      page: spec.pageNumber,
+      contentsPage: true,
+      pdfjsUri: getDocumentViewerUrl(spec.documentNode, spec.pageNumber)
+    });
     return true;
   }
 
