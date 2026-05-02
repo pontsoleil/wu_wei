@@ -8,7 +8,7 @@
 
 この文書は、WuWei の `data/` 配下に保存するノート、リソース、アップロードファイルを、WuWei の認証・権限確認を経由してのみ参照できるようにするための環境設定と実装方式を定義する。
 
-`data/` 配下には、PDF、Office 文書、画像、動画、音声、テキスト、サムネイル、プレビュー、`note.json`、`resource.json` などが保存される。これらは URL が分かっても直接ダウンロードできないことを基本方針とする。
+`data/` 配下には、PDF、Office 文書、画像、動画、音声、テキスト、サムネイル、プレビュー、`note.txt`、`resource.json` などが保存される。これらは URL が分かっても直接ダウンロードできないことを基本方針とする。
 
 == 基本方針
 
@@ -30,7 +30,7 @@
 wu_wei2/
   data/
     {user_uuid}/
-      note/YYYY/MM/DD/{note_uuid}/note.json
+      note/YYYY/MM/DD/{note_uuid}/note.txt
       note/YYYY/MM/DD/{note_uuid}/resource/{uploaded_uuid}/resource.json
       note/YYYY/MM/DD/{note_uuid}/resource/{uploaded_uuid}/thumbnail.*
       note/YYYY/MM/DD/{note_uuid}/resource/{uploaded_uuid}/preview.pdf
@@ -285,7 +285,7 @@ preview:
 
 ノートを portable bundle としてダウンロードする場合、通常保存とは別に、持ち運びに必要なファイルを bundle に含める。
 
-* `note.json` は `area + path` のまま保持する。
+* `note.txt` は `area + path` のまま保持する。
 * アップロード原本は `bundle.files[]` に Base64 で同梱する。
 * サムネイルとプレビューも必要に応じて `bundle.files[]` に同梱する。
 * 復元時は、現在ユーザーの `wu_wei2/data/{current_user_uuid}/upload/...` または `wu_wei2/data/{current_user_uuid}/note/...` に展開する。
@@ -298,7 +298,7 @@ preview:
 * `path` にユーザー UUID を含めない。
 * `..`、絶対パス、Windows パス区切り、空セグメントを拒否する。
 * `Content-Type` は拡張子だけに依存せず、可能であれば保存済み metadata の `mimeType` を優先する。
-* `note.json` や `resource.json` を直接公開しない。
+* `note.txt` や `resource.json` を直接公開しない。
 * 公開ノートの場合も、公開許可されたノートから参照されるファイルだけを配信する。
 
 == ローカル Apache 環境での扱い

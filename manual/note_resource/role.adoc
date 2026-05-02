@@ -33,13 +33,13 @@ CGI はシェルスクリプトを中心に保守します。
 |コメント、説明、表示用メタデータを更新します。ファイル本体は移動しません。
 
 |`save-note.cgi`
-|ノート JSON を `note/YYYY/MM/DD/{note_uuid}/note.json` に保存します。resource は参照保存です。
+|ノート JSON を `note/YYYY/MM/DD/{note_uuid}/note.txt` に保存します。resource は参照保存です。
 
 |`load-note.cgi`
 |保存済みノート JSON を読み込みます。
 
 |`list-note.cgi`
-|`note.json` が存在する保存済みノートだけを一覧します。`ERROR NOTE NOT FOUND` になるディレクトリは表示しません。
+|`note.txt` が存在する保存済みノートだけを一覧します。`ERROR NOTE NOT FOUND` になるディレクトリは表示しません。
 
 |`remove-note.cgi`
 |ノートを削除または trash へ移動します。参照先 upload resource は削除しません。
@@ -102,7 +102,7 @@ data/{user_uuid}/upload/YYYY/MM/DD/{upload_uuid}/manifest.json
 
 == list-note.cgi
 
-ノート一覧は `note.json` が存在し、読み込み可能なノートだけを返します。
+ノート一覧は `note.txt` が存在し、読み込み可能なノートだけを返します。
 
 空ディレクトリ、保存失敗ディレクトリ、`new_note` は通常一覧に含めません。
 
@@ -112,9 +112,9 @@ data/{user_uuid}/upload/YYYY/MM/DD/{upload_uuid}/manifest.json
 
 ノートダウンロードでは、次を ZIP 化します。
 
-* `note/YYYY/MM/DD/{note_uuid}/note.json`
+* `note/YYYY/MM/DD/{note_uuid}/note.txt`
 * ノートサムネイル
-* `note.json` が参照する `upload/YYYY/MM/DD/{upload_uuid}/` ディレクトリ
+* `note.txt` が参照する `upload/YYYY/MM/DD/{upload_uuid}/` ディレクトリ
 
 通常保存時にコピーしない代わりに、ダウンロード時に参照先を収集します。
 

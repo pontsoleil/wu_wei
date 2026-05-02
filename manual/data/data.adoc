@@ -27,7 +27,7 @@ data/{user_uuid}/
     preview.pdf
 
   note/YYYY/MM/DD/{note_uuid}/
-    note.json
+    note.txt
     thumbnail.jpg
 
   trash/
@@ -92,7 +92,7 @@ data/{user_uuid}/
 
 == ノート
 
-ノートは `note/YYYY/MM/DD/{note_uuid}/note.json` を正本とします。
+ノートは `note/YYYY/MM/DD/{note_uuid}/note.txt` を正本とします。
 
 ノート JSON はグループ、ノード、リンク、ノート自身のメタデータを保存します。アップロードコンテンツのファイル本体は保存しません。
 
@@ -164,9 +164,9 @@ Linux/nginx 環境では `X-Accel-Redirect` を使い、認可確認後に内部
 
 ノート保存とノートダウンロードは分けて考えます。
 
-* ノート保存: `note.json` に参照を保存します。
-* ノートダウンロード: `note.json` が参照する `upload/` ディレクトリを収集して ZIP 化します。
-* ノートアップロード: ZIP 内の `upload/` ディレクトリを復元し、`note.json` の参照を復元先に合わせます。
+* ノート保存: `note.txt` に参照を保存します。
+* ノートダウンロード: `note.txt` が参照する `upload/` ディレクトリを収集して ZIP 化します。
+* ノートアップロード: ZIP 内の `upload/` ディレクトリを復元し、`note.txt` の参照を復元先に合わせます。
 
 通常保存時にアップロードコンテンツをノートディレクトリへコピーしないことで、保存処理を軽く保ちます。
 
@@ -177,7 +177,7 @@ Linux/nginx 環境では `X-Accel-Redirect` を使い、認可確認後に内部
 * `manifest.json` を持たないアップロードディレクトリ
 * `resource.json` だけを持つ旧リソースディレクトリ
 * 空のノートディレクトリ
-* `note.json` が存在しないノートディレクトリ
+* `note.txt` が存在しないノートディレクトリ
 * `new_note` のまま保存完了していない作業ディレクトリ
 
 必要な場合のみ手作業で移行します。通常のコードでは旧形式救済のための複雑な分岐を増やしません。
