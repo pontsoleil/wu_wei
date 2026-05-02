@@ -180,7 +180,7 @@ json_svg_thumbnail() {
 note_id_from_relpath() {
   rel=$1
   case "$rel" in
-    */note.json)
+    */note.txt)
       dir=${rel%/*}
       basename "$dir"
       ;;
@@ -308,7 +308,7 @@ note_matches_term() {
 }
 
 {
-  find "$note_dir" -type f -name note.json -printf '%T+\t%P\t%s\n'
+  find "$note_dir" -type f -name note.txt -printf '%T+\t%P\t%s\n'
   find "$note_dir" -maxdepth 1 -type f -printf '%T+\t%P\t%s\n'
 } | {
   if is_truthy "$include_new_note"; then

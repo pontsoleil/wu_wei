@@ -3,7 +3,7 @@
 """Build a portable WuWei note ZIP on demand.
 
 The ZIP layout mirrors server/export-note.cgi:
-  note.json
+  note.txt
   upload/YYYY/MM/DD/{upload_uuid}/...
 """
 
@@ -73,7 +73,7 @@ def main() -> None:
     upload_root = Path(upload_root_s)
     payload = io.BytesIO()
     with zipfile.ZipFile(payload, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("note.json", note_json)
+        zf.writestr("note.txt", note_json)
         for rel in sorted(set(UPLOAD_REF_RE.findall(note_json))):
             if ".." in rel or rel.startswith("/"):
                 continue

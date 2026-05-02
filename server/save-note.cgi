@@ -408,7 +408,7 @@ note_dir="$note_base/$year/$month/$day/$id"
 note_resource_dir="$note_dir/resource"
 mkdir -p "$note_dir" || error_response 'ERROR NOTE DIRECTORY CREATE FAILED'
 
-JSON_FILE="${Tmp}-note.json"
+JSON_FILE="${Tmp}-note-data"
 printf '%s' "$json" > "$JSON_FILE"
 process_note_json "$JSON_FILE" "$id" || error_response 'ERROR NOTE JSON PROCESS FAILED'
 json=$(cat "$JSON_FILE")
@@ -420,7 +420,7 @@ json_base64=$(printf '%s' "$json" | base64 | tr -d '\n')
 [ -n "${json_base64:-}" ] || error_response 'ERROR JSON ENCODE FAILED'
 debug_log "json_base64_len=$(printf '%s' "$json_base64" | wc -c | tr -d ' ') note_dir=$note_dir"
 
-outfile="$note_dir/note.json"
+outfile="$note_dir/note.txt"
 {
   printf 'format_version 2\n'
   printf 'id %s\n' "$id"

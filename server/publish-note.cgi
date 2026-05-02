@@ -172,7 +172,7 @@ if [ -n "${json:-}" ]; then
   ok_response "${year}/${month}/${note_id}"
 fi
 
-note=$(find "$note_dir" \( -type f -name "$note_id" -o -type f -path "*/${note_id}/note.json" \) -print 2>/dev/null | head -n 1)
+note=$(find "$note_dir" \( -type f -name "$note_id" -o -type f -path "*/${note_id}/note.txt" \) -print 2>/dev/null | head -n 1)
 [ -n "$note" ] && [ -f "$note" ] || error500_exit "NOTE NOT FOUND: ${note_id}"
 
 cp "$note" "$public_note" || error500_exit "ERROR WHILE PUBLISHING NOTE"

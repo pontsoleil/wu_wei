@@ -2,7 +2,7 @@
 # export-note.cgi
 #
 # Build a portable note ZIP on demand:
-#   note.json
+#   note.txt
 #   upload/YYYY/MM/DD/{upload_uuid}/...
 #
 # Normal save/load stays reference-only. This endpoint collects referenced
@@ -23,7 +23,7 @@ export UNIX_STD=2003
 Tmp="/tmp/${0##*/}.$$"
 CGIVARS="${Tmp}-cgivars"
 BUNDLE_DIR="${Tmp}-bundle"
-NOTE_JSON="${Tmp}-note.json"
+NOTE_JSON="${Tmp}-note-data"
 REFS="${Tmp}-upload-refs"
 ZIP_FILE="${Tmp}.zip"
 
@@ -130,13 +130,13 @@ upload_dir=$(resolve_env_path upload "$user_id" || true)
 
 note_file="$note_dir/$id"
 if [ ! -f "$note_file" ]; then
-  note_file=$(find "$note_dir" -path "*/$id/note.json" -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | sed 's/^[^ ]* //' | head -n 1)
+  note_file=$(find "$note_dir" -path "*/$id/note.txt" -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | sed 's/^[^ ]* //' | head -n 1)
 fi
 [ -f "$note_file" ] || error_response 'ERROR NOTE FILE NOT FOUND'
 
 mkdir -p "$BUNDLE_DIR/upload"
 read_note_json "$note_file" > "$NOTE_JSON" || error_response 'ERROR NOTE JSON NOT FOUND'
-cp "$NOTE_JSON" "$BUNDLE_DIR/note.json" || error_response 'ERROR NOTE COPY FAILED'
+cp "$NOTE_JSON" "$BUNDLE_DIR/note.txt" || error_response 'ERROR NOTE COPY FAILED'
 
 grep -Eo '[0-9]{4}/[0-9]{2}/[0-9]{2}/_[0-9A-Fa-f-]+' "$NOTE_JSON" | sort -u > "$REFS" || true
 while IFS= read -r rel; do

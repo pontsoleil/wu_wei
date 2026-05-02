@@ -44,6 +44,7 @@ PUBLIC_USER_IDS = {
     "0dbfa104-accd-4188-8b1b-f2e25d38e638",
 }
 GUEST_USER_ID = "guest"
+NOTE_META_FILENAME = "note.txt"
 
 DEBUG_ENABLED = True
 
@@ -438,13 +439,18 @@ def note_timestamp(path: Path) -> str:
 
 
 def collect_note_record(note_root: Path, file_path: Path) -> Dict[str, object]:
-    relpath = note_record_id(note_root, file_path)
+    relpath = file_path.relative_to(note_root).as_posix()
+    record_id = note_record_id(note_root, file_path)
     meta = read_note_meta(file_path)
     thumbnail = meta.get("thumbnail", "") or note_thumbnail_from_json(meta)
-    parent = relpath.rsplit("/", 1)[0] if "/" in relpath else "."
-    name = relpath.rsplit("/", 1)[-1]
+    if file_path.name == NOTE_META_FILENAME:
+        parent = Path(relpath).parent.parent.as_posix()
+        name = Path(relpath).parent.name
+    else:
+        parent = relpath.rsplit("/", 1)[0] if "/" in relpath else "."
+        name = relpath.rsplit("/", 1)[-1]
     return {
-        "id": relpath,
+        "id": record_id,
         "user_id": meta.get("user_id", ""),
         "note_name": meta.get("name", ""),
         "description": meta.get("description", ""),
@@ -470,8 +476,8 @@ def is_note_file(path: Path) -> bool:
 
 def note_record_id(note_root: Path, file_path: Path) -> str:
     relpath = file_path.relative_to(note_root).as_posix()
-    if file_path.name == "note.json":
-        return Path(relpath).parent.as_posix()
+    if file_path.name == NOTE_META_FILENAME:
+        return Path(relpath).parent.name
     return relpath
 
 
@@ -494,18 +500,18 @@ def resolve_note_file(note_root: Path, note_id: str) -> Path:
     direct = note_root / note_id
     if direct.is_file():
         return direct
-    if direct.is_dir() and (direct / "note.json").is_file():
-        return direct / "note.json"
-    if (direct / "note.json").is_file():
-        return direct / "note.json"
+    if direct.is_dir() and (direct / NOTE_META_FILENAME).is_file():
+        return direct / NOTE_META_FILENAME
+    if (direct / NOTE_META_FILENAME).is_file():
+        return direct / NOTE_META_FILENAME
 
     matches = list(note_root.rglob(note_id))
     matches.sort(key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=True)
     for path in matches:
         if path.is_file() and is_note_file(path):
             return path
-        if path.is_dir() and (path / "note.json").is_file():
-            return path / "note.json"
+        if path.is_dir() and (path / NOTE_META_FILENAME).is_file():
+            return path / NOTE_META_FILENAME
     return direct
 
 

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from cgi_common import (
     environment_path,
+    get_effective_user_id,
     merge_query_and_body_params,
     resolve_note_file,
     script_error,
@@ -16,15 +17,16 @@ from cgi_common import (
 
 
 def main():
-    # shell 版の現行仕様に合わせ、request の user_id をそのまま信頼する
     params = merge_query_and_body_params()
-    user_id = trim(params.get("user_id", ""))
+    effective_user_id = get_effective_user_id()
+    req_user_id = trim(params.get("user_id", ""))
+    user_id = req_user_id or effective_user_id
     note_id = trim(params.get("id", ""))
 
-    if not user_id.startswith("ERROR") and user_id:
-        pass
-    else:
-        script_error("ERROR")
+    if not effective_user_id or not user_id or user_id.startswith("ERROR"):
+        script_error("ERROR NOT LOGGED IN")
+    if req_user_id and req_user_id != effective_user_id:
+        script_error("ERROR USER MISMATCH")
 
     note_dir = environment_path("note", user_id)
     trash_root = environment_path("trash", user_id)
@@ -32,7 +34,7 @@ def main():
         script_error("500 Internal Server Error\nERROR DIRECTORY NOT DEFINED")
 
     note_file = resolve_note_file(Path(note_dir), note_id)
-    note_path = note_file.parent if note_file.name == "note.json" else note_file
+    note_path = note_file.parent if note_file.name == "note.txt" else note_file
 
     if not note_file.exists():
         script_error("ERROR NOTE NOT FOUND")

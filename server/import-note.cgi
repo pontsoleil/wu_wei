@@ -21,7 +21,7 @@ Tmp="/tmp/${0##*/}.$$"
 CGIVARS="${Tmp}-cgivars"
 UPLOAD_FILE="${Tmp}-upload"
 EXTRACT_DIR="${Tmp}-extract"
-NOTE_JSON="${Tmp}-note.json"
+NOTE_JSON="${Tmp}-note-data"
 
 cleanup() {
   rm -f "$CGIVARS" "$UPLOAD_FILE" "$NOTE_JSON"
@@ -121,8 +121,8 @@ upload_base=$(resolve_env_path upload "$user_id" || true)
 
 if file -b "$UPLOAD_FILE" 2>/dev/null | grep -qi 'zip'; then
   archive_extract "$UPLOAD_FILE" "$EXTRACT_DIR" || error_response 'ERROR ZIP EXTRACT FAILED'
-  found_note=$(find "$EXTRACT_DIR" -type f -name note.json | head -n 1)
-  [ -f "${found_note:-}" ] || error_response 'ERROR NOTE JSON NOT FOUND'
+  found_note=$(find "$EXTRACT_DIR" -type f -name note.txt | head -n 1)
+  [ -f "${found_note:-}" ] || error_response 'ERROR NOTE TEXT NOT FOUND'
   cp "$found_note" "$NOTE_JSON" || error_response 'ERROR NOTE JSON COPY FAILED'
 
   if [ -d "$EXTRACT_DIR/upload" ]; then
@@ -175,6 +175,6 @@ mkdir -p "$note_dir" || error_response 'ERROR NOTE DIRECTORY CREATE FAILED'
   printf 'saved_at %s\n' "$saved_at"
   printf 'json_encoding base64\n'
   printf 'json_base64 %s\n' "$json_base64"
-} > "$note_dir/note.json" || error_response 'ERROR NOTE SAVE FAILED'
+} > "$note_dir/note.txt" || error_response 'ERROR NOTE SAVE FAILED'
 
 json_response_file "$NOTE_JSON"

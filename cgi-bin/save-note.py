@@ -619,7 +619,7 @@ def main():
         debug("ERROR JSON ENCODE FAILED")
         script_error("ERROR JSON ENCODE FAILED")
 
-    outfile = note_dir / "note.json"
+    outfile = note_dir / "note.txt"
     debug_kv(outfile=str(outfile), year=year, month=month, day=day, saved_at=saved_at)
 
     try:

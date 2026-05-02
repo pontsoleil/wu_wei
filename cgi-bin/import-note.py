@@ -45,9 +45,9 @@ def _extract_zip(upload_bytes: bytes, extract_dir: Path) -> Path:
             if not name or ".." in Path(name).parts:
                 continue
             zf.extract(info, extract_dir)
-    matches = list(extract_dir.rglob("note.json"))
+    matches = list(extract_dir.rglob("note.txt"))
     if not matches:
-        script_error("ERROR NOTE JSON NOT FOUND")
+        script_error("ERROR NOTE TEXT NOT FOUND")
     return matches[0]
 
 
@@ -98,7 +98,7 @@ def _save_note_meta(note_root: Path, user_id: str, note_json_text: str) -> None:
         "json_encoding base64",
         f"json_base64 {json_b64}",
     ]
-    (note_dir / "note.json").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (note_dir / "note.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def main() -> None:

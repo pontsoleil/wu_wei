@@ -9,6 +9,7 @@ import hashlib
 import json
 import mimetypes
 import os
+import re
 import shutil
 import subprocess
 import uuid
@@ -177,6 +178,38 @@ def make_pdf_thumbnail(src: Path, dest: Path, size: int = 200) -> tuple[str, str
     except Exception as e:
         debug_kv(pdf_thumb_exception=str(e), src=str(src), dest=str(dest))
     return "", ""
+
+
+def count_pdf_pages(src: Path) -> int:
+    """Return a best-effort PDF page count without adding a Python dependency."""
+    if not src or not src.exists():
+        return 0
+
+    cmd = resolve_command(os.environ.get("WUWEI_PDFINFO", ""), "pdfinfo")
+    if cmd:
+        try:
+            cp = subprocess.run(
+                [cmd, str(src)],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if cp.returncode == 0:
+                match = re.search(r"^Pages:\s*(\d+)\s*$", cp.stdout or "", re.M)
+                if match:
+                    return int(match.group(1))
+        except Exception as e:
+            debug_kv(pdf_page_count_exception=str(e), src=str(src))
+
+    try:
+        data = src.read_bytes()
+    except Exception as e:
+        debug_kv(pdf_page_count_read_exception=str(e), src=str(src))
+        return 0
+
+    # Works for the PDFs WuWei creates/receives commonly enough for metadata.
+    markers = re.findall(rb"/Type\s*/Page\b", data)
+    return len(markers)
 
 
 def make_office_pdf(src: Path, outdir: Path) -> Path | None:
@@ -427,7 +460,7 @@ def safe_note_id(value: str) -> str:
 
 
 def ensure_draft_note_json(note_dir: Path, user_id: str) -> None:
-    note_file = note_dir / "note.json"
+    note_file = note_dir / "note.txt"
     if note_file.exists():
         return
     draft = {
@@ -783,12 +816,14 @@ def main():
     office_pdf = None
     pdf_preview_uri = None
     pdf_preview_url = None
+    page_count = 0
 
     if content_type.startswith("image/"):
         resource_size, thumbnail_size = make_image_thumbnail(dest_file, thumb_file)
 
     elif content_type.lower().startswith("application/pdf"):
         resource_size, thumbnail_size = make_pdf_thumbnail(dest_file, thumb_file)
+        page_count = count_pdf_pages(dest_file)
 
     elif dest_file.suffix.lower() in OFFICE_EXTS:
         pdf_preview_dir = dest_file.parent
@@ -805,6 +840,7 @@ def main():
                 except OSError as e:
                     debug_kv(office_pdf_rename_exception=str(e), src=str(office_pdf), dst=str(normalized_pdf))
             resource_size, thumbnail_size = make_pdf_thumbnail(office_pdf, thumb_file)
+            page_count = count_pdf_pages(office_pdf)
             pdf_preview_uri = protected_file_url(user_id, "upload", upload_relative_path(upload_root, office_pdf))
             pdf_preview_url = pdf_preview_uri
             debug_kv(
@@ -881,7 +917,23 @@ def main():
             "mimeType": content_type,
             "downloadable": True,
             "duration": None,
+            "pageCount": page_count or None,
         },
+        **(
+            {
+                "contents": {
+                    "type": "pdf",
+                    "axis": {
+                        "unit": "page",
+                        "nodeType": "page",
+                    },
+                    "pageCount": page_count,
+                    "sourceRole": "preview" if office_pdf and office_pdf.exists() else "original",
+                }
+            }
+            if page_count
+            else {}
+        ),
         "viewer": {
             "supportedModes": ["infoPane", "newTab", "newWindow", "download"],
             "defaultMode": "infoPane",
