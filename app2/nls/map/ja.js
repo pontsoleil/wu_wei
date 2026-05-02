@@ -213,7 +213,6 @@ wuwei.nls.JA = {
   'Sourceposition': '始点位置',
   'Targetposition': '終点位置',
   'Info': '情報',
-  'InfoPane': '情報ペイン',
   'OpenWindow': '新しいウィンドウで開く',
   'CloseWindow': 'ウィンドウを閉じる',
   'OpenNewTab': '新しいタブで開く',

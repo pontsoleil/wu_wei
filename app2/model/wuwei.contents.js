@@ -216,11 +216,9 @@ wuwei.contents = wuwei.contents || {};
   }
 
   function clampPageNumber(group, pageNumber) {
-    var maxPage = Math.max(1, Number(group && (group.pageCount || group.axis && group.axis.end) || 1));
     var value = Math.floor(Number(pageNumber || 1));
     if (!Number.isFinite(value)) { value = 1; }
     if (value < 1) { value = 1; }
-    if (value > maxPage) { value = maxPage; }
     return value;
   }
 
@@ -254,6 +252,9 @@ wuwei.contents = wuwei.contents || {};
 
     axis = group.axis || {};
     pageCount = Math.max(1, Math.floor(Number(group.pageCount || axis.end || 1)));
+    getMemberNodes(group).forEach(function (node) {
+      pageCount = Math.max(pageCount, clampPageNumber(group, node && node.pageNumber));
+    });
     length = AXIS_LENGTH;
     orientation = (group.orientation === 'vertical') ? 'vertical' : 'horizontal';
     anchor = {
@@ -275,7 +276,7 @@ wuwei.contents = wuwei.contents || {};
       return Number(a.pageNumber || 0) - Number(b.pageNumber || 0);
     });
     members.forEach(function (node, index) {
-      var pageNumber = Math.max(1, Math.min(pageCount, Math.floor(Number(node.pageNumber || index + 1))));
+      var pageNumber = clampPageNumber(group, node.pageNumber || index + 1);
       var ratio = (pageNumber - 1) / range;
       node.pageNumber = pageNumber;
       node.x = (orientation === 'vertical') ? anchor.x : (anchor.x + (length * ratio));
