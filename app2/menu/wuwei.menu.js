@@ -2236,13 +2236,6 @@ wuwei.menu = wuwei.menu || {};
     else if ('info' === method) {
       node = resolveContextTargetRecord(state.hoveredNode);
       if (!node || !node.id) { return; }
-      if (wuwei.contents &&
-        typeof wuwei.contents.isContentsPageNode === 'function' &&
-        wuwei.contents.isContentsPageNode(node)) {
-        wuwei.contents.openPageInInfo(node);
-        closeContextMenu();
-        return;
-      }
       if (isLocalPythonOfficeUpload([node])) {
         const href = getDownloadUrl(node);
         if (href) {
@@ -2258,6 +2251,15 @@ wuwei.menu = wuwei.menu || {};
         return;
       }
       wuwei.info.open(node);
+      closeContextMenu();
+      return;
+    }
+    else if ('infoPane' === method) {
+      node = resolveContextTargetRecord(state.hoveredNode);
+      if (!node || !node.id) { return; }
+      if (wuwei.contents && typeof wuwei.contents.openPageInInfo === 'function') {
+        wuwei.contents.openPageInInfo(node);
+      }
       closeContextMenu();
       return;
     }
@@ -2375,6 +2377,10 @@ wuwei.menu = wuwei.menu || {};
 
       var contentsSpecForTab = getContentsTargetSpecForMenu(node);
       if (contentsSpecForTab && contentsSpecForTab.point && wuwei.contents) {
+        var contentsTabUrl = wuwei.contents.getPageOpenUrl(contentsSpecForTab.point);
+        if (contentsTabUrl) {
+          wuwei.info.openNewTab(contentsTabUrl);
+        }
         closeContextMenu();
         return;
       }
@@ -3313,6 +3319,7 @@ wuwei.menu = wuwei.menu || {};
         'download',
         'openNewTab',
         'openWindow',
+        'infoPane',
         'openPlayer'
       ],
       'InfoLink': [
@@ -3575,11 +3582,21 @@ wuwei.menu = wuwei.menu || {};
           return false;
         }
         return isContextOpenableTarget(allNodes) &&
-          !isContextContentsTarget(allNodes) &&
           !isLocalPythonOfficeUpload(allNodes);
       },
       null,
       'fas fa-external-link-alt fa-lg fa-fw'
+    ],
+
+    'infoPane': ['InfoPane',
+      function (allNodes) {
+        if (state.Selecting || state.Connecting) {
+          return false;
+        }
+        return isContextContentsPage(allNodes);
+      },
+      null,
+      'fas fa-info-circle fa-lg fa-fw'
     ],
 
     'openPlayer': ['OpenPlayer',

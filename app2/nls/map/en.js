@@ -212,6 +212,7 @@ wuwei.nls.EN = {
   'Sourceposition': 'Source position',
   'Targetposition': 'Target position',
   'Info': 'Information',
+  'InfoPane': 'Info pane',
   'OpenWindow': 'Open new window',
   'CloseWindow': 'Close window',
   'OpenNewTab': 'Open new tab',
