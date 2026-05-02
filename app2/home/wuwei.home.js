@@ -1422,33 +1422,38 @@ wuwei.home = (function () {
   refreshLoginStatus = function () {
     const homeDiv = document.getElementById('home');
     const menuDiv = document.getElementById('menu');
+    const userStatusDiv = document.getElementById('user_status');
+    const applyLoginClass = function () {
+      const loggedIn = true === state.loggedIn;
+      [homeDiv, menuDiv, userStatusDiv].forEach(function (el) {
+        if (!el) { return; }
+        if (loggedIn) {
+          el.classList.add('loggedIn');
+        }
+        else {
+          el.classList.remove('loggedIn');
+        }
+      });
+    };
     return new Promise(function (resolve) {
       wuwei.menu.login.check()
         .then(function (res) {
-          if (res) {
-            if ('success' === res.type) {
-              state.loggedIn = true;
-            }
-            else {
-              state.loggedIn = false;
-              wuwei.menu.snackbar.open({ message: res.message, type: res.type });
-            }
-          }
-          else {
+          if (!res) {
             state.loggedIn = false;
           }
-          if (state.loggedIn) {
-            if (homeDiv) homeDiv.classList.add('loggedIn');
-            if (menuDiv) menuDiv.classList.add('loggedIn');
+          if (res && res.type && 'success' !== res.type && 'guest' !== res.type) {
+            wuwei.menu.snackbar.open({ message: res.message, type: res.type });
           }
-          else {
-            if (homeDiv) homeDiv.classList.remove('loggedIn');
-            if (menuDiv) menuDiv.classList.remove('loggedIn');
-          }
+          applyLoginClass();
           resolve(res);
         })
         .catch(function (err) {
           console.log(err);
+          state.loggedIn = false;
+          if (wuwei.menu && wuwei.menu.login && typeof wuwei.menu.login.update === 'function') {
+            wuwei.menu.login.update({ login: null, user_id: null, name: null, role: null });
+          }
+          applyLoginClass();
           resolve(err);
         });
     });

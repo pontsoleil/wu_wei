@@ -76,6 +76,7 @@ wuwei.menu.login = wuwei.menu.login || {};
 
         menu.snackbar.open({ type: 'success', message: wuwei.nls.translate('You are logged in.') });
         document.getElementById('menu')?.classList.add('loggedIn');
+        document.getElementById('user_status')?.classList.add('loggedIn');
 
         setTimeout(() => {
           const noteMenu = document.getElementById('noteMenu');
@@ -100,6 +101,10 @@ wuwei.menu.login = wuwei.menu.login || {};
 
           // is-login.cgi が ERROR を返す古い実装でも安全
           if (!txt || txt.indexOf('ERROR') >= 0) {
+            if (common.isLocalGuestAllowed && common.isLocalGuestAllowed()) {
+              update(common.createGuestCurrentUser());
+              return resolve({ type: 'guest', message: 'Local guest mode.' });
+            }
             common.state.loggedIn = false;
             update({ login: null, user_id: null, name: null, role: null });
             return resolve({ type: 'warning', message: 'Please login.' });
@@ -109,6 +114,10 @@ wuwei.menu.login = wuwei.menu.login || {};
             response = JSON.parse(txt);
           } catch (e) {
             console.log(e, txt);
+            if (common.isLocalGuestAllowed && common.isLocalGuestAllowed()) {
+              update(common.createGuestCurrentUser());
+              return resolve({ type: 'guest', message: 'Local guest mode.' });
+            }
             common.state.loggedIn = false;
             update({ login: null, user_id: null, name: null, role: null });
             return resolve({ type: 'warning', message: 'Please login.' });
@@ -121,12 +130,20 @@ wuwei.menu.login = wuwei.menu.login || {};
             return resolve({ type: 'success', message: wuwei.nls.translate('You are logged in.') });
           }
 
+          if (common.isLocalGuestAllowed && common.isLocalGuestAllowed()) {
+            update(common.createGuestCurrentUser());
+            return resolve({ type: 'guest', message: 'Local guest mode.' });
+          }
           common.state.loggedIn = false;
           update({ login: null, user_id: null, name: null, role: null });
           return resolve({ type: 'warning', message: 'Please login.' });
         })
         .catch(error => {
           console.log(error);
+          if (common.isLocalGuestAllowed && common.isLocalGuestAllowed()) {
+            update(common.createGuestCurrentUser());
+            return resolve({ type: 'guest', message: 'Local guest mode.' });
+          }
           common.state.loggedIn = false;
           update({ login: null, user_id: null, name: null, role: null });
           resolve({ type: 'warning', message: 'Please login.' });
@@ -146,6 +163,7 @@ wuwei.menu.login = wuwei.menu.login || {};
       .finally(() => {
         update({ login: null, user_id: null, name: null, role: null });
         document.getElementById('menu')?.classList.remove('loggedIn');
+        document.getElementById('user_status')?.classList.remove('loggedIn');
       });
   }
 
@@ -185,9 +203,9 @@ wuwei.menu.login = wuwei.menu.login || {};
     }
     return {
       login: 'guest',
-      user_id: 'guest_' + Date.now() + '_' + Math.random().toString(16).slice(2),
+      user_id: 'guest',
       name: 'Guest',
-      role: null,
+      role: 'author',
       token: null
     };
   }
@@ -200,16 +218,26 @@ wuwei.menu.login = wuwei.menu.login || {};
     if (currentUser && wuwei.util.isUUID(currentUser.user_id)) {
       common.state.loggedIn = true;
       nextUser = Object.assign({}, previousUser, currentUser);
+      nextUser.role = nextUser.role || 'author';
       common.state.currentUser = nextUser;
       if (oldOwnerId && common.isTemporaryOwnerId && common.isTemporaryOwnerId(oldOwnerId)) {
         migratePageOwnership(oldOwnerId, nextUser.user_id);
       }
-      document.getElementById('menu').classList.add('loggedIn');
+      document.getElementById('menu')?.classList.add('loggedIn');
+      document.getElementById('user_status')?.classList.add('loggedIn');
+    } else if (currentUser && currentUser.user_id === common.GUEST_USER_ID) {
+      common.state.loggedIn = false;
+      nextUser = Object.assign({}, fallbackGuestUser(), currentUser);
+      nextUser.role = nextUser.role || 'author';
+      common.state.currentUser = nextUser;
+      document.getElementById('menu')?.classList.remove('loggedIn');
+      document.getElementById('user_status')?.classList.remove('loggedIn');
     } else {
       common.state.loggedIn = false;
       nextUser = fallbackGuestUser();
       common.state.currentUser = nextUser;
-      document.getElementById('menu').classList.remove('loggedIn');
+      document.getElementById('menu')?.classList.remove('loggedIn');
+      document.getElementById('user_status')?.classList.remove('loggedIn');
     }
   }
 
