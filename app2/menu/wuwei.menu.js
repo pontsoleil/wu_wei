@@ -4023,7 +4023,7 @@ wuwei.menu = wuwei.menu || {};
         return true;
       },
       null,
-      'fa fa-commenting fa-lg fa-fw'
+      'fa fa-comment fa-lg fa-fw'
     ],
 
     'closeNote': ['Close Note',
