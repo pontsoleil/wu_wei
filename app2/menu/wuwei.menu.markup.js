@@ -119,7 +119,7 @@ wuwei.menu.markup = (function () {
       </div>
     </a>
     <a href="#" id="noteIcon" class="command">
-      <i class="fa fa-comment fa-lg fa-fw"></i>
+      <i class="fa fa-book fa-lg fa-fw"></i>
       <span class="tooltiptext">${translate('Notebook')}</span>
     </a>
     <a href="#" id="pageIcon" class="command">
@@ -141,7 +141,7 @@ wuwei.menu.markup = (function () {
     html.push(`
   <div id="noteMenu" class="pulldown note" style="display: none;">
     <span class="header">
-      <i class="fa fa-comment fa-fw">&nbsp;${translate('Notebook')}</i>
+      <i class="fa fa-book fa-fw">&nbsp;${translate('Notebook')}</i>
       <i class="fas fa-times fa-fw">&nbsp;${translate('Notebook')}</i>
     </span>
     <hr>
