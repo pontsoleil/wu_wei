@@ -1352,8 +1352,25 @@ wuwei.edit = wuwei.edit || {};
     close();
   }
 
+  function flushContentsEntryFields() {
+    var pageNumberEl;
+    var pageNumber;
+    if (!stateMap.node || stateMap.node.topicKind !== 'contents-page') {
+      return;
+    }
+    pageNumberEl = document.getElementById('contentsPageNumber');
+    if (!pageNumberEl) {
+      return;
+    }
+    pageNumber = Math.floor(Number(pageNumberEl.value || 1));
+    stateMap.node.pageNumber = Number.isFinite(pageNumber) && pageNumber > 0
+      ? pageNumber
+      : 1;
+  }
+
   function commit() {
     var committed = true;
+    flushContentsEntryFields();
     // Timeline edits are buffered in the timeline panel fields,
     // so the global save icon must apply them before storing the log.
     if (state.timelineEdit) {
