@@ -119,18 +119,15 @@ wuwei.edit.uploaded.markup = ( function () {
       font = (node.style && node.style.font) || node.font || {},
       resourceUri = getEditableResourceUri(node),
       thumbnailUri = getEditableThumbnailUri(node),
-      match, matchP,
+      matchP,
       page = null,
       option = param.option;
     const fontAlign = getFontAlign(node);
     const fontSizeValue = normalizeFontSizeValue(font && font.size);
-    match = resourceUri.match(/^content\/.*\.pdf/);
-    if (match) {
-      matchP = resourceUri.match(/^(content\/.*\.pdf)#page=([0-9]*)$/);
-      if (matchP) {
-        resourceUri  = matchP[1];
-        page = +matchP[2];
-      }
+    matchP = String(resourceUri || '').match(/^(.*)#page=([0-9]+)$/);
+    if (matchP) {
+      resourceUri = matchP[1];
+      page = +matchP[2];
     }
     
     // video?
@@ -183,6 +180,10 @@ wuwei.edit.uploaded.markup = ( function () {
       value="${getMediaKindValue(node) || 'auto'}">
   </div>
   <div class="w3-row">
+    <label for="pdfPage" class="w3-col s4">ページ番号:</label>
+    <input type="text" id="pdfPage" name="pdfPage" class="w3-col s8" value="${page ? page : ''}">
+  </div>
+  <div class="w3-row">
   <label for="thumbnailUri" class="w3-col s4">${translate('THUMBNAIL')}</label>
   <input type="text" id="thumbnailUri" name="thumbnailUri" data-path="thumbnailUri" class="w3-col s8" readonly aria-readonly="true"
       value="${thumbnailUri || ''}">
@@ -197,14 +198,6 @@ wuwei.edit.uploaded.markup = ( function () {
     <input type="text" id="resourceRightsLicense" name="resource.rights.license" data-path="resource.rights.license" class="w3-col s8"
       value="${(node.resource && node.resource.rights && node.resource.rights.license) || node.resource && node.resource.license || ''}">
   </div>
-  ${match
-    ? `<div class="w3-row">
-        <label for="rUri" class="w3-col s4">${translate('page')}</label>
-        <input type="text" id="pdfPage" name="pdfPage" class="w3-col s8" value="${page ? page : ''}">
-      </div>`
-    : ''
-  }
-
   ${isVideo
     ? `<div class="w3-row">
         <div class="frame video w3-col s12">

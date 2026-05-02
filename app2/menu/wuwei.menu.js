@@ -3233,6 +3233,9 @@ wuwei.menu = wuwei.menu || {};
     isSupported: function (operation, nodes, context) {
       var operations;
       if (util.isEmpty(nodes)) { return false; }
+      if ('EDIT' === context && isContextContentsTarget(nodes)) {
+        return util.contains(this.type.EditNode, operation);
+      }
       for (var i = 0; i < nodes.length; i += 1) {
         if (util.notEmpty(nodes[i])) {
           // INFO operations are read-only; allow them even if not the owner.
@@ -3271,7 +3274,10 @@ wuwei.menu = wuwei.menu || {};
         else { operations = self.type.Node; }
       }
       else if ('EDIT' === context) {
-        if ('Link' === hoveredNode.type) { operations = self.type.EditLink; }
+        if (isContextContentsTarget(allNodes)) {
+          operations = self.type.EditNode;
+        }
+        else if ('Link' === hoveredNode.type) { operations = self.type.EditLink; }
         else { operations = self.type.EditNode; }
       }
       else if ('INFO' === context) {
