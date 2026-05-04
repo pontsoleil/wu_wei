@@ -721,20 +721,17 @@ def main():
 
     upload_root_s = environment_path("upload", user_id)
     resource_root_s = environment_path("resource", user_id)
-    thumbnail_root_s = environment_path("thumbnail", user_id)
     note_root_s = environment_path("note", user_id)
 
     debug_kv(
         env_file=str(ENV_FILE),
         raw_upload=read_named_value(ENV_FILE, "upload"),
         raw_resource=read_named_value(ENV_FILE, "resource"),
-        raw_thumbnail=read_named_value(ENV_FILE, "thumbnail"),
     )
 
     debug_kv(
         upload_root=upload_root_s,
         resource_root=resource_root_s,
-        thumbnail_root=thumbnail_root_s,
         note_root=note_root_s,
     )
 
@@ -742,12 +739,9 @@ def main():
         script_error("ERROR UPLOAD DIRECTORY NOT DEFINED")
     if not resource_root_s:
         script_error("ERROR RESOURCE DIRECTORY NOT DEFINED")
-    if not thumbnail_root_s:
-        script_error("ERROR THUMBNAIL DIRECTORY NOT DEFINED")
 
     upload_root = Path(upload_root_s)
     resource_root = Path(resource_root_s)
-    thumbnail_root = Path(thumbnail_root_s)
     note_root = Path(note_root_s) if note_root_s else upload_root.parent / "note"
     note_id = safe_note_id(form.getfirst("note_id", "") or "new_note")
     pdf_preview_uri = None
@@ -760,12 +754,8 @@ def main():
 
     upload_date = f"{year}/{month}/{day}"
     upload_day_dir = upload_root / year / month / day
-    resource_dir = resource_root / year / month / day
-    thumbnail_dir = thumbnail_root / year / month / day
 
     upload_day_dir.mkdir(parents=True, exist_ok=True)
-    resource_dir.mkdir(parents=True, exist_ok=True)
-    thumbnail_dir.mkdir(parents=True, exist_ok=True)
 
     if "file" not in form:
         script_error("ERROR FILE NOT FOUND IN MULTIPART")
@@ -815,6 +805,8 @@ def main():
 
     content_type = detect_content_type(dest_file, declared_contenttype)
     upload_relpath = upload_relative_path(upload_root, dest_file)
+    resource_dir = resource_root / upload_date
+    resource_dir.mkdir(parents=True, exist_ok=True)
     existing_resource, dedupe_reason = (None, "")
     resource_id = upload_file_id
     primary_dir = resource_dir / resource_id

@@ -166,7 +166,7 @@ day="$(date '+%d')"
 #   user      /.../wu_wei2
 #   upload    /.../wu_wei2/*/upload
 #   resource  /.../wu_wei2/*/resource
-#   thumbnail /.../wu_wei2/*/thumbnail
+#   thumbnails are stored in the upload bundle as thumbnail.jpg
 
 base_dir="$(resolve_env_template "$(read_env user)")"
 [ -z "${base_dir:-}" ] && die_json "ERROR: 'user' is empty in data/environment"
@@ -181,22 +181,14 @@ resource_tpl="$(resolve_env_template "$(read_env resource)")"
 resource_dir="${resource_tpl//\*/$user_id}"
 resource_root="$resource_dir"
 
-thumbnail_tpl="$(resolve_env_template "$(read_env thumbnail)")"
-[ -z "${thumbnail_tpl:-}" ] && die_json "ERROR: 'thumbnail' is empty in data/environment"
-thumbnail_dir="${thumbnail_tpl//\*/$user_id}"
-
 note_tpl="$(resolve_env_template "$(read_env note)")"
 note_root=""
 [ -n "${note_tpl:-}" ] && note_root="${note_tpl//\*/$user_id}"
 
 # --- ensure directories ----------------------------------------------
 mkdir -p "$file_dir/$year/$month/$day"      || die_json "ERROR: cannot mkdir $file_dir/$year/$month/$day (permission?)"
-mkdir -p "$resource_dir/$year/$month/$day"  || die_json "ERROR: cannot mkdir $resource_dir/$year/$month/$day (permission?)"
-mkdir -p "$thumbnail_dir/$year/$month/$day" || die_json "ERROR: cannot mkdir $thumbnail_dir/$year/$month/$day (permission?)"
 
 file_dir="$file_dir/$year/$month/$day"
-resource_day_dir="$resource_dir/$year/$month/$day"
-thumbnail_dir="$thumbnail_dir/$year/$month/$day"
 
 # --- read request body -----------------------------------------------
 # dd bs=1K if=/dev/stdin > "$Tmp-cgivars"
@@ -270,6 +262,8 @@ if [ ! -f "$dest_file" ]; then
 fi
 
 upload_relpath="$upload_file_date/$upload_file_uuid/$filename"
+resource_day_dir="$resource_root/$upload_file_date"
+mkdir -p "$resource_day_dir" || die_json "ERROR: cannot mkdir $resource_day_dir"
 
 find_existing_resource_dir() {
   local sha="$1" rel="$2" rf
@@ -287,7 +281,7 @@ existing_resource_dir=""
 if [ -n "$existing_resource_dir" ]; then
   uuid="${existing_resource_dir##*/}"
 else
-  uuid="_$(uuidgen | tr 'A-Z' 'a-z')"
+  uuid="$upload_file_uuid"
 fi
 uuidrgx='[0-9a-f]\{8\}-[0-9a-f]\{4\}-[1-5][0-9a-f]\{3\}-[89ab][0-9a-f]\{3\}-[0-9a-f]\{12\}'
 
@@ -351,7 +345,7 @@ if is_office_file "$filename"; then
       fi
       if [ -f "$generated_pdf" ]; then
         # Keep the uploaded Office document and its PDF rendition together.
-        # The thumbnail/resource metadata stay under resource/.
+        # Generated renditions stay in the upload bundle; metadata stays under resource/.
         preview_pdf="$upload_file_dir/preview.pdf"
         cp -f "$generated_pdf" "$preview_pdf" || preview_pdf=""
       else
