@@ -148,6 +148,10 @@ wuwei.info.uploaded.markup = ( function () {
     var viewer = (resource.viewer && 'object' === typeof resource.viewer) ? resource.viewer : {};
     var embed = (viewer.embed && 'object' === typeof viewer.embed) ? viewer.embed : {};
     var snapshotSources = (resource.snapshotSources && 'object' === typeof resource.snapshotSources) ? resource.snapshotSources : {};
+    var previewUri = getOfficePreviewUri(node, resource, viewer, embed, snapshotSources);
+    if (previewUri) {
+      return previewUri;
+    }
     if (isOfficeResource(resource, mimeType)) {
       return resolveOfficeInfoUri(node, resource, viewer, embed, snapshotSources);
     }
@@ -201,7 +205,13 @@ wuwei.info.uploaded.markup = ( function () {
     if (wuwei.util && typeof wuwei.util.getResourceFileUri === 'function') {
       candidates.push(wuwei.util.getResourceFileUri(resource, 'preview', node));
     }
+    if (wuwei.util && typeof wuwei.util.getResourcePreviewUri === 'function') {
+      candidates.push(wuwei.util.getResourcePreviewUri(node));
+    }
     candidates.push(
+      resource.uri,
+      resource.canonicalUri,
+      resource.identity && resource.identity.uri,
       embed.previewUri,
       embed.uri,
       viewer.previewUri,
@@ -276,10 +286,19 @@ wuwei.info.uploaded.markup = ( function () {
     }
     try {
       parsed = new URL(text, window.location.href);
-      return /\.pdf$/i.test(decodeURIComponent(parsed.searchParams.get('path') || '').split('#')[0].split('?')[0]);
+      return /\.pdf$/i.test(safeDecodeURIComponent(parsed.searchParams.get('path') || '').split('#')[0].split('?')[0]);
     }
     catch (e) {
-      return /\.pdf$/i.test(decodeURIComponent(text).split('#')[0].split('?')[0]);
+      return /\.pdf$/i.test(safeDecodeURIComponent(text).split('#')[0].split('?')[0]);
+    }
+  }
+
+  function safeDecodeURIComponent(value) {
+    try {
+      return decodeURIComponent(String(value || ''));
+    }
+    catch (e) {
+      return String(value || '');
     }
   }
 
