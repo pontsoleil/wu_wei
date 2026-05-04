@@ -506,6 +506,140 @@ wuwei.menu.note = wuwei.menu.note || {};
     return decodeBase64Utf8(match[1]).trim();
   }
 
+  function summarizeImportedNote(noteJson) {
+    const summary = {
+      note_id: noteJson && noteJson.note_id,
+      pages: 0,
+      contentsGroups: [],
+      pageMarkers: []
+    };
+    const pages = Array.isArray(noteJson && noteJson.pages) ? noteJson.pages : [];
+    summary.pages = pages.length;
+    pages.forEach(function (page, pageIndex) {
+      (page.groups || []).forEach(function (group) {
+        if (group && group.type === 'contents') {
+          summary.contentsGroups.push({
+            page: pageIndex + 1,
+            id: group.id,
+            documentRef: group.documentRef,
+            mediaRef: group.mediaRef,
+            pageCount: group.pageCount,
+            members: (group.members || []).length,
+            entries: (group.entries || []).map(function (entry) {
+              return {
+                nodeId: entry && entry.nodeId,
+                pageNumber: entry && entry.pageNumber
+              };
+            })
+          });
+        }
+      });
+      (page.nodes || []).forEach(function (node) {
+        if (node && (node.type === 'PageMarker' || node.topicKind === 'contents-page')) {
+          summary.pageMarkers.push({
+            page: pageIndex + 1,
+            id: node.id,
+            type: node.type,
+            topicKind: node.topicKind,
+            contentsRef: node.contentsRef,
+            documentRef: node.documentRef,
+            pageNumber: node.pageNumber,
+            label: node.label
+          });
+        }
+      });
+    });
+    return summary;
+  }
+
+  function decodeZipName(bytes) {
+    try {
+      return new TextDecoder('utf-8').decode(bytes);
+    }
+    catch (e) {
+      let out = '';
+      for (let i = 0; i < bytes.length; i += 1) {
+        out += String.fromCharCode(bytes[i]);
+      }
+      return out;
+    }
+  }
+
+  function findEndOfCentralDirectory(view) {
+    const min = Math.max(0, view.byteLength - 65557);
+    for (let p = view.byteLength - 22; p >= min; p -= 1) {
+      if (view.getUint32(p, true) === 0x06054b50) {
+        return p;
+      }
+    }
+    throw new Error('ERROR ZIP CENTRAL DIRECTORY NOT FOUND');
+  }
+
+  function inflateRawZipData(data) {
+    if (typeof DecompressionStream !== 'function') {
+      return Promise.reject(new Error('ERROR Browser cannot inflate ZIP data'));
+    }
+    const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    return new Response(stream).arrayBuffer();
+  }
+
+  function readZipEntryText(file, targetName) {
+    targetName = String(targetName || 'note.txt').replace(/\\/g, '/');
+    return file.arrayBuffer().then(function (buffer) {
+      const view = new DataView(buffer);
+      const bytes = new Uint8Array(buffer);
+      const eocd = findEndOfCentralDirectory(view);
+      const entryCount = view.getUint16(eocd + 10, true);
+      let cdOffset = view.getUint32(eocd + 16, true);
+      let found = null;
+
+      for (let i = 0; i < entryCount; i += 1) {
+        if (view.getUint32(cdOffset, true) !== 0x02014b50) {
+          throw new Error('ERROR ZIP CENTRAL DIRECTORY IS INVALID');
+        }
+        const method = view.getUint16(cdOffset + 10, true);
+        const compressedSize = view.getUint32(cdOffset + 20, true);
+        const fileNameLength = view.getUint16(cdOffset + 28, true);
+        const extraLength = view.getUint16(cdOffset + 30, true);
+        const commentLength = view.getUint16(cdOffset + 32, true);
+        const localHeaderOffset = view.getUint32(cdOffset + 42, true);
+        const name = decodeZipName(bytes.slice(cdOffset + 46, cdOffset + 46 + fileNameLength)).replace(/\\/g, '/');
+        if (name === targetName || name.replace(/^.*\//, '') === targetName) {
+          found = { method, compressedSize, localHeaderOffset, name };
+          break;
+        }
+        cdOffset += 46 + fileNameLength + extraLength + commentLength;
+      }
+
+      if (!found) {
+        throw new Error('ERROR note.txt not found in ZIP');
+      }
+      if (view.getUint32(found.localHeaderOffset, true) !== 0x04034b50) {
+        throw new Error('ERROR ZIP LOCAL HEADER IS INVALID');
+      }
+      const localNameLength = view.getUint16(found.localHeaderOffset + 26, true);
+      const localExtraLength = view.getUint16(found.localHeaderOffset + 28, true);
+      const dataStart = found.localHeaderOffset + 30 + localNameLength + localExtraLength;
+      const compressed = bytes.slice(dataStart, dataStart + found.compressedSize);
+      if (found.method === 0) {
+        return compressed.buffer.slice(compressed.byteOffset, compressed.byteOffset + compressed.byteLength);
+      }
+      if (found.method === 8) {
+        return inflateRawZipData(compressed);
+      }
+      throw new Error('ERROR Unsupported ZIP compression method: ' + found.method);
+    }).then(function (textBuffer) {
+      return new TextDecoder('utf-8').decode(textBuffer);
+    });
+  }
+
+  function readNoteJsonFromZipInBrowser(file) {
+    return readZipEntryText(file, 'note.txt').then(function (noteText) {
+      const noteJsonText = noteJsonTextFromFileText(noteText);
+      return JSON.parse(noteJsonText);
+    });
+  }
+
   function downloadFile() {
     try {
       const current = wuwei.common.current || {};
@@ -612,6 +746,16 @@ wuwei.menu.note = wuwei.menu.note || {};
       wuwei.menu.snackbar.open({ type: 'error', message: 'ERROR NOT LOGGED IN' });
       return;
     }
+    const clientNotePromise = readNoteJsonFromZipInBrowser(file)
+      .then(function (clientNoteJson) {
+        console.log('[WuWei import debug] browser ZIP note JSON', clientNoteJson);
+        console.log('[WuWei import debug] browser ZIP summary', summarizeImportedNote(clientNoteJson));
+        return clientNoteJson;
+      })
+      .catch(function (e) {
+        console.warn('[WuWei import debug] browser ZIP note JSON read failed:', e);
+        return null;
+      });
     const form = new FormData();
     form.append('user_id', cu.user_id);
     form.append('file', file);
@@ -635,8 +779,22 @@ wuwei.menu.note = wuwei.menu.note || {};
         console.log('import response:', text);
         throw new Error('ERROR Invalid imported note JSON');
       }
-      applyImportedNote(noteJson);
-      wuwei.menu.snackbar.open({ type: 'success', message: 'Imported note bundle' });
+      console.log('[WuWei import debug] server import-note response text', text);
+      console.log('[WuWei import debug] server import-note JSON', noteJson);
+      console.log('[WuWei import debug] server import-note summary', summarizeImportedNote(noteJson));
+      return clientNotePromise.then(function (clientNoteJson) {
+        if (clientNoteJson) {
+          const clientText = JSON.stringify(clientNoteJson);
+          const serverText = JSON.stringify(noteJson);
+          console.log('[WuWei import debug] server/browser JSON equal', serverText === clientText);
+          if (serverText !== clientText) {
+            console.log('[WuWei import debug] browser-only JSON text', clientText);
+            console.log('[WuWei import debug] server JSON text', serverText);
+          }
+        }
+        applyImportedNote(noteJson);
+        wuwei.menu.snackbar.open({ type: 'success', message: 'Imported note bundle' });
+      });
     }).catch(function (e) {
       console.error(e);
       wuwei.menu.snackbar.open({
