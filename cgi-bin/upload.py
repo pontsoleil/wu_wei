@@ -12,6 +12,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -220,19 +221,27 @@ def make_office_pdf(src: Path, outdir: Path) -> Path | None:
     try:
         outdir.mkdir(parents=True, exist_ok=True)
 
-        cp = subprocess.run(
-            [
-                cmd,
-                "--headless",
-                "--convert-to",
-                "pdf",
-                "--outdir",
-                str(outdir),
-                str(src),
-            ],
-            capture_output=True,
-            text=True,
-        )
+        with tempfile.TemporaryDirectory(prefix="wuwei-office-profile-") as profile:
+            profile_uri = Path(profile).resolve().as_uri()
+            cp = subprocess.run(
+                [
+                    cmd,
+                    "--headless",
+                    "--nologo",
+                    "--nofirststartwizard",
+                    "--nodefault",
+                    "--nolockcheck",
+                    "--norestore",
+                    f"-env:UserInstallation={profile_uri}",
+                    "--convert-to",
+                    "pdf",
+                    "--outdir",
+                    str(outdir),
+                    str(src),
+                ],
+                capture_output=True,
+                text=True,
+            )
 
         pdf_path = outdir / f"{src.stem}.pdf"
 
@@ -244,8 +253,17 @@ def make_office_pdf(src: Path, outdir: Path) -> Path | None:
             office_stderr=cp.stderr.strip(),
         )
 
-        if cp.returncode == 0 and pdf_path.exists():
-            return pdf_path
+        if cp.returncode == 0:
+            if pdf_path.exists():
+                return pdf_path
+            generated = sorted(
+                outdir.glob("*.pdf"),
+                key=lambda p: p.stat().st_mtime if p.exists() else 0,
+                reverse=True,
+            )
+            if generated:
+                debug_kv(office_pdf_fallback=str(generated[0]), expected=str(pdf_path))
+                return generated[0]
 
     except Exception as e:
         debug_kv(office_pdf_exception=str(e), src=str(src), outdir=str(outdir))

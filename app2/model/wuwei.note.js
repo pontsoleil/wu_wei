@@ -244,8 +244,12 @@ wuwei.note = (function () {
         kind: String(media.kind || src.kind || 'general'),
         mimeType: String(media.mimeType || src.mimeType || src.format || 'text/plain'),
         downloadable: media.downloadable === true || src.downloadable === true,
-        duration: (typeof media.duration !== 'undefined') ? media.duration : (src.duration || null)
+        duration: (typeof media.duration !== 'undefined') ? media.duration : (src.duration || null),
+        pageCount: Number.isFinite(Number(media.pageCount || src.pageCount))
+          ? Number(media.pageCount || src.pageCount)
+          : undefined
       },
+      contents: (src.contents && typeof src.contents === 'object') ? util.clone(src.contents) : undefined,
       viewer: viewer,
       storage: storage,
       snapshotSources: snapshotSources,
@@ -317,6 +321,9 @@ wuwei.note = (function () {
         thumbnailUri: uploadThumbnail
       };
     }
+    if (src.type === 'Resource' || (src.storage && typeof src.storage === 'object')) {
+      return runtimeResourceFromDefinition(src, node);
+    }
     return {
       id: String(src.id || ''),
       kind: src.kind || (src.mimeType && /^image\//i.test(src.mimeType) ? 'image' : (src.mimeType && /^video\//i.test(src.mimeType) ? 'video' : ((util.isOfficeDocument && util.isOfficeDocument(src.uri || '')) ? 'office' : 'general'))),
@@ -354,6 +361,11 @@ wuwei.note = (function () {
       mimeType: String(src.media.mimeType || ''),
       title: String(src.identity.title || (node && node.label) || ''),
       owner: String(src.rights.owner || ''),
+      media: util.clone(src.media || {}),
+      contents: src.contents && typeof src.contents === 'object' ? util.clone(src.contents) : undefined,
+      pageCount: src.contents && Number.isFinite(Number(src.contents.pageCount))
+        ? Number(src.contents.pageCount)
+        : (src.media && Number.isFinite(Number(src.media.pageCount)) ? Number(src.media.pageCount) : undefined),
       copyright: String(src.rights.copyright || ''),
       license: String(src.rights.license || ''),
       attribution: String(src.rights.attribution || ''),

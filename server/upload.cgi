@@ -346,6 +346,9 @@ if is_office_file "$filename"; then
       "$dest_file" >"$office_log" 2>&1; then
       stem="${filename%.*}"
       generated_pdf="$office_outdir/$stem.pdf"
+      if [ ! -f "$generated_pdf" ]; then
+        generated_pdf="$(find "$office_outdir" -maxdepth 1 -type f -name '*.pdf' -printf '%T@ %p\n' 2>/dev/null | sort -nr | awk 'NR==1{sub(/^[^ ]+ /,""); print}')"
+      fi
       if [ -f "$generated_pdf" ]; then
         # Keep the uploaded Office document and its PDF rendition together.
         # The thumbnail/resource metadata stay under resource/.
