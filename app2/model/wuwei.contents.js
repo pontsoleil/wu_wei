@@ -65,20 +65,31 @@ wuwei.contents = wuwei.contents || {};
   function isPdfResourceNode(node) {
     var resource = (node && node.resource && typeof node.resource === 'object') ? node.resource : {};
     var media = (resource.media && typeof resource.media === 'object') ? resource.media : {};
+    var contents = (resource.contents && typeof resource.contents === 'object') ? resource.contents : {};
     var mime = String(resource.mimeType || media.mimeType || node && (node.contenttype || node.contentType) || '').toLowerCase();
     var storageFiles = (resource.storage && Array.isArray(resource.storage.files)) ? resource.storage.files : [];
     var originalFile = storageFiles.find(function (file) {
       return file && String(file.role || '').toLowerCase() === 'original';
     }) || {};
+    var previewFile = storageFiles.find(function (file) {
+      return file && String(file.role || '').toLowerCase() === 'preview';
+    }) || {};
     var fileName = String(resource.file || resource.filename || originalFile.path || '').toLowerCase();
+    var previewName = String(previewFile.path || previewFile.file || '').toLowerCase();
     var uri = String(
       (util && typeof util.getResourceOriginalUri === 'function' ? util.getResourceOriginalUri(node) : '') ||
       resource.canonicalUri ||
       resource.uri ||
       ''
     ).toLowerCase();
+    var hasPageAxis = String(contents.type || '').toLowerCase() === 'pdf' &&
+      Number(contents.pageCount || media.pageCount || resource.pageCount || node && node.pageCount || 0) > 0;
     return !!(node && node.type === 'Content' &&
-      (mime.indexOf('application/pdf') === 0 || /\.pdf(?:[?#].*)?$/.test(uri) || /\.pdf(?:[?#].*)?$/.test(fileName)));
+      (mime.indexOf('application/pdf') === 0 ||
+        /\.pdf(?:[?#].*)?$/.test(uri) ||
+        /\.pdf(?:[?#].*)?$/.test(fileName) ||
+        /\.pdf(?:[?#].*)?$/.test(previewName) ||
+        hasPageAxis));
   }
 
   function getDocumentPageCount(node) {
@@ -421,14 +432,14 @@ wuwei.contents = wuwei.contents || {};
       : null;
     if (!isPdfResourceNode(documentNode)) {
       if (!option.silent) {
-        window.alert('PDF文書を 1 件選択してから contents を作成してください。');
+        window.alert('PDFまたはOffice文書を 1 件選択してから contents を作成してください。');
       }
       return null;
     }
     pageCount = getDocumentPageCount(documentNode);
     if (!pageCount) {
       if (!option.silent) {
-        window.alert('PDFのページ数が未取得のため contents を作成できません。アップロードし直すか resource の pageCount を設定してください。');
+        window.alert('文書のページ数が未取得のため contents を作成できません。アップロードし直すか resource の pageCount を設定してください。');
       }
       return null;
     }
