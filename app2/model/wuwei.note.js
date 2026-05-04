@@ -268,30 +268,68 @@ wuwei.note = (function () {
     var viewer = (src.viewer && typeof src.viewer === 'object') ? src.viewer : {};
     var embed = (viewer.embed && typeof viewer.embed === 'object') ? viewer.embed : {};
     var snapshotSources = (src.snapshotSources && typeof src.snapshotSources === 'object') ? src.snapshotSources : {};
-    var uri = String(src.uri || embed.uri || snapshotSources.previewUri || src.canonicalUri || snapshotSources.originalUri || '');
+    var uri = String(src.canonicalUri || src.uri || embed.uri || src.url || snapshotSources.previewUri || snapshotSources.originalUri || '');
     var uploadId, uploadDate, uploadBase, uploadPreview, uploadThumbnail;
     var currentUserId = String((state.currentUser && state.currentUser.user_id) || '');
     if (src.kind === 'upload' && src.id && src.date) {
       uploadId = String(src.id || '');
       uploadDate = String(src.date || '').replace(/\\/g, '/').replace(/^\/|\/$/g, '');
       uploadBase = uploadDate + '/' + uploadId + '/';
-      uploadPreview = util.toPublicResourceUri('upload', uploadBase + 'preview.pdf', currentUserId);
-      uploadThumbnail = util.toPublicResourceUri('upload', uploadBase + 'thumbnail.jpg', currentUserId);
       var uploadOriginalFile = String(src.file || src.filename || src.name || '').replace(/\\/g, '/').split('/').pop();
+      var uploadStorage = normalizeStorage(src.storage);
+      if (src.storage && src.storage.manifest) {
+        uploadStorage.manifest = util.clone(src.storage.manifest);
+      }
+      if (!uploadStorage.files.length) {
+        uploadStorage = {
+          managed: true,
+          copyPolicy: 'reference',
+          manifest: { area: 'upload', path: uploadBase + 'manifest.json' },
+          files: [
+            uploadOriginalFile ? { role: 'original', area: 'upload', path: uploadBase + uploadOriginalFile, mimeType: /\.pdf$/i.test(uploadOriginalFile) ? 'application/pdf' : 'application/octet-stream' } : null,
+            { role: 'thumbnail', area: 'upload', path: uploadBase + 'thumbnail.jpg', mimeType: 'image/jpeg' }
+          ].filter(Boolean)
+        };
+      }
+      uploadPreview = storageFileUrl(uploadStorage, 'preview');
+      uploadThumbnail = storageFileUrl(uploadStorage, 'thumbnail') ||
+        util.toPublicResourceUri('upload', uploadBase + 'thumbnail.jpg', currentUserId);
+      var uploadOriginal = storageFileUrl(uploadStorage, 'original');
+      if (!uploadOriginal && uploadOriginalFile) {
+        uploadOriginal = util.toPublicResourceUri('upload', uploadBase + uploadOriginalFile, currentUserId);
+      }
+      var uploadMedia = src.media && typeof src.media === 'object' ? util.clone(src.media) : {};
+      var uploadContents = src.contents && typeof src.contents === 'object' ? util.clone(src.contents) : null;
+      var uploadMimeType = String(uploadMedia.mimeType || src.mimeType || '');
+      if (!uploadMimeType && /\.pdf$/i.test(uploadOriginalFile)) {
+        uploadMimeType = 'application/pdf';
+      }
+      if (!uploadMedia.kind && /^application\/pdf/i.test(uploadMimeType)) {
+        uploadMedia.kind = 'document';
+      }
+      if (!uploadMedia.mimeType) {
+        uploadMedia.mimeType = uploadMimeType;
+      }
+      if (!uploadMedia.downloadable && /^application\/pdf/i.test(uploadMimeType)) {
+        uploadMedia.downloadable = true;
+      }
+      var uploadViewerUri = uploadPreview || uploadOriginal;
       return {
         id: uploadId,
         kind: 'upload',
-        uri: uploadPreview,
-        canonicalUri: uploadOriginalFile ? util.toPublicResourceUri('upload', uploadBase + uploadOriginalFile, state.currentUser && state.currentUser.user_id) : '',
-        mimeType: '',
+        uri: uploadViewerUri,
+        canonicalUri: uploadOriginal,
+        mimeType: uploadMimeType,
         title: String(src.title || (node && node.label) || ''),
         file: uploadOriginalFile,
         owner: currentUserId,
-        copyright: '',
-        license: '',
-        attribution: '',
-        rights: { owner: currentUserId, copyright: '', license: '', attribution: '' },
-        audit: {
+        media: uploadMedia,
+        contents: uploadContents || undefined,
+        copyright: String(src.copyright || ''),
+        license: String((src.rights && src.rights.license) || src.license || ''),
+        attribution: String((src.rights && src.rights.attribution) || src.attribution || ''),
+        rights: src.rights && typeof src.rights === 'object' ? util.clone(src.rights) : { owner: currentUserId, copyright: '', license: '', attribution: '' },
+        audit: src.audit && typeof src.audit === 'object' ? util.clone(src.audit) : {
           owner: currentUserId,
           createdBy: currentUserId,
           createdAt: '',
@@ -301,21 +339,13 @@ wuwei.note = (function () {
         viewer: {
           supportedModes: ['infoPane', 'newTab', 'newWindow', 'download'],
           defaultMode: 'infoPane',
-          embed: { enabled: true, uri: uploadPreview, thumbnailUri: uploadThumbnail },
+          embed: { enabled: true, uri: uploadViewerUri, thumbnailUri: uploadThumbnail },
           thumbnailUri: uploadThumbnail
         },
-        storage: {
-          managed: true,
-          copyPolicy: 'reference',
-          manifest: { area: 'upload', path: uploadBase + 'manifest.json' },
-          files: [
-            uploadOriginalFile ? { role: 'original', area: 'upload', path: uploadBase + uploadOriginalFile, mimeType: 'application/octet-stream' } : null,
-            { role: 'thumbnail', area: 'upload', path: uploadBase + 'thumbnail.jpg', mimeType: 'image/jpeg' },
-            { role: 'preview', area: 'upload', path: uploadBase + 'preview.pdf', mimeType: 'application/pdf' }
-          ].filter(Boolean)
-        },
+        storage: uploadStorage,
         snapshotSources: {
-          previewUri: uploadPreview,
+          previewUri: uploadPreview || undefined,
+          originalUri: uploadOriginal || undefined,
           thumbnailUri: uploadThumbnail
         },
         thumbnailUri: uploadThumbnail
