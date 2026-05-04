@@ -287,7 +287,7 @@ existing_resource_dir=""
 if [ -n "$existing_resource_dir" ]; then
   uuid="${existing_resource_dir##*/}"
 else
-  uuid="$upload_file_uuid"
+  uuid="_$(uuidgen | tr 'A-Z' 'a-z')"
 fi
 uuidrgx='[0-9a-f]\{8\}-[0-9a-f]\{4\}-[1-5][0-9a-f]\{3\}-[89ab][0-9a-f]\{3\}-[0-9a-f]\{12\}'
 
@@ -315,7 +315,7 @@ protected_file_uri() {
 }
 
 # protected runtime file uri; resource JSON stores area/path instead.
-file_uri="$(protected_file_uri upload "$year/$month/$day/$upload_file_uuid/$filename")"
+file_uri="$(protected_file_uri upload "$upload_relpath")"
 
 # --- detect actual file type ----------------------------------------
 content_type="$(file -b -i -- "$dest_file" 2>/dev/null || true)"
@@ -466,7 +466,7 @@ if is_office_file "$filename"; then media_kind="document"; fi
 mkdir -p "$sha_index_dir" || die_json "ERROR: cannot mkdir $sha_index_dir"
 cat >"$manifest_file" <<JSON || die_json "ERROR: cannot write manifest file $manifest_file"
 {
-  "id": "$(json_escape "$uuid")",
+  "id": "$(json_escape "$upload_file_uuid")",
   "type": "UploadResource",
   "version": 1,
   "created_at": "$(json_escape "$created_at")",
@@ -485,7 +485,7 @@ JSON
 cat >"$sha_index_file" <<JSON || die_json "ERROR: cannot write sha index $sha_index_file"
 {
   "sha256": "$(json_escape "$original_sha")",
-  "upload_id": "$(json_escape "$uuid")",
+  "upload_id": "$(json_escape "$upload_file_uuid")",
   "date": "$(json_escape "$upload_file_date")",
   "file": "$(json_escape "$filename")"
 }
@@ -530,7 +530,7 @@ cat >"$resource_file" <<JSON || die_json "ERROR: cannot write resource file $res
       {
         "role": "original",
         "area": "upload",
-        "path": "$(json_escape "$year/$month/$day/$upload_file_uuid/$filename")",
+        "path": "$(json_escape "$upload_relpath")",
         "mimeType": "$(json_escape "$content_type")",
         "size": ${totalsize:-0},
         "sha256": "$(json_escape "$original_sha")"
