@@ -39,6 +39,7 @@ error_response() {
 
 json_response_file() {
   printf '%s\r\n' 'Content-Type: application/json; charset=UTF-8'
+  printf '%s\r\n' 'Cache-Control: no-store'
   printf '\r\n'
   cat "$1"
   exit 0
@@ -114,6 +115,15 @@ single_line_meta() {
   tr '\r\n\t' '   ' | sed 's/  */ /g; s/^ //; s/ $//'
 }
 
+is_zip_file() {
+  file_path=$1
+  if file -b "$file_path" 2>/dev/null | grep -qi 'zip'; then
+    return 0
+  fi
+  # ZIP files begin with PK. Match Python import-note.py's magic-byte fallback.
+  head -c 4 "$file_path" 2>/dev/null | od -An -tx1 | tr -d ' \n' | grep -qi '^504b0304'
+}
+
 cl=${CONTENT_LENGTH:-0}
 [ "${cl:-0}" -gt 0 ] 2>/dev/null || error_response 'ERROR FILE NOT SPECIFIED'
 
@@ -133,7 +143,7 @@ resource_base=$(resolve_env_path resource "$user_id" || true)
 [ -n "${upload_base:-}" ] || error_response 'ERROR UPLOAD DIRECTORY NOT DEFINED'
 [ -n "${resource_base:-}" ] || error_response 'ERROR RESOURCE DIRECTORY NOT DEFINED'
 
-if file -b "$UPLOAD_FILE" 2>/dev/null | grep -qi 'zip'; then
+if is_zip_file "$UPLOAD_FILE"; then
   archive_extract "$UPLOAD_FILE" "$EXTRACT_DIR" || error_response 'ERROR ZIP EXTRACT FAILED'
   found_note="$EXTRACT_DIR/note.txt"
   [ -f "${found_note:-}" ] || error_response 'ERROR NOTE TEXT NOT FOUND'
