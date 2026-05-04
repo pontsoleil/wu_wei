@@ -149,10 +149,8 @@ if file -b "$UPLOAD_FILE" 2>/dev/null | grep -qi 'zip'; then
       src="$EXTRACT_DIR/upload/$rel"
       dst="$upload_base/$rel"
       [ -d "$src" ] || continue
-      if [ ! -d "$dst" ]; then
-        mkdir -p "$(dirname "$dst")" || error_response 'ERROR UPLOAD DIRECTORY CREATE FAILED'
-        cp -R "$src" "$dst" || error_response 'ERROR UPLOAD RESTORE FAILED'
-      fi
+      mkdir -p "$dst" || error_response 'ERROR UPLOAD DIRECTORY CREATE FAILED'
+      cp -R "$src/." "$dst/" || error_response 'ERROR UPLOAD RESTORE FAILED'
     done
   fi
 
@@ -166,10 +164,8 @@ if file -b "$UPLOAD_FILE" 2>/dev/null | grep -qi 'zip'; then
       src="$EXTRACT_DIR/resource/$rel"
       dst="$resource_base/$rel"
       [ -d "$src" ] || continue
-      if [ ! -d "$dst" ]; then
-        mkdir -p "$(dirname "$dst")" || error_response 'ERROR RESOURCE DIRECTORY CREATE FAILED'
-        cp -R "$src" "$dst" || error_response 'ERROR RESOURCE RESTORE FAILED'
-      fi
+      mkdir -p "$dst" || error_response 'ERROR RESOURCE DIRECTORY CREATE FAILED'
+      cp -R "$src/." "$dst/" || error_response 'ERROR RESOURCE RESTORE FAILED'
     done
   fi
 else

@@ -84,10 +84,8 @@ def _restore_upload_dirs(extract_dir: Path, upload_root: Path) -> None:
         if ".." in rel.parts:
             continue
         dst = upload_root / rel
-        if dst.exists():
-            continue
         dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(src, dst)
+        shutil.copytree(src, dst, dirs_exist_ok=True)
 
 
 def _restore_resource_dirs(extract_dir: Path, resource_root: Path) -> None:
@@ -101,10 +99,8 @@ def _restore_resource_dirs(extract_dir: Path, resource_root: Path) -> None:
         if ".." in rel.parts:
             continue
         dst = resource_root / rel
-        if dst.exists():
-            continue
         dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(src, dst)
+        shutil.copytree(src, dst, dirs_exist_ok=True)
 
 
 def _save_note_meta(note_root: Path, user_id: str, note_json_text: str) -> str:
