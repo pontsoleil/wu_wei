@@ -18,6 +18,7 @@ wuwei.common = (function () {
   var constants = window.constants || {};
   var simulation = null;
   var log = true;
+  var GUEST_USER_ID = 'guest';
 
   function createTempOwnerId() {
     var key = 'wuwei_temp_owner_id';
@@ -41,9 +42,9 @@ wuwei.common = (function () {
   function createGuestCurrentUser() {
     return {
       login: 'guest',
-      user_id: TEMP_OWNER_ID,
+      user_id: GUEST_USER_ID,
       name: 'Guest',
-      role: null,
+      role: 'author',
       token: null
     };
   }
@@ -53,7 +54,21 @@ wuwei.common = (function () {
   }
 
   function isTemporaryOwnerId(ownerId) {
-    return 'string' === typeof ownerId && 0 === ownerId.indexOf('guest_');
+    return ownerId === GUEST_USER_ID || ('string' === typeof ownerId && 0 === ownerId.indexOf('guest_'));
+  }
+
+  function isLocalHost() {
+    var host = (window.location && window.location.hostname || '').toLowerCase();
+    return host === '' || host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  }
+
+  function isLoginRequiredByOption() {
+    var search = (window.location && window.location.search || '').replace(/^\?/, '');
+    return /(^|&)(login=required|required-login|force-login)(=true)?(&|$)/.test(search);
+  }
+
+  function isLocalGuestAllowed() {
+    return isLocalHost() && !isLoginRequiredByOption();
   }
 
   var timelineEdit = {
@@ -796,6 +811,10 @@ wuwei.common = (function () {
     state: state,
     TEMP_OWNER_ID: TEMP_OWNER_ID,
     createGuestCurrentUser: createGuestCurrentUser,
+    GUEST_USER_ID: GUEST_USER_ID,
+    isLocalHost: isLocalHost,
+    isLoginRequiredByOption: isLoginRequiredByOption,
+    isLocalGuestAllowed: isLocalGuestAllowed,
     getCurrentOwnerId: getCurrentOwnerId,
     isTemporaryOwnerId: isTemporaryOwnerId,
     previous: previous,

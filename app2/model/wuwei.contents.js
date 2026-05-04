@@ -182,7 +182,7 @@ wuwei.contents = wuwei.contents || {};
     option = option || {};
     return {
       id: option.id || makeUuid(),
-      type: 'Topic',
+      type: 'PageMarker',
       topicKind: 'contents-page',
       contentsRef: group.id,
       documentRef: group.documentRef,
@@ -194,6 +194,10 @@ wuwei.contents = wuwei.contents || {};
       size: { radius: 18 },
       color: '#ffffff',
       outline: '#4c6b8a',
+      style: {
+        font: common.defaultFont,
+        line: { kind: 'SOLID', color: '#4c6b8a', width: 1 }
+      },
       font: common.defaultFont,
       visible: true,
       changed: true,
@@ -207,7 +211,7 @@ wuwei.contents = wuwei.contents || {};
 
   function ensurePageNodeDefaults(group, node, index) {
     node.id = node.id || makeUuid();
-    node.type = node.type || 'Topic';
+    node.type = 'PageMarker';
     node.topicKind = 'contents-page';
     node.contentsRef = group.id;
     node.documentRef = group.documentRef;
@@ -218,6 +222,14 @@ wuwei.contents = wuwei.contents || {};
     node.size = { radius: Number((node.size && node.size.radius) || 18) };
     node.color = node.color || '#ffffff';
     node.outline = node.outline || '#4c6b8a';
+    node.style = (node.style && 'object' === typeof node.style) ? node.style : {};
+    node.style.font = node.style.font || common.defaultFont;
+    node.style.line = (node.style.line && 'object' === typeof node.style.line) ? node.style.line : {};
+    node.style.line.kind = node.style.line.kind || 'SOLID';
+    node.style.line.color = node.style.line.color || node.outline;
+    node.style.line.width = Math.max(0, Number(node.style.line.width || node.outlineWidth || 1));
+    node.outline = node.style.line.color;
+    node.outlineWidth = node.style.line.width;
     node.font = node.font || common.defaultFont;
     node.visible = (false !== node.visible);
     node.changed = true;
@@ -233,30 +245,6 @@ wuwei.contents = wuwei.contents || {};
     return value;
   }
 
-  function entryComment(node) {
-    return (node && node.description && 'string' === typeof node.description.body)
-      ? node.description.body
-      : '';
-  }
-
-  function syncEntryRecord(group, node) {
-    var entries, record;
-    if (!group || !node) { return null; }
-    group.entries = Array.isArray(group.entries) ? group.entries : [];
-    entries = group.entries;
-    record = entries.find(function (item) { return memberId(item) === node.id; });
-    if (!record) {
-      record = { role: 'entry', nodeId: node.id };
-      entries.push(record);
-    }
-    node.pageNumber = clampPageNumber(group, node.pageNumber);
-    record.role = record.role || 'entry';
-    record.nodeId = node.id;
-    record.pageNumber = node.pageNumber;
-    record.comment = entryComment(node);
-    return record;
-  }
-
   function layoutAxisGroup(group) {
     var axis, pageCount, length, orientation, anchor, members, range;
     if (!group) { return null; }
@@ -266,7 +254,7 @@ wuwei.contents = wuwei.contents || {};
     getMemberNodes(group).forEach(function (node) {
       pageCount = Math.max(pageCount, clampPageNumber(group, node && node.pageNumber));
     });
-    length = AXIS_LENGTH;
+    length = Math.max(60, Number(group.length || AXIS_LENGTH));
     orientation = (group.orientation === 'vertical') ? 'vertical' : 'horizontal';
     anchor = {
       x: (axis.anchor && Number.isFinite(Number(axis.anchor.x))) ? Number(axis.anchor.x) : ((group.origin && Number.isFinite(Number(group.origin.x))) ? Number(group.origin.x) : 0),
@@ -307,7 +295,6 @@ wuwei.contents = wuwei.contents || {};
     ids = [
       group.documentRef,
       group.mediaRef,
-      group.contents && group.contents.documentRef,
       point && point.documentRef
     ].filter(Boolean);
     for (var i = 0; i < ids.length; i += 1) {
@@ -352,7 +339,6 @@ wuwei.contents = wuwei.contents || {};
     }
     group.origin = group.origin || { x: Number(group.axis.anchor.x || 0), y: Number(group.axis.anchor.y || 0) };
     if (!Array.isArray(group.members)) { group.members = []; }
-    group.length = AXIS_LENGTH;
     group.entries = Array.isArray(group.entries) ? group.entries : [];
     if (!group.members.length && group.entries.length) {
       group.members = group.entries.map(function (entry, index) {
@@ -365,6 +351,7 @@ wuwei.contents = wuwei.contents || {};
         return !!member.nodeId;
       });
     }
+    group.length = Math.max(60, Number(group.length || AXIS_LENGTH));
     if (!group.documentRef) {
       var documentNode = findDocumentNodeForGroup(group, null);
       if (documentNode) {
@@ -376,17 +363,8 @@ wuwei.contents = wuwei.contents || {};
       if (!node.documentRef && group.documentRef) {
         node.documentRef = group.documentRef;
       }
-      syncEntryRecord(group, node);
     });
-    if (!group.entries.length && group.members.length) {
-      var firstMember = group.members[0];
-      var firstId = firstMember && firstMember.nodeId ? firstMember.nodeId : firstMember;
-      group.entries = [{
-        role: 'entry',
-        nodeId: firstId,
-        pageNumber: 1
-      }];
-    }
+    delete group.contents;
     ensureDocumentEntryLink(group);
     return layoutAxisGroup(group);
   }
@@ -468,30 +446,17 @@ wuwei.contents = wuwei.contents || {};
       axis: { mode: 'document', unit: 'page', start: 1, end: pageCount, anchor: { x: origin.x, y: origin.y } },
       origin: origin,
       length: AXIS_LENGTH,
-      members: [],
-      contents: {
-        type: 'pdf',
-        axis: { unit: 'page', nodeType: 'page' },
-        documentRef: documentNode.id,
-        pageCount: pageCount
-      }
+      members: []
     });
     group.documentRef = documentNode.id;
     group.mediaRef = documentNode.id;
     group.pageCount = pageCount;
-    group.contents = {
-      type: 'pdf',
-      axis: { unit: 'page', nodeType: 'page' },
-      documentRef: documentNode.id,
-      pageCount: pageCount
-    };
     page.groups.push(group);
     nodes = [createPageNode(group, 1, { axisRole: 'entry' })];
     nodes.forEach(function (node) {
       page.nodes.push(node);
     });
     setMemberIds(group, nodes.map(function (node) { return node.id; }));
-    group.entries = [{ role: 'entry', nodeId: nodes[0].id, pageNumber: 1 }];
     page.links.push(makeDocumentEntryLink(group, documentNode, nodes[0]));
     normalizeAxisGroup(group);
     rebuildGraphAndRefresh();
@@ -503,6 +468,19 @@ wuwei.contents = wuwei.contents || {};
     props = props || {};
     if (props.orientation === 'vertical' || props.orientation === 'horizontal') {
       group.orientation = props.orientation;
+    }
+    if (Number.isFinite(Number(props.length))) {
+      group.length = Math.max(60, Number(props.length));
+    }
+    if (Number.isFinite(Number(props.strokeWidth))) {
+      group.spine = group.spine || {};
+      group.spine.width = Math.max(1, Number(props.strokeWidth));
+      group.strokeWidth = group.spine.width;
+    }
+    if (props.strokeColor) {
+      group.spine = group.spine || {};
+      group.spine.color = props.strokeColor;
+      group.strokeColor = props.strokeColor;
     }
     normalizeAxisGroup(group);
     rebuildGraphAndRefresh();
@@ -524,7 +502,6 @@ wuwei.contents = wuwei.contents || {};
     node = createPageNode(group, pageNumber, { axisRole: 'entry', comment: entryOption.comment || '' });
     page.nodes.push(node);
     group.members.push(node.id);
-    syncEntryRecord(group, node);
     normalizeAxisGroup(group);
     rebuildGraphAndRefresh();
     return node;
@@ -559,7 +536,6 @@ wuwei.contents = wuwei.contents || {};
     node.pageNumber = clampPageNumber(group, node.pageNumber);
     page.nodes.push(node);
     group.members.push(node.id);
-    syncEntryRecord(group, node);
     normalizeAxisGroup(group);
     rebuildGraphAndRefresh();
     return true;
@@ -570,7 +546,6 @@ wuwei.contents = wuwei.contents || {};
     if (!group || !isContentsGroup(group)) { return false; }
     ensurePageNodeDefaults(group, node, 0);
     node.pageNumber = clampPageNumber(group, node.pageNumber);
-    syncEntryRecord(group, node);
     normalizeAxisGroup(group);
     rebuildGraphAndRefresh();
     return true;
@@ -582,7 +557,7 @@ wuwei.contents = wuwei.contents || {};
     var group = spec && spec.group;
     var point = spec && spec.point;
     if (!page || !group) { return false; }
-    if (!point && isContentsAxisLink(target)) {
+    if (!point && (isContentsAxisLink(target) || isContentsGroup(target))) {
       page.links = (page.links || []).filter(function (link) {
         return !(link && (link.groupRef === group.id || link.contentsRef === group.id));
       });
@@ -595,7 +570,6 @@ wuwei.contents = wuwei.contents || {};
     }
     if (!point) { return false; }
     group.members = (group.members || []).filter(function (item) { return memberId(item) !== point.id; });
-    group.entries = (group.entries || []).filter(function (item) { return memberId(item) !== point.id; });
     page.links = (page.links || []).filter(function (link) {
       return !(link && (link.from === point.id || link.to === point.id || link.contentsRef === group.id && link.to === point.id));
     });
@@ -703,25 +677,6 @@ wuwei.contents = wuwei.contents || {};
     return buildDirectPdfViewerUrl(uri, pageNumber);
   }
 
-  function getPageOpenUrl(point) {
-    var spec = getPageTargetSpec(point);
-    if (!spec || !spec.documentNode) { return ''; }
-    return getDocumentViewerUrl(spec.documentNode, spec.pageNumber);
-  }
-
-  function openPageInInfo(point) {
-    var spec = getPageTargetSpec(point);
-    if (!spec || !spec.documentNode || !wuwei.info || typeof wuwei.info.open !== 'function') {
-      return false;
-    }
-    wuwei.info.open(spec.documentNode, {
-      page: spec.pageNumber,
-      contentsPage: true,
-      pdfjsUri: getDocumentViewerUrl(spec.documentNode, spec.pageNumber)
-    });
-    return true;
-  }
-
   ns.getCurrentPage = getCurrentPage;
   ns.isContentsGroup = isContentsGroup;
   ns.isContentsPageNode = isContentsPageNode;
@@ -740,7 +695,5 @@ wuwei.contents = wuwei.contents || {};
   ns.buildContentsAxisPseudoLink = buildContentsAxisPseudoLink;
   ns.getPageTargetSpec = getPageTargetSpec;
   ns.getDocumentViewerUrl = getDocumentViewerUrl;
-  ns.getPageOpenUrl = getPageOpenUrl;
-  ns.openPageInInfo = openPageInInfo;
 })(wuwei.contents);
 // wuwei.contents.js

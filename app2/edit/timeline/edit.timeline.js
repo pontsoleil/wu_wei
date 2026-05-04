@@ -32,6 +32,7 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
   var info = wuwei.info;
   var util = wuwei.util;
   var timeline = wuwei.timeline;
+  var applyToTimelineGroup = false;
 
   var currentTarget = null;
   var currentGroup = null;
@@ -197,6 +198,20 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
         }
       }
     });
+
+    jQuery('#editTimelinePointOutlineColorPalette').colorPalettePicker({
+      lines: 4,
+      bootstrap: 4,
+      dropdownTitle: '標準色',
+      buttonClass: 'btn btn-light btn-sm dropdown-toggle',
+      onSelected: function (color) {
+        var input = $('editTimelinePointOutlineColor');
+        if (input) {
+          input.value = color;
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      }
+    });
   }
 
   function applyPointStyle(point) {
@@ -212,7 +227,55 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
       $('editTimelinePointFontColor') ? $('editTimelinePointFontColor').value : point.font.color,
       point.font.color || '#303030'
     );
+    point.style = point.style || {};
+    point.style.line = point.style.line || {};
+    point.style.line.kind = point.style.line.kind || 'SOLID';
+    point.style.line.color = toHexColor(
+      $('editTimelinePointOutlineColor') ? $('editTimelinePointOutlineColor').value : (point.style.line.color || point.outline),
+      point.style.line.color || point.outline || '#666666'
+    );
+    point.style.line.width = Math.max(0, Number(
+      $('editTimelinePointOutlineWidth') ? $('editTimelinePointOutlineWidth').value : point.style.line.width
+    ) || 0);
+    point.outline = point.style.line.color;
+    point.outlineWidth = point.style.line.width;
     point.changed = true;
+  }
+
+  function clonePlain(value) {
+    return value && typeof value === 'object'
+      ? JSON.parse(JSON.stringify(value))
+      : value;
+  }
+
+  function applyPointStyleToGroup(sourcePoint) {
+    var group = currentGroup;
+    var members;
+    if (!sourcePoint || !applyToTimelineGroup || !group) {
+      return;
+    }
+    members = (group.members || []).map(function (member) {
+      var id = typeof member === 'string' ? member : member && member.id;
+      return id && model && typeof model.findNodeById === 'function'
+        ? model.findNodeById(id)
+        : null;
+    }).filter(function (node) {
+      return node && node.type === 'Segment';
+    });
+    members.forEach(function (node) {
+      if (node.id === sourcePoint.id) {
+        return;
+      }
+      node.color = sourcePoint.color;
+      node.outline = sourcePoint.outline;
+      node.outlineWidth = sourcePoint.outlineWidth;
+      node.style = clonePlain(sourcePoint.style || {});
+      node.font = clonePlain(sourcePoint.font || {});
+      node.changed = true;
+    });
+    if (wuwei.draw && typeof wuwei.draw.refresh === 'function') {
+      wuwei.draw.refresh();
+    }
   }
 
   function getInputSeconds(hiddenId, fallback) {
@@ -322,6 +385,20 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
     });
   }
 
+  function getDescriptionBody(point) {
+    if (point && point.description && typeof point.description === 'object') {
+      return point.description.body || '';
+    }
+    return '';
+  }
+
+  function buildDescription(body) {
+    return {
+      format: 'plain/text',
+      body: body || ''
+    };
+  }
+
   function configurePointPanel(point, group, mode) {
     var isEndpoint = point && (point.axisRole === 'start' || point.axisRole === 'end');
     var mediaStart = Number(point.mediaStart != null ? point.mediaStart : 0);
@@ -333,7 +410,7 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
     setInputValue('editTimelinePointMediaEnd', String(mediaEnd));
     setInputValue('editTimelinePointDuration', String(duration));
     $('editTimelinePointName').value = point.label || '';
-    $('editTimelinePointValue').value = (typeof point.value !== 'undefined') ? point.value : '';
+    $('editTimelinePointValue').value = getDescriptionBody(point);
     if ($('editTimelinePointColor')) {
       $('editTimelinePointColor').value = toHexColor(point.color || '#ffffff', '#ffffff');
     }
@@ -342,6 +419,20 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
         point.font && point.font.color ? point.font.color : '#303030',
         '#303030'
       );
+    }
+    if ($('editTimelinePointOutlineColor')) {
+      $('editTimelinePointOutlineColor').value = toHexColor(
+        (point.style && point.style.line && point.style.line.color) || point.outline || '#666666',
+        '#666666'
+      );
+    }
+    if ($('editTimelinePointOutlineWidth')) {
+      $('editTimelinePointOutlineWidth').value = Number(
+        (point.style && point.style.line && point.style.line.width) || point.outlineWidth || 1
+      );
+    }
+    if ($('applyToTimelineGroup')) {
+      $('applyToTimelineGroup').checked = !!applyToTimelineGroup;
     }
 
     $('edit-timeline-axis').style.display = 'none';
@@ -402,7 +493,7 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
         (menu.timeline && typeof menu.timeline.formatTime === 'function'
           ? menu.timeline.formatTime(mediaStart)
           : ''),
-      value: $('editTimelinePointValue').value || ''
+      description: buildDescription($('editTimelinePointValue').value || '')
     };
   }
 
@@ -481,6 +572,10 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
         onPointDurationTextChanged();
         return;
       }
+      if (t.id === 'applyToTimelineGroup') {
+        applyToTimelineGroup = !!t.checked;
+        return;
+      }
     });
   }
 
@@ -537,6 +632,9 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
   }
 
   function openAxisProperties(group) {
+    if (wuwei.edit && wuwei.edit.contents && typeof wuwei.edit.contents.close === 'function') {
+      wuwei.edit.contents.close();
+    }
     if (!group || !isAxisGroup(group)) {
       return false;
     }
@@ -562,6 +660,9 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
   }
 
   function openSegmentProperties(point) {
+    if (wuwei.edit && wuwei.edit.contents && typeof wuwei.edit.contents.close === 'function') {
+      wuwei.edit.contents.close();
+    }
     var record = resolveSegment(point);
     if (!record || !ensureEditShell()) {
       return false;
@@ -591,9 +692,9 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
   }
 
   function isAxisGroup(group) {
-    return !!(menu && menu.timeline &&
+    return !!((menu && menu.timeline &&
       typeof menu.timeline.isAxisGroup === 'function' &&
-      menu.timeline.isAxisGroup(group));
+      menu.timeline.isAxisGroup(group)));
   }
 
   function isTimelinePoint(node) {
@@ -693,8 +794,8 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
   }
 
   function cleanupPreview() {
-    if (timeline && typeof timeline.cleanupEmbeddedPreview === 'function') {
-      timeline.cleanupEmbeddedPreview(previewState, $('editTimelinePreviewHost'));
+    if (wuwei.menu && wuwei.menu.timeline && typeof wuwei.menu.timeline.cleanupEmbeddedPreview === 'function') {
+      wuwei.menu.timeline.cleanupEmbeddedPreview(previewState, $('editTimelinePreviewHost'));
       return;
     }
     if (previewState.timeWatchTimer) {
@@ -758,17 +859,17 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
   }
 
   function renderHtml5Preview(host, source, startAt, endAt) {
-    timeline.renderHtml5EmbeddedPreview(host, source, startAt, endAt, previewState);
+    wuwei.menu.timeline.renderHtml5EmbeddedPreview(host, source, startAt, endAt, previewState);
   }
 
   function renderYouTubePreview(host, source, startAt, endAt) {
-    timeline.renderYouTubeEmbeddedPreview(host, source, startAt, endAt, previewState).catch(function () {
+    wuwei.menu.timeline.renderYouTubeEmbeddedPreview(host, source, startAt, endAt, previewState).catch(function () {
       renderUnknownPreview(host, { resource: { uri: source && source.url } });
     });
   }
 
   function renderVimeoPreview(host, source, startAt, endAt) {
-    timeline.renderVimeoEmbeddedPreview(host, source, startAt, endAt, previewState).catch(function () {
+    wuwei.menu.timeline.renderVimeoEmbeddedPreview(host, source, startAt, endAt, previewState).catch(function () {
       renderUnknownPreview(host, { resource: { uri: source && source.url } });
     });
   }
@@ -857,12 +958,14 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
     var mediaNode = getMediaNodeForGroup(group);
     var resource = (mediaNode && mediaNode.resource) || {};
     var resourceUri = resource.uri || resource.canonicalUri || '';
+    var axisEnd = Number(group.timeEnd || (group.axis && group.axis.end) || group.pageCount || 0);
 
     $('editTimelineAxisId').value = group.id || '';
     $('editTimelineAxisMedia').value = mediaNode ? (mediaNode.label || resourceUri || mediaNode.id) : '';
     $('editTimelineAxisDirection').value = group.orientation || 'horizontal';
     $('editTimelineAxisStart').value = Number(group.timeStart || 0);
-    $('editTimelineAxisEnd').value = Number(group.timeEnd || 0);
+    $('editTimelineAxisEnd').value = axisEnd;
+    setTimeText('editTimelineAxisEndText', axisEnd);
     $('editTimelineAxisLength').value = Number(group.length || 480);
     $('editTimelineAxisDefaultDuration').value = Number(group.defaultPlayDuration || 15);
     $('editTimelineAxisStrokeWidth').value = Number(group.strokeWidth || (group.spine && group.spine.width) || 4);
@@ -875,9 +978,28 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
     cleanupPreview();
     $('edit-timeline-axis').style.display = '';
     $('edit-timeline-point').style.display = 'none';
+
+    if (timeline &&
+      typeof timeline.resolveMediaDuration === 'function' &&
+      typeof timeline.applyResolvedDurationToAxis === 'function' &&
+      mediaNode) {
+      timeline.resolveMediaDuration(mediaNode).then(function (duration) {
+        if (currentTarget !== group ||
+          !Number.isFinite(Number(duration)) ||
+          Number(duration) <= 0) {
+          return;
+        }
+        timeline.applyResolvedDurationToAxis(group, Number(duration));
+        $('editTimelineAxisEnd').value = Number(group.timeEnd || duration);
+        setTimeText('editTimelineAxisEndText', Number(group.timeEnd || duration));
+      });
+    }
   }
 
   function openAddSegmentFromPlayer(group) {
+    if (wuwei.edit && wuwei.edit.contents && typeof wuwei.edit.contents.close === 'function') {
+      wuwei.edit.contents.close();
+    }
     var now;
     var draft;
 
@@ -901,7 +1023,7 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
       label: menu.timeline && typeof menu.timeline.formatTime === 'function'
         ? menu.timeline.formatTime(now)
         : '',
-      value: ''
+      description: buildDescription('')
     };
 
     currentTarget = group;
@@ -932,6 +1054,9 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
   }
 
   function openSegmentFromPlayer(point) {
+    if (wuwei.edit && wuwei.edit.contents && typeof wuwei.edit.contents.close === 'function') {
+      wuwei.edit.contents.close();
+    }
     var record = resolveSegment(point);
     var spec;
     if (!record || !ensureEditShell()) {
@@ -1035,6 +1160,7 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
     }
 
     applyPointStyle(point);
+    applyPointStyleToGroup(point);
     currentTarget = point;
     currentMode = 'segment-properties';
     return true;
@@ -1060,15 +1186,17 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
     if (record.segment.axisRole === 'start' || record.segment.axisRole === 'end') {
       menu.timeline.updateTimePoint(currentTarget, {
         label: $('editTimelinePointName').value || record.segment.label || '',
-        value: $('editTimelinePointValue').value
+        description: buildDescription($('editTimelinePointValue').value || '')
       });
       applyPointStyle(record.segment);
+      applyPointStyleToGroup(record.segment);
       return true;
     }
 
     patch = buildPointPatch(record.group);
     menu.timeline.updateTimePoint(currentTarget, patch);
     applyPointStyle(record.segment);
+    applyPointStyleToGroup(record.segment);
     return true;
   }
 

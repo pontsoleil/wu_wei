@@ -2794,7 +2794,7 @@ wuwei.util = (function () {
     if (el &&
       ('Node' === el.constructor.name ||
         // Segment is a real node stored in page.nodes for timeline points.
-        ['Content', 'Topic', 'Memo', 'Table', 'Segment'].indexOf(el.type) >= 0)) {
+        ['Content', 'Topic', 'Memo', 'Table', 'Segment', 'PageMarker'].indexOf(el.type) >= 0)) {
       return true;
     }
     return false;
@@ -3978,6 +3978,23 @@ wuwei.util = (function () {
     var embed = (viewer.embed && 'object' === typeof viewer.embed) ? viewer.embed : {};
     var snapshotSources = (resource && resource.snapshotSources && 'object' === typeof resource.snapshotSources) ? resource.snapshotSources : {};
     var uid = getResourceOwnerUserId(resource, node);
+    var originalFile = getResourceFile(resource, 'original');
+    var originalMime = String(
+      originalFile && originalFile.mimeType ||
+      resource && resource.mimeType ||
+      resource && resource.media && resource.media.mimeType ||
+      ''
+    ).toLowerCase();
+    var originalUri;
+    function legacyUploadUri(filename) {
+      var date = String(resource && resource.date || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+      var id = String(resource && resource.id || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+      var file = String(filename || resource && resource.file || '').replace(/\\/g, '/').split('/').pop();
+      if (!date || !id || !file) {
+        return '';
+      }
+      return toPublicResourceUri('upload', date + '/' + id + '/' + file, uid);
+    }
     function localUri(value, area) {
       var text = String(value || '').replace(/\\/g, '/').trim();
       if (!text || /^https?:\/\//i.test(text) && text.indexOf('/wu_wei2/') < 0) {
@@ -3992,6 +4009,12 @@ wuwei.util = (function () {
       }
       return text;
     }
+    if (originalMime.indexOf('application/pdf') === 0) {
+      originalUri = getResourceFileUri(resource, 'original', node) || legacyUploadUri();
+      if (originalUri) {
+        return originalUri;
+      }
+    }
     return String(
       getResourceFileUri(resource, 'preview', node) ||
       localUri(embed.uri, 'resource') ||
@@ -3999,6 +4022,7 @@ wuwei.util = (function () {
       localUri(resource.uri, 'upload') ||
       localUri(resource.canonicalUri, 'upload') ||
       getResourceFileUri(resource, 'original', node) ||
+      legacyUploadUri() ||
       localUri(snapshotSources.originalUri, 'upload') ||
       ''
     );
@@ -4008,6 +4032,15 @@ wuwei.util = (function () {
     var resource = getResource(node);
     var snapshotSources = (resource && resource.snapshotSources && 'object' === typeof resource.snapshotSources) ? resource.snapshotSources : {};
     var uid = getResourceOwnerUserId(resource, node);
+    function legacyUploadUri() {
+      var date = String(resource && resource.date || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+      var id = String(resource && resource.id || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+      var file = String(resource && resource.file || '').replace(/\\/g, '/').split('/').pop();
+      if (!date || !id || !file) {
+        return '';
+      }
+      return toPublicResourceUri('upload', date + '/' + id + '/' + file, uid);
+    }
     function localUri(value) {
       var text = String(value || '').replace(/\\/g, '/').trim();
       if (!text || /^https?:\/\//i.test(text) && text.indexOf('/wu_wei2/') < 0) {
@@ -4027,6 +4060,7 @@ wuwei.util = (function () {
       localUri(snapshotSources.originalUri) ||
       localUri(resource.canonicalUri) ||
       localUri(resource.uri) ||
+      legacyUploadUri() ||
       ''
     );
   };

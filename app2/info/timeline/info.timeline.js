@@ -56,8 +56,8 @@ wuwei.info.timeline = wuwei.info.timeline || {};
   }
 
   function close() {
-    if (timeline && typeof timeline.cleanupEmbeddedPreview === 'function') {
-      timeline.cleanupEmbeddedPreview(pointPreviewState, document.getElementById('infoTimelinePreviewHost'));
+    if (menu.timeline && typeof menu.timeline.cleanupEmbeddedPreview === 'function') {
+      menu.timeline.cleanupEmbeddedPreview(pointPreviewState, document.getElementById('infoTimelinePreviewHost'));
     }
     var pane = document.getElementById('info-timeline');
     if (!pane) { return; }
@@ -98,9 +98,16 @@ wuwei.info.timeline = wuwei.info.timeline || {};
 
   function openAxis(group) {
     var pane = ensurePane();
+    var mediaNode;
+    var previewHost;
+    var startAt;
+    var endAt;
     if (!pane || !group) { return; }
     stateMap.group = group;
     stateMap.point = null;
+    mediaNode = getMediaNodeForGroup(group);
+    startAt = toNumber(group.timeStart || (group.axis && group.axis.start), 0);
+    endAt = toNumber(group.timeEnd || (group.axis && group.axis.end), startAt);
     pane.innerHTML = wuwei.info.timeline.markup.axisTemplate({
       group: group,
       mediaName: getMediaName(group),
@@ -109,29 +116,34 @@ wuwei.info.timeline = wuwei.info.timeline || {};
       endText: formatClockTime(group.timeEnd || 0)
     });
     pane.style.display = 'block';
+    previewHost = document.getElementById('infoTimelinePreviewHost');
+    renderPointPreview(previewHost, mediaNode, {
+      startAt: startAt,
+      endAt: endAt
+    });
   }
 
   function renderPointPreview(host, mediaNode, timing) {
     var source, startAt, endAt;
-    if (timeline && typeof timeline.cleanupEmbeddedPreview === 'function') {
-      timeline.cleanupEmbeddedPreview(pointPreviewState, host);
+    if (menu.timeline && typeof menu.timeline.cleanupEmbeddedPreview === 'function') {
+      menu.timeline.cleanupEmbeddedPreview(pointPreviewState, host);
     }
     if (!host || !mediaNode) { return; }
     source = timeline.detectMediaSource(mediaNode);
     startAt = Math.max(0, Number(timing && timing.startAt || 0));
     endAt = Math.max(startAt, Number(timing && timing.endAt || startAt));
     if (source.provider === 'html5') {
-      timeline.renderHtml5EmbeddedPreview(host, source, startAt, endAt, pointPreviewState);
+      menu.timeline.renderHtml5EmbeddedPreview(host, source, startAt, endAt, pointPreviewState);
       return;
     }
     if (source.provider === 'youtube' && source.id) {
-      timeline.renderYouTubeEmbeddedPreview(host, source, startAt, endAt, pointPreviewState).catch(function () {
+      menu.timeline.renderYouTubeEmbeddedPreview(host, source, startAt, endAt, pointPreviewState).catch(function () {
         host.innerHTML = '<div class="timeline-preview-note">YouTube preview could not be loaded.</div>';
       });
       return;
     }
     if (source.provider === 'vimeo' && source.url) {
-      timeline.renderVimeoEmbeddedPreview(host, source, startAt, endAt, pointPreviewState).catch(function () {
+      menu.timeline.renderVimeoEmbeddedPreview(host, source, startAt, endAt, pointPreviewState).catch(function () {
         host.innerHTML = '<div class="timeline-preview-note">Vimeo preview could not be loaded.</div>';
       });
       return;

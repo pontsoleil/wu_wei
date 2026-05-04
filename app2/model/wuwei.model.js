@@ -461,15 +461,15 @@ wuwei.model = (function () {
 
   reverse = function (param) {
     var link = param && param[0];
-    var from, to, routing, startArrow, endArrow;
+    var from, to, routing, startArrow, endArrow, startPosition, endPosition;
 
     if (!link) {
       console.log('reverse NO link.');
       return null;
     }
 
-    from = link.from;
-    to = link.to;
+    from = link.from || (link.source && link.source.id) || link.source;
+    to = link.to || (link.target && link.target.id) || link.target;
 
     if (!from || !to) {
       console.log('reverse NO from or to. link:', link);
@@ -479,14 +479,28 @@ wuwei.model = (function () {
     // 端点を反転
     link.from = to;
     link.to = from;
+    if (Object.prototype.hasOwnProperty.call(link, 'source')) {
+      link.source = to;
+    }
+    if (Object.prototype.hasOwnProperty.call(link, 'target')) {
+      link.target = from;
+    }
 
-    // 矢印定義があれば始点・終点を入れ替える
+    // 矢印・接続位置定義があれば始点・終点を入れ替える
     routing = (link.routing && typeof link.routing === 'object') ? link.routing : null;
     if (routing) {
       startArrow = routing.startArrow;
       endArrow = routing.endArrow;
+      startPosition = routing.startPosition;
+      endPosition = routing.endPosition;
       routing.startArrow = endArrow;
       routing.endArrow = startArrow;
+      routing.startPosition = endPosition;
+      routing.endPosition = startPosition;
+      if (!routing.startArrow) { delete routing.startArrow; }
+      if (!routing.endArrow) { delete routing.endArrow; }
+      if (!routing.startPosition) { delete routing.startPosition; }
+      if (!routing.endPosition) { delete routing.endPosition; }
     }
 
     // 監査更新が必要なら反映
@@ -817,6 +831,8 @@ wuwei.model = (function () {
       axis: param.axis ? util.clone(param.axis) : undefined,
       origin: param.origin ? util.clone(param.origin) : undefined,
       mediaRef: param.mediaRef || (timeline && timeline.mediaRef) || '',
+      documentRef: param.documentRef || '',
+      pageCount: Number.isFinite(Number(param.pageCount)) ? Number(param.pageCount) : undefined,
       defaultPlayDuration: Number.isFinite(Number(param.defaultPlayDuration))
         ? Number(param.defaultPlayDuration)
         : (Number.isFinite(Number(timeline.defaultPlayDuration)) ? Number(timeline.defaultPlayDuration) : undefined),
@@ -2899,10 +2915,15 @@ wuwei.model = (function () {
       return util.toPublicResourceUri('upload', uploadRef.date + '/' + uploadRef.id + '/' + filename, state.currentUser && state.currentUser.user_id);
     }
 
-    function uploadRoleFileName(role, fallback) {
+    function uploadRoleFile(role) {
       const found = resourceFiles.find(function (item) {
         return item && String(item.role || '').toLowerCase() === role && String(item.area || '') === 'upload' && item.path;
       });
+      return found || null;
+    }
+
+    function uploadRoleFileName(role, fallback) {
+      const found = uploadRoleFile(role);
       const path = found ? String(found.path || '').replace(/\\/g, '/') : '';
       return path ? path.split('/').pop() : fallback;
     }
@@ -2988,11 +3009,39 @@ wuwei.model = (function () {
     const runtimeResourceUri = originalFile.path || resourceIdentity.uri || resourceEmbed.uri || resourceSnapshots.previewUri || nodeUrl || uri || resourceIdentity.canonicalUri || resourceSnapshots.originalUri || '';
     const snapshotThumbnailUri = thumbnail && !isIconThumbnail(thumbnail) ? thumbnail : '';
     const uploadRef = uploadRefFromStorage();
+    const uploadPreviewFile = uploadRoleFile('preview');
+    const uploadThumbnailFile = uploadRoleFile('thumbnail');
     const uploadOriginalName = uploadRoleFileName('original', originalFile.path ? String(originalFile.path).replace(/\\/g, '/').split('/').pop() : String(downloadUrl || uri || '').replace(/\\/g, '/').split(/[?#]/)[0].split('/').pop());
-    const uploadPreviewName = uploadRoleFileName('preview', 'preview.pdf');
-    const uploadThumbnailName = uploadRoleFileName('thumbnail', 'thumbnail.jpg');
-    const uploadPreviewUri = uploadFileUri(uploadRef, uploadPreviewName) || nodeUrl || runtimeResourceUri;
+    const uploadPreviewName = uploadRoleFileName('preview', '');
+    const uploadThumbnailName = uploadRoleFileName('thumbnail', uploadThumbnailFile ? 'thumbnail.jpg' : '');
+    const uploadOriginalUri = uploadFileUri(uploadRef, uploadOriginalName) || downloadUrl || '';
+    const uploadPreviewUri = uploadPreviewName ? uploadFileUri(uploadRef, uploadPreviewName) : '';
     const uploadThumbnailUri = uploadFileUri(uploadRef, uploadThumbnailName) || snapshotThumbnailUri;
+    const uploadDisplayUri = uploadPreviewUri || nodeUrl || runtimeResourceUri || uploadOriginalUri;
+    const uploadFiles = uploadRef ? [
+      {
+        role: 'original',
+        area: 'upload',
+        path: uploadRef.date + '/' + uploadRef.id + '/' + uploadOriginalName,
+        mimeType: (resourceDef && resourceDef.media && resourceDef.media.mimeType) || resourceDef && resourceDef.mimeType || format || 'application/octet-stream'
+      }
+    ] : [];
+    if (uploadRef && uploadThumbnailName) {
+      uploadFiles.push({
+        role: 'thumbnail',
+        area: 'upload',
+        path: uploadRef.date + '/' + uploadRef.id + '/' + uploadThumbnailName,
+        mimeType: (uploadThumbnailFile && uploadThumbnailFile.mimeType) || 'image/jpeg'
+      });
+    }
+    if (uploadRef && uploadPreviewName) {
+      uploadFiles.push({
+        role: 'preview',
+        area: 'upload',
+        path: uploadRef.date + '/' + uploadRef.id + '/' + uploadPreviewName,
+        mimeType: (uploadPreviewFile && uploadPreviewFile.mimeType) || 'application/pdf'
+      });
+    }
     const runtimeResource = uploadRef ? {
       kind: 'upload',
       id: uploadRef.id,
@@ -3000,10 +3049,12 @@ wuwei.model = (function () {
       file: uploadOriginalName,
       title: resourceIdentity.title || resourceDef && resourceDef.title || label || '',
       mimeType: (resourceDef && resourceDef.media && resourceDef.media.mimeType) || resourceDef && resourceDef.mimeType || format || '',
-      uri: uploadPreviewUri,
-      canonicalUri: uploadFileUri(uploadRef, uploadOriginalName) || downloadUrl || '',
+      uri: uploadDisplayUri,
+      canonicalUri: uploadOriginalUri,
       thumbnailUri: uploadThumbnailUri,
       owner: currentUserId,
+      media: resourceDef && resourceDef.media ? Object.assign({}, resourceDef.media) : undefined,
+      contents: resourceDef && resourceDef.contents ? util.clone(resourceDef.contents) : undefined,
       rights: {
         owner: currentUserId,
         copyright: '',
@@ -3024,33 +3075,14 @@ wuwei.model = (function () {
           area: 'upload',
           path: uploadRef.date + '/' + uploadRef.id + '/manifest.json'
         },
-        files: [
-          {
-            role: 'original',
-            area: 'upload',
-            path: uploadRef.date + '/' + uploadRef.id + '/' + uploadOriginalName,
-            mimeType: (resourceDef && resourceDef.media && resourceDef.media.mimeType) || resourceDef && resourceDef.mimeType || format || 'application/octet-stream'
-          },
-          {
-            role: 'thumbnail',
-            area: 'upload',
-            path: uploadRef.date + '/' + uploadRef.id + '/' + uploadThumbnailName,
-            mimeType: 'image/jpeg'
-          },
-          {
-            role: 'preview',
-            area: 'upload',
-            path: uploadRef.date + '/' + uploadRef.id + '/' + uploadPreviewName,
-            mimeType: 'application/pdf'
-          }
-        ]
+        files: uploadFiles
       },
       viewer: {
         supportedModes: ['infoPane', 'newTab', 'newWindow', 'download'],
         defaultMode: 'infoPane',
         embed: {
-          enabled: true,
-          uri: uploadPreviewUri,
+          enabled: !!uploadDisplayUri,
+          uri: uploadDisplayUri,
           thumbnailUri: uploadThumbnailUri
         },
         thumbnailUri: uploadThumbnailUri
@@ -3137,6 +3169,10 @@ wuwei.model = (function () {
     });
     if (!videoMedia) {
       delete node.timeRange;
+    }
+    else if ((!node.resource || !node.resource.storage) &&
+      wuwei.video && typeof wuwei.video.setVideoSource === 'function') {
+      wuwei.video.setVideoSource(node, node.resource && (node.resource.canonicalUri || node.resource.uri));
     }
 
     return {
@@ -3461,7 +3497,7 @@ wuwei.model = (function () {
   function isTimelineGroupPseudoLink(link) {
     return !!(link &&
       true === link.pseudo &&
-      'timelineAxis' === link.groupType &&
+      ('timelineAxis' === link.groupType || 'contentsAxis' === link.groupType) &&
       link.groupRef);
   }
 
@@ -3885,6 +3921,17 @@ wuwei.model = (function () {
           }, MENU_TIMEOUT);
         })
         .on('click', function (d) {
+          if (window.wuwei &&
+            wuwei.contents &&
+            typeof wuwei.contents.isContentsPageNode === 'function' &&
+            wuwei.contents.isContentsPageNode(d) &&
+            !state.Selecting) {
+            d3.event.stopPropagation();
+            if (wuwei.menu && wuwei.menu.contents && typeof wuwei.menu.contents.openPageInInfo === 'function') {
+              wuwei.menu.contents.openPageInInfo(d);
+            }
+            return;
+          }
           if (!state.Selecting || 'view' === graph.mode) {
             return;
           }
@@ -3896,10 +3943,21 @@ wuwei.model = (function () {
         })
         .on('dblclick', function (d) {
           if (window.wuwei &&
+            wuwei.contents &&
+            typeof wuwei.contents.isContentsPageNode === 'function' &&
+            wuwei.contents.isContentsPageNode(d)) {
+            if (wuwei.menu && wuwei.menu.contents && typeof wuwei.menu.contents.openPageInInfo === 'function') {
+              wuwei.menu.contents.openPageInInfo(d);
+            }
+            return;
+          }
+          if (window.wuwei &&
             wuwei.video &&
             typeof wuwei.video.isVideoNode === 'function' &&
             wuwei.video.isVideoNode(d)) {
-            wuwei.video.open(d);
+            if (wuwei.menu && wuwei.menu.video && typeof wuwei.menu.video.open === 'function') {
+              wuwei.menu.video.open(d);
+            }
           }
         })
         .call(
@@ -3937,6 +3995,9 @@ wuwei.model = (function () {
       cols = size.cols,
       color = node.color,
       outline = node.outline,
+      outline_width = Number.isFinite(Number(node.style && node.style.line && node.style.line.width))
+        ? Math.max(0, Number(node.style.line.width))
+        : Math.max(0, Number(node.outlineWidth || 1)),
       font = node.font,
       font_family = (font && font.family) || 'Arial',
       font_size = (font && font.size) || '10pt',
@@ -4015,6 +4076,7 @@ wuwei.model = (function () {
         .attr('class', 'shape-node')
         .attr('r', radius)
         .attr('stroke', outline)
+        .attr('stroke-width', outline_width)
         .attr('fill', color);
     }
     else if ('RECTANGLE' === shape) {
@@ -4025,6 +4087,7 @@ wuwei.model = (function () {
         .attr('width', width)
         .attr('height', height)
         .attr('stroke', outline)
+        .attr('stroke-width', outline_width)
         .attr('fill', color);
     }
     else if ('ELLIPSE' === shape) {
@@ -4037,6 +4100,7 @@ wuwei.model = (function () {
         .attr('rx', width / 2)
         .attr('ry', height / 2)
         .attr('stroke', outline)
+        .attr('stroke-width', outline_width)
         .attr('fill', color);
     }
     else if ('ROUNDED' === shape) {
@@ -4049,6 +4113,7 @@ wuwei.model = (function () {
         .attr('rx', radius)
         .attr('ry', radius)
         .attr('stroke', outline)
+        .attr('stroke-width', outline_width)
         .attr('fill', color);
     }
     else if ('TRIANGLE' === shape) {
@@ -4061,6 +4126,7 @@ wuwei.model = (function () {
         .attr('height', height)
         .attr('points', points)
         .attr('stroke', outline)
+        .attr('stroke-width', outline_width)
         .attr('fill', color);
     }
     else if ('RHOMBUS' === shape) {
@@ -4073,6 +4139,7 @@ wuwei.model = (function () {
         .attr('height', height)
         .attr('points', points)
         .attr('stroke', outline)
+        .attr('stroke-width', outline_width)
         .attr('fill', color);
     }
     else if ('MEMO' === shape) {
@@ -4211,7 +4278,7 @@ wuwei.model = (function () {
 
     // Render plain text labels for ordinary Topic nodes and real timeline Segment nodes.
     // Segment is stored as a real node in page.nodes, so it should show its label like Topic.
-    if (('Topic' === type || 'Segment' === type) && 'THUMBNAIL' !== shape && label) {
+    if (('Topic' === type || 'Segment' === type || 'PageMarker' === type) && 'THUMBNAIL' !== shape && label) {
       gText = d3node.append('text')
         .attr('class', 'node-label')
         .attr('font-family', font_family)
@@ -6272,6 +6339,23 @@ wuwei.model = (function () {
     }
   }
 
+  function getAxisMenuPoint(x1, y1, x2, y2) {
+    var dx = Number(x2) - Number(x1);
+    var dy = Number(y2) - Number(y1);
+    var point = {
+      x: (Number(x1) + Number(x2)) / 2,
+      y: (Number(y1) + Number(y2)) / 2
+    };
+
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      point.y -= 40;
+    }
+    else {
+      point.x += 40;
+    }
+    return point;
+  }
+
   /**
    * renderTopicGroupLink
    *
@@ -6306,10 +6390,7 @@ wuwei.model = (function () {
     var TOUCH_TAP_TOLERANCE = 12;
 
     function getAxisMidPoint() {
-      return {
-        x: (spine.x1 + spine.x2) / 2,
-        y: (spine.y1 + spine.y2) / 2
-      };
+      return getAxisMenuPoint(spine.x1, spine.y1, spine.x2, spine.y2);
     }
 
     function getTouchPoint(ev) {
@@ -6512,10 +6593,7 @@ wuwei.model = (function () {
     var TOUCH_TAP_TOLERANCE = 12;
 
     function getAxisMidPoint() {
-      return {
-        x: (x1 + x2) / 2,
-        y: (y1 + y2) / 2
-      };
+      return getAxisMenuPoint(x1, y1, x2, y2);
     }
 
     function resetTouchState() {

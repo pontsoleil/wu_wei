@@ -38,6 +38,9 @@ wuwei.info.timeline.markup = (function () {
         '<div class="timeline-heading-wrap">' +
           '<h3 class="timeline-heading">' + esc(group.name || 'Timeline') + '</h3>' +
         '</div>' +
+        '<div class="timeline-preview-wrap">' +
+          '<div id="infoTimelinePreviewHost" class="timeline-preview-host"></div>' +
+        '</div>' +
         '<div class="timeline-grid">' +
             block(wuwei.nls.translate('Axis'), group.orientation || '', 'axis') +
             block(wuwei.nls.translate('End'), (param && param.endText) || '', 'end') +

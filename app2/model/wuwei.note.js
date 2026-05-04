@@ -263,6 +263,51 @@ wuwei.note = (function () {
     };
   }
 
+  function isVideoResourceLike(resource, uri) {
+    var src = resource || {};
+    var kind = String(src.kind || '').toLowerCase();
+    var subtype = String(src.subtype || (src.media && src.media.subtype) || '').toLowerCase();
+    var mimeType = String(src.mimeType || (src.media && src.media.mimeType) || '').toLowerCase();
+    var text = String(uri || src.canonicalUri || src.uri || src.url || '').toLowerCase();
+    return kind === 'video' ||
+      subtype === 'youtube' ||
+      subtype === 'vimeo' ||
+      /^video\//i.test(mimeType) ||
+      /(^|\/\/)(www\.)?(youtube\.com|youtu\.be|vimeo\.com)\//i.test(text) ||
+      /\.(mp4|m4v|webm|ogv|ogg)(\?|#|$)/i.test(text);
+  }
+
+  function normalizeUrlVideoResource(resource, node, uri) {
+    var src = resource || {};
+    var sourceUri = String(uri || src.canonicalUri || src.uri || src.url || '').trim();
+    var clone = util.clone(src);
+    var tempNode = {
+      label: node && node.label,
+      thumbnailUri: node && node.thumbnailUri,
+      timeRange: node && node.timeRange,
+      resource: clone
+    };
+    if (wuwei.video && typeof wuwei.video.setVideoSource === 'function') {
+      return wuwei.video.setVideoSource(tempNode, sourceUri);
+    }
+    clone.kind = 'video';
+    clone.uri = sourceUri;
+    clone.canonicalUri = sourceUri;
+    clone.mimeType = clone.mimeType || 'text/html';
+    clone.title = String(clone.title || (node && node.label) || sourceUri || 'Video');
+    clone.media = clone.media && typeof clone.media === 'object' ? clone.media : {};
+    clone.media.kind = 'video';
+    clone.media.mimeType = clone.mimeType;
+    clone.viewer = normalizeViewer(clone.viewer);
+    clone.viewer.embed = clone.viewer.embed && typeof clone.viewer.embed === 'object' ? clone.viewer.embed : {};
+    clone.viewer.embed.enabled = !!sourceUri;
+    clone.viewer.embed.uri = sourceUri;
+    delete clone.storage;
+    delete clone.snapshotSources;
+    delete clone.identity;
+    return clone;
+  }
+
   function normalizeResource(resource, node) {
     var src = resource || {};
     var viewer = (src.viewer && typeof src.viewer === 'object') ? src.viewer : {};
@@ -322,20 +367,19 @@ wuwei.note = (function () {
         mimeType: uploadMimeType,
         title: String(src.title || (node && node.label) || ''),
         file: uploadOriginalFile,
-        owner: currentUserId,
+        owner: String(src.owner || currentUserId),
         media: uploadMedia,
         contents: uploadContents || undefined,
         copyright: String(src.copyright || ''),
         license: String((src.rights && src.rights.license) || src.license || ''),
         attribution: String((src.rights && src.rights.attribution) || src.attribution || ''),
-        rights: src.rights && typeof src.rights === 'object' ? util.clone(src.rights) : { owner: currentUserId, copyright: '', license: '', attribution: '' },
-        audit: src.audit && typeof src.audit === 'object' ? util.clone(src.audit) : {
-          owner: currentUserId,
-          createdBy: currentUserId,
-          createdAt: '',
-          lastModifiedBy: '',
-          lastModifiedAt: ''
+        rights: {
+          owner: String((src.rights && src.rights.owner) || src.owner || currentUserId),
+          copyright: String((src.rights && src.rights.copyright) || src.copyright || ''),
+          license: String((src.rights && src.rights.license) || src.license || ''),
+          attribution: String((src.rights && src.rights.attribution) || src.attribution || '')
         },
+        audit: normalizeAudit(src.audit, state.currentUser),
         viewer: {
           supportedModes: ['infoPane', 'newTab', 'newWindow', 'download'],
           defaultMode: 'infoPane',
@@ -346,10 +390,13 @@ wuwei.note = (function () {
         snapshotSources: {
           previewUri: uploadPreview || undefined,
           originalUri: uploadOriginal || undefined,
-          thumbnailUri: uploadThumbnail
+          thumbnailUri: uploadThumbnail || undefined
         },
         thumbnailUri: uploadThumbnail
       };
+    }
+    if (isVideoResourceLike(src, uri)) {
+      return normalizeUrlVideoResource(src, node, uri);
     }
     if (src.type === 'Resource' || (src.storage && typeof src.storage === 'object')) {
       return runtimeResourceFromDefinition(src, node);
@@ -460,6 +507,9 @@ wuwei.note = (function () {
       if (shape === 'THUMBNAIL' || src.thumbnailUri || oldView.thumbnailUri || src.thumbnail) {
         out.thumbnailUri = String(out.thumbnailUri || src.thumbnailUri || oldView.thumbnailUri || src.thumbnail || '');
       }
+      if (!out.thumbnailUri && out.resource && out.resource.thumbnailUri) {
+        out.thumbnailUri = out.resource.thumbnailUri;
+      }
     }
 
     if (src.type === 'Memo') {//} && (src.memoShape || oldView.memoShape)) {
@@ -498,17 +548,22 @@ wuwei.note = (function () {
     }
 
     if (src.type === 'Segment') {
+      out.description = src.description && typeof src.description === 'object'
+        ? util.clone(src.description)
+        : { format: 'plain/text', body: '' };
       out.time = util.clone(src.time || {
         start: Number.isFinite(Number(src.timeStart)) ? Number(src.timeStart) : (Number.isFinite(Number(src.time)) ? Number(src.time) : 0),
         end: Number.isFinite(Number(src.timeEnd)) ? Number(src.timeEnd) : (Number.isFinite(Number(src.time)) ? Number(src.time) : 0)
       });
+      ['mediaStart', 'mediaEnd', 'playDuration'].forEach(function (key) {
+        if (Number.isFinite(Number(src[key]))) {
+          out[key] = Number(src[key]);
+        }
+      });
     }
 
     if (src.type === 'PageMarker' || src.topicKind === 'contents-page') {
-      if (src.type === 'PageMarker') {
-        out.type = 'PageMarker';
-      }
-      out.topicKind = 'contents-page';
+      out.type = 'PageMarker';
       if (typeof src.contentsRef === 'string' && src.contentsRef) {
         out.contentsRef = src.contentsRef;
       }
@@ -575,6 +630,7 @@ wuwei.note = (function () {
     var axis = src.axis || {};
     var members = Array.isArray(src.members) ? src.members : (Array.isArray(src.item) ? src.item : []);
     var entries = Array.isArray(src.entries) ? src.entries : [];
+    var pageCount = Number(src.pageCount || axis.end);
     var rawType = src.type || 'simple';
     var type = rawType;
 
@@ -663,7 +719,7 @@ wuwei.note = (function () {
       groupType: src.groupType || '',
       mediaRef: src.mediaRef || '',
       documentRef: src.documentRef || '',
-      pageCount: Number.isFinite(Number(src.pageCount || axis.end)) ? Number(src.pageCount || axis.end) : undefined,
+      pageCount: Number.isFinite(pageCount) ? pageCount : undefined,
       timeStart: Number.isFinite(Number(src.timeStart)) ? Number(src.timeStart) : undefined,
       timeEnd: Number.isFinite(Number(src.timeEnd)) ? Number(src.timeEnd) : undefined,
       defaultPlayDuration: Number.isFinite(Number(src.defaultPlayDuration)) ? Number(src.defaultPlayDuration) : undefined,
@@ -927,13 +983,64 @@ wuwei.note = (function () {
     var uploadRef = uploadRefFromResource(src);
     var uri;
     if (uploadRef) {
+      var originalFile = null;
+      if (src.storage && Array.isArray(src.storage.files)) {
+        originalFile = src.storage.files.find(function (file) {
+          return file && String(file.role || '').toLowerCase() === 'original';
+        });
+      }
+      uploadRef.title = String(src.title || node.label || '');
+      uploadRef.mimeType = String(
+        (src.media && src.media.mimeType) ||
+        (originalFile && originalFile.mimeType && originalFile.mimeType !== 'application/octet-stream' ? originalFile.mimeType : '') ||
+        src.mimeType ||
+        (/\.pdf$/i.test(String(uploadRef.file || '')) ? 'application/pdf' : '') ||
+        node.format ||
+        ''
+      );
+      if (src.owner) { uploadRef.owner = src.owner; }
+      if (src.media && typeof src.media === 'object') {
+        uploadRef.media = util.clone(src.media);
+      }
+      if (src.contents && typeof src.contents === 'object') {
+        uploadRef.contents = util.clone(src.contents);
+      }
+      if (src.rights && typeof src.rights === 'object') {
+        uploadRef.rights = util.clone(src.rights);
+      }
+      if (src.audit && typeof src.audit === 'object') {
+        uploadRef.audit = util.clone(src.audit);
+      }
+      if (src.storage && typeof src.storage === 'object') {
+        uploadRef.storage = util.clone(src.storage);
+        if (Array.isArray(uploadRef.storage.files)) {
+          uploadRef.storage.files = uploadRef.storage.files.filter(function (file) {
+            return file && file.path && !(/\/preview\.pdf$/i.test(String(file.path || '')) &&
+              String(uploadRef.mimeType || '').toLowerCase().indexOf('application/pdf') === 0);
+          }).map(function (file) {
+            var copy = util.clone(file);
+            if (copy.role === 'original' && (!copy.mimeType || copy.mimeType === 'application/octet-stream') && uploadRef.mimeType) {
+              copy.mimeType = uploadRef.mimeType;
+            }
+            return copy;
+          });
+        }
+      }
+      uploadRef.viewer = {
+        supportedModes: ['infoPane', 'newTab', 'newWindow', 'download'],
+        defaultMode: 'infoPane'
+      };
       return uploadRef;
     }
     uri = String(src.uri || src.canonicalUri || node.uri || node.url || '').trim();
+    if (isVideoResourceLike(src, uri)) {
+      return normalizeUrlVideoResource(src, node, uri);
+    }
     if (/^https?:\/\//i.test(uri)) {
       return {
-        kind: 'url',
-        url: uri,
+        kind: String(src.kind || 'web'),
+        uri: uri,
+        canonicalUri: String(src.canonicalUri || uri),
         title: String(src.title || node.label || '')
       };
     }
@@ -959,6 +1066,8 @@ wuwei.note = (function () {
     delete out.dragging;
     delete out.opacity;
     delete out.expire;
+    delete out.checked;
+    delete out.transparency;
     delete out.filterout;
     return out;
   }
@@ -992,6 +1101,7 @@ wuwei.note = (function () {
       delete out.url;
       delete out.format;
       delete out.thumbnail;
+      delete out.thumbnailUri;
       delete out.value;
     }
     return out;

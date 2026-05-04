@@ -38,6 +38,14 @@ wuwei.edit.markup = (function () {
   <div id="edit-link"></div>
   <div id="edit-uploaded"></div>
   <div id="edit-video"></div>
+  <div id="edit-contents">`);
+    if (wuwei.edit &&
+      wuwei.edit.contents &&
+      wuwei.edit.contents.markup &&
+      typeof wuwei.edit.contents.markup.panelsHtml === 'function') {
+      html.push(wuwei.edit.contents.markup.panelsHtml());
+    }
+    html.push(`</div>
   <div id="edit-timeline">`);
     if (wuwei.edit &&
       wuwei.edit.timeline &&

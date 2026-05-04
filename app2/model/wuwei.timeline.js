@@ -96,7 +96,7 @@ wuwei.timeline = wuwei.timeline || {};
       return true;
     }
     format = String(resource.mimeType || '').toLowerCase();
-    uri = String(resource.uri || resource.canonicalUri || '').toLowerCase();
+    uri = getMediaSourceUrl(node).toLowerCase();
     subtype = String(resource.subtype || '').toLowerCase();
     return (
       format.indexOf('video/') === 0 ||
@@ -320,27 +320,41 @@ wuwei.timeline = wuwei.timeline || {};
     try {
       u = new URL(out.url, location.href);
       out.h = u.searchParams.get('h') || '';
-      m = u.pathname.match(/\/(?:video\/)?([0-9]+)/);
+      m = u.pathname.match(/\/(?:video\/)?([0-9]+)(?:\/([A-Za-z0-9_-]+))?/);
       if (m) {
         out.id = m[1];
+        out.h = out.h || m[2] || '';
       }
     }
     catch (e) {
-      m = out.url.match(/vimeo\.com\/(?:video\/)?([0-9]+)/);
+      m = out.url.match(/vimeo\.com\/(?:video\/)?([0-9]+)(?:\/([A-Za-z0-9_-]+))?/);
       if (m) {
         out.id = m[1];
+        out.h = out.h || m[2] || '';
       }
     }
     return out;
   }
 
+  function getMediaSourceUrl(videoNode) {
+    var resource = (videoNode && videoNode.resource) || {};
+    return String(resource.canonicalUri || resource.uri || '');
+  }
+
   function detectMediaSource(videoNode) {
     var resource = (videoNode && videoNode.resource) || {};
-    var url = String(resource.uri || resource.canonicalUri || '');
+    var source;
+    var url = getMediaSourceUrl(videoNode);
     var subtype = String(resource.subtype || '').toLowerCase();
     var format = String(resource.mimeType || '').toLowerCase();
     var vimeo;
 
+    if (wuwei.video && typeof wuwei.video.detectSource === 'function') {
+      source = wuwei.video.detectSource(videoNode);
+      if (source && source.provider && source.provider !== 'unknown') {
+        return source;
+      }
+    }
     if (subtype === 'youtube' || isHostedYouTube(url)) {
       return { provider: 'youtube', id: extractYouTubeId(url), url: url };
     }
@@ -568,11 +582,21 @@ wuwei.timeline = wuwei.timeline || {};
       mediaEnd: Math.max(mediaStart, mediaEnd),
       playDuration: Math.max(0, Math.max(mediaStart, mediaEnd) - mediaStart),
       label: param.label || formatTime(mediaStart),
-      value: (typeof param.value !== 'undefined') ? param.value : '',
+      description: (param.description && typeof param.description === 'object')
+        ? util.clone(param.description)
+        : { format: 'plain/text', body: '' },
       shape: 'CIRCLE',
       size: { radius: 20 },
       color: (param.axisRole === 'point') ? common.Color.nodeFill : '#fff8d8',
       outline: (param.axisRole === 'point') ? common.Color.nodeOutline : '#b08a00',
+      style: {
+        font: common.defaultFont,
+        line: {
+          kind: 'SOLID',
+          color: (param.axisRole === 'point') ? common.Color.nodeOutline : '#b08a00',
+          width: 1
+        }
+      },
       font: common.defaultFont,
       visible: true,
       changed: true,
@@ -605,11 +629,22 @@ wuwei.timeline = wuwei.timeline || {};
     node.playDuration = Math.max(0, node.mediaEnd - node.mediaStart);
     node.label = node.label || formatTime(node.mediaStart);
     delete node.name;
-    node.value = (typeof node.value !== 'undefined') ? node.value : '';
+    node.description = (node.description && typeof node.description === 'object')
+      ? node.description
+      : { format: 'plain/text', body: '' };
+    delete node.value;
     node.shape = 'CIRCLE';
     node.size = { radius: Number((node.size && node.size.radius) || 20) };
-    node.color = (node.axisRole === 'point') ? common.Color.nodeFill : '#fff8d8';
-    node.outline = (node.axisRole === 'point') ? common.Color.nodeOutline : '#b08a00';
+    node.color = node.color || ((node.axisRole === 'point') ? common.Color.nodeFill : '#fff8d8');
+    node.outline = node.outline || ((node.axisRole === 'point') ? common.Color.nodeOutline : '#b08a00');
+    node.style = (node.style && 'object' === typeof node.style) ? node.style : {};
+    node.style.font = node.style.font || common.defaultFont;
+    node.style.line = (node.style.line && 'object' === typeof node.style.line) ? node.style.line : {};
+    node.style.line.kind = node.style.line.kind || 'SOLID';
+    node.style.line.color = node.style.line.color || node.outline;
+    node.style.line.width = Math.max(0, Number(node.style.line.width || node.outlineWidth || 1));
+    node.outline = node.style.line.color;
+    node.outlineWidth = node.style.line.width;
     node.font = node.font || common.defaultFont;
     node.visible = (false !== node.visible);
     node.changed = true;
@@ -789,7 +824,7 @@ wuwei.timeline = wuwei.timeline || {};
     group.strokeWidth = group.spine.width;
     group.axisPseudoLinkId = group.axisPseudoLinkId || makeUuid();
     group.axis = group.axis || {};
-    group.axis.mode = group.axis.mode || 'manual';
+    group.axis.mode = 'video';
     group.axis.unit = group.axis.unit || 'seconds';
     group.axis.anchor = group.axis.anchor || {};
     if (!Number.isFinite(Number(group.axis.anchor.x))) {
@@ -1011,7 +1046,7 @@ wuwei.timeline = wuwei.timeline || {};
       mediaRef: videoNode.id,
       defaultPlayDuration: 15,
       spine: { visible: true, color: '#888888', width: 4, padding: 12 },
-      axis: { mode: 'manual', unit: 'seconds', start: 0, end: duration, anchor: { x: origin.x, y: origin.y } },
+      axis: { mode: 'video', unit: 'seconds', start: 0, end: duration, anchor: { x: origin.x, y: origin.y } },
       origin: origin,
       timeStart: 0,
       timeEnd: duration,
@@ -1090,7 +1125,9 @@ wuwei.timeline = wuwei.timeline || {};
       mediaEnd: (patch && Number.isFinite(Number(patch.mediaEnd))) ? Number(patch.mediaEnd) : (mediaStart + Number(group.defaultPlayDuration || 15)),
       playDuration: (patch && Number.isFinite(Number(patch.playDuration))) ? Number(patch.playDuration) : group.defaultPlayDuration,
       label: (patch && patch.label) || formatTime(mediaStart),
-      value: patch && typeof patch.value !== 'undefined' ? patch.value : ''
+      description: patch && patch.description && typeof patch.description === 'object'
+        ? patch.description
+        : { format: 'plain/text', body: '' }
     });
 
     page.nodes.push(segmentNode);
@@ -1217,8 +1254,9 @@ wuwei.timeline = wuwei.timeline || {};
       segment.label = patch.label || formatTime(segment.mediaStart);
       delete segment.name;
     }
-    if (typeof patch.value !== 'undefined') {
-      segment.value = patch.value;
+    if (patch.description && typeof patch.description === 'object') {
+      segment.description = util.clone(patch.description);
+      delete segment.value;
     }
 
     if (segment.axisRole === 'start') {
@@ -1265,6 +1303,31 @@ wuwei.timeline = wuwei.timeline || {};
     normalizeAxisGroup(record.group);
     rebuildGraphAndRefresh();
     markGroupSelected(record.group);
+    return true;
+  }
+
+  function deleteAxisGroup(groupOrLink) {
+    var page = getCurrentPage();
+    var group = isAxisGroup(groupOrLink)
+      ? groupOrLink
+      : (isTimelineAxisLink(groupOrLink) ? model.findGroupById(groupOrLink.groupRef) : null);
+    var memberIds;
+
+    if (!page || !group || !isAxisGroup(group)) {
+      return false;
+    }
+
+    memberIds = getMemberIds(group);
+    page.links = (page.links || []).filter(function (link) {
+      return !(link && link.groupRef === group.id);
+    });
+    page.nodes = (page.nodes || []).filter(function (node) {
+      return !(node && memberIds.indexOf(node.id) >= 0);
+    });
+    page.groups = (page.groups || []).filter(function (item) {
+      return item && item.id !== group.id;
+    });
+    rebuildGraphAndRefresh();
     return true;
   }
 
@@ -1385,8 +1448,6 @@ wuwei.timeline = wuwei.timeline || {};
     return false;
   }
 
-
-
   function buildTimelineAxisPseudoLink(group) {
     if (!group || false === group.enabled) {
       return null;
@@ -1434,217 +1495,6 @@ wuwei.timeline = wuwei.timeline || {};
       }
     });
     return result;
-  }
-
-  function ensureYouTubeApi() {
-    common._timelineApiPromises = common._timelineApiPromises || {};
-    if (window.YT && window.YT.Player) {
-      return Promise.resolve();
-    }
-    if (common._timelineApiPromises.youtube) {
-      return common._timelineApiPromises.youtube;
-    }
-    common._timelineApiPromises.youtube = new Promise(function (resolve, reject) {
-      var previousReady = window.onYouTubeIframeAPIReady;
-      loadScriptOnce('timeline-youtube-iframe-api', 'https://www.youtube.com/iframe_api', function () {
-        return !!(window.YT && window.YT.Player);
-      }).then(function () {
-        if (window.YT && window.YT.Player) {
-          resolve();
-          return;
-        }
-        window.onYouTubeIframeAPIReady = function () {
-          if (typeof previousReady === 'function') {
-            try { previousReady(); } catch (e) { }
-          }
-          resolve();
-        };
-      }).catch(reject);
-    });
-    return common._timelineApiPromises.youtube;
-  }
-
-  function ensureVimeoApi() {
-    common._timelineApiPromises = common._timelineApiPromises || {};
-    if (window.Vimeo && window.Vimeo.Player) {
-      return Promise.resolve();
-    }
-    if (common._timelineApiPromises.vimeo) {
-      return common._timelineApiPromises.vimeo;
-    }
-    common._timelineApiPromises.vimeo = loadScriptOnce('timeline-vimeo-iframe-api', 'https://player.vimeo.com/api/player.js', function () {
-      return !!(window.Vimeo && window.Vimeo.Player);
-    });
-    return common._timelineApiPromises.vimeo;
-  }
-
-  function cleanupEmbeddedPreview(previewState, host) {
-    var timer = previewState && (previewState.timer || previewState.timeWatchTimer);
-    var kind = previewState && (previewState.kind || previewState.provider || '');
-    var player = previewState && (previewState.player || previewState.html5Player || previewState.youtubePlayer || previewState.vimeoPlayer);
-    if (timer) {
-      clearInterval(timer);
-    }
-    if (player) {
-      try {
-        if (kind === 'html5') {
-          player.pause();
-          player.removeAttribute('src');
-          player.load();
-        }
-        else if (kind === 'youtube') {
-          player.destroy();
-        }
-        else if (kind === 'vimeo') {
-          player.unload();
-        }
-      }
-      catch (e) { }
-    }
-    if (previewState) {
-      previewState.timer = null;
-      previewState.timeWatchTimer = null;
-      previewState.kind = '';
-      previewState.provider = '';
-      previewState.player = null;
-      previewState.html5Player = null;
-      previewState.youtubePlayer = null;
-      previewState.vimeoPlayer = null;
-      previewState.host = null;
-      previewState.hostId = '';
-    }
-    if (host) {
-      host.innerHTML = '';
-    }
-  }
-
-  function startEmbeddedPreviewEndWatch(previewState, provider, api, endSec) {
-    var key = (previewState && ('timeWatchTimer' in previewState)) ? 'timeWatchTimer' : 'timer';
-    if (previewState && previewState[key]) {
-      clearInterval(previewState[key]);
-      previewState[key] = null;
-    }
-    endSec = Number(endSec);
-    if (!Number.isFinite(endSec) || endSec <= 0 || !previewState) {
-      return;
-    }
-    previewState[key] = window.setInterval(function () {
-      if (!api) {
-        clearInterval(previewState[key]);
-        previewState[key] = null;
-        return;
-      }
-      if (provider === 'html5') {
-        if (Number(api.currentTime || 0) >= endSec) {
-          api.pause();
-        }
-        return;
-      }
-      if (provider === 'youtube') {
-        try {
-          if (Number(api.getCurrentTime() || 0) >= endSec) {
-            api.pauseVideo();
-          }
-        }
-        catch (e) { }
-        return;
-      }
-      if (provider === 'vimeo') {
-        api.getCurrentTime().then(function (sec) {
-          if (Number(sec || 0) >= endSec) {
-            api.pause().catch(function () { });
-          }
-        }).catch(function () { });
-      }
-    }, 200);
-  }
-
-  function renderHtml5EmbeddedPreview(host, source, startAt, endAt, previewState) {
-    var html = '<video controls playsinline preload="metadata" autoplay style="width:100%;height:auto;display:block;" src="' + String(source.src).replace(/"/g, '&quot;') + '"></video>';
-    host.innerHTML = html;
-    var video = host.querySelector('video');
-    if (!previewState) { previewState = {}; }
-    previewState.kind = previewState.provider = 'html5';
-    previewState.player = previewState.html5Player = video;
-    previewState.host = host;
-    if (!video) {
-      return video;
-    }
-    video.addEventListener('loadedmetadata', function onMeta() {
-      var p;
-      video.removeEventListener('loadedmetadata', onMeta);
-      try { video.currentTime = Number(startAt || 0); } catch (e) { }
-      startEmbeddedPreviewEndWatch(previewState, 'html5', video, endAt);
-      p = video.play();
-      if (p && typeof p.catch === 'function') {
-        p.catch(function () { });
-      }
-    });
-    return video;
-  }
-
-  function renderYouTubeEmbeddedPreview(host, source, startAt, endAt, previewState) {
-    return ensureYouTubeApi().then(function () {
-      var holderId = 'timelinePreviewYT_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
-      host.innerHTML = '<div id="' + holderId + '" style="width:100%;aspect-ratio:16/9;"></div>';
-      if (!previewState) { previewState = {}; }
-      previewState.kind = previewState.provider = 'youtube';
-      previewState.host = host;
-      previewState.hostId = holderId;
-      previewState.player = previewState.youtubePlayer = new YT.Player(holderId, {
-        videoId: source.id,
-        playerVars: {
-          autoplay: 1,
-          controls: 1,
-          playsinline: 1,
-          rel: 0,
-          start: Math.floor(Number(startAt || 0)),
-          end: Math.floor(Number(endAt || 0)),
-          enablejsapi: 1,
-          origin: location.origin
-        },
-        events: {
-          onReady: function (ev) {
-            try { ev.target.seekTo(Number(startAt || 0), true); } catch (e) { }
-            try { ev.target.playVideo(); } catch (e) { }
-            startEmbeddedPreviewEndWatch(previewState, 'youtube', ev.target, endAt);
-          }
-        }
-      });
-      return previewState.youtubePlayer;
-    });
-  }
-
-  function renderVimeoEmbeddedPreview(host, source, startAt, endAt, previewState) {
-    return ensureVimeoApi().then(function () {
-      var player;
-      host.innerHTML = '';
-      player = new window.Vimeo.Player(host, {
-        url: source.url,
-        autoplay: true,
-        controls: true,
-        responsive: true,
-        title: false,
-        byline: false,
-        portrait: false
-      });
-      if (!previewState) { previewState = {}; }
-      previewState.kind = previewState.provider = 'vimeo';
-      previewState.player = previewState.vimeoPlayer = player;
-      previewState.host = host;
-      player.ready().then(function () {
-        return player.setCurrentTime(Number(startAt || 0));
-      }).then(function () {
-        return player.play();
-      }).catch(function () { });
-      player.on('timeupdate', function (data) {
-        var current = Number(data && data.seconds || 0);
-        if (current >= Number(endAt || 0)) {
-          player.pause().catch(function () { });
-        }
-      });
-      return player;
-    });
   }
 
   function syncAxisEndToMediaDuration(group) {
@@ -1779,13 +1629,6 @@ wuwei.timeline = wuwei.timeline || {};
 
   ns.buildTimelineAxisPseudoLink = buildTimelineAxisPseudoLink;
   ns.buildTimelinePseudoLinksForPage = buildTimelinePseudoLinksForPage;
-  ns.ensureYouTubeApi = ensureYouTubeApi;
-  ns.ensureVimeoApi = ensureVimeoApi;
-  ns.cleanupEmbeddedPreview = cleanupEmbeddedPreview;
-  ns.startEmbeddedPreviewEndWatch = startEmbeddedPreviewEndWatch;
-  ns.renderHtml5EmbeddedPreview = renderHtml5EmbeddedPreview;
-  ns.renderYouTubeEmbeddedPreview = renderYouTubeEmbeddedPreview;
-  ns.renderVimeoEmbeddedPreview = renderVimeoEmbeddedPreview;
   ns.syncAxisEndToMediaDuration = syncAxisEndToMediaDuration;
   ns.updateTimelineAxisGeometryByEndpointDrag = updateTimelineAxisGeometryByEndpointDrag;
   ns.updateTimelineSegmentTimeFromPosition = updateTimelineSegmentTimeFromPosition;
@@ -1831,6 +1674,7 @@ wuwei.timeline = wuwei.timeline || {};
   ns.updateAxisGroup = updateAxisGroup;
   ns.updateTimePoint = updateTimePoint;
   ns.deleteTimePoint = deleteTimePoint;
+  ns.deleteAxisGroup = deleteAxisGroup;
   ns.getTimelinePlaybackSpec = getTimelinePlaybackSpec;
   ns.getTimelineTargetSpec = getTimelineTargetSpec;
   ns.confirmSavedRender = confirmSavedRender;

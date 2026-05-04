@@ -17,6 +17,7 @@ wuwei.menu.markup = (function () {
       current = common.current;
     var nls = common.nls;
     var Selecting = common.state.Selecting;
+
     var html = [];
 
     // top controls

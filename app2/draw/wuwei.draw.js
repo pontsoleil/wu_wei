@@ -367,7 +367,9 @@ wuwei.draw = wuwei.draw || {};
       link.type === 'Link' &&
       (
         link.groupType === 'timelineAxis' ||
-        link.linkType === 'timeline-axis'
+        link.linkType === 'timeline-axis' ||
+        link.groupType === 'contentsAxis' ||
+        link.linkType === 'contents-axis'
       )
     );
   }
