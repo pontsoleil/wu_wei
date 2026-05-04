@@ -3,7 +3,8 @@
 #
 # Import either a plain note JSON file or a portable ZIP made by
 # export-note.cgi. ZIP import restores upload/YYYY/MM/DD/{upload_uuid}/...
-# first, then stores the note JSON by reference.
+# and resource/YYYY/MM/DD/{resource_uuid}/... first, then stores the note JSON
+# by reference.
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "${SCRIPT_FILENAME:-$0}")" && pwd) || exit 1
 cd "$SCRIPT_DIR" || exit 1
@@ -45,6 +46,17 @@ json_response_file() {
 
 strip_quotes() {
   sed 's/^"\(.*\)"$/\1/'
+}
+
+decode_note_payload() {
+  src=$1
+  dst=$2
+  json_base64=$(nameread json_base64 "$src" | strip_quotes || true)
+  if [ -n "${json_base64:-}" ]; then
+    printf '%s' "$json_base64" | base64 -d > "$dst" 2>/dev/null || return 1
+    return 0
+  fi
+  cp "$src" "$dst" || return 1
 }
 
 json_string_field() {
@@ -116,14 +128,16 @@ fi
 
 note_base=$(resolve_env_path note "$user_id" || true)
 upload_base=$(resolve_env_path upload "$user_id" || true)
+resource_base=$(resolve_env_path resource "$user_id" || true)
 [ -n "${note_base:-}" ] || error_response 'ERROR NOTE DIRECTORY NOT DEFINED'
 [ -n "${upload_base:-}" ] || error_response 'ERROR UPLOAD DIRECTORY NOT DEFINED'
+[ -n "${resource_base:-}" ] || error_response 'ERROR RESOURCE DIRECTORY NOT DEFINED'
 
 if file -b "$UPLOAD_FILE" 2>/dev/null | grep -qi 'zip'; then
   archive_extract "$UPLOAD_FILE" "$EXTRACT_DIR" || error_response 'ERROR ZIP EXTRACT FAILED'
-  found_note=$(find "$EXTRACT_DIR" -type f -name note.txt | head -n 1)
+  found_note="$EXTRACT_DIR/note.txt"
   [ -f "${found_note:-}" ] || error_response 'ERROR NOTE TEXT NOT FOUND'
-  cp "$found_note" "$NOTE_JSON" || error_response 'ERROR NOTE JSON COPY FAILED'
+  decode_note_payload "$found_note" "$NOTE_JSON" || error_response 'ERROR NOTE JSON DECODE FAILED'
 
   if [ -d "$EXTRACT_DIR/upload" ]; then
     (cd "$EXTRACT_DIR/upload" && find . -mindepth 4 -maxdepth 4 -type d -name '_*' -print) |
@@ -141,8 +155,25 @@ if file -b "$UPLOAD_FILE" 2>/dev/null | grep -qi 'zip'; then
       fi
     done
   fi
+
+  if [ -d "$EXTRACT_DIR/resource" ]; then
+    (cd "$EXTRACT_DIR/resource" && find . -mindepth 4 -maxdepth 4 -type d -name '_*' -print) |
+    while IFS= read -r rel; do
+      rel=${rel#./}
+      case "$rel" in
+        *..*|/*) continue ;;
+      esac
+      src="$EXTRACT_DIR/resource/$rel"
+      dst="$resource_base/$rel"
+      [ -d "$src" ] || continue
+      if [ ! -d "$dst" ]; then
+        mkdir -p "$(dirname "$dst")" || error_response 'ERROR RESOURCE DIRECTORY CREATE FAILED'
+        cp -R "$src" "$dst" || error_response 'ERROR RESOURCE RESTORE FAILED'
+      fi
+    done
+  fi
 else
-  cp "$UPLOAD_FILE" "$NOTE_JSON" || error_response 'ERROR NOTE JSON COPY FAILED'
+  decode_note_payload "$UPLOAD_FILE" "$NOTE_JSON" || error_response 'ERROR NOTE JSON DECODE FAILED'
 fi
 
 sed -i '1s/^\xEF\xBB\xBF//' "$NOTE_JSON"

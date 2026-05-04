@@ -454,6 +454,58 @@ wuwei.menu.note = wuwei.menu.note || {};
     return `${base}${ext || '.txt'}`;
   }
 
+  function decodeBase64Utf8(value) {
+    return decodeURIComponent(escape(atob(String(value || '').trim())));
+  }
+
+  function encodeBase64Utf8(value) {
+    return btoa(unescape(encodeURIComponent(String(value || ''))));
+  }
+
+  function singleLineMeta(value) {
+    return String(value || '').replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  function noteMetaTextFromJson(noteText) {
+    const current = wuwei.common.current || {};
+    const cu = (wuwei.common.state && wuwei.common.state.currentUser) || {};
+    let noteJson = {};
+    try {
+      noteJson = JSON.parse(noteText);
+    }
+    catch (e) {
+      noteJson = {};
+    }
+    const noteId = noteJson.note_id || noteJson.note_uuid || current.note_id || 'new_note';
+    const noteName = noteJson.note_name || current.note_name || '';
+    const description = noteJson.description || current.description || '';
+    const userId = cu.user_id || noteJson.user_id || 'guest';
+    const savedAt = (new Date()).toISOString();
+    return [
+      'format_version 2',
+      `id ${singleLineMeta(noteId)}`,
+      `user_id ${singleLineMeta(userId)}`,
+      `name ${singleLineMeta(noteName)}`,
+      `description ${singleLineMeta(description)}`,
+      'thumbnail ',
+      `saved_at ${singleLineMeta(savedAt)}`,
+      'json_encoding base64',
+      `json_base64 ${encodeBase64Utf8(noteText)}`
+    ].join('\n') + '\n';
+  }
+
+  function noteJsonTextFromFileText(text) {
+    const raw = String(text || '').replace(/^\uFEFF/, '').trim();
+    if (/^\{/.test(raw)) {
+      return raw;
+    }
+    const match = raw.match(/^json_base64[ \t]+(.+)$/m);
+    if (!match) {
+      throw new Error('ERROR NOTE JSON NOT FOUND');
+    }
+    return decodeBase64Utf8(match[1]).trim();
+  }
+
   function downloadFile() {
     try {
       const current = wuwei.common.current || {};
@@ -481,7 +533,7 @@ wuwei.menu.note = wuwei.menu.note || {};
 
       const text = wuwei.note.exportNoteText();
       Promise.resolve(text).then(function (noteText) {
-        const blob = new Blob([noteText], { type: 'text/plain;charset=utf-8' });
+        const blob = new Blob([noteMetaTextFromJson(noteText)], { type: 'text/plain;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement('a');
         anchor.href = url;
@@ -604,7 +656,7 @@ wuwei.menu.note = wuwei.menu.note || {};
     const reader = new FileReader();
     reader.onload = function () {
       try {
-        const text = String(reader.result || '').replace(/^\uFEFF/, '').trim();
+        const text = noteJsonTextFromFileText(reader.result);
         const noteJson = JSON.parse(text);
         applyImportedNote(noteJson);
         wuwei.menu.snackbar.open({ type: 'success', message: 'Imported note file' });

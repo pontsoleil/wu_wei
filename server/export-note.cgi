@@ -4,9 +4,11 @@
 # Build a portable note ZIP on demand:
 #   note.txt
 #   upload/YYYY/MM/DD/{upload_uuid}/...
+#   resource/YYYY/MM/DD/{resource_uuid}/resource.json
 #
 # Normal save/load stays reference-only. This endpoint collects referenced
-# upload directories only when the user explicitly downloads a note bundle.
+# upload directories and resource metadata only when the user explicitly
+# downloads a note bundle.
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "${SCRIPT_FILENAME:-$0}")" && pwd) || exit 1
 cd "$SCRIPT_DIR" || exit 1
@@ -119,6 +121,7 @@ fi
 
 note_dir=$(resolve_env_path note "$user_id" || true)
 upload_dir=$(resolve_env_path upload "$user_id" || true)
+resource_dir=$(resolve_env_path resource "$user_id" || true)
 [ -d "${note_dir:-}" ] || error_response 'ERROR NOTE DIRECTORY NOT FOUND'
 [ -d "${upload_dir:-}" ] || error_response 'ERROR UPLOAD DIRECTORY NOT FOUND'
 
@@ -130,7 +133,7 @@ fi
 
 mkdir -p "$BUNDLE_DIR/upload"
 read_note_json "$note_file" > "$NOTE_JSON" || error_response 'ERROR NOTE JSON NOT FOUND'
-cp "$NOTE_JSON" "$BUNDLE_DIR/note.txt" || error_response 'ERROR NOTE COPY FAILED'
+cp "$note_file" "$BUNDLE_DIR/note.txt" || error_response 'ERROR NOTE COPY FAILED'
 
 grep -Eo '[0-9]{4}/[0-9]{2}/[0-9]{2}/_[0-9A-Fa-f-]+' "$NOTE_JSON" | sort -u > "$REFS" || true
 while IFS= read -r rel; do
@@ -144,6 +147,24 @@ while IFS= read -r rel; do
   mkdir -p "$(dirname "$dst")" || error_response 'ERROR BUNDLE DIRECTORY CREATE FAILED'
   cp -R "$src" "$dst" || error_response 'ERROR BUNDLE UPLOAD COPY FAILED'
 done < "$REFS"
+
+if [ -d "${resource_dir:-}" ]; then
+  find "$resource_dir" -type f -name resource.json 2>/dev/null |
+  while IFS= read -r resource_file; do
+    resource_parent=$(dirname "$resource_file")
+    resource_id=$(basename "$resource_parent")
+    [ -n "$resource_id" ] || continue
+    grep -Fq "$resource_id" "$NOTE_JSON" || continue
+    rel=${resource_parent#"$resource_dir"/}
+    case "$rel" in
+      *..*|/*) continue ;;
+    esac
+    dst="$BUNDLE_DIR/resource/$rel"
+    [ -d "$dst" ] && continue
+    mkdir -p "$(dirname "$dst")" || error_response 'ERROR BUNDLE RESOURCE DIRECTORY CREATE FAILED'
+    cp -R "$resource_parent" "$dst" || error_response 'ERROR BUNDLE RESOURCE COPY FAILED'
+  done
+fi
 
 archive_create "$BUNDLE_DIR" "$ZIP_FILE" || error_response 'ERROR ZIP COMMAND NOT FOUND'
 [ -s "$ZIP_FILE" ] || error_response 'ERROR ZIP CREATE FAILED'

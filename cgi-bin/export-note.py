@@ -5,11 +5,13 @@
 The ZIP layout mirrors server/export-note.cgi:
   note.txt
   upload/YYYY/MM/DD/{upload_uuid}/...
+  resource/YYYY/MM/DD/{resource_uuid}/resource.json
 """
 
 from __future__ import annotations
 
 import io
+import json
 import re
 import sys
 import zipfile
@@ -42,6 +44,43 @@ def _add_directory(zf: zipfile.ZipFile, root: Path, arc_root: str) -> None:
         zf.write(path, f"{arc_root.rstrip('/')}/{rel}")
 
 
+def _resource_ids_from_note(note_json: str) -> set[str]:
+    try:
+        note = json.loads(note_json)
+    except Exception:
+        return set(re.findall(r"_[0-9A-Fa-f-]{36}", note_json))
+    if not isinstance(note, dict):
+        return set()
+    ids: set[str] = set()
+    for resource in note.get("resources", []):
+        if isinstance(resource, dict) and isinstance(resource.get("id"), str):
+            ids.add(resource["id"])
+    for page in note.get("pages", []):
+        if not isinstance(page, dict):
+            continue
+        for node in page.get("nodes", []):
+            if not isinstance(node, dict):
+                continue
+            resource = node.get("resource")
+            if isinstance(resource, dict) and isinstance(resource.get("id"), str):
+                ids.add(resource["id"])
+    return ids
+
+
+def _add_resource_definitions(zf: zipfile.ZipFile, resource_root: Path | None, note_json: str) -> None:
+    if not resource_root or not resource_root.is_dir():
+        return
+    resource_ids = _resource_ids_from_note(note_json)
+    if not resource_ids:
+        return
+    for resource_file in resource_root.rglob("resource.json"):
+        resource_dir = resource_file.parent
+        if resource_dir.name not in resource_ids:
+            continue
+        rel = resource_dir.relative_to(resource_root).as_posix()
+        _add_directory(zf, resource_dir, f"resource/{rel}")
+
+
 def main() -> None:
     params = merge_query_and_body_params()
     session_user_id = get_effective_user_id()
@@ -55,6 +94,7 @@ def main() -> None:
 
     note_root_s = environment_path("note", user_id)
     upload_root_s = environment_path("upload", user_id)
+    resource_root_s = environment_path("resource", user_id)
     if not note_root_s or not Path(note_root_s).exists():
         script_error("ERROR NOTE DIRECTORY NOT FOUND")
     if not upload_root_s or not Path(upload_root_s).exists():
@@ -71,15 +111,17 @@ def main() -> None:
         script_error("ERROR NOTE JSON NOT FOUND")
 
     upload_root = Path(upload_root_s)
+    resource_root = Path(resource_root_s) if resource_root_s else None
     payload = io.BytesIO()
     with zipfile.ZipFile(payload, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("note.txt", note_json)
+        zf.write(note_file, "note.txt")
         for rel in sorted(set(UPLOAD_REF_RE.findall(note_json))):
             if ".." in rel or rel.startswith("/"):
                 continue
             src = upload_root / rel
             if src.is_dir():
                 _add_directory(zf, src, f"upload/{rel}")
+        _add_resource_definitions(zf, resource_root, note_json)
 
     body = payload.getvalue()
     filename = _safe_zip_name(f"{note_id}.zip")

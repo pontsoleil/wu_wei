@@ -35,6 +35,28 @@ def _single_line(value: str) -> str:
     return " ".join((value or "").replace("\r", " ").replace("\n", " ").replace("\t", " ").split())
 
 
+def _named_value(text: str, key: str) -> str:
+    prefix = key + " "
+    for line in text.splitlines():
+        if line.startswith(prefix):
+            return line[len(prefix):].strip()
+    return ""
+
+
+def _decode_note_payload(text: str) -> str:
+    text = text.lstrip("\ufeff").strip()
+    if text.startswith("{"):
+        return text
+    json_b64 = _named_value(text, "json_base64")
+    if not json_b64:
+        script_error("ERROR NOTE JSON NOT FOUND")
+    try:
+        return base64.b64decode(json_b64).decode("utf-8", errors="strict").strip()
+    except Exception:
+        debug_exception()
+        script_error("ERROR NOTE JSON DECODE FAILED")
+
+
 def _extract_zip(upload_bytes: bytes, extract_dir: Path) -> Path:
     extract_dir.mkdir(parents=True, exist_ok=True)
     zip_path = extract_dir / "bundle.zip"
@@ -45,10 +67,10 @@ def _extract_zip(upload_bytes: bytes, extract_dir: Path) -> Path:
             if not name or ".." in Path(name).parts:
                 continue
             zf.extract(info, extract_dir)
-    matches = list(extract_dir.rglob("note.txt"))
-    if not matches:
+    note_file = extract_dir / "note.txt"
+    if not note_file.is_file():
         script_error("ERROR NOTE TEXT NOT FOUND")
-    return matches[0]
+    return note_file
 
 
 def _restore_upload_dirs(extract_dir: Path, upload_root: Path) -> None:
@@ -68,8 +90,25 @@ def _restore_upload_dirs(extract_dir: Path, upload_root: Path) -> None:
         shutil.copytree(src, dst)
 
 
+def _restore_resource_dirs(extract_dir: Path, resource_root: Path) -> None:
+    resource_dir = extract_dir / "resource"
+    if not resource_dir.is_dir():
+        return
+    for src in resource_dir.glob("*/*/*/_*"):
+        if not src.is_dir():
+            continue
+        rel = src.relative_to(resource_dir)
+        if ".." in rel.parts:
+            continue
+        dst = resource_root / rel
+        if dst.exists():
+            continue
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(src, dst)
+
+
 def _save_note_meta(note_root: Path, user_id: str, note_json_text: str) -> None:
-    note_json_text = note_json_text.lstrip("\ufeff")
+    note_json_text = _decode_note_payload(note_json_text)
     try:
         note_json = json.loads(note_json_text)
     except Exception:
@@ -112,10 +151,13 @@ def main() -> None:
 
     note_root_s = environment_path("note", user_id)
     upload_root_s = environment_path("upload", user_id)
+    resource_root_s = environment_path("resource", user_id)
     if not note_root_s:
         script_error("ERROR NOTE DIRECTORY NOT DEFINED")
     if not upload_root_s:
         script_error("ERROR UPLOAD DIRECTORY NOT DEFINED")
+    if not resource_root_s:
+        script_error("ERROR RESOURCE DIRECTORY NOT DEFINED")
 
     if "file" not in form:
         script_error("ERROR FILE NOT SPECIFIED")
@@ -129,6 +171,7 @@ def main() -> None:
         if filename.endswith(".zip") or "zip" in content_type or upload_bytes[:4] == b"PK\x03\x04":
             note_file = _extract_zip(upload_bytes, extract_dir)
             _restore_upload_dirs(extract_dir, Path(upload_root_s))
+            _restore_resource_dirs(extract_dir, Path(resource_root_s))
             note_json_text = note_file.read_text(encoding="utf-8", errors="strict")
         else:
             note_json_text = upload_bytes.decode("utf-8", errors="strict")
