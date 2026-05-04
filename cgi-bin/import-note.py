@@ -107,7 +107,7 @@ def _restore_resource_dirs(extract_dir: Path, resource_root: Path) -> None:
         shutil.copytree(src, dst)
 
 
-def _save_note_meta(note_root: Path, user_id: str, note_json_text: str) -> None:
+def _save_note_meta(note_root: Path, user_id: str, note_json_text: str) -> str:
     note_json_text = _decode_note_payload(note_json_text)
     try:
         note_json = json.loads(note_json_text)
@@ -138,6 +138,7 @@ def _save_note_meta(note_root: Path, user_id: str, note_json_text: str) -> None:
         f"json_base64 {json_b64}",
     ]
     (note_dir / "note.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return note_json_text
 
 
 def main() -> None:
@@ -176,7 +177,7 @@ def main() -> None:
         else:
             note_json_text = upload_bytes.decode("utf-8", errors="strict")
 
-        _save_note_meta(Path(note_root_s), user_id, note_json_text)
+        note_json_text = _save_note_meta(Path(note_root_s), user_id, note_json_text)
 
     emit_headers("application/json; charset=UTF-8")
     sys.stdout.flush()
