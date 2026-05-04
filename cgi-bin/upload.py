@@ -350,7 +350,7 @@ def file_entry(role: str, path: Path, mime_type: str, size_text: str = "", sha25
 def write_upload_manifest(
     manifest_file: Path,
     *,
-    resource_id: str,
+    upload_id: str,
     user_id: str,
     title: str,
     kind: str,
@@ -365,7 +365,7 @@ def write_upload_manifest(
     created_at: str,
 ) -> None:
     manifest = {
-        "id": resource_id,
+        "id": upload_id,
         "type": "UploadResource",
         "version": 1,
         "created_at": created_at,
@@ -798,7 +798,7 @@ def main():
     content_type = detect_content_type(dest_file, declared_contenttype)
     upload_relpath = upload_relative_path(upload_root, dest_file)
     existing_resource, dedupe_reason = (None, "")
-    resource_id = upload_file_id
+    resource_id = f"_{uuid.uuid4()}"
     primary_dir = resource_dir / resource_id
     rid = resource_id.lstrip("_")
     primary_dir.mkdir(parents=True, exist_ok=True)
@@ -902,6 +902,12 @@ def main():
     resource = {
         "id": resource_id,
         "type": "Resource",
+        "label": name,
+        "title": name,
+        "kind": media_kind(content_type, filename),
+        "mimeType": content_type,
+        "uri": "",
+        "canonicalUri": "",
         "origin": {
             "type": "userRegistered",
             "subtype": "uploadedDocument" if media_kind(content_type, filename) == "document" else f"uploaded{media_kind(content_type, filename).capitalize()}",
@@ -968,7 +974,7 @@ def main():
     preview_sha = sha256_file(office_pdf) if office_pdf and office_pdf.exists() else ""
     write_upload_manifest(
         manifest_file,
-        resource_id=resource_id,
+        upload_id=upload_file_id,
         user_id=user_id,
         title=name,
         kind=media_kind(content_type, filename),
@@ -982,7 +988,7 @@ def main():
         preview_sha=preview_sha,
         created_at=now.isoformat(),
     )
-    write_sha_index(sha_index_file, sha256=original_hash, upload_id=resource_id, date=upload_date, filename=dest_file.name)
+    write_sha_index(sha_index_file, sha256=original_hash, upload_id=upload_file_id, date=upload_date, filename=dest_file.name)
     resource_file.write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     response = {

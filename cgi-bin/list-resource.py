@@ -8,6 +8,7 @@ from cgi_common import (
     debug_exception,
     debug_kv,
     environment_path,
+    get_effective_user_id,
     get_session_user_id,
     json_response,
     merge_query_and_body_params,
@@ -25,15 +26,16 @@ from resource_common import (
 def main():
     params = merge_query_and_body_params()
     session_user_id = get_session_user_id()
+    effective_user_id = get_effective_user_id()
     req_user_id = (params.get("user_id", "") or "").strip()
-    debug_kv(params=params, session_user_id=session_user_id, req_user_id=req_user_id)
+    debug_kv(params=params, session_user_id=session_user_id, effective_user_id=effective_user_id, req_user_id=req_user_id)
 
-    if not session_user_id:
+    if not effective_user_id:
         script_error("ERROR NOT LOGGED IN")
-    if req_user_id and req_user_id != session_user_id:
+    if req_user_id and req_user_id != effective_user_id:
         script_error("ERROR USER MISMATCH")
 
-    user_id = session_user_id
+    user_id = effective_user_id
     resource_dir = environment_path("resource", user_id)
     if not resource_dir:
         script_error("ERROR RESOURCE DIR NOT DEFINED")

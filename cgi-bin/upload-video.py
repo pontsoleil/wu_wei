@@ -255,6 +255,48 @@ def file_entry(role: str, path: Path, mime_type: str, size_text: str = "") -> di
     return item
 
 
+def write_upload_manifest(
+    manifest_file: Path,
+    *,
+    upload_id: str,
+    user_id: str,
+    title: str,
+    original_file: Path,
+    original_mime: str,
+    original_sha: str,
+    thumbnail_file: Path | None,
+    thumbnail_size: str,
+    duration: str,
+    created_at: str,
+) -> None:
+    manifest = {
+        "id": upload_id,
+        "type": "UploadResource",
+        "version": 1,
+        "created_at": created_at,
+        "created_by": user_id,
+        "title": title,
+        "kind": "video",
+        "original": {
+            "file": original_file.name,
+            "display_name": title,
+            "mime": original_mime or "application/octet-stream",
+            "size": original_file.stat().st_size if original_file.exists() else 0,
+            "sha256": original_sha,
+            "duration": duration or "",
+        },
+    }
+    if thumbnail_file and thumbnail_file.exists():
+        manifest["thumbnail"] = {
+            "file": thumbnail_file.name,
+            "mime": "image/jpeg",
+            "size": thumbnail_file.stat().st_size,
+            "sha256": sha256_file(thumbnail_file),
+            "display_size": thumbnail_size or "",
+        }
+    manifest_file.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
 def upload_relative_path(upload_root: Path, path: Path) -> str:
     try:
         return path.relative_to(upload_root).as_posix()
@@ -459,35 +501,24 @@ def main():
         declared_contenttype=declared_contenttype,
     )
 
-    dest_file = upload_dir / filename
+    upload_file_id = f"_{uuid.uuid4()}"
+    upload_file_dir = upload_dir / upload_file_id
+    dest_file = upload_file_dir / filename
+    dest_file.parent.mkdir(parents=True, exist_ok=True)
     with open(dest_file, "wb") as f:
         shutil.copyfileobj(fileitem.file, f)
 
     content_type = detect_content_type(dest_file, declared_contenttype)
     original_hash = sha256_file(dest_file)
     upload_relpath = upload_relative_path(upload_root, dest_file)
-    existing_resource, dedupe_reason = find_existing_resource(
-        resource_root,
-        original_hash=original_hash,
-        canonical_uri="",
-        source_path=upload_relpath,
-    )
-    if existing_resource and dedupe_reason != "originalPath":
-        debug_kv(dedupe="resource reused", resource_id=existing_resource.get("id"), sha256=original_hash)
-        json_response(response_from_resource(existing_resource, user_id=user_id, warning="resource reused"))
-
-    if existing_resource and dedupe_reason == "originalPath":
-        resource_id = str(existing_resource.get("id") or "")
-        primary_dir = resource_dir / resource_id
-        debug_kv(dedupe="resource updated by same original path", resource_id=resource_id, source_path=upload_relpath)
-    else:
-        resource_id = f"_{uuid.uuid4()}"
-        primary_dir = resource_dir / resource_id
+    resource_id = f"_{uuid.uuid4()}"
+    primary_dir = resource_dir / resource_id
     rid = resource_id.lstrip("_")
     primary_dir.mkdir(parents=True, exist_ok=True)
 
     resource_file = primary_dir / "resource.json"
-    thumb_file = primary_dir / "thumbnail.jpg"
+    manifest_file = dest_file.parent / "manifest.json"
+    thumb_file = dest_file.parent / "thumbnail.jpg"
 
     identify_out = identify_text(dest_file)
     video_wh = ffprobe_video_size(dest_file)
@@ -499,7 +530,7 @@ def main():
     if (content_type or "").startswith("video/"):
         _, thumbnail_size = make_video_thumbnail(dest_file, thumb_file, duration)
         if thumb_file.exists():
-            thumbnail_uri = protected_file_url(user_id, "resource", resource_relative_path(resource_root, thumb_file))
+            thumbnail_uri = protected_file_url(user_id, "upload", upload_relative_path(upload_root, thumb_file))
 
     file_uri = protected_file_url(user_id, "upload", upload_relpath)
     resource_uri = ""
@@ -526,13 +557,19 @@ def main():
     files[0]["path"] = upload_relpath
     if thumb_file.exists():
         item = file_entry("thumbnail", thumb_file, "image/jpeg", thumbnail_size or "")
-        item["area"] = "resource"
-        item["path"] = resource_relative_path(resource_root, thumb_file)
+        item["area"] = "upload"
+        item["path"] = upload_relative_path(upload_root, thumb_file)
         files.append(item)
 
     resource = {
         "id": resource_id,
         "type": "Resource",
+        "label": name,
+        "title": name,
+        "kind": "video",
+        "mimeType": content_type,
+        "uri": "",
+        "canonicalUri": "",
         "origin": {
             "type": "userRegistered",
             "subtype": "uploadedVideo",
@@ -560,6 +597,10 @@ def main():
         "storage": {
             "managed": True,
             "copyPolicy": "snapshot",
+            "manifest": {
+                "area": "upload",
+                "path": upload_relative_path(upload_root, manifest_file),
+            },
             "files": files,
         },
         "rights": {
@@ -576,6 +617,19 @@ def main():
             "lastModifiedAt": "",
         },
     }
+    write_upload_manifest(
+        manifest_file,
+        upload_id=upload_file_id,
+        user_id=user_id,
+        title=name,
+        original_file=dest_file,
+        original_mime=content_type,
+        original_sha=original_hash,
+        thumbnail_file=thumb_file if thumb_file.exists() else None,
+        thumbnail_size=thumbnail_size or "",
+        duration=duration or "",
+        created_at=now.isoformat(),
+    )
     resource_file.write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     warning = ""

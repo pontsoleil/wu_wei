@@ -33,62 +33,14 @@
 
 /* controls */
 #info-video .controls {
-  margin-top: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  margin-top: 8px;
 }
 
-#info-video .controls .label {
-  font-size: 12px;
-}
-
-#info-video .time-inputs {
-  display: flex;
-  gap: 8px;
-  margin: 8px 0;
-  flex-wrap: wrap;
-}
-
-#info-video .time-inputs input {
-  flex: 1 1 auto;
-  min-width: 0;
-  padding: 6px 8px;
-  border: 1px solid #b8b8b8;
-  border-radius: 4px;
-  background: #fff;
-  color: #222;
-}
-
-#info-video .buttons {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin: 8px 0;
-}
-
-#info-video .buttons button {
-  appearance: none;
-  border: 1px solid #888;
-  background: #f4f4f4;
-  color: #222;
-  border-radius: 4px;
-  padding: 6px 10px;
-  font-size: 13px;
-  line-height: 1.2;
-  cursor: pointer;
-}
-
-#info-video .buttons button:hover {
-  background: #e9e9e9;
-}
-
-#info-video .buttons button:disabled {
-  color: #666;
-  background: #e2e2e2;
-  border-color: #b8b8b8;
-  opacity: 1;
-  cursor: not-allowed;
+#info-video .video-duration {
+  padding: 6px 0;
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.4;
 }
 
 /* links */
@@ -111,6 +63,61 @@
   border-radius: 6px;
 }
 
-#info-video .value {
+#info-video .video-description.rich-description {
+  margin-top: 8px;
+  padding: 0;
+  color: #334155;
+  line-height: 1.5;
+}
+
+#info-video .video-description.rich-description p,
+#info-video .video-description.rich-description ul,
+#info-video .video-description.rich-description ol,
+#info-video .video-description.rich-description blockquote,
+#info-video .video-description.rich-description pre,
+#info-video .video-description.rich-description table {
+  margin: 0 0 6px;
+}
+
+#info-video .video-description.rich-description h1,
+#info-video .video-description.rich-description h2,
+#info-video .video-description.rich-description h3,
+#info-video .video-description.rich-description h4,
+#info-video .video-description.rich-description h5,
+#info-video .video-description.rich-description h6 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  line-height: 1.35;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+#info-video .video-description.rich-description ul,
+#info-video .video-description.rich-description ol {
+  padding-left: 1.25em;
+}
+
+#info-video .video-description.rich-description blockquote {
+  padding-left: 8px;
+  border-left: 3px solid #cbd5e1;
+  color: #475569;
+}
+
+#info-video .video-description.rich-description pre,
+#info-video .video-description.rich-description code {
   white-space: pre-wrap;
+  word-break: break-word;
+  font-family: "Cascadia Mono", "Yu Gothic UI", monospace;
+  font-size: 12px;
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+#info-video .video-description.rich-description pre {
+  padding: 4px 6px;
+}
+
+#info-video .video-description.rich-description a {
+  color: #2563eb;
+  text-decoration: none;
 }

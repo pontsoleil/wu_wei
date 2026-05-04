@@ -6,12 +6,14 @@ from __future__ import annotations
 import base64
 import json
 import re
+from datetime import datetime
 from pathlib import Path
 
 from cgi_common import (
     debug_exception,
     debug_kv,
     environment_path,
+    get_effective_user_id,
     get_session_user_id,
     json_response,
     merge_query_and_body_params,
@@ -55,16 +57,9 @@ def find_resource_json(root: Path, resource_id: str) -> Path | None:
 
 
 def resource_uri_values(resource: dict) -> list[str]:
-    identity = resource.get("identity") if isinstance(resource.get("identity"), dict) else {}
-    viewer = resource.get("viewer") if isinstance(resource.get("viewer"), dict) else {}
-    embed = viewer.get("embed") if isinstance(viewer.get("embed"), dict) else {}
-    snapshot_sources = resource.get("snapshotSources") if isinstance(resource.get("snapshotSources"), dict) else {}
     return [
-        str(identity.get("uri") or "").strip(),
-        str(embed.get("uri") or "").strip(),
-        str(snapshot_sources.get("previewUri") or "").strip(),
-        str(identity.get("canonicalUri") or "").strip(),
-        str(snapshot_sources.get("originalUri") or "").strip(),
+        str(resource.get("uri") or "").strip(),
+        str(resource.get("canonicalUri") or "").strip(),
     ]
 
 
@@ -73,48 +68,42 @@ def has_resource_uri(resource: dict) -> bool:
 
 
 def merge_resource_uri_fields(resource: dict, existing: dict) -> None:
-    identity = resource.setdefault("identity", {})
-    if not isinstance(identity, dict):
-        identity = {}
-        resource["identity"] = identity
-    existing_identity = existing.get("identity") if isinstance(existing.get("identity"), dict) else {}
     for key in ("uri", "canonicalUri"):
-        if not str(identity.get(key) or "").strip() and existing_identity.get(key):
-            identity[key] = existing_identity.get(key)
+        if not str(resource.get(key) or "").strip() and existing.get(key):
+            resource[key] = existing.get(key)
 
-    viewer = resource.setdefault("viewer", {})
-    if not isinstance(viewer, dict):
-        viewer = {}
-        resource["viewer"] = viewer
-    embed = viewer.setdefault("embed", {})
-    if not isinstance(embed, dict):
-        embed = {}
-        viewer["embed"] = embed
-    existing_viewer = existing.get("viewer") if isinstance(existing.get("viewer"), dict) else {}
-    existing_embed = existing_viewer.get("embed") if isinstance(existing_viewer.get("embed"), dict) else {}
-    if not str(embed.get("uri") or "").strip() and existing_embed.get("uri"):
-        embed["uri"] = existing_embed.get("uri")
 
-    snapshot_sources = resource.setdefault("snapshotSources", {})
-    if not isinstance(snapshot_sources, dict):
-        snapshot_sources = {}
-        resource["snapshotSources"] = snapshot_sources
-    existing_snapshot_sources = existing.get("snapshotSources") if isinstance(existing.get("snapshotSources"), dict) else {}
-    for key in ("previewUri", "originalUri", "thumbnailUri"):
-        if not str(snapshot_sources.get(key) or "").strip() and existing_snapshot_sources.get(key):
-            snapshot_sources[key] = existing_snapshot_sources.get(key)
+def resource_timestamp(resource: dict) -> datetime:
+    audit = resource.get("audit") if isinstance(resource.get("audit"), dict) else {}
+    for key in ("createdAt", "lastModifiedAt"):
+        value = str(audit.get(key) or "").strip()
+        if not value:
+            continue
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone()
+        except Exception:
+            continue
+    return datetime.now().astimezone()
+
+
+def create_resource_json(root: Path, resource: dict, resource_id: str) -> Path:
+    ts = resource_timestamp(resource)
+    path = root / ts.strftime("%Y") / ts.strftime("%m") / ts.strftime("%d") / resource_id / "resource.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def main():
     params = merge_query_and_body_params()
     session_user_id = get_session_user_id()
+    effective_user_id = get_effective_user_id()
     req_user_id = (params.get("user_id", "") or "").strip()
     resource_id = (params.get("id", "") or "").strip()
-    debug_kv(params={k: ("..." if k == "resource_json_base64" else v) for k, v in params.items()}, session_user_id=session_user_id)
+    debug_kv(params={k: ("..." if k == "resource_json_base64" else v) for k, v in params.items()}, session_user_id=session_user_id, effective_user_id=effective_user_id)
 
-    if not session_user_id:
+    if not effective_user_id:
         script_error("ERROR NOT LOGGED IN")
-    if req_user_id and req_user_id != session_user_id:
+    if req_user_id and req_user_id != effective_user_id:
         script_error("ERROR USER MISMATCH")
     if not resource_id or not SAFE_ID_RE.match(resource_id):
         script_error("ERROR INVALID RESOURCE ID")
@@ -123,10 +112,12 @@ def main():
     if str(resource.get("id") or "") != resource_id:
         script_error("ERROR RESOURCE ID MISMATCH")
 
-    root = Path(environment_path("resource", session_user_id))
+    root = Path(environment_path("resource", effective_user_id))
     path = find_resource_json(root, resource_id)
     if not path:
-        script_error("ERROR RESOURCE NOT FOUND")
+        if not has_resource_uri(resource):
+            script_error("ERROR RESOURCE NOT FOUND")
+        path = create_resource_json(root, resource, resource_id)
 
     if not has_resource_uri(resource):
         try:

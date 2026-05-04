@@ -200,25 +200,17 @@ def _resource_timestamp(resource: dict, fallback: datetime) -> datetime:
 
 
 def _resource_identity_key(resource: dict) -> str:
-    identity = resource.get("identity") if isinstance(resource.get("identity"), dict) else {}
     return str(
-        identity.get("canonicalUri")
-        or identity.get("uri")
+        resource.get("canonicalUri")
+        or resource.get("uri")
         or ""
     ).strip()
 
 
 def _resource_uri_values(resource: dict) -> list[str]:
-    identity = resource.get("identity") if isinstance(resource.get("identity"), dict) else {}
-    viewer = resource.get("viewer") if isinstance(resource.get("viewer"), dict) else {}
-    embed = viewer.get("embed") if isinstance(viewer.get("embed"), dict) else {}
-    snapshot_sources = resource.get("snapshotSources") if isinstance(resource.get("snapshotSources"), dict) else {}
     return [
-        str(identity.get("uri") or "").strip(),
-        str(embed.get("uri") or "").strip(),
-        str(snapshot_sources.get("previewUri") or "").strip(),
-        str(identity.get("canonicalUri") or "").strip(),
-        str(snapshot_sources.get("originalUri") or "").strip(),
+        str(resource.get("uri") or "").strip(),
+        str(resource.get("canonicalUri") or "").strip(),
     ]
 
 
@@ -239,38 +231,9 @@ def _snapshot_filename(item: dict, src: Path) -> str:
 
 
 def _merge_resource_uri_fields(resource: dict, existing: dict) -> None:
-    identity = resource.setdefault("identity", {})
-    if not isinstance(identity, dict):
-        identity = {}
-        resource["identity"] = identity
-    existing_identity = existing.get("identity") if isinstance(existing.get("identity"), dict) else {}
-
-    if not str(identity.get("uri") or "").strip() and existing_identity.get("uri"):
-        identity["uri"] = existing_identity.get("uri")
-    if not str(identity.get("canonicalUri") or "").strip() and existing_identity.get("canonicalUri"):
-        identity["canonicalUri"] = existing_identity.get("canonicalUri")
-
-    viewer = resource.setdefault("viewer", {})
-    if not isinstance(viewer, dict):
-        viewer = {}
-        resource["viewer"] = viewer
-    embed = viewer.setdefault("embed", {})
-    if not isinstance(embed, dict):
-        embed = {}
-        viewer["embed"] = embed
-    existing_viewer = existing.get("viewer") if isinstance(existing.get("viewer"), dict) else {}
-    existing_embed = existing_viewer.get("embed") if isinstance(existing_viewer.get("embed"), dict) else {}
-    if not str(embed.get("uri") or "").strip() and existing_embed.get("uri"):
-        embed["uri"] = existing_embed.get("uri")
-
-    snapshot_sources = resource.setdefault("snapshotSources", {})
-    if not isinstance(snapshot_sources, dict):
-        snapshot_sources = {}
-        resource["snapshotSources"] = snapshot_sources
-    existing_snapshot_sources = existing.get("snapshotSources") if isinstance(existing.get("snapshotSources"), dict) else {}
-    for key in ("previewUri", "originalUri", "thumbnailUri"):
-        if not str(snapshot_sources.get(key) or "").strip() and existing_snapshot_sources.get(key):
-            snapshot_sources[key] = existing_snapshot_sources.get(key)
+    for key in ("uri", "canonicalUri"):
+        if not str(resource.get(key) or "").strip() and existing.get(key):
+            resource[key] = existing.get(key)
 
 
 def _find_existing_primary_resource_by_id(resource_root: Path, rid: str) -> Path | None:

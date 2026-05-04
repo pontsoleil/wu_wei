@@ -41,6 +41,23 @@ wuwei.edit.video = wuwei.edit.video || {};
     if (s == null) return 0; const str = String(s).trim(); if (!str) return 0; if (/^\d+(\.\d+)?$/.test(str)) return Math.max(0, parseFloat(str)); const parts = str.split(':').map(p => p.trim()); if (parts.some(p => p === '' || isNaN(p))) return 0; let sec = 0; if (parts.length === 3) sec = (+parts[0]) * 3600 + (+parts[1]) * 60 + (+parts[2]); else if (parts.length === 2) sec = (+parts[0]) * 60 + (+parts[1]); else sec = +parts[0]; return Math.max(0, sec);
   }
   function formatSeconds(sec) { sec = Math.max(0, Number(sec) || 0); const h = Math.floor(sec / 3600); const m = Math.floor((sec % 3600) / 60); const s = Math.floor(sec % 60); return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`; }
+  function getMediaDuration(resource, node) {
+    const res = getResource(node, resource);
+    const media = res && res.media && typeof res.media === 'object' ? res.media : {};
+    const range = getTimeRange(node);
+    const values = [
+      res && res.duration,
+      media.duration,
+      range && range.end
+    ];
+    for (let i = 0; i < values.length; i += 1) {
+      const duration = Number(values[i]);
+      if (Number.isFinite(duration) && duration > 0) {
+        return duration;
+      }
+    }
+    return 0;
+  }
   function getResource(node, fallback) {
     return (node && node.resource && typeof node.resource === 'object')
       ? node.resource
@@ -68,12 +85,73 @@ wuwei.edit.video = wuwei.edit.video || {};
   function extractVimeoId(url) { const s = String(url || ''); const m = s.match(/vimeo\.com\/(?:video\/)?([0-9]+)/); return m ? m[1] : ''; }
   function buildPreview(resource, node) {
     const res = getResource(node, resource);
+    const source = wuwei.video && typeof wuwei.video.detectSource === 'function'
+      ? wuwei.video.detectSource({ resource: res })
+      : null;
     const resourceUri = toAbsUri((res && (res.canonicalUri || res.uri)) || '');
     const range = getTimeRange(node);
     const start = Number(range.start || 0);
-    if (/youtu(?:\.be|be\.com)/i.test(resourceUri)) return { hosted: true, html: '<iframe src="https://www.youtube.com/embed/' + encodeURIComponent(extractYouTubeId(resourceUri)) + '?playsinline=1&rel=0&start=' + Math.floor(start) + '" frameborder="0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen style="width:100%;aspect-ratio:16/9;"></iframe>' };
-    if (/vimeo\.com/i.test(resourceUri)) return { hosted: true, html: '<iframe src="https://player.vimeo.com/video/' + encodeURIComponent(extractVimeoId(resourceUri)) + '#t=' + Math.floor(start) + 's" frameborder="0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen style="width:100%;aspect-ratio:16/9;"></iframe>' };
+    if (source && source.provider === 'youtube') return { hosted: true, html: '<iframe src="https://www.youtube.com/embed/' + encodeURIComponent(source.id || extractYouTubeId(resourceUri)) + '?playsinline=1&rel=0&start=' + Math.floor(start) + '" frameborder="0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen style="width:100%;aspect-ratio:16/9;"></iframe>' };
+    if (source && source.provider === 'vimeo') return { hosted: true, html: '<iframe src="https://player.vimeo.com/video/' + encodeURIComponent(source.id || extractVimeoId(resourceUri)) + (source.h ? ('?h=' + encodeURIComponent(source.h)) : '') + '#t=' + Math.floor(start) + 's" frameborder="0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen style="width:100%;aspect-ratio:16/9;"></iframe>' };
     return { hosted: false, html: '<video id="editVideoPlayer" controls playsinline preload="metadata" src="' + encodeURI(resourceUri) + '" style="width:100%;height:auto;"></video>' };
+  }
+
+  function setNodeMediaDuration(node, resource, duration) {
+    const value = Number(duration);
+    if (!Number.isFinite(value) || value <= 0) {
+      return false;
+    }
+    resource = getResource(node, resource);
+    if (node) {
+      node.resource = resource;
+    }
+    resource.duration = value;
+    resource.media = (resource.media && typeof resource.media === 'object') ? resource.media : {};
+    resource.media.duration = value;
+    if (node) {
+      if (!node.timeRange || typeof node.timeRange !== 'object') {
+        node.timeRange = {};
+      }
+      if (node.timeRange.end == null || !Number.isFinite(Number(node.timeRange.end)) || Number(node.timeRange.end) <= 0) {
+        node.timeRange.end = value;
+      }
+      node.changed = true;
+    }
+    return true;
+  }
+
+  function syncDurationDisplayFromNode(node, resource) {
+    const el = document.getElementById('editVideoDuration');
+    if (el) {
+      el.textContent = formatSeconds(getMediaDuration(resource, node));
+    }
+  }
+
+  function applyResolvedDurationToNodeAndPane(node, resource, duration) {
+    if (setNodeMediaDuration(node, resource, duration)) {
+      syncDurationDisplayFromNode(node, resource);
+    }
+  }
+
+  function resolveDurationForDisplay(node, resource, hosted) {
+    const current = getMediaDuration(resource, node);
+    const player = document.getElementById('editVideoPlayer');
+    if (current > 0) {
+      applyResolvedDurationToNodeAndPane(node, resource, current);
+      return;
+    }
+    if (!hosted && player) {
+      player.addEventListener('loadedmetadata', function onMeta() {
+        player.removeEventListener('loadedmetadata', onMeta);
+        applyResolvedDurationToNodeAndPane(node, resource, Number(player.duration || 0));
+      });
+      return;
+    }
+    if (wuwei.timeline && typeof wuwei.timeline.resolveMediaDuration === 'function') {
+      wuwei.timeline.resolveMediaDuration(node).then(function (duration) {
+        applyResolvedDurationToNodeAndPane(node, resource, duration);
+      }).catch(function () { });
+    }
   }
 
   function wireVideoControls(param, hosted) {
@@ -82,6 +160,10 @@ wuwei.edit.video = wuwei.edit.video || {};
     const player = document.getElementById('editVideoPlayer');
     const startI = document.getElementById('editVideoStart');
     const endI = document.getElementById('editVideoEnd');
+    if (!startI || !endI) {
+      document.getElementById('editVideoOpenPlayer')?.addEventListener('click', () => { if (window.wuwei && wuwei.menu && wuwei.menu.video && typeof wuwei.menu.video.open === 'function') wuwei.menu.video.open(node); });
+      return;
+    }
     startI.value = formatSeconds(range.start || 0); endI.value = (range.end == null) ? '' : formatSeconds(range.end);
     function parseEndOrNull(str) { const s = String(str || '').trim(); if (!s) return null; const v = parseTimeToSeconds(s); return Number.isFinite(v) ? v : null; }
     if (!hosted && player) {
@@ -94,7 +176,7 @@ wuwei.edit.video = wuwei.edit.video || {};
     document.getElementById('editVideoSetEndHere')?.addEventListener('click', () => { if (player) endI.value = formatSeconds(player.currentTime || 0); });
     document.getElementById('editVideoClearEnd')?.addEventListener('click', () => { endI.value = ''; });
     document.getElementById('editVideoSaveRange')?.addEventListener('click', () => { const targetRange = ensureTimeRange(node); targetRange.start = parseTimeToSeconds(startI.value); targetRange.end = parseEndOrNull(endI.value); node.changed = true; if (model && typeof model.updateNode === 'function') model.updateNode(node); if (draw && typeof draw.refresh === 'function') draw.refresh(); });
-    document.getElementById('editVideoOpenPlayer')?.addEventListener('click', () => { if (window.wuwei && wuwei.video && typeof wuwei.video.open === 'function') wuwei.video.open(node); });
+    document.getElementById('editVideoOpenPlayer')?.addEventListener('click', () => { if (window.wuwei && wuwei.menu && wuwei.menu.video && typeof wuwei.menu.video.open === 'function') wuwei.menu.video.open(node); });
   }
 
   function open(param) {
@@ -104,10 +186,12 @@ wuwei.edit.video = wuwei.edit.video || {};
       const resource = getResource(node, param.resource);
       const range = ensureTimeRange(node);
       const preview = buildPreview(resource, node);
+      const duration = getMediaDuration(resource, node);
       const el = document.getElementById('edit-video');
-      el.innerHTML = wuwei.edit.video.markup.template(param = Object.assign({}, param, { resource: resource, previewHtml: preview.html, hosted: preview.hosted, startStr: formatSeconds(range.start || 0), endStr: range.end == null ? '' : formatSeconds(range.end) }));
+      el.innerHTML = wuwei.edit.video.markup.template(param = Object.assign({}, param, { resource: resource, previewHtml: preview.html, hosted: preview.hosted, startStr: formatSeconds(range.start || 0), endStr: range.end == null ? '' : formatSeconds(range.end), durationStr: formatSeconds(duration) }));
       el.style.display = 'block';
       initColorPalettePicker(param);
+      resolveDurationForDisplay(node, resource, preview.hosted);
       if (isVideo(resource, node)) wireVideoControls(param, preview.hosted);
       resolve(el);
     });

@@ -22,6 +22,7 @@ wuwei.info.video.markup = (function () {
     template,
     escapeHtml,
     escapeAttr,
+    renderDescription,
     rowcount,
     translate;
 
@@ -41,8 +42,10 @@ wuwei.info.video.markup = (function () {
       fmt,
       startStr,
       endStr,
+      durationStr,
       previewHtml,
-      hostedHint;
+      descriptionHtml,
+      html;
 
     description = node && node.description && typeof node.description.body === 'string'
       ? node.description.body
@@ -63,6 +66,7 @@ wuwei.info.video.markup = (function () {
     endStr = (end == null || end === '')
       ? ((duration != null && duration > 0) ? fmt(duration) : '')
       : fmt(end);
+    durationStr = (duration != null && duration > 0) ? fmt(duration) : '00:00:00';
 
     if ('html5' === provider) {
       previewHtml =
@@ -84,12 +88,7 @@ wuwei.info.video.markup = (function () {
         '</div>';
     }
 
-    hostedHint = ('html5' === provider)
-      ? ''
-      : '<div id="infoVideoHostedHint" class="hosted-hint" ' +
-      'style="margin-top:8px; font-size:0.9em; opacity:0.8;">' +
-      escapeHtml(translate('Hosted video preview may be blocked. Use Open player or open in a new tab.')) +
-      '</div>';
+    descriptionHtml = renderDescription(node && node.description);
 
     html = [];
     html.push(
@@ -105,32 +104,19 @@ wuwei.info.video.markup = (function () {
     );
     html.push(
       '<div class="controls">',
-      '<label class="label">' + translate('clip range') + ':</label>',
-      '<div class="time-inputs">',
-      '<input id="infoVideoStart" name="timeRange.start" data-path="timeRange.start" type="text" value="' + escapeAttr(startStr) + '" placeholder="start 00:01:23.5" />',
-      '<input id="infoVideoEnd" name="timeRange.end" data-path="timeRange.end" type="text" value="' + escapeAttr(endStr) + '" placeholder="end (optional) 00:02:10" />',
-      '</div>',
+      '<input id="infoVideoStart" name="timeRange.start" data-path="timeRange.start" type="hidden" value="' + escapeAttr(startStr) + '">',
+      '<input id="infoVideoEnd" name="timeRange.end" data-path="timeRange.end" type="hidden" value="' + escapeAttr(endStr) + '">',
+      '<div class="video-duration" id="infoVideoDuration">' + escapeHtml(durationStr) + '</div>',
       '</div>'
     );
 
     html.push(
-      '<div class="w3-container font-size-' + escapeAttr(fontSize) + '">',
-      '<!--Card content-->',
-      description
-        ? '<p class="value">' + wuwei.util.encodeHtml(String(description).replace(/\\n/g, '\n')) + '</p>'
-        : '',
+      '<div class="w3-container font-size-' + escapeAttr(fontSize) + ' video-description rich-description">',
+      descriptionHtml,
       '</div>',
-      hostedHint,
-      '<span class="player w3-row" onclick="wuwei.info.video.openModal()">',
-      translate('Open player') + ' <i class="fas fa-external-link-alt"></i>',
-      '</span>'
-    );
-    html.push(
-      ((provider !== 'html5' && rawUrl)
-        ? '<span class="player w3-row" onclick="wuwei.info.video.openNewTab()">' +
-            translate('Open in new tab') + ' <i class="fas fa-external-link-alt"></i>' +
-          '</span>'
-        : ''),
+      '<span class="player w3-row" id="infoVideoOpenPlayer">',
+      'Open Media Player. <i class="fas fa-external-link-alt"></i>',
+      '</span>',
       '</div>'
     );
 
@@ -149,6 +135,63 @@ wuwei.info.video.markup = (function () {
   escapeAttr = function (s) {
     return escapeHtml(s).replace(/`/g, '&#96;');
   };
+
+  renderDescription = function (description) {
+    var format, body, html;
+    if (!description || 'object' !== typeof description) {
+      return '';
+    }
+    format = String(description.format || 'plain/text').toLowerCase();
+    body = String(description.body || '');
+    if (!body.trim()) {
+      return '';
+    }
+    if (format.indexOf('html') >= 0) {
+      html = body;
+    }
+    else if ((format.indexOf('markdown') >= 0 || format === 'md') &&
+      window.marked && typeof window.marked.parse === 'function') {
+      try { html = window.marked.parse(body); }
+      catch (e) { html = ''; }
+    }
+    else if ((format.indexOf('markdown') >= 0 || format === 'md') &&
+      window.markdownit && typeof window.markdownit === 'function') {
+      try { html = window.markdownit({ html: false, linkify: true }).render(body); }
+      catch (e2) { html = ''; }
+    }
+    else if ((format.indexOf('asciidoc') >= 0 || format === 'adoc') &&
+      window.wuwei && wuwei.util && typeof wuwei.util.renderAsciiDoc === 'function') {
+      try {
+        html = wuwei.util.renderAsciiDoc(body, {
+          showtitle: false,
+          allowHtml: true
+        });
+      }
+      catch (e3) { html = ''; }
+    }
+    if (!html) {
+      html = '<p>' + escapeHtml(body).replace(/\n{2,}/g, '</p><p>').replace(/\n/g, '<br>') + '</p>';
+    }
+    return sanitizeDescriptionHtml(html);
+  };
+
+  function sanitizeDescriptionHtml(html) {
+    var template = document.createElement('template');
+    template.innerHTML = String(html || '');
+    template.content.querySelectorAll('script, style, iframe, object, embed').forEach(function (el) {
+      el.remove();
+    });
+    template.content.querySelectorAll('*').forEach(function (el) {
+      Array.from(el.attributes).forEach(function (attr) {
+        var name = attr.name.toLowerCase();
+        var value = String(attr.value || '');
+        if (name.indexOf('on') === 0 || (/(href|src|xlink:href)/.test(name) && /^\s*javascript:/i.test(value))) {
+          el.removeAttribute(attr.name);
+        }
+      });
+    });
+    return template.innerHTML;
+  }
 
   rowcount = function (str) {
     return wuwei.edit.markup.rowcount(str);

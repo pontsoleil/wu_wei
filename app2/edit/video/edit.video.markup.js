@@ -26,6 +26,18 @@ wuwei.edit.video.markup = (function () {
     if ('number' === typeof value || /^\d+(\.\d+)?$/.test(String(value))) { return String(value) + 'pt'; }
     return String(value);
   }
+  function getMediaKindValue(resource) {
+    const kind = String(resource && resource.kind || '').toLowerCase();
+    const mimeType = String(resource && resource.mimeType || '').toLowerCase();
+    const media = resource && resource.media && typeof resource.media === 'object' ? resource.media : {};
+    const mediaKind = String(media.kind || '').toLowerCase();
+    if (mediaKind === 'video' || kind === 'video' || mimeType.indexOf('video/') === 0) { return 'video'; }
+    if (mediaKind === 'audio' || kind === 'audio' || mimeType.indexOf('audio/') === 0) { return 'audio'; }
+    if (mediaKind === 'image' || kind === 'image' || mimeType.indexOf('image/') === 0) { return 'image'; }
+    if (mediaKind === 'document' || kind === 'pdf' || kind === 'office' || kind === 'document') { return 'document'; }
+    if (mediaKind === 'webpage' || kind === 'web' || kind === 'webpage') { return 'webpage'; }
+    return kind || mediaKind || '';
+  }
   const template = function (param) {
     let node = param.node;
     let resource = (node && node.resource && typeof node.resource === 'object')
@@ -44,45 +56,47 @@ wuwei.edit.video.markup = (function () {
     const title = (node && node.label) || resource.title || resourceUri || 'Video';
     const startStr = param.startStr || '00:00:00';
     const endStr = param.endStr || '';
+    const durationStr = param.durationStr || '';
     const previewHtml = param.previewHtml || '';
     const hosted = !!param.hosted;
     var html = [];
-    html.append(['<div class="edit">',
+    html.push('<div class="edit">',
       '<div>',
-        '<h5 id="rName" name="rName" rows="' + rowcount(title) + '">' + escapeHtml(title) + '</h5>',
+        '<textarea id="rName" name="label" data-path="label" class="w3-col s12" rows="' + rowcount(title) + '" placeholder="' + translate('Label') + '">' + escapeHtml(title) + '</textarea>',
       '</div>',
       '<div class="w3-row">',
         '<textarea id="rValue_comment" name="description.body" data-path="description.body" class="w3-col s12" rows="' + rowcount(value) + '" placeholder="' + translate('Comment') + '">' + escapeHtml(value) + '</textarea>',
       '</div>' +
       '<div class="w3-row">',
+        '<label for="rMedia_kind" class="w3-col s4">' + translate('Media type') + '</label>',
+        selectOptions('rMedia_kind',
+          getMediaKindValue(resource),
+          [
+            { value: '', label: 'auto' },
+            { value: 'webpage', label: 'webpage' },
+            { value: 'document', label: 'document' },
+            { value: 'image', label: 'image' },
+            { value: 'video', label: 'video' },
+            { value: 'audio', label: 'audio' }
+          ],
+          null,
+          's8'),
+      '</div>' +
+      '<div class="w3-row">',
         '<label for="rUri" class="w3-col s2">URL:</label>',
-        '<input type="text" id="rUri" name="resource.uri" data-path="resource.uri" class="w3-col s10" value="' + escapeHtml(resourceUri) + '">',
+        '<input type="text" id="rUri" name="resource.canonicalUri" data-path="resource.canonicalUri" class="w3-col s10" value="' + escapeHtml(resourceUri) + '">',
       '</div>' +
       '<div class="frame video ' + (hosted ? 'hosted' : 'html5') + '">' + previewHtml + '</div>' +
       '<div class="controls video">' +
-      '<label class="label">' + translate('clip range') + ':</label>' +
-      '<div class="time-inputs">',
-        '<input id="editVideoStart" name="timeRange.start" data-path="timeRange.start" type="text" value="' + escapeHtml(startStr) + '" placeholder="start 00:01">',
-        '<input id="editVideoEnd" name="timeRange.end" data-path="timeRange.end" type="text" value="' + escapeHtml(endStr) + '" placeholder="end (optional) 02:10">',
-      '</div>' +
-      '<div class="buttons">',
-        '<button type="button" id="editVideoJumpStart"' + (hosted ? ' disabled' : '') + '>' + translate('jump start') + '</button>',
-        '<button type="button" id="editVideoJumpEnd"' + (hosted ? ' disabled' : '') + '>' + translate('jump end') + '</button>',
-        '<button type="button" id="editVideoSetStartHere"' + (hosted ? ' disabled' : '') + '>' + translate('set start here') + '</button>',
-        '<button type="button" id="editVideoSetEndHere"' + (hosted ? ' disabled' : '') + '>' + translate('set end here') + '</button>',
-        '<button type="button" id="editVideoClearEnd">' + translate('clear end') + '</button>',
+        '<input id="editVideoStart" name="timeRange.start" data-path="timeRange.start" type="hidden" value="' + escapeHtml(startStr) + '">',
+        '<input id="editVideoEnd" name="timeRange.end" data-path="timeRange.end" type="hidden" value="' + escapeHtml(endStr) + '">',
+        '<div class="video-duration" id="editVideoDuration">' + escapeHtml(durationStr || '00:00:00') + '</div>',
       '</div>' +
       '<div class="buttons" style="margin-top:8px;">',
-      '<button type="button" id="editVideoSaveRange">save</button>',
-      '<span class="player-link" id="editVideoOpenPlayer">Open player <i class="fas fa-external-link-alt"></i></span>',
-      '</div>'])
-    if (hosted) {
-      html.append(['<div><p class="note">',
-        translate('The iframe preview does not retrieve the current/playback position; instead, it saves the start/end times and uses Open player.'),
-        '</p></div>'])
-    }
+        '<span class="player-link" id="editVideoOpenPlayer">Open Media Player. <i class="fas fa-external-link-alt"></i></span>',
+      '</div>')
     if (node) {
-      html.append(['<div class="w3-row">',
+      html.push('<div class="w3-row">',
         '<label for="nShape" class="w3-col s4">' + translate('Shape') + '</label>',
       selectOptions('nShape', node.shape, shapes, translate('Select shape')).replace('name="nShape"', 'name="shape" data-path="shape"'),
       '</div>',
@@ -102,9 +116,9 @@ wuwei.edit.video.markup = (function () {
         '<input type="color" id="nFont_color" name="style.font.color" data-path="style.font.color" value="' + escapeHtml(font && font.color || '') + '" class="w3-col s3 pointer">',
         '<div id="nodeFont_color" name="nodeFont_color" class="w3-col s3 pointer"></div>',
         selectOptions('nFont_size', fontSizeValue, fontSizes, translate('Select font size'), 's3').replace('name="nFont_size"', 'name="style.font.size" data-path="style.font.size"') ,
-      '</div>']);
+      '</div>');
     }
-    html.append('</div>');
+    html.push('</div>');
     return html.join('');
   };
   return { template: template };

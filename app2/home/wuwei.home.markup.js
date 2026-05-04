@@ -290,10 +290,14 @@ wuwei.home.markup = (function () {
       return wuwei.info.getPreviewKind(file);
     }
     const value = file && file.value ? file.value : {};
+    const resource = file && file.resource && typeof file.resource === 'object' ? file.resource : {};
+    const media = resource.media && typeof resource.media === 'object' ? resource.media : {};
     const viewerType = String(value.viewerType || '').toLowerCase();
     const format = String(file && file.contenttype || '').toLowerCase();
-    const url = safeDecode(file && (file.preview_url || file.url || file.uri) || '').toLowerCase();
-    if (viewerType === 'youtube' || viewerType === 'vimeo' || viewerType === 'video') {
+    const kind = String(media.kind || resource.kind || file && file.option || '').toLowerCase();
+    const url = safeDecode(file && (file.preview_url || file.url || file.uri) || resource.canonicalUri || resource.uri || '').toLowerCase();
+    if (viewerType === 'youtube' || viewerType === 'vimeo' || viewerType === 'video' ||
+      kind === 'video' || /^https?:\/\/(www\.)?(youtube\.com|m\.youtube\.com|youtu\.be|vimeo\.com|player\.vimeo\.com)\b/.test(url)) {
       return 'video';
     }
     if (viewerType === 'pdf' || format === 'application/pdf' || /\.pdf(\?|#|$)/i.test(url)) {
@@ -322,6 +326,31 @@ wuwei.home.markup = (function () {
       safeDecode(file && file.url ? file.url : '') ||
       safeDecode(file && file.uri ? file.uri : '') ||
       '');
+  }
+
+  function isHostedYouTube(url) {
+    return /^https?:\/\/(www\.)?(youtube\.com|m\.youtube\.com|youtu\.be)\b/i.test(String(url || ''));
+  }
+
+  function isHostedVimeo(url) {
+    return /^https?:\/\/(www\.)?(vimeo\.com|player\.vimeo\.com)\b/i.test(String(url || ''));
+  }
+
+  function buildHostedVideoEmbedUrl(rawUrl) {
+    if (window.wuwei && wuwei.info && typeof wuwei.info.buildHostedVideoEmbedUrl === 'function') {
+      return wuwei.info.buildHostedVideoEmbedUrl(rawUrl, isHostedYouTube(rawUrl) ? 'youtube' : 'vimeo', 0);
+    }
+    if (isHostedYouTube(rawUrl)) {
+      let m = String(rawUrl || '').match(/[?&]v=([A-Za-z0-9_-]{11})/) ||
+        String(rawUrl || '').match(/youtu\.be\/([A-Za-z0-9_-]{11})/) ||
+        String(rawUrl || '').match(/youtube\.com\/(?:embed|shorts|live)\/([A-Za-z0-9_-]{11})/);
+      return m ? ('https://www.youtube.com/embed/' + encodeURIComponent(m[1]) + '?playsinline=1&rel=0') : '';
+    }
+    if (isHostedVimeo(rawUrl)) {
+      let m = String(rawUrl || '').match(/vimeo\.com\/(?:video\/)?([0-9]+)(?:\/([A-Za-z0-9_-]+))?/);
+      return m ? ('https://player.vimeo.com/video/' + encodeURIComponent(m[1]) + (m[2] ? ('?h=' + encodeURIComponent(m[2])) : '')) : '';
+    }
+    return '';
   }
 
   /*  function renderThumbnail(file) {
@@ -358,6 +387,24 @@ wuwei.home.markup = (function () {
             : ''
         ))
     );
+
+    if (previewKind === 'video' && previewSrc) {
+      if (isHostedYouTube(previewSrc) || isHostedVimeo(previewSrc)) {
+        const embedUrl = buildHostedVideoEmbedUrl(previewSrc);
+        if (embedUrl) {
+          return `
+        <div class="file-thumb file-thumb-video">
+          <iframe src="${escapeHtml(embedUrl)}" title="${name}" loading="lazy" frameborder="0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>
+          <span class="file-badge">${typeLabel}</span>
+        </div>`;
+        }
+      }
+      return `
+        <div class="file-thumb file-thumb-video">
+          <video class="thumbnail" src="${escapeHtml(previewSrc)}" controls playsinline preload="metadata"></video>
+          <span class="file-badge">${typeLabel}</span>
+        </div>`;
+    }
 
     if (thumbUri && thumbUri.indexOf('undefined') < 0) {
       return `
@@ -589,6 +636,11 @@ wuwei.home.markup = (function () {
             <div class="home-subtitle">${escapeHtml(translate('Browse uploaded files, saved webpages, PDFs, and other registered resources. Add comments, insert selected content into the current note, or start a new note from it.'))}</div>
           </div>
         </div>
+        <div id="files" class="home-top-stats toolbar-stats">
+          <div class="toolbar-stat"><span>${escapeHtml(translate('Total items'))}: </span><span id="total-files"></span></div>
+          <div id="homeCurrentRange" class="toolbar-range"></div>
+          <div id="Items" class="toolbar-items"></div>
+        </div>
       </div>
       <div class="home-command-row">
         <div class="home-header-actions">
@@ -720,17 +772,6 @@ wuwei.home.markup = (function () {
       </aside>
 
       <main id="main" class="home-main">
-        <section class="home-toolbar home-panel">
-          <div class="toolbar-meta">
-            <div class="toolbar-title">${escapeHtml(translate('Content gallery'))}</div>
-            <div id="homeCurrentRange" class="toolbar-range"></div>
-          </div>
-          <div id="files" class="toolbar-stats">
-            <div class="toolbar-stat"><span>${escapeHtml(translate('Total items'))}: </span><span id="total-files"></span></div>
-            <div id="Items" class="toolbar-items"></div>
-          </div>
-        </section>
-
         <section class="home-panel gallery-panel">
           <div id="gallery">${fileGallery(files)}</div>
         </section>

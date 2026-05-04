@@ -318,6 +318,7 @@ wuwei.home = (function () {
     if (commentEl) {
       commentEl.innerHTML = html || escapeHtml(translate('No comment yet'));
       commentEl.classList.toggle('muted', !html);
+      commentEl.classList.add('rich-description');
       commentEl.classList.remove('hidden');
     }
     if (editorEl) {
@@ -368,22 +369,23 @@ wuwei.home = (function () {
     const media = resource && resource.media && typeof resource.media === 'object' ? resource.media : {};
     const viewer = resource && resource.viewer && typeof resource.viewer === 'object' ? resource.viewer : {};
     const storage = resource && resource.storage && typeof resource.storage === 'object' ? resource.storage : {};
-    const sourceUri = safeDecode(file.uri || identity.uri || identity.canonicalUri || '');
+    const sourceUri = safeDecode(resource.uri || resource.canonicalUri || '');
     const previewUri = safeDecode(file.preview_url || value.previewUri || file.url || viewer.uri || sourceUri || '');
-    const canonicalUri = safeDecode(file.download_url || identity.canonicalUri || sourceUri || previewUri || '');
+    const canonicalUri = safeDecode(resource.canonicalUri || resource.uri || '');
 
     if (resource) {
       resource.id = resourceId;
       resource.label = resource.label || label;
+      resource.title = resource.title || label;
       resource.description = description;
+      resource.uri = sourceUri;
+      resource.canonicalUri = canonicalUri || sourceUri;
       resource.identity = Object.assign({}, identity, {
-        title: identity.title || label,
-        uri: identity.uri || sourceUri || previewUri,
-        canonicalUri: identity.canonicalUri || canonicalUri || sourceUri || previewUri
+        title: identity.title || resource.title || label
       });
       resource.media = Object.assign({}, media, {
-        kind: media.kind || file.option || 'general',
-        mimeType: media.mimeType || file.contenttype || 'text/plain'
+        kind: media.kind || resource.kind || file.option || 'general',
+        mimeType: media.mimeType || resource.mimeType || file.contenttype || 'text/plain'
       });
       resource.viewer = viewer;
       resource.storage = storage;
@@ -397,42 +399,58 @@ wuwei.home = (function () {
       label: label,
       name: label,
       option: file.option || '',
-      contenttype: file.contenttype || (media && media.mimeType) || 'text/plain',
+      contenttype: file.contenttype || resource.mimeType || (media && media.mimeType) || 'text/plain',
       uri: sourceUri || previewUri,
       url: previewUri || sourceUri,
-      download_url: canonicalUri || sourceUri || previewUri,
+      download_url: file.download_url || canonicalUri || sourceUri || previewUri,
       preview_url: previewUri || sourceUri,
       value: value
     };
   }
 
   function isRegistrableResourceFile(file) {
-    if (!file || !file.id) { return false; }
+    function reject(reason) {
+      console.log('wuwei.home: skipped non-current resource format', {
+        id: file && file.id ? file.id : '',
+        label: file && (file.label || file.name) ? (file.label || file.name) : '',
+        reason: reason
+      });
+      return false;
+    }
+
+    if (!file || !file.id) { return reject('missing file id'); }
 
     const resource = file.resource && typeof file.resource === 'object' ? file.resource : null;
-    if (!resource) { return false; }
+    if (!resource) { return reject('missing resource object'); }
 
     const identity = resource.identity && typeof resource.identity === 'object' ? resource.identity : {};
     const media = resource.media && typeof resource.media === 'object' ? resource.media : {};
-    const viewer = resource.viewer && typeof resource.viewer === 'object' ? resource.viewer : {};
-    const embed = viewer.embed && typeof viewer.embed === 'object' ? viewer.embed : {};
     const storage = resource.storage && typeof resource.storage === 'object' ? resource.storage : {};
     const files = Array.isArray(storage.files) ? storage.files : [];
-    const snapshotSources = resource.snapshotSources && typeof resource.snapshotSources === 'object' ? resource.snapshotSources : {};
 
-    const resourceId = resource.id || file.id;
-    const label = safeDecode(file.label || file.name || resource.label || identity.title || '');
-    const mimeType = media.mimeType || file.contenttype || '';
-    const kind = media.kind || file.option || '';
-    const uri = safeDecode(file.uri || identity.uri || identity.canonicalUri || embed.uri || '');
-    const previewUri = safeDecode(file.preview_url || file.url || snapshotSources.previewUri || embed.uri || '');
-    const downloadUri = safeDecode(file.download_url || snapshotSources.originalUri || identity.canonicalUri || '');
+    const resourceId = resource.id || '';
+    const label = safeDecode(file.label || file.name || resource.label || resource.title || identity.title || '');
+    const mimeType = media.mimeType || resource.mimeType || file.contenttype || '';
+    const kind = media.kind || resource.kind || file.option || '';
     const hasStorageFile = files.some(function (item) {
       return item && item.path && ['original', 'preview', 'thumbnail'].includes(String(item.role || '').toLowerCase());
     });
-    const hasAddress = !!(uri || previewUri || downloadUri);
+    const manifest = storage.manifest && typeof storage.manifest === 'object' ? storage.manifest : {};
+    const hasUploadStorage = !!(hasStorageFile || storage.managed || storage.copyPolicy || manifest.path);
+    const hasResourceUri = !!safeDecode(resource.uri || resource.canonicalUri || '');
 
-    return !!(resourceId && label && hasAddress && (kind || mimeType || hasStorageFile));
+    if (resource.type && resource.type !== 'Resource') { return reject('resource.type is not Resource'); }
+    if (!resourceId) { return reject('missing resource.id'); }
+    if (!label) { return reject('missing label/title'); }
+    if (hasUploadStorage) {
+      if (!manifest.path) { return reject('missing storage.manifest.path'); }
+      if (!hasStorageFile) { return reject('missing storage.files'); }
+    }
+    else if (!hasResourceUri) {
+      return reject('missing resource.uri/resource.canonicalUri');
+    }
+    if (!(kind || mimeType || hasStorageFile)) { return reject('missing media kind/mimeType'); }
+    return true;
   }
 
   function hasEditableCurrentNote() {
@@ -502,15 +520,15 @@ wuwei.home = (function () {
       safeDecode(file && file.name ? file.name : ''),
       safeDecode(value && value.label ? value.label : ''),
       safeDecode(descriptionBody),
-      safeDecode(identity.title || ''),
+      safeDecode(resource.title || identity.title || ''),
       storageFiles.map(function (item) {
         if (!item) {
           return '';
         }
         return [safeDecode(item.area || ''), safeDecode(item.path || '')].join(' ');
       }).join(' '),
-      safeDecode(identity.uri || ''),
-      safeDecode(identity.canonicalUri || ''),
+      safeDecode(resource.uri || identity.uri || ''),
+      safeDecode(resource.canonicalUri || identity.canonicalUri || ''),
       safeDecode(file && file.url ? file.url : ''),
       safeDecode(file && file.uri ? file.uri : '')
     ].join(' ').toLowerCase();
@@ -524,10 +542,12 @@ wuwei.home = (function () {
     const resource = file && file.resource && typeof file.resource === 'object' ? file.resource : {};
     const media = resource.media && typeof resource.media === 'object' ? resource.media : {};
     const identity = resource.identity && typeof resource.identity === 'object' ? resource.identity : {};
-    const kind = String(media.kind || file.option || '').toLowerCase();
-    const mime = String(media.mimeType || file.contenttype || '').toLowerCase();
+    const kind = String(media.kind || resource.kind || file.option || '').toLowerCase();
+    const mime = String(media.mimeType || resource.mimeType || file.contenttype || '').toLowerCase();
     const uri = safeDecode(
       file && (file.preview_url || file.download_url || file.url || file.uri) ||
+      resource.uri ||
+      resource.canonicalUri ||
       identity.uri ||
       identity.canonicalUri ||
       ''
@@ -826,6 +846,31 @@ wuwei.home = (function () {
         '</div>';
     }
 
+    if (!src) {
+      return thumbnailSrc ? renderImagePreview(thumbnailSrc) : '';
+    }
+
+    if (kind === 'video') {
+      if (isHostedYouTube(src) || isHostedVimeo(src)) {
+        const provider = isHostedYouTube(src) ? 'youtube' : 'vimeo';
+        const embedUrl = buildHostedVideoEmbedUrl(src, provider, 0);
+        const safeEmbedUrl = escapeHtml(embedUrl);
+        if (embedUrl) {
+          return '<div class="home-preview-stack">' +
+            '<div class="info-iframe-wrap home-iframe-preview home-video-preview" data-preview-url="' + safeEmbedUrl + '">' +
+            '<iframe src="' + safeEmbedUrl + '" title="' + name + '" loading="lazy" frameborder="0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>' +
+            '<div class="home-iframe-fallback hidden">' +
+            '<div class="home-iframe-fallback-title">' + escapeHtml(translate('Hosted video preview may be blocked. Use Open player or open in a new tab.')) + '</div>' +
+            renderOpenAction(src) +
+            '</div>' +
+            '</div>' +
+            renderOpenAction(src) +
+            '</div>';
+        }
+      }
+      return '<video class="info-preview-video" src="' + safeSrc + '" controls></video>';
+    }
+
     if (thumbnailSrc) {
       return renderImagePreview(thumbnailSrc);
     }
@@ -834,19 +879,8 @@ wuwei.home = (function () {
       return renderImagePreview(src);
     }
 
-    if (!src) {
-      return '';
-    }
-
     if (kind === 'pdf' || /\.pdf(\?|#|$)/i.test(src)) {
       return renderPreviewLink(translate('PDF preview'));
-    }
-
-    if (kind === 'video') {
-      if (isHostedYouTube(src) || isHostedVimeo(src)) {
-        return renderPreviewLink(translate('Video'));
-      }
-      return '<video class="info-preview-video" src="' + safeSrc + '" controls></video>';
     }
 
     if (kind === 'iframe') {
@@ -1321,6 +1355,19 @@ wuwei.home = (function () {
     }
   }
 
+  function currentMonthKey() {
+    if (!year || !month) { return ''; }
+    return year + '-' + String(month).padStart(2, '0');
+  }
+
+  function latestAvailableMonthKey(sourceMonths) {
+    if (!Array.isArray(sourceMonths) || !sourceMonths.length) { return ''; }
+    return sourceMonths
+      .filter(function (value) { return /^\d{4}-\d{2}$/.test(String(value || '')); })
+      .sort()
+      .pop() || '';
+  }
+
   function setFilterControlValues() {
     const startEl = document.getElementById('homeDateStart');
     const endEl = document.getElementById('homeDateEnd');
@@ -1584,10 +1631,11 @@ wuwei.home = (function () {
         }
         else {
           if (wuweiDiv) wuweiDiv.style.display = 'none';
-          // if (wuwei.info && typeof wuwei.info.close === 'function') { wuwei.info.close(); }
-          // if (wuwei.edit && typeof wuwei.edit.close === 'function') { wuwei.edit.close(); }
-          // if (wuwei.search && typeof wuwei.search.close === 'function') { wuwei.search.close(); }
-          // if (wuwei.filter && typeof wuwei.filter.close === 'function') { wuwei.filter.close(); }
+          if (wuwei.info && typeof wuwei.info.close === 'function') { wuwei.info.close(); }
+          if (wuwei.edit && typeof wuwei.edit.close === 'function') { wuwei.edit.close(); }
+          if (wuwei.menu && wuwei.menu.video && typeof wuwei.menu.video.close === 'function') { wuwei.menu.video.close(); }
+          if (wuwei.search && typeof wuwei.search.close === 'function') { wuwei.search.close(); }
+          if (wuwei.filter && typeof wuwei.filter.close === 'function') { wuwei.filter.close(); }
           if (homeDiv) { homeDiv.style.display = 'flex' };
           refreshLoginStatus().then(function () {
             const currentUser = state.currentUser || {};
@@ -1918,16 +1966,7 @@ wuwei.home = (function () {
   };
 
   populateFile = function (response) {
-    let daysString = response.days;
     days = {};
-    if (daysString) {
-      let days_ = daysString.split('_');
-      if (days_ && days_.length > 0) {
-        days_.forEach(function (day) {
-          days[day] = true;
-        });
-      }
-    }
 
     const count = response.count;
     if (count < 0) { return; }
@@ -1943,6 +1982,9 @@ wuwei.home = (function () {
         if (!isRegistrableResourceFile(file)) {
           return;
         }
+        const resource = file.resource && typeof file.resource === 'object' ? file.resource : {};
+        const identity = resource.identity && typeof resource.identity === 'object' ? resource.identity : {};
+        const viewer = resource.viewer && typeof resource.viewer === 'object' ? resource.viewer : {};
         const value = file.value || {};
         let filterDate = response.date;
         let lastmodified = value.lastmodified;
@@ -1967,21 +2009,28 @@ wuwei.home = (function () {
         util.appendById(allFiles, {
           id: file.id,
           resource: file.resource,
-          label: file.label,
+          label: file.label || resource.label || resource.title || identity.title || '',
           description: file.description,
-          option: file.option,
-          contenttype: format,
-          name: safeDecode(file.name),
-          url: safeDecode(file.url),
-          uri: safeDecode(file.uri),
-          download_url: safeDecode(file.download_url),
-          preview_url: safeDecode(file.preview_url),
+          option: file.option || resource.kind || '',
+          contenttype: format || resource.mimeType || '',
+          name: safeDecode(file.name || file.label || resource.label || resource.title || identity.title || ''),
+          url: safeDecode(file.url || file.preview_url || viewer.uri || resource.uri || identity.uri || ''),
+          uri: safeDecode(file.uri || resource.uri || identity.uri || ''),
+          download_url: safeDecode(file.download_url || resource.canonicalUri || identity.canonicalUri || ''),
+          preview_url: safeDecode(file.preview_url || viewer.uri || file.url || resource.uri || identity.uri || ''),
           value: value,
           type: type,
           thumbnail: value.thumbnail ? value.thumbnail.uri : ''
         });
       });
     }
+
+    allFiles.forEach(function (file) {
+      const resourceDate = getResourceDate(file);
+      if (resourceDate) {
+        days[resourceDate] = true;
+      }
+    });
 
     if (wuwei.home.markup && wuwei.home.markup.add_calendar) {
       wuwei.home.markup.add_calendar(year, month, days, months);
@@ -2046,6 +2095,24 @@ wuwei.home = (function () {
     })
       .then(function (responseText) {
         const response = parseResourceListResponse(responseText);
+        const latestMonth = latestAvailableMonthKey(response.months || []);
+        if (!date && !dateRangeStart && !dateRangeEnd && !searchTerm &&
+          param.allowMonthFallback !== false &&
+          (!response.r || response.r.length === 0) &&
+          latestMonth && latestMonth !== currentMonthKey()) {
+          const parts = latestMonth.split('-');
+          year = Number(parts[0]) || year;
+          month = Number(parts[1]) || month;
+          listFile({
+            year: year,
+            month: month,
+            date: '',
+            start: state.start || 0,
+            count: state.count || 24,
+            allowMonthFallback: false
+          });
+          return;
+        }
         months = response.months || months;
         populateFile(response);
       })

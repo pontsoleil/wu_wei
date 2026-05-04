@@ -5,7 +5,7 @@
  * WuWei is a free, open-source knowledge modelling tool.
  * - HTML5 video: inline preview with jump/set-here controls
  * - YouTube / Vimeo: iframe preview in info pane
- * - Accurate playback is delegated to wuwei.video.open()
+ * - Accurate playback is delegated to wuwei.menu.video.open()
  * - Vimeo embed refusal is handled by always showing fallback guidance
  *
  * Licensed under the MIT License.
@@ -45,6 +45,7 @@ wuwei.info.video = wuwei.info.video || {};
     buildEmbedUrl,
     parseTimeToSeconds,
     formatSeconds,
+    getMediaDuration,
     getPlayerEl,
     getStartInputEl,
     getEndInputEl,
@@ -57,11 +58,13 @@ wuwei.info.video = wuwei.info.video || {};
     // syncHostedControls,
     openModal,
     openNewTab,
+    getResourceUrl,
     wireEvents,
     open,
     close,
     loadScript,
     updateNodeDuration,
+    syncDurationDisplayFromNode,
     setEndFromDuration,
     ensureDurationFromPreview,
     initModule;
@@ -80,6 +83,10 @@ wuwei.info.video = wuwei.info.video || {};
     return (util && typeof util.getResource === 'function')
       ? util.getResource(node)
       : ((node && node.resource && 'object' === typeof node.resource) ? node.resource : {});
+  };
+
+  getResourceUrl = function (resource) {
+    return String(resource && (resource.canonicalUri || resource.uri) || '');
   };
 
   getTimeRange = function (node) {
@@ -107,7 +114,7 @@ wuwei.info.video = wuwei.info.video || {};
     }
 
     fmt = String(resource.mimeType || '').toLowerCase();
-    uri = String(resource.canonicalUri || resource.uri || '').toLowerCase();
+    uri = getResourceUrl(resource).toLowerCase();
     title = String(resource.title || '').toLowerCase();
     kind = String(resource.kind || '').toLowerCase();
 
@@ -174,15 +181,17 @@ wuwei.info.video = wuwei.info.video || {};
     try {
       u = new URL(out.url, location.href);
       out.h = u.searchParams.get('h') || '';
-      m = u.pathname.match(/\/(?:video\/)?([0-9]+)/);
+      m = u.pathname.match(/\/(?:video\/)?([0-9]+)(?:\/([A-Za-z0-9_-]+))?/);
       if (m) {
         out.id = m[1];
+        out.h = out.h || m[2] || '';
       }
     }
     catch (e) {
-      m = out.url.match(/vimeo\.com\/(?:video\/)?([0-9]+)/);
+      m = out.url.match(/vimeo\.com\/(?:video\/)?([0-9]+)(?:\/([A-Za-z0-9_-]+))?/);
       if (m) {
         out.id = m[1];
+        out.h = out.h || m[2] || '';
       }
     }
 
@@ -190,7 +199,7 @@ wuwei.info.video = wuwei.info.video || {};
   };
 
   buildEmbedUrl = function (resource, provider, start) {
-    var rawUrl = String(resource && (resource.canonicalUri || resource.uri) || '');
+    var rawUrl = getResourceUrl(resource);
     var startSec = Math.max(0, Math.floor(Number(start || 0)));
     var id, vimeo, qs, q, t;
 
@@ -273,6 +282,25 @@ wuwei.info.video = wuwei.info.video || {};
     ss = ss.padStart(2, '0');
 
     return hh + ':' + mm + ':' + ss;
+  };
+
+  getMediaDuration = function (resource, node) {
+    var res = resource || getNodeResource(node);
+    var media = res && 'object' === typeof res.media ? res.media : {};
+    var range = getTimeRange(node);
+    var values = [
+      res && res.duration,
+      media.duration,
+      range && range.end
+    ];
+    var i, duration;
+    for (i = 0; i < values.length; i += 1) {
+      duration = Number(values[i]);
+      if (Number.isFinite(duration) && duration > 0) {
+        return duration;
+      }
+    }
+    return 0;
   };
 
   getPlayerEl = function () {
@@ -373,11 +401,32 @@ wuwei.info.video = wuwei.info.video || {};
     }
 
     stateMap.resource = stateMap.resource || getNodeResource(stateMap.node);
+    stateMap.node.resource = stateMap.resource;
     stateMap.resource.duration = sec;
+    stateMap.resource.media = (stateMap.resource.media && 'object' === typeof stateMap.resource.media)
+      ? stateMap.resource.media
+      : {};
+    stateMap.resource.media.duration = sec;
+    if (!stateMap.node.timeRange || 'object' !== typeof stateMap.node.timeRange) {
+      stateMap.node.timeRange = {};
+    }
+    if (stateMap.node.timeRange.end == null ||
+      !Number.isFinite(Number(stateMap.node.timeRange.end)) ||
+      Number(stateMap.node.timeRange.end) <= 0) {
+      stateMap.node.timeRange.end = sec;
+    }
     stateMap.node.changed = true;
+    syncDurationDisplayFromNode();
 
     if (model && typeof model.updateNode === 'function') {
       model.updateNode(stateMap.node);
+    }
+  };
+
+  syncDurationDisplayFromNode = function () {
+    var el = document.getElementById('infoVideoDuration');
+    if (el) {
+      el.textContent = formatSeconds(getMediaDuration(stateMap.resource, stateMap.node));
     }
   };
 
@@ -587,10 +636,11 @@ wuwei.info.video = wuwei.info.video || {};
   openModal = function (node) {
     var target = node || stateMap.node || stateMap.resource;
     if (window.wuwei &&
-      wuwei.video &&
-      typeof wuwei.video.open === 'function' &&
+      wuwei.menu &&
+      wuwei.menu.video &&
+      typeof wuwei.menu.video.open === 'function' &&
       target) {
-      wuwei.video.open(target);
+      wuwei.menu.video.open(target);
     }
   };
 
@@ -609,6 +659,7 @@ wuwei.info.video = wuwei.info.video || {};
     var btnHereE = document.getElementById('infoVideoSetEndHere');
     var btnSave = document.getElementById('infoVideoSaveRange');
     var btnOpenTab = document.getElementById('infoVideoOpenTab');
+    var btnOpenPlayer = document.getElementById('infoVideoOpenPlayer');
 
     if (btnJumpS) {
       btnJumpS.onclick = jumpToStart;
@@ -630,6 +681,11 @@ wuwei.info.video = wuwei.info.video || {};
         openNewTab();
       };
     }
+    if (btnOpenPlayer) {
+      btnOpenPlayer.onclick = function () {
+        openModal();
+      };
+    }
 
     // syncHostedControls();
     ensureTimeUpdateHandler();
@@ -646,7 +702,7 @@ wuwei.info.video = wuwei.info.video || {};
     stateMap.node = param.node ? (model.findNodeById(param.node.id) || param.node) : null;
     stateMap.resource = param.resource || getNodeResource(stateMap.node);
     stateMap.provider = detectProvider(stateMap.resource);
-    stateMap.rawUrl = String(stateMap.resource && (stateMap.resource.canonicalUri || stateMap.resource.uri) || '');
+    stateMap.rawUrl = getResourceUrl(stateMap.resource);
 
     if (!isVideoResource(stateMap.resource)) {
       pane.innerHTML = '';
@@ -670,9 +726,7 @@ wuwei.info.video = wuwei.info.video || {};
       provider: stateMap.provider,
       start: start,
       end: end,
-      duration: (stateMap.resource && stateMap.resource.duration != null)
-        ? stateMap.resource.duration
-        : null,
+      duration: getMediaDuration(stateMap.resource, stateMap.node),
       src: toAbsUri(stateMap.rawUrl),
       rawUrl: stateMap.rawUrl,
       embedUrl: stateMap.embedUrl

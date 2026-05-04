@@ -12,7 +12,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterable
 
-from cgi_common import environment_path, environment_url, trim
+from urllib.parse import quote
+
+from cgi_common import environment_path, trim
 
 
 def load_resource(path: Path) -> dict | None:
@@ -59,6 +61,18 @@ def available_months(resource_root: Path) -> list[str]:
     return sorted([m for m in months if m])
 
 
+def protected_file_url(user_id: str, area: str, rel_path: str) -> str:
+    area = str(area or "").strip().lower()
+    rel_path = str(rel_path or "").replace("\\", "/").strip("/")
+    if not area or not rel_path:
+        return ""
+    return (
+        f"cgi-bin/load-file.py?area={quote(area, safe='')}"
+        f"&path={quote(rel_path, safe='')}"
+        f"&user_id={quote(str(user_id or ''), safe='')}"
+    )
+
+
 def local_file_url(user_id: str, source_path: str) -> str:
     if not source_path:
         return ""
@@ -71,7 +85,7 @@ def local_file_url(user_id: str, source_path: str) -> str:
         base = Path(environment_path(area, user_id))
         try:
             rel = source.resolve().relative_to(base.resolve()).as_posix()
-            return environment_url(area, user_id, rel)
+            return protected_file_url(user_id, area, rel)
         except Exception:
             continue
 
@@ -89,14 +103,14 @@ def file_url(user_id: str, resource_json: Path, role_path: str, source_path: str
         area_root = Path(environment_path(area, user_id))
         candidate = area_root / role_path
         if candidate.exists():
-            return environment_url(area, user_id, role_path)
+            return protected_file_url(user_id, area, role_path)
 
     resource_dir = resource_json.parent
     candidate = resource_dir / role_path
     if candidate.exists():
         try:
             rel = candidate.relative_to(Path(environment_path("resource", user_id))).as_posix()
-            return environment_url("resource", user_id, rel)
+            return protected_file_url(user_id, "resource", rel)
         except Exception:
             return str(candidate)
 
@@ -133,6 +147,7 @@ def is_hosted_vimeo(uri: str) -> bool:
 def is_webpage_resource(resource: dict, uri: str) -> bool:
     origin = resource.get("origin") if isinstance(resource.get("origin"), dict) else {}
     media = resource.get("media") if isinstance(resource.get("media"), dict) else {}
+    contents = resource.get("contents") if isinstance(resource.get("contents"), dict) else {}
     viewer = resource.get("viewer") if isinstance(resource.get("viewer"), dict) else {}
     origin_type = str(origin.get("type") or "").lower()
     origin_subtype = str(origin.get("subtype") or "").lower()
@@ -162,7 +177,7 @@ def option_for_resource(resource: dict) -> str:
     origin = resource.get("origin") if isinstance(resource.get("origin"), dict) else {}
     identity = resource.get("identity") if isinstance(resource.get("identity"), dict) else {}
     media = resource.get("media") if isinstance(resource.get("media"), dict) else {}
-    uri = str(identity.get("uri") or identity.get("canonicalUri") or "")
+    uri = str(resource.get("uri") or resource.get("canonicalUri") or identity.get("uri") or identity.get("canonicalUri") or "")
     if str(media.get("kind") or "").lower() == "video" or is_hosted_youtube(uri) or is_hosted_vimeo(uri):
         return "video"
     if is_webpage_resource(resource, uri):
@@ -218,24 +233,33 @@ def collect_resource_record(resource_root: Path, resource_json: Path, user_id: s
     viewer = resource.get("viewer") if isinstance(resource.get("viewer"), dict) else {}
     embed = viewer.get("embed") if isinstance(viewer.get("embed"), dict) else {}
     description = resource.get("description") if isinstance(resource.get("description"), dict) else {}
+    contents = resource.get("contents") if isinstance(resource.get("contents"), dict) else {}
     thumbnail = find_storage_file(resource, "thumbnail")
     preview = find_storage_file(resource, "preview")
     original = find_storage_file(resource, "original")
 
     title = resource.get("label") or identity.get("title") or resource.get("id") or resource_json.parent.name
-    uri = identity.get("uri") or embed.get("uri") or identity.get("canonicalUri") or ""
-    canonical_uri = identity.get("canonicalUri") or uri
-    content_type = media.get("mimeType") or original.get("mimeType") or ""
+    uri = (
+        resource.get("uri")
+        or resource.get("canonicalUri")
+        or identity.get("uri")
+        or embed.get("uri")
+        or identity.get("canonicalUri")
+        or ""
+    )
+    canonical_uri = resource.get("canonicalUri") or identity.get("canonicalUri") or uri
+    content_type = media.get("mimeType") or resource.get("mimeType") or original.get("mimeType") or ""
     if not content_type and is_webpage_resource(resource, canonical_uri or uri):
         content_type = "text/html"
     viewer_type = viewer_type_for_resource(resource, canonical_uri or uri, content_type)
+    original_uri = file_url(user_id, resource_json, str(original.get("path") or ""), "", str(original.get("area") or "")) if original else ""
     preview_uri = embed.get("uri") or (
-        file_url(user_id, resource_json, str(preview.get("path") or ""), str(preview.get("sourcePath") or ""), str(preview.get("area") or ""))
+        file_url(user_id, resource_json, str(preview.get("path") or ""), "", str(preview.get("area") or ""))
         if preview
-        else uri
+        else (original_uri or uri)
     )
     thumbnail_uri = (
-        file_url(user_id, resource_json, str(thumbnail.get("path") or ""), str(thumbnail.get("sourcePath") or ""), str(thumbnail.get("area") or ""))
+        file_url(user_id, resource_json, str(thumbnail.get("path") or ""), "", str(thumbnail.get("area") or ""))
         if thumbnail
         else external_thumbnail_uri(resource)
     )
@@ -250,26 +274,27 @@ def collect_resource_record(resource_root: Path, resource_json: Path, user_id: s
         "contenttype": content_type,
         "uri": uri,
         "url": preview_uri or uri,
-        "download_url": canonical_uri,
+        "download_url": canonical_uri or original_uri,
         "preview_url": preview_uri,
         "value": {
             "lastmodified": timestamp_for_resource(resource_root, resource_json, resource),
             "totalsize": first_storage_size(resource),
             "viewerType": viewer_type,
             "previewUri": preview_uri,
+            **(
+                {
+                    "contents": {
+                        "type": contents.get("type") or "pdf",
+                        "axis": contents.get("axis") or {"unit": "page", "nodeType": "page"},
+                        "pageCount": contents.get("pageCount") or media.get("pageCount"),
+                    }
+                }
+                if (contents.get("pageCount") or media.get("pageCount"))
+                else {}
+            ),
             "resource": {
-                "uri": environment_url(
-                    "resource",
-                    user_id,
-                    resource_date_from_path(resource_root, resource_json).replace("-", "/"),
-                    resource_json.parent.name,
-                ),
-                "url": environment_url(
-                    "resource",
-                    user_id,
-                    resource_date_from_path(resource_root, resource_json).replace("-", "/"),
-                    resource_json.parent.name,
-                ),
+                "uri": canonical_uri or original_uri,
+                "url": canonical_uri or original_uri,
             },
             **(
                 {
@@ -343,7 +368,11 @@ def resource_search_text(resource: dict) -> str:
             str(resource.get("label") or ""),
             strip_markup(str(description.get("format") or "plain/text"), str(description.get("body") or "")),
             str(identity.get("title") or ""),
-            str(storage.get("sourcePath") or ""),
+            " ".join(
+                f"{str(item.get('area') or '')}/{str(item.get('path') or '')}"
+                for item in files
+                if isinstance(item, dict)
+            ),
             " ".join(str(item.get("path") or "") for item in files if isinstance(item, dict)),
             str(identity.get("uri") or ""),
             str(identity.get("canonicalUri") or ""),

@@ -221,11 +221,11 @@ wuwei.edit = wuwei.edit || {};
       return;
     }
 
-    var detected = detectMediaFromUrl((node.resource && node.resource.uri) || '');
+    var detected = detectMediaFromUrl((node.resource && (node.resource.canonicalUri || node.resource.uri)) || '');
     var kind = '';
     node.resource = node.resource || {};
 
-    if (typeof requestedKind === 'string') {
+    if (typeof requestedKind === 'string' && requestedKind) {
       kind = requestedKind;
     }
     else {
@@ -253,6 +253,16 @@ wuwei.edit = wuwei.edit || {};
       node.resource.kind = kind;
     }
 
+    node.resource.media = (node.resource.media && 'object' === typeof node.resource.media)
+      ? node.resource.media
+      : {};
+    if (kind) {
+      node.resource.media.kind = (kind === 'webpage') ? 'webpage' : (kind === 'document' ? 'document' : kind);
+    }
+    if (detected.subtype) {
+      node.resource.media.subtype = detected.subtype;
+    }
+
     if (kind === 'video') {
       if (!node.resource.mimeType) {
         node.resource.mimeType = detected.mimeType || 'video/mp4';
@@ -266,6 +276,126 @@ wuwei.edit = wuwei.edit || {};
     else if (!node.resource.mimeType && detected.mimeType) {
       node.resource.mimeType = detected.mimeType;
     }
+    if (node.resource.mimeType) {
+      node.resource.media.mimeType = node.resource.mimeType;
+    }
+  }
+
+  function normalizeVideoResourceSource(node, url) {
+    var resource;
+    var sourceUrl;
+    var detected;
+    if (!node) {
+      return;
+    }
+    resource = node.resource || {};
+    sourceUrl = String(url || resource.canonicalUri || resource.uri || '').trim();
+    detected = detectMediaFromUrl(sourceUrl);
+    if (node.option === 'video' ||
+      resource.kind === 'video' ||
+      detected.kind === 'video') {
+      if (wuwei.video && typeof wuwei.video.setVideoSource === 'function') {
+        wuwei.video.setVideoSource(node, sourceUrl);
+      }
+      else {
+        node.resource = resource;
+        node.resource.kind = 'video';
+        node.resource.uri = sourceUrl;
+        node.resource.canonicalUri = sourceUrl;
+      }
+    }
+  }
+
+  function isHttpUrl(value) {
+    return /^https?:\/\//i.test(String(value || '').trim());
+  }
+
+  function buildNetworkResourceForCommit(node) {
+    var resource, sourceUrl, detected, owner, now, title, kind, mimeType;
+    if (!node || node.type !== 'Content') {
+      return null;
+    }
+    resource = (node.resource && 'object' === typeof node.resource) ? node.resource : {};
+    if (resource.storage) {
+      return null;
+    }
+    sourceUrl = String(resource.canonicalUri || resource.uri || '').trim();
+    if (!isHttpUrl(sourceUrl)) {
+      return null;
+    }
+
+    detected = detectMediaFromUrl(sourceUrl);
+    owner = String((state.currentUser && state.currentUser.user_id) || '');
+    now = new Date().toISOString();
+    title = String(node.label || resource.title || sourceUrl || 'Web content');
+    kind = resource.kind || (detected.kind === 'webpage' ? 'web' : detected.kind) || 'web';
+    mimeType = resource.mimeType || detected.mimeType || (detected.kind === 'webpage' ? 'text/html' : 'text/plain');
+
+    resource.id = resource.id || node.id;
+    resource.type = 'Resource';
+    resource.label = resource.label || title;
+    resource.title = resource.title || title;
+    resource.kind = kind;
+    resource.mimeType = mimeType;
+    resource.uri = sourceUrl;
+    resource.canonicalUri = sourceUrl;
+    resource.origin = (resource.origin && 'object' === typeof resource.origin) ? resource.origin : {};
+    resource.origin.type = resource.origin.type || 'userRegistered';
+    resource.origin.subtype = resource.origin.subtype ||
+      (detected.kind === 'video' ? 'externalVideo' :
+        detected.kind === 'document' ? 'externalDocument' :
+          detected.kind === 'image' ? 'externalImage' :
+            detected.kind === 'audio' ? 'externalAudio' : 'externalWebpage');
+    resource.origin.provider = resource.origin.provider || 'url';
+    resource.media = (resource.media && 'object' === typeof resource.media) ? resource.media : {};
+    resource.media.kind = resource.media.kind || (detected.kind === 'webpage' ? 'webpage' : detected.kind || kind);
+    resource.media.subtype = resource.media.subtype || detected.subtype || resource.subtype || '';
+    resource.media.mimeType = resource.media.mimeType || mimeType;
+    resource.media.downloadable = resource.media.downloadable === true;
+    resource.viewer = (resource.viewer && 'object' === typeof resource.viewer) ? resource.viewer : {};
+    resource.viewer.supportedModes = resource.viewer.supportedModes || ['infoPane', 'newTab', 'newWindow'];
+    resource.viewer.defaultMode = resource.viewer.defaultMode || 'infoPane';
+    resource.viewer.embed = (resource.viewer.embed && 'object' === typeof resource.viewer.embed) ? resource.viewer.embed : {};
+    resource.viewer.embed.enabled = resource.viewer.embed.enabled !== false;
+    resource.viewer.embed.uri = resource.viewer.embed.uri || sourceUrl;
+    resource.description = (node.description && 'object' === typeof node.description)
+      ? node.description
+      : (resource.description && 'object' === typeof resource.description ? resource.description : { format: 'plain/text', body: '' });
+    resource.rights = (resource.rights && 'object' === typeof resource.rights) ? resource.rights : {};
+    resource.rights.owner = resource.rights.owner || owner;
+    resource.rights.copyright = resource.rights.copyright || '';
+    resource.rights.license = resource.rights.license || '';
+    resource.rights.attribution = resource.rights.attribution || '';
+    resource.audit = (resource.audit && 'object' === typeof resource.audit) ? resource.audit : {};
+    resource.audit.owner = resource.audit.owner || owner;
+    resource.audit.createdBy = resource.audit.createdBy || owner;
+    resource.audit.createdAt = resource.audit.createdAt || now;
+    resource.audit.lastModifiedBy = owner;
+    resource.audit.lastModifiedAt = now;
+
+    delete resource.identity;
+    delete resource.snapshotSources;
+    node.resource = resource;
+    return resource;
+  }
+
+  function registerNetworkResourceOnCommit() {
+    var resource;
+    if (!wuwei.resource || typeof wuwei.resource.update !== 'function') {
+      return;
+    }
+    resource = buildNetworkResourceForCommit(stateMap.node);
+    if (!resource) {
+      return;
+    }
+    wuwei.resource.update({ id: resource.id, resource: resource })
+      .catch(function (err) {
+        console.log('wuwei.edit: failed to register network resource', {
+          id: resource.id,
+          uri: resource.uri || resource.canonicalUri || '',
+          error: err
+        });
+      });
   }
 
   function asciiDocToPlainText(asciiDocText) {
@@ -345,6 +475,10 @@ wuwei.edit = wuwei.edit || {};
     }
     if ('style.line.color' === path) {
       node.outline = value;
+      return;
+    }
+    if ('style.line.width' === path) {
+      node.outlineWidth = Number(value || 1);
       return;
     }
     if ('style.font.color' === path) {
@@ -578,11 +712,11 @@ wuwei.edit = wuwei.edit || {};
         if ('editGroup' == id || 'edirRole' == id) {
           return;
         }
-        if ('applyToGroup' === id) {
+        if ('applyToGroup' === id || 'applyToTimelineGroup' === id || 'applyToContentsGroup' === id) {
           if (!stateMap.option || 'object' !== typeof stateMap.option) {
             stateMap.option = {};
           }
-          stateMap.option.applyToGroup = !!target.checked;
+          stateMap.option[id] = !!target.checked;
           return;
         }
         if (target.classList &&
@@ -606,7 +740,7 @@ wuwei.edit = wuwei.edit || {};
               }
             }
             if (state.Selecting && Array.isArray(stateMap.selecteds) &&
-              ['shape', 'size.radius', 'size.width', 'size.height', 'style.fill', 'style.line.color', 'style.font.color', 'style.font.size'].indexOf(path) >= 0) {
+              ['shape', 'size.radius', 'size.width', 'size.height', 'style.fill', 'style.line.color', 'style.line.width', 'style.font.color', 'style.font.size'].indexOf(path) >= 0) {
               stateMap.selecteds.forEach(function (selectedNode) {
                 setNodePath(selectedNode, path, value);
               });
@@ -614,7 +748,7 @@ wuwei.edit = wuwei.edit || {};
             else {
               setNodePath(stateMap.node, path, value);
             }
-            if ('resource.uri' === path && stateMap.node.resource) {
+            if (('resource.uri' === path || 'resource.canonicalUri' === path) && stateMap.node.resource) {
               if (wuwei.util && typeof wuwei.util.toStorageRelativePath === 'function' &&
                 (String(value || '').match(/^(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i) ||
                   String(value || '').match(/(?:^|\/)upload\//))) {
@@ -623,6 +757,11 @@ wuwei.edit = wuwei.edit || {};
                 setNodePath(stateMap.node, path, value);
               }
               var detectedMedia = detectMediaFromUrl(value || '');
+              if (detectedMedia.kind === 'video' ||
+                stateMap.node.option === 'video' ||
+                stateMap.node.resource.kind === 'video') {
+                normalizeVideoResourceSource(stateMap.node, value);
+              }
               if (!stateMap.node.resource.kind ||
                 detectedMedia.kind === 'video' ||
                 stateMap.node.resource.kind === 'web' ||
@@ -873,7 +1012,7 @@ wuwei.edit = wuwei.edit || {};
         }
         // associations are deprecated (links carry their own label/rtype)
         var styleChanged = ['nShape', 'nColor', 'nOutline', 'nSize_radius', 'nSize_width', 'nSize_height'].indexOf(target.id) >= 0 ||
-          ['shape', 'size.radius', 'size.width', 'size.height', 'style.fill', 'style.line.color'].indexOf(path) >= 0;
+          ['shape', 'size.radius', 'size.width', 'size.height', 'style.fill', 'style.line.color', 'style.line.width'].indexOf(path) >= 0;
         if (stateMap.node) {
           stateMap.node.changed = true;
         }
@@ -964,7 +1103,13 @@ wuwei.edit = wuwei.edit || {};
       editPane.style.display = 'block';
       hideEdits();
 
-      if (param.link && isTimelineAxisLink(param.link)) {
+      if (param.link && isContentsAxisTarget(param.link)) {
+        resolve(wuwei.edit.contents.openAxisProperties(param.link, param.option || {}));
+      }
+      else if (param.node && isContentsAxisTarget(param.node)) {
+        resolve(wuwei.edit.contents.openAxisProperties(param.node, param.option || {}));
+      }
+      else if (param.link && isTimelineAxisLink(param.link)) {
         resolve(wuwei.edit.timeline.open(param.link, param.option || {}));
       }
       else if (param.node && isTimelinePointNode(param.node)) {
@@ -980,8 +1125,8 @@ wuwei.edit = wuwei.edit || {};
         resolve(wuwei.edit.link.open(param));
       }
       else if (param.node && param.node.topicKind === 'contents-page' &&
-        wuwei.edit.entry && typeof wuwei.edit.entry.open === 'function') {
-        resolve(wuwei.edit.entry.open(param));
+        wuwei.edit.contents && typeof wuwei.edit.contents.openPageMarker === 'function') {
+        resolve(wuwei.edit.contents.openPageMarker(param));
       }
       else if (param.node && ['Topic', 'Memo'].includes(param.node.type)) {
         resolve(wuwei.edit.generic.open(param));
@@ -989,7 +1134,9 @@ wuwei.edit = wuwei.edit || {};
       else if (isUploadedContentNode(param.node)) {
         resolve(wuwei.edit.uploaded.open(param));
       }
-      else if ('video' === param.node.option) {
+      else if ('video' === param.node.option ||
+        (wuwei.video && typeof wuwei.video.isVideoNode === 'function' && wuwei.video.isVideoNode(param.node))) {
+        param.node.option = 'video';
         resolve(wuwei.edit.video.open(param));
       }
       else {
@@ -1062,12 +1209,20 @@ wuwei.edit = wuwei.edit || {};
     );
   }
 
+  function isContentsAxisTarget(target) {
+    if (!target || !wuwei.edit.contents || typeof wuwei.edit.contents.canOpen !== 'function') {
+      return false;
+    }
+    return wuwei.edit.contents.canOpen(target);
+  }
+
   function hideEdits() {
     if (!document.getElementById('edit').innerHTML) { return; }
     if (document.getElementById('edit-generic')) { document.getElementById('edit-generic').style.display = 'none'; }
     if (document.getElementById('edit-uploaded')) { document.getElementById('edit-uploaded').style.display = 'none'; }
     if (document.getElementById('edit-video')) { document.getElementById('edit-video').style.display = 'none'; }
     if (document.getElementById('edit-link')) { document.getElementById('edit-link').style.display = 'none'; }
+    if (document.getElementById('edit-contents-axis')) { document.getElementById('edit-contents-axis').style.display = 'none'; }
   }
 
   function hideControls() {
@@ -1076,6 +1231,39 @@ wuwei.edit = wuwei.edit || {};
     // hide
     menu.innerHTML = '<span>&#9650</span>';
     elem.classList.add('hidden');
+  }
+
+  function resetForExternalEditor() {
+    var editPane = document.getElementById('edit');
+    var infoPane = document.getElementById('info');
+    var openControls = document.getElementById('open_controls');
+    var editingCircle = document.getElementById('Editing');
+
+    stateMap.node = null;
+    stateMap.link = null;
+    stateMap.selecteds = [];
+    stateMap.option = {};
+    stateMap.param = {};
+
+    if (infoPane) {
+      infoPane.style.display = 'none';
+    }
+    if (editPane && wuwei.edit.markup && typeof wuwei.edit.markup.template === 'function') {
+      editPane.innerHTML = wuwei.edit.markup.template();
+      editPane.style.display = 'block';
+    }
+    if (openControls) {
+      openControls.style.display = 'none';
+    }
+    if (editingCircle) {
+      editingCircle.style.opacity = '0';
+      delete editingCircle.dataset.node_id;
+      delete editingCircle.dataset.link_id;
+    }
+    common.state.Editing = true;
+    beginEditSession();
+    hideControls();
+    hideEdits();
   }
 
   function open(node, option, cb) {
@@ -1135,6 +1323,13 @@ wuwei.edit = wuwei.edit || {};
       stateMap.link = node;
     }
 
+    if (isContentsAxisTarget(node)) {
+      if (wuwei.edit.contents && typeof wuwei.edit.contents.openAxisProperties === 'function') {
+        editPane.style.display = 'block';
+        return wuwei.edit.contents.openAxisProperties(node, option || {});
+      }
+      return false;
+    }
     if (isTimelinePointNode(node)) {
       if (wuwei.edit.timeline && typeof wuwei.edit.timeline.open === 'function') {
         editPane.style.display = 'block';
@@ -1368,13 +1563,93 @@ wuwei.edit = wuwei.edit || {};
       : 1;
   }
 
+  function flushVideoEditFields() {
+    var pane, labelEl, descriptionEl, kindEl, uriEl, uri;
+    if (!stateMap.node) {
+      return;
+    }
+    pane = document.getElementById('edit-video');
+    if (!pane || pane.style.display === 'none' || !pane.innerHTML) {
+      return;
+    }
+
+    labelEl = document.getElementById('rName');
+    if (labelEl) {
+      setNodePath(stateMap.node, 'label', labelEl.value || '');
+      if (stateMap.node.resource && 'object' === typeof stateMap.node.resource) {
+        stateMap.node.resource.label = labelEl.value || '';
+        stateMap.node.resource.title = labelEl.value || '';
+        stateMap.node.resource.identity = (stateMap.node.resource.identity && 'object' === typeof stateMap.node.resource.identity)
+          ? stateMap.node.resource.identity
+          : {};
+        stateMap.node.resource.identity.title = labelEl.value || '';
+      }
+    }
+
+    descriptionEl = document.getElementById('rValue_comment') || document.getElementById('rValue');
+    if (descriptionEl) {
+      setNodePath(stateMap.node, 'description.body', descriptionEl.value || '');
+    }
+
+    kindEl = document.getElementById('rMedia_kind') || document.getElementById('resource_kind');
+    if (kindEl) {
+      applyMediaDetectionToNode(stateMap.node, kindEl.value || '');
+    }
+
+    uriEl = document.getElementById('rUri');
+    if (uriEl) {
+      uri = String(uriEl.value || '').trim();
+      if (uri) {
+        stateMap.node.resource = stateMap.node.resource || {};
+        stateMap.node.resource.uri = uri;
+        stateMap.node.resource.canonicalUri = uri;
+        normalizeVideoResourceSource(stateMap.node, uri);
+      }
+    }
+
+    stateMap.node.changed = true;
+  }
+
+  function flushVideoResourceFields() {
+    var uriEl;
+    if (!stateMap.node || stateMap.node.option !== 'video') {
+      return;
+    }
+    uriEl = document.getElementById('rUri');
+    normalizeVideoResourceSource(stateMap.node, uriEl ? uriEl.value : '');
+  }
+
+  function flushNetworkResourceFields() {
+    var uriEl, value;
+    if (!stateMap.node || !stateMap.node.resource || stateMap.node.resource.storage) {
+      return;
+    }
+    uriEl = document.getElementById('rUri');
+    if (!uriEl) {
+      return;
+    }
+    value = String(uriEl.value || '').trim();
+    if (!isHttpUrl(value)) {
+      return;
+    }
+    stateMap.node.resource.uri = value;
+    stateMap.node.resource.canonicalUri = value;
+    applyMediaDetectionToNode(stateMap.node, '');
+  }
+
   function commit() {
     var committed = true;
+    flushVideoEditFields();
+    flushVideoResourceFields();
+    flushNetworkResourceFields();
     flushContentsEntryFields();
     // Timeline edits are buffered in the timeline panel fields,
     // so the global save icon must apply them before storing the log.
     if (state.timelineEdit) {
       committed = wuwei.edit.timeline.commit();
+    }
+    if (state.contentsEdit) {
+      committed = wuwei.edit.contents.commit();
     }
 
     if (false === committed) {
@@ -1397,6 +1672,7 @@ wuwei.edit = wuwei.edit || {};
     snapshotTaken = false;
     // Store the log after timeline graph rebuild has been confirmed.
     log.storeLog({ operation: 'edit' });
+    registerNetworkResourceOnCommit();
     close();
     return true;
   }
@@ -1404,11 +1680,22 @@ wuwei.edit = wuwei.edit || {};
   function infoOpen() {
     var targetNode = stateMap.node;
     var targetOption = stateMap.option;
+    var contentsGroup = null;
     flushContentsEntryFields();
+    if (!targetNode && state.contentsEdit && wuwei.edit.contents &&
+      typeof wuwei.edit.contents.getCurrentGroup === 'function' &&
+      typeof wuwei.edit.contents.openInfo === 'function') {
+      contentsGroup = wuwei.edit.contents.getCurrentGroup();
+      if (contentsGroup) {
+        close();
+        wuwei.edit.contents.openInfo(contentsGroup);
+        return;
+      }
+    }
     if (targetNode && targetNode.topicKind === 'contents-page' &&
-      wuwei.contents && typeof wuwei.contents.openPageInInfo === 'function') {
+      wuwei.menu && wuwei.menu.contents && typeof wuwei.menu.contents.openPageInInfo === 'function') {
       close();
-      wuwei.contents.openPageInInfo(targetNode);
+      wuwei.menu.contents.openPageInInfo(targetNode);
       return;
     }
     close();
@@ -1442,6 +1729,9 @@ wuwei.edit = wuwei.edit || {};
     }
 
     wuwei.edit.timeline.close();
+    if (wuwei.edit.contents && typeof wuwei.edit.contents.close === 'function') {
+      wuwei.edit.contents.close();
+    }
 
     document.getElementById('edit').innerHTML = '';
     document.getElementById('edit').style.display = 'none';
@@ -1529,6 +1819,7 @@ wuwei.edit = wuwei.edit || {};
   ns.refreshTemplate = refreshTemplate;
   ns.infoOpen = infoOpen;
   ns.closeEdit = closeEdit;
+  ns.resetForExternalEditor = resetForExternalEditor;
   ns.update = update;
   ns.asciiDocToPlainText = asciiDocToPlainText;
   ns.asciiDocToHtml = asciiDocToHtml;
