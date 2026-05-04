@@ -2874,7 +2874,8 @@ wuwei.model = (function () {
         if (match) {
           return {
             kind: 'upload',
-            id: (resourceDef && resourceDef.id) || match[2],
+            id: match[2],
+            resourceId: resourceDef && resourceDef.id || match[2],
             date: match[1]
           };
         }

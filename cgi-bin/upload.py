@@ -816,7 +816,7 @@ def main():
     content_type = detect_content_type(dest_file, declared_contenttype)
     upload_relpath = upload_relative_path(upload_root, dest_file)
     existing_resource, dedupe_reason = (None, "")
-    resource_id = f"_{uuid.uuid4()}"
+    resource_id = upload_file_id
     primary_dir = resource_dir / resource_id
     rid = resource_id.lstrip("_")
     primary_dir.mkdir(parents=True, exist_ok=True)
