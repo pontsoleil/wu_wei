@@ -528,6 +528,7 @@ wuwei.note = (function () {
     var timeline = src.timeline || {};
     var axis = src.axis || {};
     var members = Array.isArray(src.members) ? src.members : (Array.isArray(src.item) ? src.item : []);
+    var entries = Array.isArray(src.entries) ? src.entries : [];
     var rawType = src.type || 'simple';
     var type = rawType;
 
@@ -548,6 +549,21 @@ wuwei.note = (function () {
     }
     else if (rawType === 'timelineGroup') {
       type = 'timeline';
+    }
+    else if (rawType === 'contentsGroup') {
+      type = 'contents';
+    }
+
+    if (type === 'contents' && !members.length && entries.length) {
+      members = entries.map(function (entry, index) {
+        return {
+          nodeId: entry && (entry.nodeId || entry.id) || '',
+          order: Number(entry && entry.order || index + 1),
+          role: 'member'
+        };
+      }).filter(function (member) {
+        return !!member.nodeId;
+      });
     }
 
     return {
@@ -585,11 +601,23 @@ wuwei.note = (function () {
       }).filter(function (m) {
         return !!m.nodeId;
       }),
+      entries: (type === 'contents') ? entries.map(function (entry) {
+        return {
+          role: entry && entry.role || 'entry',
+          nodeId: entry && (entry.nodeId || entry.id) || '',
+          pageNumber: Math.max(1, Math.floor(Number(entry && entry.pageNumber || 1))),
+          comment: String(entry && entry.comment || '')
+        };
+      }).filter(function (entry) {
+        return !!entry.nodeId;
+      }) : undefined,
       axis: src.axis ? util.clone(src.axis) : undefined,
       origin: src.origin ? util.clone(src.origin) : undefined,
       length: Number.isFinite(Number(src.length)) ? Number(src.length) : undefined,
       groupType: src.groupType || '',
       mediaRef: src.mediaRef || '',
+      documentRef: src.documentRef || '',
+      pageCount: Number.isFinite(Number(src.pageCount || axis.end)) ? Number(src.pageCount || axis.end) : undefined,
       timeStart: Number.isFinite(Number(src.timeStart)) ? Number(src.timeStart) : undefined,
       timeEnd: Number.isFinite(Number(src.timeEnd)) ? Number(src.timeEnd) : undefined,
       defaultPlayDuration: Number.isFinite(Number(src.defaultPlayDuration)) ? Number(src.defaultPlayDuration) : undefined,

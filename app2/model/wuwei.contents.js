@@ -354,6 +354,17 @@ wuwei.contents = wuwei.contents || {};
     if (!Array.isArray(group.members)) { group.members = []; }
     group.length = AXIS_LENGTH;
     group.entries = Array.isArray(group.entries) ? group.entries : [];
+    if (!group.members.length && group.entries.length) {
+      group.members = group.entries.map(function (entry, index) {
+        return {
+          nodeId: entry && (entry.nodeId || entry.id) || '',
+          order: Number(entry && entry.order || index + 1),
+          role: 'member'
+        };
+      }).filter(function (member) {
+        return !!member.nodeId;
+      });
+    }
     if (!group.documentRef) {
       var documentNode = findDocumentNodeForGroup(group, null);
       if (documentNode) {
