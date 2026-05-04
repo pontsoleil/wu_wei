@@ -49,10 +49,21 @@ strip_quotes() {
   sed 's/^"\(.*\)"$/\1/'
 }
 
+named_value() {
+  key=$1
+  src=$2
+  awk -v k="$key" '
+    index($0, k " ") == 1 {
+      print substr($0, length(k) + 2)
+      exit
+    }
+  ' "$src"
+}
+
 decode_note_payload() {
   src=$1
   dst=$2
-  json_base64=$(nameread json_base64 "$src" | strip_quotes || true)
+  json_base64=$(named_value json_base64 "$src" | strip_quotes || true)
   if [ -n "${json_base64:-}" ]; then
     printf '%s' "$json_base64" | base64 -d > "$dst" 2>/dev/null || return 1
     return 0
