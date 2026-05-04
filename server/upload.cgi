@@ -134,6 +134,23 @@ thumb_input_arg() {
   esac
 }
 
+pdf_page_count() {
+  local src="$1" count
+  [ -f "$src" ] || { printf '0'; return 0; }
+  if command -v pdfinfo >/dev/null 2>&1; then
+    count="$(pdfinfo "$src" 2>/dev/null | awk -F: 'tolower($1)=="pages" { gsub(/[[:space:]]/, "", $2); print $2; exit }')"
+    case "$count" in
+      ''|*[!0-9]*) ;;
+      *) printf '%s' "$count"; return 0 ;;
+    esac
+  fi
+  count="$(LC_ALL=C grep -a -o '/Type[[:space:]]*/Page\([^sA-Za-z]\|$\)' "$src" 2>/dev/null | wc -l | tr -d ' ')"
+  case "$count" in
+    ''|*[!0-9]*) printf '0' ;;
+    *) printf '%s' "$count" ;;
+  esac
+}
+
 # UUID regex (bash regex)
 UUID_RE='^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
 
@@ -435,6 +452,19 @@ elif [ -n "$preview_pdf" ] && [ -f "$preview_pdf" ]; then
   identify_out="$(identify "${preview_pdf}[0]" 2>/dev/null || true)"
 fi
 
+page_count=0
+contents_source_role=""
+if [[ "$content_type" == application/pdf* ]]; then
+  page_count="$(pdf_page_count "$dest_file")"
+  contents_source_role="original"
+elif [ -n "$preview_pdf" ] && [ -f "$preview_pdf" ]; then
+  page_count="$(pdf_page_count "$preview_pdf")"
+  contents_source_role="preview"
+fi
+case "$page_count" in
+  ''|*[!0-9]*) page_count=0 ;;
+esac
+
 # --- resource fields -------------------------------------------------
 if [ -n "${fullname:-}" ]; then
   name="$fullname"
@@ -506,8 +536,9 @@ cat >"$resource_file" <<JSON || die_json "ERROR: cannot write resource file $res
     "kind": "$(json_escape "$media_kind")",
     "mimeType": "$(json_escape "$content_type")",
     "downloadable": true,
-    "duration": null
-  },
+    "duration": null,
+    "pageCount": $(if [ "${page_count:-0}" -gt 0 ]; then printf '%s' "$page_count"; else printf 'null'; fi)
+  }$(if [ "${page_count:-0}" -gt 0 ]; then printf ',\n  "contents": {\n    "type": "pdf",\n    "axis": {\n      "unit": "page",\n      "nodeType": "page"\n    },\n    "pageCount": %s,\n    "sourceRole": "%s"\n  }' "$page_count" "$(json_escape "$contents_source_role")"; fi),
   "viewer": {
     "supportedModes": ["infoPane", "newTab", "newWindow", "download"],
     "defaultMode": "infoPane",
