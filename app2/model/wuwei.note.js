@@ -504,6 +504,22 @@ wuwei.note = (function () {
       });
     }
 
+    if (src.type === 'PageMarker' || src.topicKind === 'contents-page') {
+      if (src.type === 'PageMarker') {
+        out.type = 'PageMarker';
+      }
+      out.topicKind = 'contents-page';
+      if (typeof src.contentsRef === 'string' && src.contentsRef) {
+        out.contentsRef = src.contentsRef;
+      }
+      if (typeof src.documentRef === 'string' && src.documentRef) {
+        out.documentRef = src.documentRef;
+      }
+      if (Number.isFinite(Number(src.pageNumber))) {
+        out.pageNumber = Number(src.pageNumber);
+      }
+    }
+
     if (typeof src.groupRef === 'string' && src.groupRef) {
       out.groupRef = src.groupRef;
     }
