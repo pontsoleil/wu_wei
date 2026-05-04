@@ -268,8 +268,19 @@ wuwei.info.uploaded.markup = ( function () {
   }
 
   function isPdfLikeUri(uri) {
-    return /\.pdf(?:[?#].*)?$/i.test(String(uri || '')) ||
-      /[?&](?:mimeType|content_type)=application%2Fpdf/i.test(String(uri || ''));
+    var text = String(uri || '');
+    var parsed;
+    if (/\.pdf(?:[?#].*)?$/i.test(text) ||
+      /[?&](?:mimeType|content_type)=application%2Fpdf/i.test(text)) {
+      return true;
+    }
+    try {
+      parsed = new URL(text, window.location.href);
+      return /\.pdf$/i.test(decodeURIComponent(parsed.searchParams.get('path') || '').split('#')[0].split('?')[0]);
+    }
+    catch (e) {
+      return /\.pdf$/i.test(decodeURIComponent(text).split('#')[0].split('?')[0]);
+    }
   }
 
   function canUseOfficeViewer(uri) {
