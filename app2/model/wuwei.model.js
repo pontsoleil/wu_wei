@@ -743,6 +743,15 @@ wuwei.model = (function () {
         return;
       }
 
+      if ('contents' === group.type && wuwei.contents &&
+        typeof wuwei.contents.buildContentsAxisPseudoLink === 'function') {
+        link = wuwei.contents.buildContentsAxisPseudoLink(group);
+        if (link) {
+          result.links.push(link);
+        }
+        return;
+      }
+
       if (wuwei.timeline &&
         typeof wuwei.timeline.isAxisGroup === 'function' &&
         wuwei.timeline.isAxisGroup(group) &&
@@ -7878,6 +7887,9 @@ wuwei.model = (function () {
     const page = getCurrentPage();
     if (page && wuwei.timeline && typeof wuwei.timeline.normalizeAllAxisGroups === 'function') {
       wuwei.timeline.normalizeAllAxisGroups(page);
+    }
+    if (page && wuwei.contents && typeof wuwei.contents.normalizeAllAxisGroups === 'function') {
+      wuwei.contents.normalizeAllAxisGroups(page);
     }
     const pseudo = buildGroupPseudoGroups(page);
     if (current && page) {
