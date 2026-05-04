@@ -675,7 +675,9 @@ wuwei.note = (function () {
         return stripRuntimeNodeForSave(node, resources);
       }),
       links: (page.links || []).filter(Boolean).map(stripRuntimeLink),
-      groups: (page.groups || []).filter(Boolean).map(stripRuntimeGroup),
+      groups: (page.groups || []).filter(Boolean).map(function (group) {
+        return stripRuntimeGroup(group, page);
+      }),
       transform: normalizeTransform(page.transform || page.translate),
       thumbnail: (typeof page.thumbnail === 'undefined') ? defaultThumbnail : page.thumbnail,
       audit: normalizeAudit(page.audit || current.audit, state.currentUser)
@@ -878,6 +880,16 @@ wuwei.note = (function () {
   function stripRuntimeNodeForSave(node, resources) {
     var out = stripRuntimeNode(node);
     var compactResource;
+    if (out.topicKind === 'contents-page' || out.type === 'PageMarker') {
+      out.type = 'PageMarker';
+      out.topicKind = 'contents-page';
+      if (Number.isFinite(Number(out.pageNumber))) {
+        out.pageNumber = Math.max(1, Math.floor(Number(out.pageNumber)));
+      }
+      else {
+        out.pageNumber = 1;
+      }
+    }
     if (out.type === 'Content') {
       compactResource = compactResourceForSave(out);
       if (compactResource) {
@@ -899,6 +911,33 @@ wuwei.note = (function () {
     return out;
   }
 
+  function memberNodeId(member) {
+    return (typeof member === 'string') ? member : (member && (member.nodeId || member.id)) || '';
+  }
+
+  function buildContentsEntriesForSave(group, page) {
+    var nodes = (page && Array.isArray(page.nodes)) ? page.nodes : [];
+    var byId = {};
+    nodes.forEach(function (node) {
+      if (node && node.id) {
+        byId[node.id] = node;
+      }
+    });
+    return (Array.isArray(group.members) ? group.members : []).map(function (member) {
+      var id = memberNodeId(member);
+      var node = id ? byId[id] : null;
+      if (!node || node.topicKind !== 'contents-page') {
+        return null;
+      }
+      return {
+        role: 'entry',
+        nodeId: node.id,
+        pageNumber: Number.isFinite(Number(node.pageNumber)) ? Math.max(1, Math.floor(Number(node.pageNumber))) : 1,
+        comment: node.description && typeof node.description.body === 'string' ? node.description.body : ''
+      };
+    }).filter(Boolean);
+  }
+
   function stripRuntimeLink(link) {
     var out = util.clone(link) || {};
     if (out.from && typeof out.from === 'object') { out.from = out.from.id; }
@@ -918,7 +957,7 @@ wuwei.note = (function () {
     return out;
   }
 
-  function stripRuntimeGroup(group) {
+  function stripRuntimeGroup(group, page) {
     var out = util.clone(group) || {};
     delete out._sim;
     delete out.axisPseudoLinkId;
@@ -926,11 +965,23 @@ wuwei.note = (function () {
     delete out.pseudoLinkId;
     delete out.strokeColor;
     delete out.strokeWidth;
+    if (out.type === 'contents') {
+      delete out.contents;
+      out.entries = buildContentsEntriesForSave(out, page);
+    }
     if (Array.isArray(out.members)) {
       out.members = out.members.map(function (member) {
         var next = util.clone(member) || {};
+        if (typeof member === 'string') {
+          return { nodeId: member, role: 'member' };
+        }
         delete next._simDx;
         delete next._simDy;
+        if (!next.nodeId && next.id) {
+          next.nodeId = next.id;
+          delete next.id;
+        }
+        next.role = next.role || 'member';
         return next;
       });
     }
