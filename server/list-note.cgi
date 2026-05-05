@@ -394,9 +394,9 @@ fi
       note_user_id=$(json_string_field user_id "$abs_file" || true)
       note_name=$(json_string_field note_name "$abs_file" || true)
       note_description=$(json_string_field description "$abs_file" || true)
-      note_thumbnail=$(json_string_field thumbnail "$abs_file" || true)
+      note_thumbnail=$(json_svg_thumbnail "$abs_file" || true)
       if [ -z "${note_thumbnail:-}" ]; then
-        note_thumbnail=$(json_svg_thumbnail "$abs_file" || true)
+        note_thumbnail=$(json_string_field thumbnail "$abs_file" || true)
       fi
 
       [ "$i" -gt 0 ] && printf ','
