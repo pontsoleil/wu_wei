@@ -1,56 +1,96 @@
-#!/bin/sh
+#!/bin/bash
 # publish-note.cgi
-# POSIX sh CGI for publishing a note JSON.
+#
+# Normal mode:
+#   stderr is appended only to:
+#     log/cgi.err
+#
+# Debug mode:
+#   create the following flag file, then call this CGI:
+#     log/.debug.publish-note.cgi
+#
+#   In debug mode, stderr is written to both:
+#     log/cgi.err
+#     log/publish-note.cgi.<pid>.log
 
+# WW_CGI_BOOTSTRAP: stabilise cwd under fcgiwrap
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "${SCRIPT_FILENAME:-$0}")" && pwd) || exit 1
 cd "$SCRIPT_DIR" || exit 1
 
-mkdir -p "$SCRIPT_DIR/log" 2>/dev/null || :
-if ( : >> "$SCRIPT_DIR/log/cgi.err" ) 2>/dev/null; then
-  exec 2>>"$SCRIPT_DIR/log/cgi.err"
+mkdir -p "$SCRIPT_DIR/log"
+
+REQLOG=""
+DEBUG_FILE="$SCRIPT_DIR/log/.debug.${0##*/}"
+
+if [ -f "$DEBUG_FILE" ]; then
+  REQLOG="$SCRIPT_DIR/log/${0##*/}.$$.log"
+  # stderr -> both cgi.err and per-request log
+  exec 2> >(tee -a "$SCRIPT_DIR/log/cgi.err" >>"$REQLOG")
+  set -eu
+  DEBUG=1
 else
-  exec 2>/dev/null
+  # stderr -> cgi.err only
+  exec 2>>"$SCRIPT_DIR/log/cgi.err"
+  set -eu
+  DEBUG=0
 fi
 
-set -u
 export LC_ALL=C
+
+type command >/dev/null 2>&1 && type getconf >/dev/null 2>&1 &&
+export PATH=".:./bin:$(command -p getconf PATH)${PATH+:}${PATH-}"
 export UNIX_STD=2003
 
-if command -v getconf >/dev/null 2>&1; then
-  PATH=".:./bin:$(command -p getconf PATH)${PATH+:}${PATH-}"
-  export PATH
-fi
-
 Tmp="/tmp/${0##*/}.$$"
-CGIVARS_ORG="${Tmp}-org"
 CGIVARS="${Tmp}-cgivars"
-JSON_FILE="${Tmp}-json"
-BODY_FILE="${Tmp}-body"
-ACK=$(printf '\006')
+CGIVARS_ORG="${Tmp}-cgivars-org"
+JSON_FILE="${Tmp}-note-data"
 
 cleanup() {
-  rm -f "$CGIVARS_ORG" "$CGIVARS" "$JSON_FILE" "$BODY_FILE"
+  rm -f "$CGIVARS" "$CGIVARS_ORG" "$JSON_FILE"
 }
 trap cleanup EXIT HUP INT TERM
 
-text_response() {
+year=$(date '+%Y')
+month=$(date '+%m')
+ACK=$(printf '\006')
+
+error_response() {
   printf '%s\r\n' 'Content-Type: text/plain; charset=UTF-8'
   printf '\r\n'
   printf '%s\n' "$1"
   exit 0
 }
 
-error_response() {
-  text_response "ERROR $1"
+ok_response() {
+  printf '%s\r\n' 'Content-Type: text/plain; charset=UTF-8'
+  printf '\r\n'
+  printf '%s\n' "$1"
+  exit 0
 }
 
-internal_error() {
-  text_response "500 Internal Server Error
-$1"
+debug_log() {
+  [ "${DEBUG:-0}" = "1" ] || return 0
+  printf '[%s] %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$*" >&2
 }
 
-require_cmd() {
-  command -v "$1" >/dev/null 2>&1 || internal_error "COMMAND NOT FOUND: $1"
+debug_preview() {
+  label=$1
+  value=$2
+  [ "${DEBUG:-0}" = "1" ] || return 0
+  len=$(printf '%s' "$value" | wc -c | tr -d ' ')
+  head=$(printf '%s' "$value" | head -c 240 | tr '\r\n\t' '   ')
+  printf '[%s] %s_len=%s %s_head=%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$label" "$len" "$label" "$head" >&2
+}
+
+raw_form_value() {
+  key=$1
+  file=$2
+  [ -f "$file" ] || return 0
+  tr '&' '\n' < "$file" |
+  sed -n "s/^${key}=//p" |
+  head -n 1 |
+  sed 's/+/ /g; s/%2[Dd]/-/g; s/%5[Ff]/_/g; s/%40/@/g'
 }
 
 strip_quotes() {
@@ -65,10 +105,11 @@ validate_id() {
   value=$1
   name=$2
   case "$value" in
-    ''|ERROR*) error_response "INVALID ${name}" ;;
+    ''|ERROR*) error_response "ERROR INVALID ${name}" ;;
+    *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-]*)
+      error_response "ERROR INVALID ${name}"
+      ;;
   esac
-  printf '%s' "$value" | grep -Eq '^[A-Za-z0-9._-]+$' ||
-    error_response "INVALID ${name}"
 }
 
 resolve_env_path() {
@@ -86,47 +127,32 @@ resolve_env_path() {
   esac
 }
 
-read_request_params() {
-  qs=${QUERY_STRING:-}
-  cl=${CONTENT_LENGTH:-0}
-
-  if [ "${cl:-0}" -gt 0 ] 2>/dev/null; then
-    cat > "$BODY_FILE" || internal_error "FAILED TO READ REQUEST BODY"
-  else
-    : > "$BODY_FILE"
-  fi
-
-  if [ -n "$qs" ] && [ -s "$BODY_FILE" ]; then
-    printf '%s&' "$qs" > "$CGIVARS_ORG"
-    cat "$BODY_FILE" >> "$CGIVARS_ORG"
-  elif [ -n "$qs" ]; then
-    printf '%s' "$qs" > "$CGIVARS_ORG"
-  elif [ -s "$BODY_FILE" ]; then
-    cat "$BODY_FILE" > "$CGIVARS_ORG"
-  else
-    : > "$CGIVARS_ORG"
-  fi
-
-  form_length=$(wc -c < "$CGIVARS_ORG" | tr -d ' ')
-  CONTENT_LENGTH=$form_length cgi-name -s"$ACK" < "$CGIVARS_ORG" > "$CGIVARS" ||
-    internal_error "FAILED TO PARSE REQUEST"
-}
-
 ensure_note_json_file() {
-  file=$1
-  awk '
-    BEGIN { RS=""; ok = 1 }
-    {
-      s = $0
-      sub(/^\xef\xbb\xbf/, "", s)
-      sub(/^[ \t\r\n]*/, "", s)
-      sub(/[ \t\r\n]*$/, "", s)
-      if (s !~ /^\{/) ok = 0
-      if (s !~ /"pages"[ \t\r\n]*:[ \t\r\n]*\[/) ok = 0
-      if (s ~ /"resources"[ \t\r\n]*:/ && s !~ /"resources"[ \t\r\n]*:[ \t\r\n]*\[/) ok = 0
-    }
-    END { exit(ok ? 0 : 1) }
-  ' "$file"
+  json_file=$1
+
+  [ -s "$json_file" ] || {
+    printf 'publish_note_json_error=JSON NOT SPECIFIED\n' >&2
+    return 1
+  }
+
+  # publish-note.py validates full JSON. The EC2 shell version keeps this
+  # deliberately small: require a JSON object with pages array, and ensure
+  # resources, if present, is also an array.
+  if ! grep -q '^[[:space:]]*{' "$json_file"; then
+    printf 'publish_note_json_error=NOTE JSON MUST BE OBJECT\n' >&2
+    return 1
+  fi
+  if ! grep -q '"pages"[[:space:]]*:[[:space:]]*\[' "$json_file"; then
+    printf 'publish_note_json_error=NOTE JSON PAGES MUST BE ARRAY\n' >&2
+    return 1
+  fi
+  if grep -q '"resources"[[:space:]]*:' "$json_file" &&
+     ! grep -q '"resources"[[:space:]]*:[[:space:]]*\[' "$json_file"; then
+    printf 'publish_note_json_error=NOTE JSON RESOURCES MUST BE ARRAY\n' >&2
+    return 1
+  fi
+
+  return 0
 }
 
 resolve_note_file() {
@@ -137,34 +163,47 @@ resolve_note_file() {
     printf '%s\n' "$note_root/$note_id"
     return 0
   fi
-
   if [ -f "$note_root/$note_id/note.json" ]; then
     printf '%s\n' "$note_root/$note_id/note.json"
     return 0
   fi
 
   find "$note_root" \( -type f -name "$note_id" -o -type f -path "*/${note_id}/note.json" \) -print 2>/dev/null |
-    head -n 1
+  head -n 1
 }
 
-require_cmd cgi-name
-require_cmd nameread
-require_cmd sed
-require_cmd awk
-require_cmd cp
-require_cmd mkdir
-require_cmd date
-require_cmd find
-require_cmd grep
-require_cmd head
-require_cmd tr
-require_cmd wc
+# --- Collect CGI params from QUERY_STRING + POST body -------------------
+qs=${QUERY_STRING:-}
+body=""
+cl=${CONTENT_LENGTH:-0}
 
-read_request_params
+if [ "${cl:-0}" -gt 0 ] 2>/dev/null; then
+  # FastCGI provides exactly the request body on stdin. A single large
+  # dd block can return a short read from a pipe, so read until EOF.
+  body=$(cat || true)
+fi
+
+if [ -n "$qs" ] && [ -n "$body" ]; then
+  printf '%s&%s' "$qs" "$body" > "$CGIVARS_ORG"
+elif [ -n "$qs" ]; then
+  printf '%s' "$qs" > "$CGIVARS_ORG"
+elif [ -n "$body" ]; then
+  printf '%s' "$body" > "$CGIVARS_ORG"
+else
+  : > "$CGIVARS_ORG"
+fi
+
+# Keep save-note.cgi-compatible parsing. It is proven on EC2/fcgiwrap.
+cgi-name -s"$ACK" < "$CGIVARS_ORG" > "$CGIVARS"
 
 user_id=$(nameread user_id "$CGIVARS" | strip_quotes || true)
+[ -n "${user_id:-}" ] || user_id=$(raw_form_value user_id "$CGIVARS_ORG" | strip_quotes || true)
 note_id=$(nameread id "$CGIVARS" | strip_quotes || true)
+[ -n "${note_id:-}" ] || note_id=$(raw_form_value id "$CGIVARS_ORG" | strip_quotes || true)
 json=$(nameread json "$CGIVARS" | strip_quotes || true)
+
+debug_log "request user_id=${user_id:-} id=${note_id:-} content_length=${CONTENT_LENGTH:-0}"
+debug_preview "json_raw" "$json"
 
 validate_id "$user_id" "USER_ID"
 validate_id "$note_id" "NOTE_ID"
@@ -172,26 +211,36 @@ validate_id "$note_id" "NOTE_ID"
 note_dir=$(resolve_env_path note "$user_id" || true)
 public_root=$(resolve_env_path public || true)
 
-[ -n "$note_dir" ] || internal_error "FAILED TO READ NOTE DIRECTORY"
-[ -n "$public_root" ] || internal_error "FAILED TO READ PUBLIC DIRECTORY"
+[ -n "${note_dir:-}" ] || error_response '500 Internal Server Error
+FAILED TO READ NOTE DIRECTORY'
+[ -n "${public_root:-}" ] || error_response '500 Internal Server Error
+FAILED TO READ PUBLIC DIRECTORY'
 
-year=$(date '+%Y')
-month=$(date '+%m')
 public_dir="${public_root}/${year}/${month}"
 public_note="${public_dir}/${note_id}"
-
-mkdir -p "$public_dir" || internal_error "FAILED TO CREATE PUBLIC DIRECTORY"
+mkdir -p "$public_dir" || error_response '500 Internal Server Error
+FAILED TO CREATE PUBLIC DIRECTORY'
 
 if [ -n "${json:-}" ]; then
-  printf '%s' "$json" | restore_ack_to_space > "$JSON_FILE"
-  ensure_note_json_file "$JSON_FILE" || error_response "NOTE JSON MUST BE OBJECT WITH PAGES ARRAY"
+  json=$(printf '%s' "$json" | restore_ack_to_space)
+  json=$(printf '%s' "$json" | sed '1s/^\xEF\xBB\xBF//')
+  debug_preview "json" "$json"
+
+  printf '%s' "$json" > "$JSON_FILE"
+  ensure_note_json_file "$JSON_FILE" || error_response 'ERROR NOTE JSON MUST BE OBJECT WITH PAGES ARRAY'
   printf '\n' >> "$JSON_FILE"
-  cp "$JSON_FILE" "$public_note" || internal_error "ERROR WHILE PUBLISHING NOTE"
-  text_response "${year}/${month}/${note_id}"
+  cp "$JSON_FILE" "$public_note" || error_response '500 Internal Server Error
+ERROR WHILE PUBLISHING NOTE'
+  ok_response "${year}/${month}/${note_id}"
 fi
 
 note=$(resolve_note_file "$note_dir" "$note_id" || true)
-[ -n "${note:-}" ] && [ -f "$note" ] || internal_error "NOTE NOT FOUND: ${note_id}"
+[ -n "${note:-}" ] && [ -f "$note" ] || error_response "500 Internal Server Error
+NOTE NOT FOUND: ${note_id}"
 
-cp "$note" "$public_note" || internal_error "ERROR WHILE PUBLISHING NOTE"
-text_response "${year}/${month}/${note_id}"
+cp "$note" "$public_note" || error_response '500 Internal Server Error
+ERROR WHILE PUBLISHING NOTE'
+ok_response "${year}/${month}/${note_id}"
+
+rm -f "$Tmp" "$Tmp"-*
+exit 0
