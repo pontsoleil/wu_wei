@@ -180,7 +180,7 @@ cookie_headers=$(
 )
 
 printf "Content-Type: application/json\r\n"
-# Set-Cookie を必ず「ヘッダ行」として出す（複数行もOK）
+# Set-Cookie headers must be emitted before the blank response line.
 while IFS= read -r line; do
   printf "%s\r\n" "$line"
 done <<< "$cookie_headers"

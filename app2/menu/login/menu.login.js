@@ -110,17 +110,21 @@ wuwei.menu.login = wuwei.menu.login || {};
             return resolve({ type: 'warning', message: 'Please login.' });
           }
 
-          try {
-            response = JSON.parse(txt);
-          } catch (e) {
-            console.log(e, txt);
-            if (common.isLocalGuestAllowed && common.isLocalGuestAllowed()) {
-              update(common.createGuestCurrentUser());
-              return resolve({ type: 'guest', message: 'Local guest mode.' });
+          if (util.isUUID(txt)) {
+            response = { user_id: txt, login: '', name: '', role: 'author' };
+          } else {
+            try {
+              response = JSON.parse(txt);
+            } catch (e) {
+              console.log(e, txt);
+              if (common.isLocalGuestAllowed && common.isLocalGuestAllowed()) {
+                update(common.createGuestCurrentUser());
+                return resolve({ type: 'guest', message: 'Local guest mode.' });
+              }
+              common.state.loggedIn = false;
+              update({ login: null, user_id: null, name: null, role: null });
+              return resolve({ type: 'warning', message: 'Please login.' });
             }
-            common.state.loggedIn = false;
-            update({ login: null, user_id: null, name: null, role: null });
-            return resolve({ type: 'warning', message: 'Please login.' });
           }
 
           // ★ Cookie比較はしない（HttpOnlyのため）
