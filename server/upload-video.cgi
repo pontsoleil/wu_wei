@@ -154,15 +154,14 @@ mkdir -p "$upload_file_dir" || die_json "ERROR: cannot mkdir $upload_file_dir"
 DEST_FILE="$upload_file_dir/$filename"
 cp -- "$Tmp-uploadfile" "$DEST_FILE" || die_json "ERROR: cannot save upload to $DEST_FILE"
 
-uuid="_$(uuidgen | tr 'A-Z' 'a-z')"
+uuid="$upload_file_uuid"
 resource_dir="$resource_day_dir/$uuid"
 mkdir -p "$resource_dir" || die_json "ERROR: cannot mkdir $resource_dir"
 
 resource_file="$resource_dir/resource.json"
 resource_uri=""
 
-manifest_file="$upload_file_dir/manifest.json"
-thumb_file="$upload_file_dir/thumbnail.jpg"
+thumb_file="$resource_dir/thumbnail.jpg"
 thumbnail_uri=""
 
 url_encode() {
@@ -218,7 +217,7 @@ if [[ "${det_mime:-}" == video/* || "${contenttype:-}" == video/* ]]; then
       -ss "$ss" -i "$DEST_FILE" \
       -frames:v 1 -vf "scale='min($size,iw)':-2" -q:v 3 \
       "$thumb_file"; then
-      thumbnail="$(protected_file_uri upload "${thumb_file#$upload_root/}")"
+      thumbnail="$(protected_file_uri resource "${thumb_file#$resource_root/}")"
       if [[ -n "$FFPROBE" ]]; then
         thumb_wh="$("$FFPROBE" -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0:s=x "$thumb_file" 2>/dev/null || true)"
       fi
@@ -244,24 +243,6 @@ lastmodified="$(stat -c %y -- "$DEST_FILE" 2>/dev/null || true)"
   thumb_sha=""
   [ -f "$thumb_file" ] && thumb_sha="$(sha256sum "$thumb_file" 2>/dev/null | awk '{print $1}')"
   created_at="$(date '+%Y-%m-%dT%H:%M:%S%z')"
-  cat >"$manifest_file" <<JSON || die_json "ERROR: cannot write manifest file $manifest_file"
-{
-  "id": "$(json_escape "$upload_file_uuid")",
-  "type": "UploadResource",
-  "version": 1,
-  "created_at": "$(json_escape "$created_at")",
-  "created_by": "$(json_escape "$user_id")",
-  "title": "$(json_escape "$name")",
-  "kind": "video",
-  "original": {
-    "file": "$(json_escape "$filename")",
-    "display_name": "$(json_escape "$name")",
-    "mime": "$(json_escape "${contenttype:-application/octet-stream}")",
-    "size": ${totalsize:-0},
-    "sha256": "$(json_escape "$original_sha")"
-  }$(if [ -f "$thumb_file" ]; then printf ',\n  "thumbnail": {\n    "file": "thumbnail.jpg",\n    "mime": "image/jpeg",\n    "size": %s,\n    "sha256": "%s"%s\n  }' "$(stat -c %s -- "$thumb_file" 2>/dev/null || echo 0)" "$(json_escape "$thumb_sha")" "$(if [ -n "${tw:-}" ] && [ -n "${th:-}" ]; then printf ',\n    "display_size": "%s"' "$(json_escape "${tw}x${th}")"; fi)"; fi)
-}
-JSON
   cat <<JSON
 {
   "id": "$(json_escape "$uuid")",
@@ -293,10 +274,6 @@ JSON
   "storage": {
     "managed": true,
     "copyPolicy": "snapshot",
-    "manifest": {
-      "area": "upload",
-      "path": "$(json_escape "$year/$month/$day/$upload_file_uuid/manifest.json")"
-    },
     "files": [
       {
         "role": "original",
@@ -305,7 +282,7 @@ JSON
         "mimeType": "$(json_escape "${contenttype:-application/octet-stream}")",
         "size": ${totalsize:-0},
         "sha256": "$(json_escape "$original_sha")"$(if [ -n "${video_wh:-}" ]; then printf ',\n        "displaySize": "%s"' "$(json_escape "$video_wh")"; fi)
-      }$(if [ -f "$thumb_file" ]; then printf ',\n      {\n        "role": "thumbnail",\n        "area": "upload",\n        "path": "%s",\n        "mimeType": "image/jpeg",\n        "size": %s,\n        "sha256": "%s"%s\n      }' "$(json_escape "${thumb_file#$upload_root/}")" "$(stat -c %s -- "$thumb_file" 2>/dev/null || echo 0)" "$(json_escape "$thumb_sha")" "$(if [ -n "${tw:-}" ] && [ -n "${th:-}" ]; then printf ',\n        "displaySize": "%s"' "$(json_escape "${tw}x${th}")"; fi)"; fi)
+      }$(if [ -f "$thumb_file" ]; then printf ',\n      {\n        "role": "thumbnail",\n        "area": "resource",\n        "path": "%s",\n        "mimeType": "image/jpeg",\n        "size": %s,\n        "sha256": "%s"%s\n      }' "$(json_escape "${thumb_file#$resource_root/}")" "$(stat -c %s -- "$thumb_file" 2>/dev/null || echo 0)" "$(json_escape "$thumb_sha")" "$(if [ -n "${tw:-}" ] && [ -n "${th:-}" ]; then printf ',\n        "displaySize": "%s"' "$(json_escape "${tw}x${th}")"; fi)"; fi)
     ]
   },
   "rights": {

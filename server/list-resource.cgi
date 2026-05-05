@@ -175,150 +175,84 @@ resource_date_from_rel() {
   esac
 }
 
-json_number_field() {
-  key=$1
-  file=$2
-  awk -v k="$key" '
-    BEGIN { RS=""; ORS="" }
-    {
-      pat = "\"" k "\"[ \t\r\n]*:[ \t\r\n]*"
-      p = match($0, pat)
-      if (!p) exit
-      s = substr($0, RSTART + RLENGTH)
-      if (match(s, /^-?[0-9]+(\.[0-9]+)?/)) print substr(s, RSTART, RLENGTH)
-    }
-  ' "$file"
-}
-
-storage_file_value() {
-  role=$1
-  key=$2
-  file=$3
-  awk -v role="$role" -v key="$key" '
-    function emit_value(obj,    pat,p,s,i,c,out,esc) {
-      pat = "\"" key "\"[ \t\r\n]*:[ \t\r\n]*"
-      p = match(obj, pat)
-      if (!p) return
-      s = substr(obj, RSTART + RLENGTH)
-      if (substr(s, 1, 1) == "\"") {
-        s = substr(s, 2)
-        out = ""; esc = 0
-        for (i = 1; i <= length(s); i++) {
-          c = substr(s, i, 1)
-          if (esc) { out = out c; esc = 0; continue }
-          if (c == "\\") { out = out c; esc = 1; continue }
-          if (c == "\"") break
-          out = out c
-        }
-        print out
-      } else {
-        if (match(s, /^[^,}\r\n]+/)) {
-          out = substr(s, RSTART, RLENGTH)
-          gsub(/^[ \t]+|[ \t]+$/, "", out)
-          print out
-        }
-      }
-    }
-    /"files"[ \t\r\n]*:/ { in_files = 1 }
-    in_files {
-      if (!in_obj && $0 ~ /\{/) { in_obj = 1; obj = $0 "\n"; next }
-      if (in_obj) {
-        obj = obj $0 "\n"
-        if ($0 ~ /\}/) {
-          if (obj ~ "\"" "role" "\"[ \t\r\n]*:[ \t\r\n]*\"" role "\"") {
-            emit_value(obj)
-            exit
-          }
-          in_obj = 0
-          obj = ""
-        }
-      }
-    }
-  ' "$file"
-}
-
-resource_hidden() {
-  file=$1
-  awk '
-    BEGIN { RS=""; hidden=0 }
-    /"hiddenFromHome"[ \t\r\n]*:[ \t\r\n]*true/ { hidden=1 }
-    /"home"[ \t\r\n]*:[ \t\r\n]*\{/ && /"hidden"[ \t\r\n]*:[ \t\r\n]*true/ { hidden=1 }
-    END { exit hidden ? 0 : 1 }
-  ' "$file"
-}
-
-resource_current_format() {
-  file=$1
-  awk '
-    BEGIN { RS=""; ok=1 }
-    /"storage"[ \t\r\n]*:[ \t\r\n]*\{/ && /"files"[ \t\r\n]*:[ \t\r\n]*\[/ && !/"area"[ \t\r\n]*:/ { ok=0 }
-    END { exit ok ? 0 : 1 }
-  ' "$file"
-}
-
-emit_resource_record() {
+emit_upload_manifest_record() {
   root=$1
   path=$2
   uid=$3
   rel=${path#"$root"/}
+  dir=${rel%/*}
   id=$(json_string_field id "$path")
   [ -n "$id" ] || id=$(basename "$(dirname "$path")")
-  title=$(json_nested_string_field identity title "$path")
-  label=$(json_string_field label "$path")
-  name=${label:-${title:-$id}}
-  kind=$(json_nested_string_field media kind "$path")
-  mime=$(json_nested_string_field media mimeType "$path")
+  title=$(json_string_field title "$path")
+  name=${title:-$id}
+  kind=$(json_string_field kind "$path")
+  created=$(json_string_field created_at "$path")
+  original_file=$(json_nested_string_field original file "$path")
+  original_display=$(json_nested_string_field original display_name "$path")
+  original_mime=$(json_nested_string_field original mime "$path")
+  original_size=$(json_nested_string_field original size "$path")
+  original_sha=$(json_nested_string_field original sha256 "$path")
+  thumb_file=$(json_nested_string_field thumbnail file "$path")
+  thumb_mime=$(json_nested_string_field thumbnail mime "$path")
+  thumb_size=$(json_nested_string_field thumbnail size "$path")
+  thumb_sha=$(json_nested_string_field thumbnail sha256 "$path")
+  preview_file=$(json_nested_string_field preview file "$path")
+  preview_mime=$(json_nested_string_field preview mime "$path")
+  preview_size=$(json_nested_string_field preview size "$path")
+  preview_sha=$(json_nested_string_field preview sha256 "$path")
+  [ -n "$name" ] || name=$original_display
+  [ -n "$name" ] || name=$original_file
   [ -n "$kind" ] || kind=general
-  [ -n "$mime" ] || mime=application/octet-stream
-  created=$(json_nested_string_field audit createdAt "$path")
-  modified=$(json_nested_string_field audit lastModifiedAt "$path")
-  date=$(resource_date_from_rel "$rel")
-  ts=${modified:-${created:-${date}T00:00:00}}
-
-  original_area=$(storage_file_value original area "$path")
-  original_path=$(storage_file_value original path "$path")
-  original_size=$(storage_file_value original size "$path")
-  thumb_area=$(storage_file_value thumbnail area "$path")
-  thumb_path=$(storage_file_value thumbnail path "$path")
-  preview_area=$(storage_file_value preview area "$path")
-  preview_path=$(storage_file_value preview path "$path")
-  original_url=$(file_rel_url "$uid" "$original_area" "$original_path")
-  thumb_url=$(file_rel_url "$uid" "$thumb_area" "$thumb_path")
-  preview_url=$(file_rel_url "$uid" "$preview_area" "$preview_path")
-  embed_url=$(json_nested_string_field embed uri "$path")
-  identity_uri=$(json_nested_string_field identity uri "$path")
-  canonical_uri=$(json_nested_string_field identity canonicalUri "$path")
-  public_url=${embed_url:-${identity_uri:-$canonical_uri}}
-  [ -n "$original_url" ] || original_url=$public_url
-  [ -n "$preview_url" ] || preview_url=$original_url
-  [ -n "$thumb_url" ] || thumb_url=$(json_string_field thumbnailUri "$path")
+  [ -n "$original_mime" ] || original_mime=application/octet-stream
   [ -n "$original_size" ] || original_size=0
+  [ -n "$thumb_mime" ] || thumb_mime=image/jpeg
+  [ -n "$thumb_size" ] || thumb_size=0
+  [ -n "$preview_mime" ] || preview_mime=application/pdf
+  [ -n "$preview_size" ] || preview_size=0
+
+  date=$(resource_date_from_rel "$rel")
+  ts=${created:-${date}T00:00:00}
+  original_path=""
+  [ -n "$original_file" ] && original_path="$dir/$original_file"
+  thumb_path=""
+  [ -n "$thumb_file" ] && thumb_path="$dir/$thumb_file"
+  preview_path=""
+  [ -n "$preview_file" ] && preview_path="$dir/$preview_file"
+  original_url=$(file_rel_url "$uid" upload "$original_path")
+  thumb_url=$(file_rel_url "$uid" upload "$thumb_path")
+  preview_url=$(file_rel_url "$uid" upload "$preview_path")
+  [ -n "$preview_url" ] || preview_url=$original_url
   viewer=iframe
-  case "$kind:$mime" in
+  case "$kind:$original_mime" in
     video:*|*:video/*) viewer=video ;;
     image:*|*:image/*) viewer=image ;;
     *:application/pdf) viewer=pdf ;;
   esac
-  option=upload
-  case "$kind" in
-    video:*) option=video ;;
-  esac
-  if [ "$option" = "upload" ] && [ -z "$original_path" ]; then
-    case "$public_url" in http://*|https://*) option=webpage ;; esac
-  fi
-  desc_obj=$(json_object_field description "$path")
-  [ -n "$desc_obj" ] || desc_obj='{}'
 
   printf '{'
   printf '"id":"%s",' "$(printf '%s' "$id" | json_escape)"
-  printf '"resource":'
-  cat "$path"
-  printf ','
+  printf '"resource":{'
+  printf '"id":"%s","type":"Resource",' "$(printf '%s' "$id" | json_escape)"
   printf '"label":"%s",' "$(printf '%s' "$name" | json_escape)"
-  printf '"description":%s,' "$desc_obj"
+  printf '"identity":{"title":"%s","canonicalUri":"%s","uri":"%s"},' "$(printf '%s' "$name" | json_escape)" "$(printf '%s' "$original_url" | json_escape)" "$(printf '%s' "$preview_url" | json_escape)"
+  printf '"media":{"kind":"%s","mimeType":"%s","downloadable":true},' "$(printf '%s' "$kind" | json_escape)" "$(printf '%s' "$original_mime" | json_escape)"
+  printf '"viewer":{"defaultMode":"infoPane","embed":{"enabled":true,"uri":"%s"},"thumbnailUri":"%s"},' "$(printf '%s' "$preview_url" | json_escape)" "$(printf '%s' "$thumb_url" | json_escape)"
+  printf '"storage":{"managed":true,"copyPolicy":"reference","manifest":{"area":"upload","path":"%s"},"files":[' "$(printf '%s' "$rel" | json_escape)"
+  printf '{"role":"original","area":"upload","path":"%s","mimeType":"%s","size":%s,"sha256":"%s"}' "$(printf '%s' "$original_path" | json_escape)" "$(printf '%s' "$original_mime" | json_escape)" "$original_size" "$(printf '%s' "$original_sha" | json_escape)"
+  if [ -n "$thumb_path" ]; then
+    printf ',{"role":"thumbnail","area":"upload","path":"%s","mimeType":"%s","size":%s,"sha256":"%s"}' "$(printf '%s' "$thumb_path" | json_escape)" "$(printf '%s' "$thumb_mime" | json_escape)" "$thumb_size" "$(printf '%s' "$thumb_sha" | json_escape)"
+  fi
+  if [ -n "$preview_path" ]; then
+    printf ',{"role":"preview","area":"upload","path":"%s","mimeType":"%s","size":%s,"sha256":"%s"}' "$(printf '%s' "$preview_path" | json_escape)" "$(printf '%s' "$preview_mime" | json_escape)" "$preview_size" "$(printf '%s' "$preview_sha" | json_escape)"
+  fi
+  printf ']},'
+  printf '"audit":{"owner":"%s","createdBy":"%s","createdAt":"%s","lastModifiedBy":"","lastModifiedAt":""}' "$(printf '%s' "$uid" | json_escape)" "$(printf '%s' "$uid" | json_escape)" "$(printf '%s' "$ts" | json_escape)"
+  printf '},'
+  printf '"label":"%s",' "$(printf '%s' "$name" | json_escape)"
+  printf '"description":{},'
   printf '"name":"%s",' "$(printf '%s' "$name" | json_escape)"
-  printf '"option":"%s",' "$(printf '%s' "$option" | json_escape)"
-  printf '"contenttype":"%s",' "$(printf '%s' "$mime" | json_escape)"
+  printf '"option":"upload",'
+  printf '"contenttype":"%s",' "$(printf '%s' "$original_mime" | json_escape)"
   printf '"uri":"%s",' "$(printf '%s' "$original_url" | json_escape)"
   printf '"url":"%s",' "$(printf '%s' "$preview_url" | json_escape)"
   printf '"download_url":"%s",' "$(printf '%s' "$original_url" | json_escape)"
@@ -346,9 +280,9 @@ if [ -n "${req_user_id:-}" ] && [ "$req_user_id" != "$session_user_id" ]; then
   text_response 'ERROR USER MISMATCH'
 fi
 user_id=$session_user_id
-resource_dir=$(resolve_env_path resource "$user_id" || true)
-[ -n "${resource_dir:-}" ] || text_response 'ERROR RESOURCE DIR NOT DEFINED'
-[ -d "$resource_dir" ] || mkdir -p "$resource_dir"
+upload_dir=$(resolve_env_path upload "$user_id" || true)
+[ -n "${upload_dir:-}" ] || text_response 'ERROR UPLOAD DIR NOT DEFINED'
+[ -d "$upload_dir" ] || mkdir -p "$upload_dir"
 
 year=$(nameread year "$CGIVARS" | strip_quotes || true)
 month=$(nameread month "$CGIVARS" | strip_quotes || true)
@@ -356,36 +290,34 @@ date_filter=$(nameread date "$CGIVARS" | strip_quotes || true)
 start_date=$(nameread start_date "$CGIVARS" | strip_quotes || true)
 end_date=$(nameread end_date "$CGIVARS" | strip_quotes || true)
 term=$(nameread term "$CGIVARS" | strip_quotes || true)
-start=$(nameread start "$CGIVARS" | strip_quotes || true)
-count_req=$(nameread count "$CGIVARS" | strip_quotes || true)
-case "$start" in ''|*[!0-9]*) start=0 ;; esac
-case "$count_req" in ''|*[!0-9]*) count_req=0 ;; esac
 month_key=""
 if [ -n "${year:-}" ] && [ -n "${month:-}" ]; then
   month_key=$(printf '%04d-%02d' "$year" "$month" 2>/dev/null || true)
 fi
 
 : > "$FOUND"
-if [ -n "${resource_dir:-}" ] && [ -d "$resource_dir" ]; then
-  find "$resource_dir" -type f -name resource.json -printf '%T@ resource %p\n' 2>/dev/null >> "$FOUND"
+if [ -n "${upload_dir:-}" ] && [ -d "$upload_dir" ]; then
+  find "$upload_dir" -type f -name manifest.json -printf '%T@ upload %p\n' 2>/dev/null >> "$FOUND"
 fi
 sort -rn "$FOUND" > "$FOUND.sorted" && mv "$FOUND.sorted" "$FOUND"
 : > "$SEEN"
 
-count_out=0
-count_org=0
-seen_index=0
+json_header
+printf '{"total":'
+total=$(wc -l < "$FOUND" | tr -d '[:space:]')
+printf '%s,' "${total:-0}"
+printf '"start":0,"count_org":'
+
+count=0
 days=""
 months=""
 records_tmp="${Tmp}-records"
-logs_tmp="${Tmp}-logs"
 : > "$records_tmp"
-: > "$logs_tmp"
 while IFS= read -r found_line; do
   source_type=$(printf '%s' "$found_line" | awk '{print $2}')
   path=$(printf '%s' "$found_line" | awk '{sub(/^[^ ]+ [^ ]+ /,""); print}')
-  [ "$source_type" = "resource" ] || continue
-  root=$resource_dir
+  [ "$source_type" = "upload" ] || continue
+  root=$upload_dir
   rel=${path#"$root"/}
   d=$(resource_date_from_rel "$rel")
   [ -n "$month_key" ] && case "$d" in "$month_key"-*) ;; *) continue ;; esac
@@ -393,48 +325,21 @@ while IFS= read -r found_line; do
   [ -n "$start_date" ] && { [ -n "$d" ] || continue; [ "$d" \< "$start_date" ] && continue; }
   [ -n "$end_date" ] && { [ -n "$d" ] || continue; [ "$d" \> "$end_date" ] && continue; }
   [ -n "$term" ] && ! grep -Fqi -- "$term" "$path" && continue
-  type_field=$(json_string_field type "$path")
-  if [ "$type_field" != "Resource" ]; then
-    printf 'list-resource.cgi: skipped non-current resource format: %s\n' "$rel" >> "$logs_tmp"
-    continue
-  fi
-  if ! resource_current_format "$path"; then
-    printf 'list-resource.cgi: skipped resource without storage file area: %s\n' "$rel" >> "$logs_tmp"
-    continue
-  fi
-  if resource_hidden "$path"; then
-    continue
-  fi
   record_id=$(json_string_field id "$path")
   [ -n "$record_id" ] || record_id=$(basename "$(dirname "$path")")
-  if [ -z "$record_id" ]; then
-    printf 'list-resource.cgi: skipped resource without id: %s\n' "$rel" >> "$logs_tmp"
-    continue
-  fi
   if grep -Fxq "$record_id" "$SEEN" 2>/dev/null; then
     continue
   fi
   printf '%s\n' "$record_id" >> "$SEEN"
-  count_org=$((count_org + 1))
   [ -n "$d" ] && case "_${days}_" in *"_${d}_"*) ;; *) days="${days}${days:+_}$d" ;; esac
   m=${d%-*}
   [ -n "$m" ] && case " $months " in *" $m "*) ;; *) months="${months}${months:+ }$m" ;; esac
-  if [ "$seen_index" -lt "$start" ]; then
-    seen_index=$((seen_index + 1))
-    continue
-  fi
-  if [ "$count_req" -gt 0 ] && [ "$count_out" -ge "$count_req" ]; then
-    seen_index=$((seen_index + 1))
-    continue
-  fi
-  [ "$count_out" -gt 0 ] && printf ',' >> "$records_tmp"
-  emit_resource_record "$resource_dir" "$path" "$user_id" >> "$records_tmp"
-  count_out=$((count_out + 1))
-  seen_index=$((seen_index + 1))
+  [ "$count" -gt 0 ] && printf ',' >> "$records_tmp"
+  emit_upload_manifest_record "$upload_dir" "$path" "$user_id" >> "$records_tmp"
+  count=$((count + 1))
 done < "$FOUND"
 
-json_header
-printf '{"total":%s,"start":%s,"count_org":%s,"count":%s,"year":"%s","month":"%s","date":"%s","start_date":"%s","end_date":"%s","days":"%s","months":[' "$count_org" "$start" "$count_org" "$count_out" "$(printf '%s' "$year" | json_escape)" "$(printf '%s' "$month" | json_escape)" "$(printf '%s' "$date_filter" | json_escape)" "$(printf '%s' "$start_date" | json_escape)" "$(printf '%s' "$end_date" | json_escape)" "$(printf '%s' "$days" | json_escape)"
+printf '%s,"count":%s,"year":"%s","month":"%s","date":"%s","start_date":"%s","end_date":"%s","days":"%s","months":[' "$count" "$count" "$(printf '%s' "$year" | json_escape)" "$(printf '%s' "$month" | json_escape)" "$(printf '%s' "$date_filter" | json_escape)" "$(printf '%s' "$start_date" | json_escape)" "$(printf '%s' "$end_date" | json_escape)" "$(printf '%s' "$days" | json_escape)"
 mi=0
 for m in $months; do
   [ "$mi" -gt 0 ] && printf ','
@@ -443,13 +348,5 @@ for m in $months; do
 done
 printf '],"r":['
 cat "$records_tmp"
-printf '],"logs":['
-li=0
-while IFS= read -r log_line; do
-  [ -n "$log_line" ] || continue
-  [ "$li" -gt 0 ] && printf ','
-  printf '"%s"' "$(printf '%s' "$log_line" | json_escape)"
-  li=$((li + 1))
-done < "$logs_tmp"
 printf ']}'
-rm -f "$records_tmp" "$logs_tmp"
+rm -f "$records_tmp"

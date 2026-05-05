@@ -34,7 +34,7 @@ def main():
         script_error("500 Internal Server Error\nERROR DIRECTORY NOT DEFINED")
 
     note_file = resolve_note_file(Path(note_dir), note_id)
-    note_path = note_file.parent if note_file.name == "note.txt" else note_file
+    note_path = note_file.parent if note_file.name == "note.json" else note_file
 
     if not note_file.exists():
         script_error("ERROR NOTE NOT FOUND")

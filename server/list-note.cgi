@@ -180,7 +180,7 @@ json_svg_thumbnail() {
 note_id_from_relpath() {
   rel=$1
   case "$rel" in
-    */note.txt)
+    */note.json)
       dir=${rel%/*}
       basename "$dir"
       ;;
@@ -198,9 +198,35 @@ is_listable_note_file() {
   case "$load_id" in
     ERROR*|*/*|*..*) return 1 ;;
   esac
-  json_value=$(read_meta json_base64 "$file" || true)
-  [ -n "$json_value" ] || return 1
+  case "$file" in
+    */note.json) ;;
+    *) return 1 ;;
+  esac
+  grep -q '"note_id"[[:space:]]*:' "$file" || grep -q '"note_uuid"[[:space:]]*:' "$file" || return 1
   return 0
+}
+
+json_string_field() {
+  key=$1
+  file=$2
+  awk -v k="$key" '
+    BEGIN { RS=""; ORS="" }
+    {
+      pat = "\"" k "\"[ \t\r\n]*:[ \t\r\n]*\""
+      p = match($0, pat)
+      if (!p) exit
+      s = substr($0, RSTART + RLENGTH)
+      out = ""; esc = 0
+      for (i = 1; i <= length(s); i++) {
+        c = substr(s, i, 1)
+        if (esc) { out = out c; esc = 0; continue }
+        if (c == "\\") { out = out c; esc = 1; continue }
+        if (c == "\"") break
+        out = out c
+      }
+      print out
+    }
+  ' "$file"
 }
 
 resolve_env_path() {
@@ -290,27 +316,16 @@ note_matches_term() {
   file=$1
   keyword=$2
   [ -n "$keyword" ] || return 0
-  {
-    read_meta id "$file" || true
-    read_meta name "$file" || true
-    read_meta description "$file" || true
-    read_meta saved_at "$file" || true
-  } | grep -Fqi -- "$keyword" && return 0
-
-  json_b64=$(read_meta json_base64 "$file" || true)
-  [ -n "$json_b64" ] && printf '%s' "$json_b64" | base64 -d 2>/dev/null | grep -Fqi -- "$keyword" && return 0
-
-  return 1
+  grep -Fqi -- "$keyword" "$file"
 }
 
 {
-  find "$note_dir" -type f -name note.txt -printf '%T+\t%P\t%s\n'
-  find "$note_dir" -maxdepth 1 -type f -printf '%T+\t%P\t%s\n'
+  find "$note_dir" -type f -name note.json -printf '%T+\t%P\t%s\n'
 } | {
   if is_truthy "$include_new_note"; then
     cat
   else
-    awk -F "$(printf '\t')" '$2 !~ /(^|\/)new_note\/note\.json$/ && $2 != "new_note"'
+    awk -F "$(printf '\t')" '$2 !~ /(^|\/)new_note\/note\.json$/'
   fi
 } | while IFS="$(printf '\t')" read -r timestamp relpath size; do
   [ -n "${relpath:-}" ] || continue
@@ -376,15 +391,12 @@ fi
       file=${relpath##*/}
       note_id=$(note_id_from_relpath "$relpath")
 
-      note_user_id=$(read_meta user_id "$abs_file" || true)
-      note_name=$(read_meta name "$abs_file" || true)
-      note_description=$(read_meta description "$abs_file" || true)
-      note_thumbnail=$(read_meta thumbnail "$abs_file" || true)
+      note_user_id=$(json_string_field user_id "$abs_file" || true)
+      note_name=$(json_string_field note_name "$abs_file" || true)
+      note_description=$(json_string_field description "$abs_file" || true)
+      note_thumbnail=$(json_string_field thumbnail "$abs_file" || true)
       if [ -z "${note_thumbnail:-}" ]; then
-        json_b64=$(read_meta json_base64 "$abs_file" || true)
-        if [ -n "${json_b64:-}" ] && printf '%s' "$json_b64" | base64 -d > "$Tmp-note-json" 2>/dev/null; then
-          note_thumbnail=$(json_svg_thumbnail "$Tmp-note-json" || true)
-        fi
+        note_thumbnail=$(json_svg_thumbnail "$abs_file" || true)
       fi
 
       [ "$i" -gt 0 ] && printf ','

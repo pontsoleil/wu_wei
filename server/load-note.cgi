@@ -97,12 +97,8 @@ fi
 
 file="$note_dir/$id"
 if [ ! -f "$file" ]; then
-  file=$(find "$note_dir" -path "*/$id/note.txt" -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | sed 's/^[^ ]* //' | head -n 1)
+  file=$(find "$note_dir" -path "*/$id/note.json" -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | sed 's/^[^ ]* //' | head -n 1)
 fi
 [ -f "$file" ] || error_response 'ERROR NOTE FILE NOT FOUND'
 
-json_base64=$(nameread json_base64 "$file" | strip_quotes || true)
-[ -n "${json_base64:-}" ] || error_response 'ERROR JSON NOT FOUND'
-json=$(printf '%s' "$json_base64" | base64 -d 2>/dev/null || true)
-[ -n "${json:-}" ] || error_response 'ERROR JSON DECODE FAILED'
-json_response "$json"
+json_response_file "$file"

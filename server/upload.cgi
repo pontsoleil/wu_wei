@@ -493,7 +493,7 @@ if is_office_file "$filename"; then media_kind="document"; fi
 mkdir -p "$sha_index_dir" || die_json "ERROR: cannot mkdir $sha_index_dir"
 cat >"$manifest_file" <<JSON || die_json "ERROR: cannot write manifest file $manifest_file"
 {
-  "id": "$(json_escape "$upload_file_uuid")",
+  "id": "$(json_escape "$uuid")",
   "type": "UploadResource",
   "version": 1,
   "created_at": "$(json_escape "$created_at")",
@@ -512,7 +512,7 @@ JSON
 cat >"$sha_index_file" <<JSON || die_json "ERROR: cannot write sha index $sha_index_file"
 {
   "sha256": "$(json_escape "$original_sha")",
-  "upload_id": "$(json_escape "$upload_file_uuid")",
+  "upload_id": "$(json_escape "$uuid")",
   "date": "$(json_escape "$upload_file_date")",
   "file": "$(json_escape "$filename")"
 }

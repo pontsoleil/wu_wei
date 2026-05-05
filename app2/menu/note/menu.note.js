@@ -454,56 +454,12 @@ wuwei.menu.note = wuwei.menu.note || {};
     return `${base}${ext || '.txt'}`;
   }
 
-  function decodeBase64Utf8(value) {
-    return decodeURIComponent(escape(atob(String(value || '').trim())));
-  }
-
-  function encodeBase64Utf8(value) {
-    return btoa(unescape(encodeURIComponent(String(value || ''))));
-  }
-
-  function singleLineMeta(value) {
-    return String(value || '').replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
-  }
-
-  function noteMetaTextFromJson(noteText) {
-    const current = wuwei.common.current || {};
-    const cu = (wuwei.common.state && wuwei.common.state.currentUser) || {};
-    let noteJson = {};
-    try {
-      noteJson = JSON.parse(noteText);
-    }
-    catch (e) {
-      noteJson = {};
-    }
-    const noteId = noteJson.note_id || noteJson.note_uuid || current.note_id || 'new_note';
-    const noteName = noteJson.note_name || current.note_name || '';
-    const description = noteJson.description || current.description || '';
-    const userId = cu.user_id || noteJson.user_id || 'guest';
-    const savedAt = (new Date()).toISOString();
-    return [
-      'format_version 2',
-      `id ${singleLineMeta(noteId)}`,
-      `user_id ${singleLineMeta(userId)}`,
-      `name ${singleLineMeta(noteName)}`,
-      `description ${singleLineMeta(description)}`,
-      'thumbnail ',
-      `saved_at ${singleLineMeta(savedAt)}`,
-      'json_encoding base64',
-      `json_base64 ${encodeBase64Utf8(noteText)}`
-    ].join('\n') + '\n';
-  }
-
   function noteJsonTextFromFileText(text) {
     const raw = String(text || '').replace(/^\uFEFF/, '').trim();
     if (/^\{/.test(raw)) {
       return raw;
     }
-    const match = raw.match(/^json_base64[ \t]+(.+)$/m);
-    if (!match) {
-      throw new Error('ERROR NOTE JSON NOT FOUND');
-    }
-    return decodeBase64Utf8(match[1]).trim();
+    throw new Error('ERROR NOTE JSON NOT FOUND');
   }
 
   function summarizeImportedNote(noteJson) {
@@ -584,7 +540,7 @@ wuwei.menu.note = wuwei.menu.note || {};
   }
 
   function readZipEntryText(file, targetName) {
-    targetName = String(targetName || 'note.txt').replace(/\\/g, '/');
+    targetName = String(targetName || 'note.json').replace(/\\/g, '/');
     return file.arrayBuffer().then(function (buffer) {
       const view = new DataView(buffer);
       const bytes = new Uint8Array(buffer);
@@ -612,7 +568,7 @@ wuwei.menu.note = wuwei.menu.note || {};
       }
 
       if (!found) {
-        throw new Error('ERROR note.txt not found in ZIP');
+        throw new Error('ERROR ' + targetName + ' not found in ZIP');
       }
       if (view.getUint32(found.localHeaderOffset, true) !== 0x04034b50) {
         throw new Error('ERROR ZIP LOCAL HEADER IS INVALID');
@@ -634,7 +590,7 @@ wuwei.menu.note = wuwei.menu.note || {};
   }
 
   function readNoteJsonFromZipInBrowser(file) {
-    return readZipEntryText(file, 'note.txt').then(function (noteText) {
+    return readZipEntryText(file, 'note.json').then(function (noteText) {
       const noteJsonText = noteJsonTextFromFileText(noteText);
       return JSON.parse(noteJsonText);
     });
@@ -667,7 +623,7 @@ wuwei.menu.note = wuwei.menu.note || {};
 
       const text = wuwei.note.exportNoteText();
       Promise.resolve(text).then(function (noteText) {
-        const blob = new Blob([noteMetaTextFromJson(noteText)], { type: 'text/plain;charset=utf-8' });
+        const blob = new Blob([noteText], { type: 'application/json;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement('a');
         anchor.href = url;

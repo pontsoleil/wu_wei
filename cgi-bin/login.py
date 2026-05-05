@@ -57,7 +57,9 @@ def emit_cookie_delete_headers():
     domain = cookie_domain_attr()
     path = cookie_path()
     return [
-        f"Set-Cookie: wuwei_user_id=; Max-Age=0; Path={path}{domain}; HttpOnly; SameSite=Lax"
+        f"Set-Cookie: wuwei_user_id=; Max-Age=0; Path={path}{domain}; HttpOnly; SameSite=Lax",
+        f"Set-Cookie: wuwei_user_id=; Max-Age=0; Path={path}/cgi-bin{domain}; HttpOnly; SameSite=Lax",
+        f"Set-Cookie: wuwei_user_id=; Max-Age=0; Path={path}/server{domain}; HttpOnly; SameSite=Lax",
     ]
 
 

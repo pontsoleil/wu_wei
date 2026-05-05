@@ -96,17 +96,7 @@ resource_identity_key() {
   file=$1
   v=$(json_string_field canonicalUri "$file")
   [ -n "$v" ] || v=$(json_string_field uri "$file")
-  [ -n "$v" ] || v=$(json_string_field sourcePath "$file")
   printf '%s\n' "$v"
-}
-
-resource_date_path() {
-  file=$1
-  ts=$(json_string_field createdAt "$file")
-  [ -n "$ts" ] || ts=$(json_string_field lastModifiedAt "$file")
-  date_part=$(printf '%s' "$ts" | sed -n 's/^\([0-9][0-9][0-9][0-9]\)-\([0-9][0-9]\)-\([0-9][0-9]\).*/\1\/\2\/\3/p')
-  [ -n "$date_part" ] || date_part=$(date '+%Y/%m/%d')
-  printf '%s\n' "$date_part"
 }
 
 read_params
@@ -141,18 +131,10 @@ if [ -z "${target:-}" ]; then
   ' {} \; -print | head -n 1)
 fi
 
-if [ -z "${target:-}" ]; then
-  incoming_key=$(resource_identity_key "$RESOURCE_JSON")
-  [ -n "$incoming_key" ] || text_response 'ERROR RESOURCE NOT FOUND'
-  date_path=$(resource_date_path "$RESOURCE_JSON")
-  target_dir="$resource_dir/$date_path/$resource_id"
-  mkdir -p "$target_dir" || text_response 'ERROR RESOURCE UPDATE FAILED'
-  target="$target_dir/resource.json"
-fi
+[ -n "${target:-}" ] || text_response 'ERROR RESOURCE NOT FOUND'
 
 incoming_key=$(resource_identity_key "$RESOURCE_JSON")
-existing_key=""
-[ -f "$target" ] && existing_key=$(resource_identity_key "$target")
+existing_key=$(resource_identity_key "$target")
 if [ -z "$incoming_key" ] && [ -n "$existing_key" ]; then
   existing_uri=$(json_string_field uri "$target")
   existing_canonical=$(json_string_field canonicalUri "$target")

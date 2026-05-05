@@ -2,7 +2,7 @@
 # remove-note.cgi
 #
 # Move a note to trash. Handles both complete notes
-#   note/YYYY/MM/DD/{note_id}/note.txt
+#   note/YYYY/MM/DD/{note_id}/note.json
 # and failed-save leftovers where only the {note_id}/ directory exists.
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "${SCRIPT_FILENAME:-$0}")" && pwd) || exit 1
@@ -113,7 +113,7 @@ find_note_target() {
     return 0
   fi
 
-  found=$(find "$root" -type f -name note.txt -path "*/$nid/note.txt" -print 2>/dev/null | head -n 1)
+  found=$(find "$root" -type f -name note.json -path "*/$nid/note.json" -print 2>/dev/null | head -n 1)
   if [ -n "$found" ]; then
     dirname "$found"
     return 0

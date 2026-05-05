@@ -1,7 +1,6 @@
 #!C:\Users\nobuy\AppData\Local\Programs\Python\Python310\python.exe
 # -*- coding: utf-8 -*-
 
-import base64
 import json
 import shutil
 from datetime import datetime
@@ -66,23 +65,10 @@ def main():
         except Exception as e:
             script_error(f"ERROR {e}")
 
-        json_base64 = base64.b64encode(json_text.encode("utf-8")).decode("ascii")
         saved_at = now.strftime("%Y-%m-%dT%H:%M:%S%z")
-        name = _single_line_meta(params.get("name", "") or "")
-        description = _single_line_meta(params.get("description", "") or "")
-        thumbnail = _single_line_meta(params.get("thumbnail", "") or "")
 
         try:
-            with public_note.open("w", encoding="utf-8", newline="\n") as f:
-                f.write("format_version 2\n")
-                f.write(f"id {note_id}\n")
-                f.write(f"user_id {user_id}\n")
-                f.write(f"name {name}\n")
-                f.write(f"description {description}\n")
-                f.write(f"thumbnail {thumbnail}\n")
-                f.write(f"saved_at {saved_at}\n")
-                f.write("json_encoding base64\n")
-                f.write(f"json_base64 {json_base64}\n")
+            public_note.write_text(json_text + "\n", encoding="utf-8", newline="\n")
         except Exception:
             script_error("500 Internal Server Error\nERROR WHILE PUBLISHING NOTE")
 

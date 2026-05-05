@@ -2,7 +2,7 @@
 # export-note.cgi
 #
 # Build a portable note ZIP on demand:
-#   note.txt
+#   note.json
 #   upload/YYYY/MM/DD/{upload_uuid}/...
 #   resource/YYYY/MM/DD/{resource_uuid}/resource.json
 #
@@ -83,9 +83,7 @@ read_request_params() {
 
 read_note_json() {
   note_file=$1
-  json_base64=$(nameread json_base64 "$note_file" | strip_quotes || true)
-  [ -n "${json_base64:-}" ] || return 1
-  printf '%s' "$json_base64" | base64 -d 2>/dev/null || return 1
+  cat "$note_file"
 }
 
 archive_create() {
@@ -127,13 +125,13 @@ resource_dir=$(resolve_env_path resource "$user_id" || true)
 
 note_file="$note_dir/$id"
 if [ ! -f "$note_file" ]; then
-  note_file=$(find "$note_dir" -path "*/$id/note.txt" -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | sed 's/^[^ ]* //' | head -n 1)
+  note_file=$(find "$note_dir" -path "*/$id/note.json" -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | sed 's/^[^ ]* //' | head -n 1)
 fi
 [ -f "$note_file" ] || error_response 'ERROR NOTE FILE NOT FOUND'
 
 mkdir -p "$BUNDLE_DIR/upload"
 read_note_json "$note_file" > "$NOTE_JSON" || error_response 'ERROR NOTE JSON NOT FOUND'
-cp "$note_file" "$BUNDLE_DIR/note.txt" || error_response 'ERROR NOTE COPY FAILED'
+cp "$note_file" "$BUNDLE_DIR/note.json" || error_response 'ERROR NOTE JSON COPY FAILED'
 
 grep -Eo '[0-9]{4}/[0-9]{2}/[0-9]{2}/_[0-9A-Fa-f-]+' "$NOTE_JSON" | sort -u > "$REFS" || true
 while IFS= read -r rel; do

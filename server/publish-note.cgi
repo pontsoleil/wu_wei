@@ -101,7 +101,6 @@ require_cmd cp
 require_cmd mkdir
 require_cmd date
 require_cmd mktemp
-require_cmd base64
 
 year=$(date '+%Y')
 month=$(date '+%m')
@@ -154,25 +153,12 @@ if [ -n "${json:-}" ]; then
   thumbnail=$(printf '%s' "$thumbnail" | restore_ack_to_space | single_line_meta)
   json=$(printf '%s' "$json" | restore_ack_to_space | sed '1s/^\xEF\xBB\xBF//')
 
-  json_base64=$(printf '%s' "$json" | base64 | tr -d '\n')
-  [ -n "${json_base64:-}" ] || error500_exit "ERROR JSON ENCODE FAILED"
-
-  {
-    printf 'format_version 2\n'
-    printf 'id %s\n' "$note_id"
-    printf 'user_id %s\n' "$user_id"
-    printf 'name %s\n' "$name"
-    printf 'description %s\n' "$description"
-    printf 'thumbnail %s\n' "$thumbnail"
-    printf 'saved_at %s\n' "$saved_at"
-    printf 'json_encoding base64\n'
-    printf 'json_base64 %s\n' "$json_base64"
-  } > "$public_note" || error500_exit "ERROR WHILE PUBLISHING NOTE"
+  printf '%s\n' "$json" > "$public_note" || error500_exit "ERROR WHILE PUBLISHING NOTE"
 
   ok_response "${year}/${month}/${note_id}"
 fi
 
-note=$(find "$note_dir" \( -type f -name "$note_id" -o -type f -path "*/${note_id}/note.txt" \) -print 2>/dev/null | head -n 1)
+note=$(find "$note_dir" \( -type f -name "$note_id" -o -type f -path "*/${note_id}/note.json" \) -print 2>/dev/null | head -n 1)
 [ -n "$note" ] && [ -f "$note" ] || error500_exit "NOTE NOT FOUND: ${note_id}"
 
 cp "$note" "$public_note" || error500_exit "ERROR WHILE PUBLISHING NOTE"

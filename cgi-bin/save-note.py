@@ -1,7 +1,6 @@
 #!C:\Users\nobuy\AppData\Local\Programs\Python\Python310\python.exe
 # -*- coding: utf-8 -*-
 
-import base64
 import binascii
 import hashlib
 import json
@@ -577,27 +576,13 @@ def main():
 
     json_text = json.dumps(note_json, ensure_ascii=False, separators=(",", ":"))
 
-    json_base64 = base64.b64encode(json_text.encode("utf-8")).decode("ascii")
-    if not json_base64:
-        debug("ERROR JSON ENCODE FAILED")
-        script_error("ERROR JSON ENCODE FAILED")
-
-    outfile = note_dir / "note.txt"
-    debug_kv(outfile=str(outfile), year=year, month=month, day=day, saved_at=saved_at)
+    json_file = note_dir / "note.json"
+    debug_kv(json_file=str(json_file), year=year, month=month, day=day, saved_at=saved_at)
 
     try:
-        with outfile.open("w", encoding="utf-8", newline="\n") as f:
-            f.write("format_version 2\n")
-            f.write(f"id {note_id}\n")
-            f.write(f"user_id {user_id}\n")
-            f.write(f"name {name}\n")
-            f.write(f"description {description}\n")
-            f.write(f"thumbnail {thumbnail}\n")
-            f.write(f"saved_at {saved_at}\n")
-            f.write("json_encoding base64\n")
-            f.write(f"json_base64 {json_base64}\n")
+        json_file.write_text(json_text + "\n", encoding="utf-8", newline="\n")
     except Exception as e:
-        debug_kv(save_error=str(e), outfile=str(outfile))
+        debug_kv(save_error=str(e), json_file=str(json_file))
         script_error("ERROR SAVE FAILED")
 
     debug_kv(saved_note_id=note_id, response_name=name)

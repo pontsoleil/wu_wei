@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import cgi
-import base64
 import hashlib
 import json
 import mimetypes
@@ -478,7 +477,7 @@ def safe_note_id(value: str) -> str:
 
 
 def ensure_draft_note_json(note_dir: Path, user_id: str) -> None:
-    note_file = note_dir / "note.txt"
+    note_file = note_dir / "note.json"
     if note_file.exists():
         return
     draft = {
@@ -490,23 +489,7 @@ def ensure_draft_note_json(note_dir: Path, user_id: str) -> None:
         "resources": [],
         "pages": [],
     }
-    encoded = json.dumps(draft, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    note_file.write_text(
-        "\n".join([
-            "format_version 2",
-            "id new_note",
-            f"user_id {user_id}",
-            "name ",
-            "description ",
-            "thumbnail ",
-            f"saved_at {datetime.now().astimezone().strftime('%Y-%m-%dT%H:%M:%S%z')}",
-            "json_encoding base64",
-            f"json_base64 {base64.b64encode(encoded).decode('ascii')}",
-            "",
-        ]),
-        encoding="utf-8",
-        newline="\n",
-    )
+    note_file.write_text(json.dumps(draft, ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8", newline="\n")
 
 
 def find_upload_file_for_day(upload_day_dir: Path, filename: str) -> Path | None:

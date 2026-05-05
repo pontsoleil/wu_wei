@@ -416,22 +416,9 @@ if [ -z "${thumbnail:-}" ]; then
   thumbnail=$(json_svg_thumbnail "$JSON_FILE" | single_line_meta || true)
 fi
 
-json_base64=$(printf '%s' "$json" | base64 | tr -d '\n')
-[ -n "${json_base64:-}" ] || error_response 'ERROR JSON ENCODE FAILED'
-debug_log "json_base64_len=$(printf '%s' "$json_base64" | wc -c | tr -d ' ') note_dir=$note_dir"
-
-outfile="$note_dir/note.txt"
-{
-  printf 'format_version 2\n'
-  printf 'id %s\n' "$id"
-  printf 'user_id %s\n' "$user_id"
-  printf 'name %s\n' "$name"
-  printf 'description %s\n' "$description"
-  printf 'thumbnail %s\n' "$thumbnail"
-  printf 'saved_at %s\n' "$saved_at"
-  printf 'json_encoding base64\n'
-  printf 'json_base64 %s\n' "$json_base64"
-} > "$outfile" || error_response 'ERROR SAVE FAILED'
+json_outfile="$note_dir/note.json"
+printf '%s\n' "$json" > "$json_outfile" || error_response 'ERROR JSON SAVE FAILED'
+debug_log "json_file=$json_outfile note_dir=$note_dir"
 
 escaped_name=$(printf '%s' "$name" | json_escape)
 escaped_id=$(printf '%s' "$id" | json_escape)

@@ -29,6 +29,7 @@ def emit_headers():
     print("Content-Type: application/json")
     print("Cache-Control: no-store")
     print(f"Set-Cookie: wuwei_user_id=; Max-Age=0; Path=/wu_wei2{domain}; HttpOnly")
+    print(f"Set-Cookie: wuwei_user_id=; Max-Age=0; Path=/wu_wei2/cgi-bin{domain}; HttpOnly")
     print(f"Set-Cookie: wuwei_user_id=; Max-Age=0; Path=/wu_wei2/server{domain}; HttpOnly")
     print()
 

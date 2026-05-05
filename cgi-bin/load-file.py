@@ -23,6 +23,7 @@ from cgi_common import (
 )
 
 ALLOWED_AREAS = {"upload", "note", "resource", "thumbnail", "content"}
+CHUNK_SIZE = 1024 * 1024
 
 
 def reject(message: str, status: str = "400 Bad Request") -> None:
@@ -37,6 +38,10 @@ def safe_relative_path(value: str) -> str:
     if any(p in {".", ".."} for p in parts):
         return ""
     return "/".join(parts)
+
+
+def safe_header_filename(value: str) -> str:
+    return value.replace("\\", "/").split("/")[-1].replace('"', "").replace("\r", "").replace("\n", "")
 
 
 def main() -> None:
@@ -83,12 +88,21 @@ def main() -> None:
     mime = mimetypes.guess_type(str(target))[0] or "application/octet-stream"
     print(f"Content-Type: {mime}")
     print("Cache-Control: no-store")
+    print(f'Content-Disposition: inline; filename="{safe_header_filename(rel)}"')
+    print(f"Content-Length: {target.stat().st_size}")
     print(
         "X-Accel-Redirect: "
         + quote(f"/_wuwei2_data/{user_id}/{area}/{rel}", safe="/._-~")
     )
     print()
     sys.stdout.flush()
+    with target.open("rb") as f:
+        while True:
+            chunk = f.read(CHUNK_SIZE)
+            if not chunk:
+                break
+            sys.stdout.buffer.write(chunk)
+    sys.stdout.buffer.flush()
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 #!C:\Users\nobuy\AppData\Local\Programs\Python\Python310\python.exe
 # -*- coding: utf-8 -*-
 import sys
+from pathlib import Path
 
 from cgi_common import (
     PUBLIC_USER_IDS,

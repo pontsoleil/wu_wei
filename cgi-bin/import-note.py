@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import base64
 import cgi
 import json
 import shutil
@@ -35,28 +34,6 @@ def _single_line(value: str) -> str:
     return " ".join((value or "").replace("\r", " ").replace("\n", " ").replace("\t", " ").split())
 
 
-def _named_value(text: str, key: str) -> str:
-    prefix = key + " "
-    for line in text.splitlines():
-        if line.startswith(prefix):
-            return line[len(prefix):].strip()
-    return ""
-
-
-def _decode_note_payload(text: str) -> str:
-    text = text.lstrip("\ufeff").strip()
-    if text.startswith("{"):
-        return text
-    json_b64 = _named_value(text, "json_base64")
-    if not json_b64:
-        script_error("ERROR NOTE JSON NOT FOUND")
-    try:
-        return base64.b64decode(json_b64).decode("utf-8", errors="strict").strip()
-    except Exception:
-        debug_exception()
-        script_error("ERROR NOTE JSON DECODE FAILED")
-
-
 def _extract_zip(upload_bytes: bytes, extract_dir: Path) -> Path:
     extract_dir.mkdir(parents=True, exist_ok=True)
     zip_path = extract_dir / "bundle.zip"
@@ -67,10 +44,10 @@ def _extract_zip(upload_bytes: bytes, extract_dir: Path) -> Path:
             if not name or ".." in Path(name).parts:
                 continue
             zf.extract(info, extract_dir)
-    note_file = extract_dir / "note.txt"
-    if not note_file.is_file():
-        script_error("ERROR NOTE TEXT NOT FOUND")
-    return note_file
+    note_json = extract_dir / "note.json"
+    if note_json.is_file():
+        return note_json
+    script_error("ERROR NOTE JSON NOT FOUND")
 
 
 def _restore_upload_dirs(extract_dir: Path, upload_root: Path) -> None:
@@ -104,7 +81,7 @@ def _restore_resource_dirs(extract_dir: Path, resource_root: Path) -> None:
 
 
 def _save_note_meta(note_root: Path, user_id: str, note_json_text: str) -> str:
-    note_json_text = _decode_note_payload(note_json_text)
+    note_json_text = note_json_text.lstrip("\ufeff").strip()
     try:
         note_json = json.loads(note_json_text)
     except Exception:
@@ -121,19 +98,7 @@ def _save_note_meta(note_root: Path, user_id: str, note_json_text: str) -> str:
     now = datetime.now().astimezone()
     note_dir = note_root / now.strftime("%Y") / now.strftime("%m") / now.strftime("%d") / note_id
     note_dir.mkdir(parents=True, exist_ok=True)
-    json_b64 = base64.b64encode(note_json_text.encode("utf-8")).decode("ascii")
-    lines = [
-        "format_version 2",
-        f"id {note_id}",
-        f"user_id {user_id}",
-        f"name {_single_line(_json_string(note_json, 'note_name'))}",
-        f"description {_single_line(_json_string(note_json, 'description'))}",
-        "thumbnail ",
-        f"saved_at {now.strftime('%Y-%m-%dT%H:%M:%S%z')}",
-        "json_encoding base64",
-        f"json_base64 {json_b64}",
-    ]
-    (note_dir / "note.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (note_dir / "note.json").write_text(note_json_text + "\n", encoding="utf-8")
     return note_json_text
 
 

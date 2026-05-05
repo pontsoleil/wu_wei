@@ -49,28 +49,6 @@ strip_quotes() {
   sed 's/^"\(.*\)"$/\1/'
 }
 
-named_value() {
-  key=$1
-  src=$2
-  awk -v k="$key" '
-    index($0, k " ") == 1 {
-      print substr($0, length(k) + 2)
-      exit
-    }
-  ' "$src"
-}
-
-decode_note_payload() {
-  src=$1
-  dst=$2
-  json_base64=$(named_value json_base64 "$src" | strip_quotes || true)
-  if [ -n "${json_base64:-}" ]; then
-    printf '%s' "$json_base64" | base64 -d > "$dst" 2>/dev/null || return 1
-    return 0
-  fi
-  cp "$src" "$dst" || return 1
-}
-
 json_string_field() {
   key=$1
   file=$2
@@ -156,9 +134,11 @@ resource_base=$(resolve_env_path resource "$user_id" || true)
 
 if is_zip_file "$UPLOAD_FILE"; then
   archive_extract "$UPLOAD_FILE" "$EXTRACT_DIR" || error_response 'ERROR ZIP EXTRACT FAILED'
-  found_note="$EXTRACT_DIR/note.txt"
-  [ -f "${found_note:-}" ] || error_response 'ERROR NOTE TEXT NOT FOUND'
-  decode_note_payload "$found_note" "$NOTE_JSON" || error_response 'ERROR NOTE JSON DECODE FAILED'
+  if [ -f "$EXTRACT_DIR/note.json" ]; then
+    cp "$EXTRACT_DIR/note.json" "$NOTE_JSON" || error_response 'ERROR NOTE JSON COPY FAILED'
+  else
+    error_response 'ERROR NOTE JSON NOT FOUND'
+  fi
 
   if [ -d "$EXTRACT_DIR/upload" ]; then
     (cd "$EXTRACT_DIR/upload" && find . -mindepth 4 -maxdepth 4 -type d -name '_*' -print) |
@@ -190,7 +170,7 @@ if is_zip_file "$UPLOAD_FILE"; then
     done
   fi
 else
-  decode_note_payload "$UPLOAD_FILE" "$NOTE_JSON" || error_response 'ERROR NOTE JSON DECODE FAILED'
+  cp "$UPLOAD_FILE" "$NOTE_JSON" || error_response 'ERROR NOTE JSON COPY FAILED'
 fi
 
 sed -i '1s/^\xEF\xBB\xBF//' "$NOTE_JSON"
@@ -209,20 +189,8 @@ day=$(date '+%d')
 saved_at=$(date '+%Y-%m-%dT%H:%M:%S%z')
 note_name=$(json_string_field note_name "$NOTE_JSON" | single_line_meta)
 description=$(json_string_field description "$NOTE_JSON" | single_line_meta)
-json_base64=$(base64 < "$NOTE_JSON" | tr -d '\n')
-
 note_dir="$note_base/$year/$month/$day/$note_id"
 mkdir -p "$note_dir" || error_response 'ERROR NOTE DIRECTORY CREATE FAILED'
-{
-  printf 'format_version 2\n'
-  printf 'id %s\n' "$note_id"
-  printf 'user_id %s\n' "$user_id"
-  printf 'name %s\n' "$note_name"
-  printf 'description %s\n' "$description"
-  printf 'thumbnail \n'
-  printf 'saved_at %s\n' "$saved_at"
-  printf 'json_encoding base64\n'
-  printf 'json_base64 %s\n' "$json_base64"
-} > "$note_dir/note.txt" || error_response 'ERROR NOTE SAVE FAILED'
+cp "$NOTE_JSON" "$note_dir/note.json" || error_response 'ERROR NOTE JSON SAVE FAILED'
 
 json_response_file "$NOTE_JSON"

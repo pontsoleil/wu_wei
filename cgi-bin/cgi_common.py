@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import base64
 import json
 import os
 import re
@@ -44,7 +43,7 @@ PUBLIC_USER_IDS = {
     "0dbfa104-accd-4188-8b1b-f2e25d38e638",
 }
 GUEST_USER_ID = "guest"
-NOTE_META_FILENAME = "note.txt"
+NOTE_JSON_FILENAME = "note.json"
 
 DEBUG_ENABLED = True
 
@@ -375,28 +374,40 @@ def normalise_posint(value: str, default: int) -> int:
 
 
 def read_note_meta(path: Path) -> Dict[str, str]:
-    keys = [
-        "format_version",
-        "id",
-        "user_id",
-        "name",
-        "description",
-        "thumbnail",
-        "saved_at",
-        "json_encoding",
-        "json_base64",
-    ]
-    return {k: read_named_value(path, k) for k in keys}
+    meta: Dict[str, str] = {"_file_path": str(path)}
+    try:
+        note = json.loads(path.read_text(encoding="utf-8", errors="strict").lstrip("\ufeff"))
+    except Exception:
+        return meta
+    if not isinstance(note, dict):
+        return meta
+    audit = note.get("audit") if isinstance(note.get("audit"), dict) else {}
+    meta.update({
+        "id": str(note.get("note_id") or note.get("note_uuid") or ""),
+        "user_id": str((audit or {}).get("owner") or note.get("user_id") or ""),
+        "name": str(note.get("note_name") or ""),
+        "description": str(note.get("description") or ""),
+        "thumbnail": str(note.get("thumbnail") or ""),
+        "saved_at": str((audit or {}).get("lastModifiedAt") or (audit or {}).get("createdAt") or ""),
+    })
+    return meta
+
+
+def note_json_path_for_meta(path: Path) -> Path:
+    if path.name == NOTE_JSON_FILENAME:
+        return path
+    if path.is_dir():
+        return path / NOTE_JSON_FILENAME
+    return path.with_name(NOTE_JSON_FILENAME)
 
 
 def decode_note_json(meta: Dict[str, str]) -> str:
-    json_b64 = meta.get("json_base64", "")
-    if not json_b64:
-        raise ValueError("JSON NOT FOUND")
-    try:
-        return base64.b64decode(json_b64).decode("utf-8", errors="strict")
-    except Exception as e:
-        raise ValueError(f"JSON DECODE FAILED: {e}")
+    file_path = meta.get("_file_path", "")
+    if file_path:
+        json_file = note_json_path_for_meta(Path(file_path))
+        if json_file.is_file():
+            return json_file.read_text(encoding="utf-8", errors="strict").lstrip("\ufeff").strip()
+    raise ValueError("JSON NOT FOUND")
 
 
 def note_thumbnail_from_json(meta: Dict[str, str]) -> str:
@@ -437,12 +448,8 @@ def collect_note_record(note_root: Path, file_path: Path) -> Dict[str, object]:
     record_id = note_record_id(note_root, file_path)
     meta = read_note_meta(file_path)
     thumbnail = meta.get("thumbnail", "") or note_thumbnail_from_json(meta)
-    if file_path.name == NOTE_META_FILENAME:
-        parent = Path(relpath).parent.parent.as_posix()
-        name = Path(relpath).parent.name
-    else:
-        parent = relpath.rsplit("/", 1)[0] if "/" in relpath else "."
-        name = relpath.rsplit("/", 1)[-1]
+    parent = Path(relpath).parent.as_posix()
+    name = file_path.name
     return {
         "id": record_id,
         "user_id": meta.get("user_id", ""),
@@ -459,18 +466,20 @@ def collect_note_record(note_root: Path, file_path: Path) -> Dict[str, object]:
 def is_note_file(path: Path) -> bool:
     if not path.is_file():
         return False
+    if path.name != NOTE_JSON_FILENAME:
+        return False
     if "resource" in path.parts:
         return False
     try:
-        meta = read_note_meta(path)
-        return bool(meta.get("json_base64"))
+        note = json.loads(path.read_text(encoding="utf-8", errors="strict").lstrip("\ufeff"))
+        return isinstance(note, dict) and bool(note.get("note_id") or note.get("note_uuid"))
     except Exception:
         return False
 
 
 def note_record_id(note_root: Path, file_path: Path) -> str:
     relpath = file_path.relative_to(note_root).as_posix()
-    if file_path.name == NOTE_META_FILENAME:
+    if file_path.name == NOTE_JSON_FILENAME:
         return Path(relpath).parent.name
     return relpath
 
@@ -494,18 +503,18 @@ def resolve_note_file(note_root: Path, note_id: str) -> Path:
     direct = note_root / note_id
     if direct.is_file():
         return direct
-    if direct.is_dir() and (direct / NOTE_META_FILENAME).is_file():
-        return direct / NOTE_META_FILENAME
-    if (direct / NOTE_META_FILENAME).is_file():
-        return direct / NOTE_META_FILENAME
+    if direct.is_dir() and (direct / NOTE_JSON_FILENAME).is_file():
+        return direct / NOTE_JSON_FILENAME
+    if (direct / NOTE_JSON_FILENAME).is_file():
+        return direct / NOTE_JSON_FILENAME
 
     matches = list(note_root.rglob(note_id))
     matches.sort(key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=True)
     for path in matches:
         if path.is_file() and is_note_file(path):
             return path
-        if path.is_dir() and (path / NOTE_META_FILENAME).is_file():
-            return path / NOTE_META_FILENAME
+        if path.is_dir() and (path / NOTE_JSON_FILENAME).is_file():
+            return path / NOTE_JSON_FILENAME
     return direct
 
 
