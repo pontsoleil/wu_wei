@@ -70,6 +70,8 @@ resolve_user_dir() {
     "$base/user" \
     "$base" \
     "$(dirname "$base")/user" \
+    "$(dirname "$(dirname "$base")")/wu_wei2/user" \
+    "$(dirname "$(dirname "$(dirname "$SCRIPT_DIR")")")/wu_wei2/user" \
     "$SCRIPT_DIR/user"
   do
     if [ -r "$candidate/member.name" ] && [ -r "$candidate/password" ]; then

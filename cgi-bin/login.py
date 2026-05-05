@@ -188,6 +188,8 @@ def resolve_user_dir(base_user_dir: str) -> Path:
         base / "user",
         base,
         base.parent / "user",
+        base.parent.parent / "wu_wei2" / "user",
+        SCRIPT_DIR.parent.parent.parent / "wu_wei2" / "user",
         SCRIPT_DIR / "user",
     ]
     for candidate in candidates:
