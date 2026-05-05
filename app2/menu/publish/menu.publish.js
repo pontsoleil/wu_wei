@@ -153,7 +153,8 @@ wuwei.menu.publish = wuwei.menu.publish || {};
     const url = String(noteUrl || '').trim();
     if (!url) { return ''; }
     if (/^https?:\/\//i.test(url)) { return url; }
-    return `${window.location.origin}${window.location.pathname}?note=/${url.replace(/^\/+/, '')}`;
+    const path = url.replace(/^\/+/, '');
+    return `${window.location.origin}${window.location.pathname}?note=${path}&u=guest`;
   }
 
   ns.publish = publish;

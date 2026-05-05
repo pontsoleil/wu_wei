@@ -166,8 +166,12 @@ wuwei.shell = (function () {
       wuwei.common.state.viewOnly = true;
       wuwei.common.state.published = true;
       for (var pub of common.PUBLIC) {
+        if (u && u !== pub.login && u !== pub.user_id) {
+          continue;
+        }
         wuwei.common.state.currentUser = {
           user: pub.user,
+          login: pub.login,
           user_id: pub.user_id
         };
         break;

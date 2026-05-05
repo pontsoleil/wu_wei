@@ -856,6 +856,7 @@ wuwei.note = (function () {
       currentPage: currentPage.id,
       pages: pages,
       resources: resources,
+      thumbnail: (typeof src.thumbnail === 'undefined') ? '' : src.thumbnail,
       audit: normalizeAudit(src.audit || { createdBy: src.owner_id || src.ownerId || (state.currentUser && state.currentUser.user_id) || common.TEMP_OWNER_ID }, state.currentUser)
     });
   }
@@ -1204,6 +1205,7 @@ wuwei.note = (function () {
       this.currentPage = (findPageByRef(this, param.currentPage) || this.pages[0]).id;
       this.page = findPageByRef(this, this.currentPage);
       this.resources = cloneArray(param.resources).map(normalizeResourceDefinition);
+      this.thumbnail = (typeof param.thumbnail === 'undefined') ? '' : param.thumbnail;
       const portable = (param.bundle && typeof param.bundle === 'object')
         ? param.bundle
         : ((param.portable && typeof param.portable === 'object')
@@ -1459,6 +1461,7 @@ wuwei.note = (function () {
       note_id: current.note_id,
       note_name: current.note_name,
       description: current.description,
+      thumbnail: currentPageThumbnail || '',
       currentPage: (findPageByRef(current, current.currentPage) || current.page || {}).id || current.currentPage,
       resources: [],
       pages: [],
@@ -1471,6 +1474,7 @@ wuwei.note = (function () {
     });
 
     current.resources = noteToSave.resources;
+    current.thumbnail = noteToSave.thumbnail;
     const noteJson = JSON.stringify(noteToSave).trim();
 
     // const thumbEl = document.querySelector('div.thumbnail');
@@ -1516,6 +1520,7 @@ wuwei.note = (function () {
       note_id: current.note_id,
       note_name: current.note_name || '',
       description: current.description || '',
+      thumbnail: currentPageThumbnail || '',
       currentPage: (findPageByRef(current, current.currentPage) || current.page || {}).id || current.currentPage,
       resources: cloneArray(current.resources).map(normalizeResourceDefinition),
       pages: [],
@@ -1528,6 +1533,7 @@ wuwei.note = (function () {
     });
 
     current.resources = noteToExport.resources;
+    current.thumbnail = noteToExport.thumbnail;
     return JSON.stringify(noteToExport, null, 2).trim();
   }
 
