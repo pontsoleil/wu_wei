@@ -167,23 +167,8 @@ if [ "_${ntrd_pw}_" != "_${strd_pw}_" ]; then
   fail_json "LOGIN FAILED"
 fi
 
-cat <<-FOR_COOKIE > "$Tmp-forcookie"
-wuwei_user_id $id
-FOR_COOKIE
-
-# mkcookie の出力から空行と CR を除去
-cookie_headers=$(
-  cat "$Tmp-forcookie" \
-  | mkcookie -e +86400 -p /wu_wei2 -d .sambuichi.jp -s A -h Y \
-  | tr -d '\r' \
-  | sed '/^[[:space:]]*$/d'
-)
-
 printf "Content-Type: application/json\r\n"
-# Set-Cookie headers must be emitted before the blank response line.
-while IFS= read -r line; do
-  printf "%s\r\n" "$line"
-done <<< "$cookie_headers"
+printf "Set-Cookie: wuwei_user_id=%s; Max-Age=86400; Path=/wu_wei2; Domain=.sambuichi.jp; HttpOnly; Secure; SameSite=Lax\r\n" "$(json_escape "$id")"
 printf "Cache-Control: no-store\r\n\r\n"
 
 printf '{"login":"%s","user_id":"%s","name":"%s","role":"%s"}\n' \

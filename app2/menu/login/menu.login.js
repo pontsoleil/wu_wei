@@ -31,6 +31,14 @@ wuwei.menu.login = wuwei.menu.login || {};
     if (cb && typeof cb === 'function') cb();
   }
 
+  function notify(type, message) {
+    if (menu.snackbar && typeof menu.snackbar.open === 'function') {
+      menu.snackbar.open({ type: type, message: message });
+    } else {
+      console.log(message);
+    }
+  }
+
   function login(form) {
     form.action = util.getServerUrl('login');
     form.method = 'post';
@@ -51,7 +59,7 @@ wuwei.menu.login = wuwei.menu.login || {};
           common.state.loggedIn = false;
           update({ login: null, user_id: null, name: null, role: null });
           close();
-          menu.snackbar.open({ type: 'warning', message: txt || 'LOGIN FAILED' });
+          notify('warning', txt || 'LOGIN FAILED');
           return;
         }
 
@@ -60,7 +68,7 @@ wuwei.menu.login = wuwei.menu.login || {};
           common.state.loggedIn = false;
           update({ login: null, user_id: null, name: null, role: null });
           close();
-          menu.snackbar.open({ type: 'warning', message: response?.error || 'LOGIN FAILED' });
+          notify('warning', response?.error || 'LOGIN FAILED');
           return;
         }
 
@@ -74,7 +82,7 @@ wuwei.menu.login = wuwei.menu.login || {};
         const resultEl = document.querySelector('#login .ajax_result');
         if (resultEl) resultEl.innerText = 'Welcome ' + (response.name || '') + '.';
 
-        menu.snackbar.open({ type: 'success', message: wuwei.nls.translate('You are logged in.') });
+        notify('success', wuwei.nls.translate('You are logged in.'));
         document.getElementById('menu')?.classList.add('loggedIn');
         document.getElementById('user_status')?.classList.add('loggedIn');
 
@@ -159,7 +167,7 @@ wuwei.menu.login = wuwei.menu.login || {};
   function logout() {
     ajaxRequest(util.getServerUrl('logout'), null, 'GET', 30000)
       .then(() => {
-        menu.snackbar.open({ type: 'info', message: wuwei.nls.translate('You are logged out.') });
+        notify('info', wuwei.nls.translate('You are logged out.'));
         const noteMenu = document.getElementById('noteMenu');
         if (noteMenu) noteMenu.style.display = 'none';
       })
