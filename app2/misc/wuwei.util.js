@@ -3901,6 +3901,13 @@ wuwei.util = (function () {
     var currentUid = String(getCurrentUserId() || '').trim();
     var kind = String(resource && resource.kind || '').toLowerCase();
     var isManagedUpload = kind === 'upload';
+    var explicitOwner = String(
+      resource && resource.owner ||
+      rights.owner ||
+      audit.owner ||
+      audit.createdBy ||
+      ''
+    ).trim();
     var i;
 
     for (i = 0; !isManagedUpload && i < files.length; i += 1) {
@@ -3909,8 +3916,8 @@ wuwei.util = (function () {
       }
     }
 
-    if (isManagedUpload && currentUid) {
-      return currentUid;
+    if (isManagedUpload) {
+      return explicitOwner || currentUid;
     }
 
     return String(

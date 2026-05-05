@@ -138,7 +138,7 @@ validate_id "$user_id" "USER_ID"
 validate_id "$note_id" "NOTE_ID"
 
 note_dir=$(resolve_env_path note "$user_id" || true)
-public_root=$(nameread public data/environment | strip_quotes || true)
+public_root=$(resolve_env_path public "" || true)
 
 [ -n "$note_dir" ] || error500_exit "NOTE DIRECTORY IS EMPTY"
 [ -n "$public_root" ] || error500_exit "PUBLIC DIRECTORY IS EMPTY"

@@ -27,8 +27,8 @@ def _ensure_note_json(value: str) -> str:
     data = json.loads(text)
     if not isinstance(data, dict):
         raise ValueError("NOTE JSON MUST BE OBJECT")
-    if "pages" not in data or not isinstance(data.get("pages"), dict):
-        raise ValueError("NOTE JSON PAGES MUST BE OBJECT")
+    if "pages" not in data or not isinstance(data.get("pages"), list):
+        raise ValueError("NOTE JSON PAGES MUST BE ARRAY")
     if "resources" in data and not isinstance(data.get("resources"), list):
         raise ValueError("NOTE JSON RESOURCES MUST BE ARRAY")
     return json.dumps(data, ensure_ascii=False, separators=(",", ":"))

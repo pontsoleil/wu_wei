@@ -37,6 +37,13 @@ json_response() {
   exit 0
 }
 
+json_response_file() {
+  printf '%s\r\n' 'Content-Type: application/json; charset=UTF-8'
+  printf '\r\n'
+  cat "$1"
+  exit 0
+}
+
 strip_quotes() {
   sed 's/^"\(.*\)"$/\1/'
 }

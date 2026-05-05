@@ -174,9 +174,9 @@ wuwei.note = (function () {
     return text;
   }
 
-  function storageFileUrl(storage, role) {
+  function storageFileUrl(storage, role, ownerUserId) {
     var files = (storage && Array.isArray(storage.files)) ? storage.files : [];
-    var i, file, path, area;
+    var i, file, path, area, uid;
     for (i = 0; i < files.length; i += 1) {
       file = files[i] || {};
       if (String(file.role || '').toLowerCase() !== role) {
@@ -185,7 +185,8 @@ wuwei.note = (function () {
       area = String(file.area || '').trim() || (role === 'original' ? 'upload' : 'note');
       path = String(file.path || '').replace(/\\/g, '/');
       if (path) {
-        return toRuntimeFileUrl(util.toPublicResourceUri(area, util.toStorageRelativePath(path, state.currentUser && state.currentUser.user_id, area), state.currentUser && state.currentUser.user_id));
+        uid = String(ownerUserId || state.currentUser && state.currentUser.user_id || '');
+        return toRuntimeFileUrl(util.toPublicResourceUri(area, util.toStorageRelativePath(path, uid, area), uid));
       }
     }
     return '';
@@ -202,9 +203,10 @@ wuwei.note = (function () {
     var snapshotSources = (src.snapshotSources && typeof src.snapshotSources === 'object')
       ? util.clone(src.snapshotSources)
       : {};
-    var previewUri = snapshotSources.previewUri || storageFileUrl(storage, 'preview');
-    var thumbnailUri = snapshotSources.thumbnailUri || viewer.thumbnailUri || storageFileUrl(storage, 'thumbnail');
-    var originalUri = snapshotSources.originalUri || storageFileUrl(storage, 'original');
+    var ownerUserId = String(src.owner || rights.owner || src.user_id || src.userId || '').trim();
+    var previewUri = snapshotSources.previewUri || storageFileUrl(storage, 'preview', ownerUserId);
+    var thumbnailUri = snapshotSources.thumbnailUri || viewer.thumbnailUri || storageFileUrl(storage, 'thumbnail', ownerUserId);
+    var originalUri = snapshotSources.originalUri || storageFileUrl(storage, 'original', ownerUserId);
     if (previewUri) {
       snapshotSources.previewUri = previewUri;
       if (!identity.uri) {
@@ -336,12 +338,13 @@ wuwei.note = (function () {
           ].filter(Boolean)
         };
       }
-      uploadPreview = storageFileUrl(uploadStorage, 'preview');
-      uploadThumbnail = storageFileUrl(uploadStorage, 'thumbnail') ||
-        util.toPublicResourceUri('upload', uploadBase + 'thumbnail.jpg', currentUserId);
-      var uploadOriginal = storageFileUrl(uploadStorage, 'original');
+      var uploadOwnerId = String(src.owner || (src.rights && src.rights.owner) || (src.audit && src.audit.owner) || currentUserId);
+      uploadPreview = storageFileUrl(uploadStorage, 'preview', uploadOwnerId);
+      uploadThumbnail = storageFileUrl(uploadStorage, 'thumbnail', uploadOwnerId) ||
+        util.toPublicResourceUri('upload', uploadBase + 'thumbnail.jpg', uploadOwnerId);
+      var uploadOriginal = storageFileUrl(uploadStorage, 'original', uploadOwnerId);
       if (!uploadOriginal && uploadOriginalFile) {
-        uploadOriginal = util.toPublicResourceUri('upload', uploadBase + uploadOriginalFile, currentUserId);
+        uploadOriginal = util.toPublicResourceUri('upload', uploadBase + uploadOriginalFile, uploadOwnerId);
       }
       var uploadMedia = src.media && typeof src.media === 'object' ? util.clone(src.media) : {};
       var uploadContents = src.contents && typeof src.contents === 'object' ? util.clone(src.contents) : null;
@@ -367,14 +370,14 @@ wuwei.note = (function () {
         mimeType: uploadMimeType,
         title: String(src.title || (node && node.label) || ''),
         file: uploadOriginalFile,
-        owner: String(src.owner || currentUserId),
+        owner: uploadOwnerId,
         media: uploadMedia,
         contents: uploadContents || undefined,
         copyright: String(src.copyright || ''),
         license: String((src.rights && src.rights.license) || src.license || ''),
         attribution: String((src.rights && src.rights.attribution) || src.attribution || ''),
         rights: {
-          owner: String((src.rights && src.rights.owner) || src.owner || currentUserId),
+          owner: String((src.rights && src.rights.owner) || src.owner || uploadOwnerId),
           copyright: String((src.rights && src.rights.copyright) || src.copyright || ''),
           license: String((src.rights && src.rights.license) || src.license || ''),
           attribution: String((src.rights && src.rights.attribution) || src.attribution || '')
