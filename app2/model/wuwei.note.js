@@ -1538,7 +1538,7 @@ wuwei.note = (function () {
 
     current.resources = noteToExport.resources;
     current.thumbnail = noteToExport.thumbnail;
-    return JSON.stringify(noteToExport, null, 2).trim();
+    return JSON.stringify(noteToExport).trim();
   }
 
   function exportPortableNoteText() {
