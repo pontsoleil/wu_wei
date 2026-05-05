@@ -5,8 +5,12 @@
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "${SCRIPT_FILENAME:-$0}")" && pwd) || exit 1
 cd "$SCRIPT_DIR" || exit 1
 
-mkdir -p "$SCRIPT_DIR/log" || exit 1
-exec 2>>"$SCRIPT_DIR/log/cgi.err"
+mkdir -p "$SCRIPT_DIR/log" 2>/dev/null || :
+if ( : >> "$SCRIPT_DIR/log/cgi.err" ) 2>/dev/null; then
+  exec 2>>"$SCRIPT_DIR/log/cgi.err"
+else
+  exec 2>/dev/null
+fi
 
 set -u
 export LC_ALL=C
@@ -21,10 +25,11 @@ Tmp="/tmp/${0##*/}.$$"
 CGIVARS_ORG="${Tmp}-org"
 CGIVARS="${Tmp}-cgivars"
 JSON_FILE="${Tmp}-json"
+BODY_FILE="${Tmp}-body"
 ACK=$(printf '\006')
 
 cleanup() {
-  rm -f "$CGIVARS_ORG" "$CGIVARS" "$JSON_FILE"
+  rm -f "$CGIVARS_ORG" "$CGIVARS" "$JSON_FILE" "$BODY_FILE"
 }
 trap cleanup EXIT HUP INT TERM
 
@@ -83,19 +88,21 @@ resolve_env_path() {
 
 read_request_params() {
   qs=${QUERY_STRING:-}
-  body=""
   cl=${CONTENT_LENGTH:-0}
 
   if [ "${cl:-0}" -gt 0 ] 2>/dev/null; then
-    body=$(cat || true)
+    cat > "$BODY_FILE" || internal_error "FAILED TO READ REQUEST BODY"
+  else
+    : > "$BODY_FILE"
   fi
 
-  if [ -n "$qs" ] && [ -n "$body" ]; then
-    printf '%s&%s' "$qs" "$body" > "$CGIVARS_ORG"
+  if [ -n "$qs" ] && [ -s "$BODY_FILE" ]; then
+    printf '%s&' "$qs" > "$CGIVARS_ORG"
+    cat "$BODY_FILE" >> "$CGIVARS_ORG"
   elif [ -n "$qs" ]; then
     printf '%s' "$qs" > "$CGIVARS_ORG"
-  elif [ -n "$body" ]; then
-    printf '%s' "$body" > "$CGIVARS_ORG"
+  elif [ -s "$BODY_FILE" ]; then
+    cat "$BODY_FILE" > "$CGIVARS_ORG"
   else
     : > "$CGIVARS_ORG"
   fi
