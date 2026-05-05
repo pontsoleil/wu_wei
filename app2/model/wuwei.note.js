@@ -1044,8 +1044,7 @@ wuwei.note = (function () {
       return {
         kind: String(src.kind || 'web'),
         uri: uri,
-        canonicalUri: String(src.canonicalUri || uri),
-        title: String(src.title || node.label || '')
+        canonicalUri: String(src.canonicalUri || uri)
       };
     }
     if (uri) {
@@ -1100,12 +1099,17 @@ wuwei.note = (function () {
       if (!out.resourceView) {
         out.resourceView = { mode: 'default' };
       }
+      if (node.thumbnailUri && !(out.resource && out.resource.kind === 'upload')) {
+        out.thumbnailUri = String(node.thumbnailUri);
+      }
+      else {
+        delete out.thumbnailUri;
+      }
       delete out.resourceRef;
       delete out.uri;
       delete out.url;
       delete out.format;
       delete out.thumbnail;
-      delete out.thumbnailUri;
       delete out.value;
     }
     return out;
@@ -1470,7 +1474,7 @@ wuwei.note = (function () {
 
     pagesAsArray(current).forEach(function (page, index) {
       if (!page) { return; }
-      noteToSave.pages.push(serializePageForSave(page, index, noteToSave.resources, null));
+      noteToSave.pages.push(serializePageForSave(page, index, noteToSave.resources, currentPageThumbnail));
     });
 
     current.resources = noteToSave.resources;
