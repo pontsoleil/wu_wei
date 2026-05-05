@@ -29,6 +29,7 @@ wuwei.shell = (function () {
     openSnackbar,
     refreshCurrentDraw,
     restartCurrentDraw,
+    normalizeJsonStructuralEscapes,
     initModule;
   //----------------- END MODULE SCOPE VARIABLES ---------------
 
@@ -96,6 +97,49 @@ wuwei.shell = (function () {
     if (wuwei.draw && typeof wuwei.draw.refresh === 'function') {
       wuwei.draw.refresh();
     }
+  };
+
+  normalizeJsonStructuralEscapes = function (text) {
+    var source = String(text || ''),
+      result = '',
+      inString = false,
+      escaped = false,
+      i,
+      c,
+      n;
+
+    for (i = 0; i < source.length; i += 1) {
+      c = source.charAt(i);
+      n = source.charAt(i + 1);
+
+      if (inString) {
+        result += c;
+        if (escaped) {
+          escaped = false;
+        } else if (c === '\\') {
+          escaped = true;
+        } else if (c === '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (c === '"') {
+        inString = true;
+        result += c;
+      } else if (c === '\\' && n === 'n') {
+        result += '\n';
+        i += 1;
+      } else if (c === '\\' && n === 'r') {
+        i += 1;
+      } else if (c === '\\' && n === 't') {
+        result += '\t';
+        i += 1;
+      } else {
+        result += c;
+      }
+    }
+    return result;
   };
 
   restartCurrentDraw = function () {
@@ -193,9 +237,13 @@ wuwei.shell = (function () {
               try {
                 noteJson = JSON.parse(decodedText);
               } catch (e) {
-                console.log(e);
-                openSnackbar({ message: responseText, type: 'warning' });
-                return;
+                try {
+                  noteJson = JSON.parse(normalizeJsonStructuralEscapes(decodedText));
+                } catch (e2) {
+                  console.log(e2);
+                  openSnackbar({ message: responseText, type: 'warning' });
+                  return;
+                }
               }
 
               wuwei.note.updateNote(noteJson);

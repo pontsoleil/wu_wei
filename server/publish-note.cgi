@@ -155,6 +155,55 @@ ensure_note_json_file() {
   return 0
 }
 
+normalize_json_structural_escapes() {
+  # cgi-name may preserve form-field newlines as literal "\n". In JSON this is
+  # valid only inside strings; outside strings it breaks JSON.parse. Convert
+  # escaped whitespace only while the scanner is outside JSON strings.
+  awk '
+    BEGIN { ORS = ""; in_s = 0; esc = 0 }
+    {
+      line = $0
+      for (i = 1; i <= length(line); i++) {
+        c = substr(line, i, 1)
+        n = substr(line, i + 1, 1)
+
+        if (in_s) {
+          printf "%s", c
+          if (esc) {
+            esc = 0
+          } else if (c == "\\") {
+            esc = 1
+          } else if (c == "\"") {
+            in_s = 0
+          }
+          continue
+        }
+
+        if (c == "\"") {
+          in_s = 1
+          printf "%s", c
+          continue
+        }
+
+        if (c == "\\" && n == "n") {
+          printf "\n"
+          i++
+        } else if (c == "\\" && n == "r") {
+          i++
+        } else if (c == "\\" && n == "t") {
+          printf "\t"
+          i++
+        } else {
+          printf "%s", c
+        }
+      }
+      if (NR > 1) {
+        printf "\n"
+      }
+    }
+  '
+}
+
 resolve_note_file() {
   note_root=$1
   note_id=$2
@@ -224,6 +273,7 @@ FAILED TO CREATE PUBLIC DIRECTORY'
 if [ -n "${json:-}" ]; then
   json=$(printf '%s' "$json" | restore_ack_to_space)
   json=$(printf '%s' "$json" | sed '1s/^\xEF\xBB\xBF//')
+  json=$(printf '%s' "$json" | normalize_json_structural_escapes)
   debug_preview "json" "$json"
 
   printf '%s' "$json" > "$JSON_FILE"
