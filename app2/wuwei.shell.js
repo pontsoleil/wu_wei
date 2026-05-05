@@ -179,7 +179,7 @@ wuwei.shell = (function () {
       if (wuwei.common.state.currentUser) {
         wuwei.note.loadNote(note_id)
           .then(function (responseText) {
-            if (responseText.trim().match(/^ERROR/)) {
+            if (responseText.trim().match(/^(ERROR|500 Internal Server Error)/)) {
               openSnackbar({ type: 'error', message: responseText });
             } else if (responseText.match(/^#! \/bin\/sh/)) {
               responseText = 'ERROR Cannnot execute bin/sh';

@@ -90,9 +90,15 @@ user_id=$(nameread user_id "$CGIVARS" | strip_quotes || true)
 id=$(nameread id "$CGIVARS" | strip_quotes || true)
 
 [ -n "${id:-}" ] || error_response 'ERROR ID NOT SPECIFIED'
+case "$id" in
+  /*|*..*) error_response 'ERROR INVALID ID' ;;
+esac
 
 if [ "_${user_id:-}" = '_dd99d0a5-566b-41cf-934d-127a89e13ba1' ] ||
-   [ "_${user_id:-}" = '_0dbfa104-accd-4188-8b1b-f2e25d38e638' ]; then
+   [ "_${user_id:-}" = '_0dbfa104-accd-4188-8b1b-f2e25d38e638' ] ||
+   [ "_${user_id:-}" = '_guest' ] ||
+   [ "_${user_id:-}" = '_data' ] ||
+   printf '%s' "$id" | grep -Eq '^[0-9]{4}/[0-9]{2}/_[A-Za-z0-9._-]+$'; then
   note_dir=$(resolve_env_path public || true)
 else
   if [ -z "${session_user_id:-}" ] || [ -z "${user_id:-}" ] || [ "$user_id" != "$session_user_id" ]; then
