@@ -31,3 +31,9 @@ Thumbs.db
 /server/bin/ffmpeg
 /server/bin/ffprobe
 
+
+# Runtime/user data
+/user/
+
+# Local backup files
+server/data/environment.bak.*
