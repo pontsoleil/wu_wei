@@ -4611,6 +4611,27 @@ wuwei.model = (function () {
       };
     }
 
+    function getEventContextPoint(ev) {
+      var src = ev && ev.sourceEvent ? ev.sourceEvent : ev;
+      var p;
+
+      if (src && src.changedTouches && src.changedTouches.length > 0) {
+        src = src.changedTouches[0];
+      }
+      else if (src && src.touches && src.touches.length > 0) {
+        src = src.touches[0];
+      }
+
+      if (!src || !Number.isFinite(Number(src.clientX)) || !Number.isFinite(Number(src.clientY))) {
+        return null;
+      }
+
+      p = util.pContext({ x: Number(src.clientX), y: Number(src.clientY) });
+      return (p && Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y)))
+        ? { x: Number(p.x), y: Number(p.y) }
+        : null;
+    }
+
     function getTouchPoint(ev) {
       var src = ev;
 
@@ -4701,7 +4722,7 @@ wuwei.model = (function () {
         d3.event.preventDefault();
         scheduleGroupHoverMenu({
           node: node,
-          position: getBoxCenter()
+          position: getEventContextPoint(d3.event) || getBoxCenter()
         });
       })
       .on('mousemove', function () {
@@ -6308,11 +6329,21 @@ wuwei.model = (function () {
    * - hover 直後に即 menu を開くと、drag 開始前に menu が割り込むことがある。
    * - 短い遅延を入れることで、単なる通過と操作意図を分けやすくする。
    */
-  function scheduleGroupHoverMenu(link, position) {
+  function scheduleGroupHoverMenu(target, position) {
+    var ctx;
+
     clearTimeout(state.menuTimer);
 
     if (!canOpenGroupHoverMenu()) {
       return;
+    }
+
+    ctx = (target && (target.node || target.link || target.groupOverlay))
+      ? Object.assign({}, target)
+      : { link: target, position: position };
+
+    if (position && !ctx.position) {
+      ctx.position = position;
     }
 
     state.menuTimer = setTimeout(function () {
@@ -6320,10 +6351,7 @@ wuwei.model = (function () {
         return;
       }
 
-      menu.openContextMenu({
-        link: link,
-        position: position
-      });
+      menu.openContextMenu(ctx);
     }, 180);
   }
 
