@@ -110,15 +110,15 @@ wuwei.edit.group = wuwei.edit.group || {};
     group.spine.padding = toNumber(spinePaddingEl && spinePaddingEl.value, 'simple' === group.type ? 16 : 12);
     group.spine.visible = spineVisibleEl ? !!spineVisibleEl.checked : true;
 
-    if (('vertical' === previousType && 'horizontal' === group.type) ||
-      ('horizontal' === previousType && 'vertical' === group.type)) {
-      if (wuwei.model && typeof wuwei.model.reflowGroupMembers === 'function') {
-        wuwei.model.reflowGroupMembers(group, group.type);
-      }
-    }
-    else if (wuwei.model && typeof wuwei.model.setGraphFromCurrentPage === 'function') {
-      wuwei.model.setGraphFromCurrentPage();
-    }
+//    if (('vertical' === previousType && 'horizontal' === group.type) ||
+//      ('horizontal' === previousType && 'vertical' === group.type)) {
+//      if (wuwei.model && typeof wuwei.model.reflowGroupMembers === 'function') {
+    wuwei.model.reflowGroupMembers(group, group.type);
+//      }
+//    }
+//    else if (wuwei.model && typeof wuwei.model.setGraphFromCurrentPage === 'function') {
+//      wuwei.model.setGraphFromCurrentPage();
+//    }
 
     group.audit = (group.audit && 'object' === typeof group.audit) ? group.audit : {};
     group.audit.lastModifiedBy =

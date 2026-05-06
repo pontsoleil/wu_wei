@@ -64,10 +64,10 @@ wuwei.edit.group.markup = (function () {
   <div class="w3-row">
     <textarea id="editGroupDescription" class="w3-col s12" rows="4" placeholder="${t('Description')}">${esc(description.body)}</textarea>
   </div>
-  <div class="w3-row">
+<!--  <div class="w3-row">
     <label class="w3-col s6"><input type="checkbox" id="editGroupVisible"${checked(group && group.visible)}> ${t('Visible')}</label>
     <label class="w3-col s6"><input type="checkbox" id="editGroupMoveTogether"${checked(group && group.moveTogether)}> ${t('Move together')}</label>
-  </div>
+  </div> -->
   <div class="w3-row">
     <label for="editGroupType" class="w3-col s4">${t('Shape')}</label>
     <select id="editGroupType" class="w3-col s8">
@@ -86,9 +86,9 @@ wuwei.edit.group.markup = (function () {
     <input type="color" id="editGroupSpineColor" class="w3-col s4 pointer" value="${esc(spine.color || '#888888')}">
   </div>
   <div class="w3-row">
-    <label for="editGroupSpinePadding" class="w3-col s4">Padding</label>
-    <input type="number" id="editGroupSpinePadding" class="w3-col s4" value="${num(spine.padding, isSimple ? 16 : 12)}">
-    <label class="w3-col s4"><input type="checkbox" id="editGroupSpineVisible"${checked(spine.visible)}> ${t('Visible')}</label>
+    <label for="editGroupSpinePadding" class="w3-col s6">Padding</label>
+    <input type="number" id="editGroupSpinePadding" class="w3-col s6" value="${num(spine.padding, isSimple ? 16 : 12)}">
+    <!-- <label class="w3-col s4"><input type="checkbox" id="editGroupSpineVisible"${checked(spine.visible)}> ${t('Visible')}</label>-->
   </div>
 </form>`;
   }
