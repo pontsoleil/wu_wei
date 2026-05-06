@@ -89,83 +89,6 @@ wuwei.edit = wuwei.edit || {};
     return isEditableGroup(model.findGroupById(groupId)) ? model.findGroupById(groupId) : null;
   }
 
-  function escapeEditHtml(value) {
-    return String(value == null ? '' : value)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
-
-  function numberOr(value, fallback) {
-    var number = Number(value);
-    return Number.isFinite(number) ? number : fallback;
-  }
-
-  function checkedAttr(value) {
-    return value === false ? '' : ' checked';
-  }
-
-  function selectedAttr(value, expected) {
-    return String(value || '') === expected ? ' selected' : '';
-  }
-
-  function translate(value) {
-    return wuwei.edit.markup && typeof wuwei.edit.markup.translate === 'function'
-      ? wuwei.edit.markup.translate(value)
-      : value;
-  }
-
-  function renderGroupEditor(group) {
-    var pane = document.getElementById('edit-group');
-    var description = (group.description && 'object' === typeof group.description)
-      ? group.description
-      : { format: 'plain', body: '' };
-    var spine = (group.spine && 'object' === typeof group.spine) ? group.spine : {};
-    var axisControls = '';
-
-    if (!pane || !group) {
-      return;
-    }
-
-    if ('horizontal' === group.type || 'vertical' === group.type) {
-      axisControls = `
-  <div class="w3-row">
-    <label for="editGroupType" class="w3-col s4">${translate('Shape')}</label>
-    <select id="editGroupType" class="w3-col s8">
-      <option value="horizontal"${selectedAttr(group.type, 'horizontal')}>Horizontal group</option>
-      <option value="vertical"${selectedAttr(group.type, 'vertical')}>Vertical group</option>
-    </select>
-  </div>
-  <div class="w3-row">
-    <label for="editGroupSpineWidth" class="w3-col s4">${translate('Size')}</label>
-    <input type="number" id="editGroupSpineWidth" class="w3-col s4" value="${numberOr(spine.width, 6)}">
-    <input type="color" id="editGroupSpineColor" class="w3-col s4 pointer" value="${escapeEditHtml(spine.color || '#888888')}">
-  </div>
-  <div class="w3-row">
-    <label for="editGroupSpinePadding" class="w3-col s4">Padding</label>
-    <input type="number" id="editGroupSpinePadding" class="w3-col s4" value="${numberOr(spine.padding, 12)}">
-    <label class="w3-col s4"><input type="checkbox" id="editGroupSpineVisible"${checkedAttr(spine.visible)}> Visible</label>
-  </div>`;
-    }
-
-    pane.innerHTML = `
-<form id="editform" class="group form-group content">
-  <div class="w3-row">
-    <textarea id="editGroupName" class="w3-col s12" rows="2" placeholder="${translate('Label')}">${escapeEditHtml(group.name || '')}</textarea>
-  </div>
-  <div class="w3-row">
-    <textarea id="editGroupDescription" class="w3-col s12" rows="4" placeholder="${translate('Description')}">${escapeEditHtml(description.body || '')}</textarea>
-  </div>
-  <div class="w3-row">
-    <label class="w3-col s6"><input type="checkbox" id="editGroupVisible"${checkedAttr(group.visible)}> Visible</label>
-    <label class="w3-col s6"><input type="checkbox" id="editGroupMoveTogether"${checkedAttr(group.moveTogether)}> Move together</label>
-  </div>
-${axisControls}
-</form>`;
-    pane.style.display = 'block';
-  }
-
   function detectMediaFromUrl(rawUrl) {
     var resourceUri = String(rawUrl || '').trim();
     var lowerResourceUri = resourceUri.toLowerCase();
@@ -1420,8 +1343,9 @@ ${axisControls}
       stateMap.group = editableGroup;
       stateMap.option = (option && 'object' === typeof option) ? option : {};
       editPane.style.display = 'block';
-      renderGroupEditor(editableGroup);
-      document.getElementById('editform').addEventListener('change', update, false);
+      if (wuwei.edit.group && typeof wuwei.edit.group.open === 'function') {
+        wuwei.edit.group.open(editableGroup, stateMap.option);
+      }
       editPane.dataset.node_id = undefined;
       editPane.dataset.link_id = undefined;
       editPane.dataset.group_id = editableGroup.id;
@@ -1756,62 +1680,11 @@ ${axisControls}
   }
 
   function flushGroupEditFields() {
-    var group, pane, nameEl, descriptionEl, visibleEl, moveTogetherEl;
-    var typeEl, spineWidthEl, spineColorEl, spinePaddingEl, spineVisibleEl;
     if (!stateMap.group) {
       return true;
     }
-    group = stateMap.group;
-    pane = document.getElementById('edit-group');
-    if (!pane || pane.style.display === 'none') {
-      return true;
-    }
-
-    nameEl = document.getElementById('editGroupName');
-    descriptionEl = document.getElementById('editGroupDescription');
-    visibleEl = document.getElementById('editGroupVisible');
-    moveTogetherEl = document.getElementById('editGroupMoveTogether');
-
-    if (nameEl) {
-      group.name = nameEl.value || '';
-    }
-    group.description = (group.description && 'object' === typeof group.description)
-      ? group.description
-      : { format: 'plain', body: '' };
-    if (descriptionEl) {
-      group.description.body = descriptionEl.value || '';
-    }
-    if (visibleEl) {
-      group.visible = !!visibleEl.checked;
-    }
-    if (moveTogetherEl) {
-      group.moveTogether = !!moveTogetherEl.checked;
-    }
-
-    typeEl = document.getElementById('editGroupType');
-    if (typeEl && ('horizontal' === typeEl.value || 'vertical' === typeEl.value)) {
-      group.type = typeEl.value;
-      group.orientation = typeEl.value;
-    }
-
-    if ('horizontal' === group.type || 'vertical' === group.type) {
-      spineWidthEl = document.getElementById('editGroupSpineWidth');
-      spineColorEl = document.getElementById('editGroupSpineColor');
-      spinePaddingEl = document.getElementById('editGroupSpinePadding');
-      spineVisibleEl = document.getElementById('editGroupSpineVisible');
-      group.spine = (group.spine && 'object' === typeof group.spine) ? group.spine : {};
-      group.spine.width = numberOr(spineWidthEl && spineWidthEl.value, 6);
-      group.spine.color = (spineColorEl && spineColorEl.value) || '#888888';
-      group.spine.padding = numberOr(spinePaddingEl && spinePaddingEl.value, 12);
-      group.spine.visible = spineVisibleEl ? !!spineVisibleEl.checked : true;
-    }
-
-    group.audit = (group.audit && 'object' === typeof group.audit) ? group.audit : {};
-    group.audit.lastModifiedBy = (common.state.currentUser && common.state.currentUser.user_id) || common.state.user_id || '';
-    group.audit.lastModifiedAt = new Date().toISOString();
-
-    if (model && typeof model.setGraphFromCurrentPage === 'function') {
-      model.setGraphFromCurrentPage();
+    if (wuwei.edit.group && typeof wuwei.edit.group.commit === 'function') {
+      return wuwei.edit.group.commit();
     }
     return true;
   }
@@ -1862,6 +1735,18 @@ ${axisControls}
     var targetOption = stateMap.option;
     var contentsGroup = null;
     flushContentsEntryFields();
+    flushGroupEditFields();
+    if (!targetNode && stateMap.group) {
+      var targetGroup = stateMap.group;
+      close();
+      wuwei.info.open({
+        id: targetGroup.pseudoNodeId || targetGroup.pseudoLinkId || targetGroup.id,
+        type: 'Group',
+        groupRef: targetGroup.id,
+        groupType: targetGroup.type
+      }, targetOption);
+      return;
+    }
     if (!targetNode && state.contentsEdit && wuwei.edit.contents &&
       typeof wuwei.edit.contents.getCurrentGroup === 'function' &&
       typeof wuwei.edit.contents.openInfo === 'function') {
@@ -1908,6 +1793,9 @@ ${axisControls}
       wuwei.edit.link.close();
     }
     else if (stateMap.group) {
+      if (wuwei.edit.group && typeof wuwei.edit.group.close === 'function') {
+        wuwei.edit.group.close();
+      }
       stateMap.group = null;
     }
 
@@ -1947,6 +1835,9 @@ ${axisControls}
     }
     if (wuwei.edit.link && typeof wuwei.edit.link.initModule === 'function') {
       wuwei.edit.link.initModule();
+    }
+    if (wuwei.edit.group && typeof wuwei.edit.group.initModule === 'function') {
+      wuwei.edit.group.initModule();
     }
     if (wuwei.edit.uploaded && typeof wuwei.edit.uploaded.initModule === 'function') {
       wuwei.edit.uploaded.initModule();

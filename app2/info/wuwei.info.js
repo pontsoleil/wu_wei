@@ -95,6 +95,7 @@ wuwei.info = wuwei.info || {};
   function hideAllInfoPanes() {
     var ids = [
       'info-generic',
+      'info-group',
       'info-uploaded',
       'info-video',
       'info-asciidoc',
@@ -134,6 +135,15 @@ wuwei.info = wuwei.info || {};
     return resolveTarget(node);
   }
 
+  function isGroupTarget(target) {
+    return !!(target &&
+      'Group' === target.type &&
+      target.groupRef &&
+      wuwei.info.group &&
+      typeof wuwei.info.group.canOpen === 'function' &&
+      wuwei.info.group.canOpen(target));
+  }
+
   function getNodeUri(node) {
     if (!node) {
       return '';
@@ -158,6 +168,7 @@ wuwei.info = wuwei.info || {};
 
   function hideInfoPanes() {
     hidePane('info-generic');
+    hidePane('info-group');
     hidePane('info-uploaded');
     hidePane('info-video');
     hidePane('info-asciidoc');
@@ -312,6 +323,15 @@ wuwei.info = wuwei.info || {};
       return;
     }
 
+    if (isGroupTarget(resolvedNode)) {
+      showInfoPane('info-group');
+      wuwei.info.group.open({
+        node: resolvedNode,
+        option: stateMap.option
+      });
+      return;
+    }
+
     hasAdoc = hasAsciiDocValue(resolvedNode);
 
     // preview 系
@@ -386,6 +406,9 @@ wuwei.info = wuwei.info || {};
     }
     if (wuwei.info.generic && 'function' === typeof wuwei.info.generic.close) {
       wuwei.info.generic.close();
+    }
+    if (wuwei.info.group && 'function' === typeof wuwei.info.group.close) {
+      wuwei.info.group.close();
     }
     if (wuwei.info.video && typeof wuwei.info.video.close === 'function') {
       wuwei.info.video.close();
@@ -623,6 +646,10 @@ wuwei.info = wuwei.info || {};
 
     if (wuwei.info.generic && typeof wuwei.info.generic.initModule === 'function') {
       wuwei.info.generic.initModule();
+    }
+
+    if (wuwei.info.group && typeof wuwei.info.group.initModule === 'function') {
+      wuwei.info.group.initModule();
     }
 
     if (wuwei.info.video && typeof wuwei.info.video.initModule === 'function') {

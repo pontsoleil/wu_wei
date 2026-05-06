@@ -688,7 +688,7 @@ wuwei.model = (function () {
     }
     return {
       id: makeStablePseudoId(group, 'pseudoLinkId'),
-      type: 'Link',
+      type: 'Group',
       pseudo: true,
       shape: 'NORMAL',
       groupType: group.type,
@@ -696,6 +696,14 @@ wuwei.model = (function () {
       visible: true,
       color: (group.spine && group.spine.color) || '#888888',
       size: (group.spine && group.spine.width) || 6,
+      style: {
+        line: {
+          kind: (group.spine && group.spine.kind) || 'SOLID',
+          color: (group.spine && group.spine.color) || '#888888',
+          width: (group.spine && group.spine.width) || 6
+        },
+        font: defaultLink.style.font
+      },
       font: defaultLink.style.font,
       audit: makeAudit()
     };
@@ -4696,9 +4704,9 @@ wuwei.model = (function () {
       .attr('rx', 8)
       .attr('ry', 8)
       .attr('fill', 'none')
-      .attr('stroke', '#666666')
-      .attr('stroke-width', 2)
-      .attr('stroke-dasharray', '8,4');
+      .attr('stroke', box.stroke || '#666666')
+      .attr('stroke-width', box.strokeWidth || 2)
+      .attr('stroke-dasharray', box.dasharray || null);
 
     g.append('rect')
       .attr('class', 'group-box-hit')
@@ -6489,8 +6497,9 @@ wuwei.model = (function () {
       .attr('y1', spine.y1)
       .attr('x2', spine.x2)
       .attr('y2', spine.y2)
-      .attr('stroke', (group.spine && group.spine.color) || '#888')
-      .attr('stroke-width', (group.spine && group.spine.width) || 6)
+      .attr('stroke', spine.stroke || '#888')
+      .attr('stroke-width', spine.strokeWidth || 6)
+      .attr('stroke-dasharray', spine.dasharray || null)
       .attr('stroke-linecap', 'round');
 
     // 操作用 hit 線は前面
@@ -7153,6 +7162,206 @@ wuwei.model = (function () {
     }
 
     return null;
+  }
+
+  function findGroupByTarget(target) {
+    if (!target) {
+      return null;
+    }
+    if (target.groupRef) {
+      return findGroupById(target.groupRef);
+    }
+    if (target.id) {
+      return findGroupById(target.id);
+    }
+    return null;
+  }
+
+  function removeGroupDefinition(groupId) {
+    var page = getCurrentPage();
+    if (!page || !Array.isArray(page.groups) || !groupId) {
+      return null;
+    }
+    var removed = null;
+    page.groups = page.groups.filter(function (group) {
+      if (group && group.id === groupId) {
+        removed = group;
+        return false;
+      }
+      return true;
+    });
+    return removed;
+  }
+
+  function eraseGroup(target) {
+    var group = findGroupByTarget(target);
+    var members;
+    var removedNodes = [];
+    var removedLinks = [];
+    var seenLinks = {};
+
+    if (!group) {
+      return null;
+    }
+
+    members = findGroupNodes(group.id);
+    members.forEach(function (node) {
+      var links;
+      if (!node || !node.id) {
+        return;
+      }
+      links = (findLinksByNode(node) || {}).links || [];
+      links.forEach(function (link) {
+        if (!link || !link.id || seenLinks[link.id]) {
+          return;
+        }
+        seenLinks[link.id] = true;
+        removeLink(link);
+        removedLinks.push({ id: link.id, type: 'Link' });
+      });
+      removeNode({ id: node.id });
+      removedNodes.push({ id: node.id, type: 'Node' });
+    });
+
+    removeGroupDefinition(group.id);
+    setGraphFromCurrentPage();
+    updateLinkCount();
+
+    return {
+      command: 'eraseGroup',
+      param: {
+        node: removedNodes,
+        link: removedLinks,
+        group: [{ id: group.id, type: 'Group' }]
+      }
+    };
+  }
+
+  function median(values) {
+    var sorted = (values || []).filter(function (value) {
+      return Number.isFinite(Number(value));
+    }).map(Number).sort(function (a, b) { return a - b; });
+    var middle;
+
+    if (sorted.length === 0) {
+      return 0;
+    }
+    middle = Math.floor(sorted.length / 2);
+    if (sorted.length % 2) {
+      return sorted[middle];
+    }
+    return (sorted[middle - 1] + sorted[middle]) / 2;
+  }
+
+  function reflowGroupMembers(groupOrTarget, nextType) {
+    var group = findGroupByTarget(groupOrTarget) || groupOrTarget;
+    var members;
+    var centerX, centerY, start, spacing = 40;
+
+    if (!group || !('horizontal' === nextType || 'vertical' === nextType)) {
+      return false;
+    }
+
+    members = findGroupNodes(group.id);
+    if (members.length === 0) {
+      return false;
+    }
+
+    centerX = median(members.map(function (node) { return node.x; }));
+    centerY = median(members.map(function (node) { return node.y; }));
+
+    if ('horizontal' === nextType) {
+      members.sort(function (a, b) { return Number(a.x || 0) - Number(b.x || 0); });
+      start = centerX - (spacing * (members.length - 1) / 2);
+      members.forEach(function (node, index) {
+        node.x = start + spacing * index;
+        node.y = centerY;
+        node.fx = null;
+        node.fy = null;
+        node.changed = true;
+      });
+    }
+    else {
+      members.sort(function (a, b) { return Number(a.y || 0) - Number(b.y || 0); });
+      start = centerY - (spacing * (members.length - 1) / 2);
+      members.forEach(function (node, index) {
+        node.x = centerX;
+        node.y = start + spacing * index;
+        node.fx = null;
+        node.fy = null;
+        node.changed = true;
+      });
+    }
+
+    group.origin = { x: centerX, y: centerY };
+    if (!group.axis || 'object' !== typeof group.axis) {
+      group.axis = {};
+    }
+    group.axis.anchor = { x: centerX, y: centerY };
+    setGraphFromCurrentPage();
+    return true;
+  }
+
+  function copyGroup(target) {
+    var group = findGroupByTarget(target);
+    var page = getCurrentPage();
+    var members, diff, idMap = {};
+    var copiedNodes = [];
+    var copiedGroup;
+
+    if (!group || !page || !Array.isArray(page.groups)) {
+      return null;
+    }
+
+    members = findGroupNodes(group.id);
+    diff = newPosition(0, 0);
+
+    members.forEach(function (node) {
+      var cloned;
+      if (!node || !node.id) {
+        return;
+      }
+      cloned = util.clone(node);
+      cloned.id = util.createUuid();
+      cloned.x = Number(node.x || 0) + diff.x;
+      cloned.y = Number(node.y || 0) + diff.y;
+      idMap[node.id] = cloned.id;
+      copiedNodes.push(NodeFactory(cloned));
+      addNode({ node: cloned });
+    });
+
+    copiedGroup = util.clone(group);
+    copiedGroup.id = util.createUuid();
+    delete copiedGroup.pseudoNodeId;
+    delete copiedGroup.pseudoLinkId;
+    copiedGroup.members = (group.members || []).map(function (member) {
+      var sourceId = (member && member.nodeId) ? member.nodeId : member;
+      var copiedMember;
+      if (!sourceId || !idMap[sourceId]) {
+        return null;
+      }
+      copiedMember = ('object' === typeof member) ? util.clone(member) : { nodeId: sourceId };
+      copiedMember.nodeId = idMap[sourceId];
+      return copiedMember;
+    }).filter(Boolean);
+    if (copiedGroup.origin) {
+      copiedGroup.origin.x = Number(copiedGroup.origin.x || 0) + diff.x;
+      copiedGroup.origin.y = Number(copiedGroup.origin.y || 0) + diff.y;
+    }
+    if (copiedGroup.axis && copiedGroup.axis.anchor) {
+      copiedGroup.axis.anchor.x = Number(copiedGroup.axis.anchor.x || 0) + diff.x;
+      copiedGroup.axis.anchor.y = Number(copiedGroup.axis.anchor.y || 0) + diff.y;
+    }
+    page.groups.push(copiedGroup);
+    setGraphFromCurrentPage();
+
+    return {
+      command: 'copyGroup',
+      param: {
+        node: copiedNodes,
+        group: [copiedGroup]
+      }
+    };
   }
 
   function setRegularGroupFamilyVisible(group, visible, nodesBucket, linksBucket, hideConnectedLinks) {
@@ -8346,16 +8555,18 @@ wuwei.model = (function () {
     if (!border) {
       return null;
     }
-    const padding = 16;
+    const spine = (group.spine && 'object' === typeof group.spine) ? group.spine : {};
+    const strokeWidth = Number(spine.width || 2);
+    const padding = Number.isFinite(Number(spine.padding)) ? Number(spine.padding) : 16;
     return {
       group: group.id,
       x: border.left - padding,
       y: border.top - padding,
       width: border.width + padding * 2,
       height: border.height + padding * 2,
-      stroke: '#666666',
-      strokeWidth: 2,
-      dasharray: '8 4'
+      stroke: spine.color || '#666666',
+      strokeWidth: strokeWidth,
+      dasharray: strokeDasharrayForLineKind(spine.kind || 'DASHED', strokeWidth)
     };
   }
 
@@ -8390,12 +8601,30 @@ wuwei.model = (function () {
       const anchorX = group.axis && group.axis.anchor && Number.isFinite(Number(group.axis.anchor.x))
         ? Number(group.axis.anchor.x)
         : (xs.reduce(function (a, b) { return a + b; }, 0) / xs.length);
-      return { group: group.id, x1: anchorX, y1: minY - padding, x2: anchorX, y2: maxY + padding, stroke: spine.color || '#666666', strokeWidth: Number(spine.width || 6) };
+      return {
+        group: group.id,
+        x1: anchorX,
+        y1: minY - padding,
+        x2: anchorX,
+        y2: maxY + padding,
+        stroke: spine.color || '#666666',
+        strokeWidth: Number(spine.width || 6),
+        dasharray: strokeDasharrayForLineKind(spine.kind || 'SOLID', Number(spine.width || 6))
+      };
     }
     const anchorY = group.axis && group.axis.anchor && Number.isFinite(Number(group.axis.anchor.y))
       ? Number(group.axis.anchor.y)
       : (ys.reduce(function (a, b) { return a + b; }, 0) / ys.length);
-    return { group: group.id, x1: minX - padding, y1: anchorY, x2: maxX + padding, y2: anchorY, stroke: spine.color || '#666666', strokeWidth: Number(spine.width || 6) };
+    return {
+      group: group.id,
+      x1: minX - padding,
+      y1: anchorY,
+      x2: maxX + padding,
+      y2: anchorY,
+      stroke: spine.color || '#666666',
+      strokeWidth: Number(spine.width || 6),
+      dasharray: strokeDasharrayForLineKind(spine.kind || 'SOLID', Number(spine.width || 6))
+    };
   }
 
   initModule = function () {
@@ -8498,8 +8727,12 @@ wuwei.model = (function () {
     getGroupMembers: getGroupMembers,
     getGroupNodeIds: getGroupNodeIds,
     findGroupById: findGroupById,
+    findGroupByTarget: findGroupByTarget,
     findGroupNodes: findGroupNodes,
     findGroupsByNodeId: findGroupsByNodeId,
+    copyGroup: copyGroup,
+    eraseGroup: eraseGroup,
+    reflowGroupMembers: reflowGroupMembers,
     isNodeInAnyGroup: isNodeInAnyGroup,
     pruneGroups: pruneGroups,
     removeNodeFromAllGroups: removeNodeFromAllGroups,

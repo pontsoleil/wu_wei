@@ -2140,9 +2140,34 @@ wuwei.menu = wuwei.menu || {};
       closeContextMenu();
       return;
     }
+    else if ('copy' === method &&
+      isContextGroup([resolveContextTargetRecord(state.hoveredNode)])) {
+      node = resolveContextTargetRecord(state.hoveredNode);
+      if (!node) { return; }
+      if (model && typeof model.copyGroup === 'function') {
+        wuwei.log.savePrevious();
+        var copiedGroupLog = model.copyGroup(node);
+        if (copiedGroupLog) {
+          wuwei.log.storeLog({ operation: 'copy' });
+          draw.reRender();
+        }
+        closeContextMenu();
+        return;
+      }
+    }
     else if ('erase' === method) {
       node = resolveContextTargetRecord(state.hoveredNode);
       if (!node) { return; }
+
+      if (isContextGroup([node]) && model && typeof model.eraseGroup === 'function') {
+        wuwei.log.savePrevious();
+        if (model.eraseGroup(node)) {
+          wuwei.log.storeLog({ operation: 'erase' });
+          draw.reRender();
+        }
+        closeContextMenu();
+        return;
+      }
 
       var eraseTimelineSpec = wuwei.menu.timeline.getTimelineTargetSpec(node);
       if (eraseTimelineSpec && eraseTimelineSpec.group) {
@@ -3264,6 +3289,11 @@ wuwei.menu = wuwei.menu || {};
         'vertical2',
         'erase'
       ],
+      'EditGroup': [
+        'edit',
+        'copy',
+        'erase'
+      ],
       'InfoNode': [
         'info',
         'infoTimelineSegment',
@@ -3292,7 +3322,8 @@ wuwei.menu = wuwei.menu || {};
             else { type = 'InfoNode'; }
           }
           else if ('EDIT' === context) {
-            if ('Link' === nodes[i].type) { type = 'EditLink'; }
+            if (isContextGroup([nodes[i]])) { type = 'EditGroup'; }
+            else if ('Link' === nodes[i].type) { type = 'EditLink'; }
             else { type = 'EditNode'; }
           }
           else {
@@ -3320,9 +3351,8 @@ wuwei.menu = wuwei.menu || {};
         else { operations = self.type.Node; }
       }
       else if ('EDIT' === context) {
-        if (isContextContentsTarget(allNodes)) {
-          operations = self.type.EditLink;
-        }
+        if (isContextGroup(allNodes)) { operations = self.type.EditGroup; }
+        else if (isContextContentsTarget(allNodes)) { operations = self.type.EditLink; }
         else if ('Link' === hoveredNode.type) { operations = self.type.EditLink; }
         else { operations = self.type.EditNode; }
       }
@@ -3374,10 +3404,10 @@ wuwei.menu = wuwei.menu || {};
     }
 
     if (target.id) {
-      if (util.isLink(target)) {//} && model && typeof model.findLinkById === 'function') {
+      if (util.isLink(target)) {
         return model.findLinkById(target.id) || target;
       }
-      if (util.isNode(target)) {// && model && typeof model.findNodeById === 'function') {
+      if (util.isNode(target)) {
         return model.findNodeById(target.id) || target;
       }
     }
@@ -3391,6 +3421,8 @@ wuwei.menu = wuwei.menu || {};
     }
     return resolveContextTargetRecord(allNodes[0] || null);
   }
+
+
 
   function getContextTimelineSpec(allNodes) {
     var target = getContextTarget(allNodes);
@@ -3406,6 +3438,14 @@ wuwei.menu = wuwei.menu || {};
       return null;
     }
     return wuwei.contents.getPageTargetSpec(target);
+  }
+
+  function isContextGroup(allNodes) {
+    var target = getContextTarget(allNodes);
+    if (util.isEmpty(target)) {
+      return false;
+    }
+    return !!('Group' === target.type && target.groupRef);
   }
 
   function isContextLink(allNodes) {
@@ -4623,6 +4663,7 @@ wuwei.menu = wuwei.menu || {};
   ns.ContextINFO = ContextINFO;
   ns.ContextOperate = ContextOperate;
   ns.contextUpdatePosition = contextUpdatePosition;
+  ns.isContextGroup = isContextGroup;
   /** note */
   ns.noteClicked = noteClicked;
   ns.closeNoteClicked = closeNoteClicked;

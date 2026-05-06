@@ -39,6 +39,7 @@ wuwei.info.markup = ( function () {
 <!--/.Card header-->
 <!--Card content-->
 <div id="info-generic"></div>
+<div id="info-group"></div>
 <div id="info-uploaded"></div>
 <div id="info-video"></div>
 <div id="info-asciidoc"></div>
