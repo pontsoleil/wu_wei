@@ -1956,15 +1956,15 @@ wuwei.menu = wuwei.menu || {};
       spine: (isHorizontal || isVertical)
         ? {
           visible: true,
-          color: (preserveMetaGroup && preserveMetaGroup.spine && preserveMetaGroup.spine.color) || '#888888',
-          width: (preserveMetaGroup && preserveMetaGroup.spine && preserveMetaGroup.spine.width) || 6,
-          padding: (preserveMetaGroup && preserveMetaGroup.spine && preserveMetaGroup.spine.padding) || 12
+          color: (preserveMetaGroup && preserveMetaGroup.spine && preserveMetaGroup.spine.color) || common.defaultStyle.group.color,
+          width: (preserveMetaGroup && preserveMetaGroup.spine && preserveMetaGroup.spine.width) || common.defaultStyle.group.width,
+          padding: (preserveMetaGroup && preserveMetaGroup.spine && preserveMetaGroup.spine.padding) || common.defaultStyle.group.padding
         }
         : {
           visible: false,
-          color: (preserveMetaGroup && preserveMetaGroup.spine && preserveMetaGroup.spine.color) || '#888888',
-          width: (preserveMetaGroup && preserveMetaGroup.spine && preserveMetaGroup.spine.width) || 6,
-          padding: (preserveMetaGroup && preserveMetaGroup.spine && preserveMetaGroup.spine.padding) || 12
+          color: (preserveMetaGroup && preserveMetaGroup.spine && preserveMetaGroup.spine.color) || common.defaultStyle.group.color,
+          width: (preserveMetaGroup && preserveMetaGroup.spine && preserveMetaGroup.spine.width) || common.defaultStyle.group.width,
+          padding: (preserveMetaGroup && preserveMetaGroup.spine && preserveMetaGroup.spine.padding) || common.defaultStyle.group.padding
         },
       axis: undefined,
       members: members.map(function (n, index) {

@@ -674,7 +674,7 @@ wuwei.model = (function () {
       audit: makeAudit(),
       font: defaultFont,
       color: 'none',
-      outline: '#888888'
+      outline: common.defaultStyle.group.color
     };
   }
 
@@ -694,13 +694,13 @@ wuwei.model = (function () {
       groupType: group.type,
       groupRef: group.id,
       visible: true,
-      color: (group.spine && group.spine.color) || '#888888',
-      size: (group.spine && group.spine.width) || 6,
+      color: (group.spine && group.spine.color) || common.defaultStyle.group.color,
+      size: (group.spine && group.spine.width) || common.defaultStyle.group.width,
       style: {
         line: {
-          kind: (group.spine && group.spine.kind) || 'SOLID',
-          color: (group.spine && group.spine.color) || '#888888',
-          width: (group.spine && group.spine.width) || 6
+          kind: (group.spine && group.spine.kind) || common.defaultStyle.group.kind,
+          color: (group.spine && group.spine.color) || common.defaultStyle.group.color,
+          width: (group.spine && group.spine.width) || common.defaultStyle.group.width
         },
         font: defaultLink.style.font
       },
@@ -723,8 +723,8 @@ wuwei.model = (function () {
       groupType: 'timelineAxis',
       groupRef: group.id,
       visible: true,
-      color: (group.spine && group.spine.color) || '#888888',
-      size: (group.spine && group.spine.width) || 4,
+      color: (group.spine && group.spine.color) || common.defaultStyle.group.color,
+      size: (group.spine && group.spine.width) || common.defaultStyle.group.timeline_width,
       font: defaultLink.style.font,
       audit: makeAudit()
     };
@@ -7195,7 +7195,7 @@ wuwei.model = (function () {
 
   function eraseGroup(target) {
     var group = findGroupByTarget(target);
-    var members;
+    var memberIds;
     var removedNodes = [];
     var removedLinks = [];
     var seenLinks = {};
@@ -7204,26 +7204,29 @@ wuwei.model = (function () {
       return null;
     }
 
-    members = findGroupNodes(group.id);
-    members.forEach(function (node) {
+    memberIds = getGroupNodeIds(group);
+    removeGroupDefinition(group.id);
+
+    memberIds.forEach(function (nodeId) {
+      var node = findNodeById(nodeId);
       var links;
-      if (!node || !node.id) {
+      if (!nodeId) {
         return;
       }
-      links = (findLinksByNode(node) || {}).links || [];
-      links.forEach(function (link) {
-        if (!link || !link.id || seenLinks[link.id]) {
-          return;
-        }
-        seenLinks[link.id] = true;
-        removeLink(link);
-        removedLinks.push({ id: link.id, type: 'Link' });
-      });
-      removeNode({ id: node.id });
-      removedNodes.push({ id: node.id, type: 'Node' });
+      if (node) {
+        links = (findLinksByNode(node) || {}).links || [];
+        links.forEach(function (link) {
+          if (!link || !link.id || seenLinks[link.id]) {
+            return;
+          }
+          seenLinks[link.id] = true;
+          removedLinks.push({ id: link.id, type: 'Link' });
+        });
+      }
+      removeNode({ id: nodeId });
+      removedNodes.push({ id: nodeId, type: 'Node' });
     });
 
-    removeGroupDefinition(group.id);
     setGraphFromCurrentPage();
     updateLinkCount();
 
@@ -7256,7 +7259,8 @@ wuwei.model = (function () {
   function reflowGroupMembers(groupOrTarget, nextType) {
     var group = findGroupByTarget(groupOrTarget) || groupOrTarget;
     var members;
-    var centerX, centerY, start, spacing = 40;
+    var groupStyle = (common && common.defaultStyle && common.defaultStyle.group) || {};
+    var centerX, centerY, start, spacing = Number(groupStyle.dist || 40);
 
     if (!group || !('horizontal' === nextType || 'vertical' === nextType)) {
       return false;

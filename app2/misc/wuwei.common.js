@@ -638,6 +638,16 @@ wuwei.common = (function () {
   };
 
   var defaultStyle = {
+    group: {
+      kind: "SOLID",
+      simple_kind: "DASHED",
+      color: "#888888",
+      width: 6,
+      timeline_width: 4,
+      contents_width: 4,
+      padding: 12,
+      dist: 40
+    },
     topic: {
       fill: Color.nodeFill,
       font: defaultFont,

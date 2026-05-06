@@ -88,7 +88,7 @@ wuwei.edit.group.markup = (function () {
   <div class="w3-row">
     <label for="editGroupSpinePadding" class="w3-col s6">Padding</label>
     <input type="number" id="editGroupSpinePadding" class="w3-col s6" value="${num(spine.padding, isSimple ? 16 : 12)}">
-    <!-- <label class="w3-col s4"><input type="checkbox" id="editGroupSpineVisible"${checked(spine.visible)}> ${t('Visible')}</label>-->
+    <!-- <label class="w3-col s4"><input type="checkbox" id="editGroupSpineVisible"${checked(spine.visible)}> ${t('Visible')}</label> -->
   </div>
 </form>`;
   }
