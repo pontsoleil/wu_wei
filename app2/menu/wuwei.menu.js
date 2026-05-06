@@ -3422,8 +3422,6 @@ wuwei.menu = wuwei.menu || {};
     return resolveContextTargetRecord(allNodes[0] || null);
   }
 
-
-
   function getContextTimelineSpec(allNodes) {
     var target = getContextTarget(allNodes);
     if (util.isEmpty(target)) {

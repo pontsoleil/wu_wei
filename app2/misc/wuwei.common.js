@@ -2,13 +2,11 @@
  * wuwei.common.js
  * common data module
  *
- * WuWei is a free to use open source knowledge modeling tool.
- * More information on WuWei can be found on WuWei homepage.
- * https://www.wuwei.space/blog/
+ * WuWei is a free, open-source knowledge modelling tool.
  *
- * WuWei is copyrighted free software by Nobuyuki SAMBUICHI.
- *
- * Copyright (c) 2013-2021, SAMBUICHI Professional Engineer's Office All rights reserved.
+ * Licensed under the MIT License.
+ * Copyright (c) 2013-2021,2026 SAMBUICHI, Nobuyuki
+ * (Sambuichi Professional Engineers Office)
  **/
 wuwei.common = (function () {
   var href = window.location.href;
@@ -640,13 +638,21 @@ wuwei.common = (function () {
   var defaultStyle = {
     group: {
       kind: "SOLID",
-      simple_kind: "DASHED",
       color: "#888888",
       width: 6,
-      timeline_width: 4,
-      contents_width: 4,
       padding: 12,
-      dist: 40
+      dist: 40,
+      simple: {
+        kind: "DASHED",
+        width: 4
+      },
+      timeline: {
+        width: 4
+      },
+      contents: {
+        width: 4,
+        color: '#4c6b8a'
+      }
     },
     topic: {
       fill: Color.nodeFill,

@@ -400,8 +400,8 @@ wuwei.contents = wuwei.contents || {};
       groupType: 'contentsAxis',
       groupRef: group.id,
       visible: true,
-      color: (group.spine && group.spine.color) || group.strokeColor || '#4c6b8a',
-      size: (group.spine && group.spine.width) || group.strokeWidth || 4,
+      color: (group.spine && group.spine.color) || group.strokeColor || common.defaultStyle.group.contents.color,
+      size: (group.spine && group.spine.width) || group.strokeWidth || common.defaultStyle.group.contents.width,
       font: { size: '12pt', color: common.Color.linkText, family: 'Arial' },
       audit: makeAudit()
     };

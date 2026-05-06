@@ -1,6 +1,12 @@
 /**
  * edit.group.js
  * group editor controller
+ *
+ * WuWei is a free, open-source knowledge modelling tool.
+ *
+ * Licensed under the MIT License.
+ * Copyright (c) 2026 SAMBUICHI, Nobuyuki
+ * (Sambuichi Professional Engineers Office)
  */
 wuwei.edit = wuwei.edit || {};
 wuwei.edit.group = wuwei.edit.group || {};
@@ -26,9 +32,9 @@ wuwei.edit.group = wuwei.edit.group || {};
     var style = (wuwei.common && wuwei.common.defaultStyle && wuwei.common.defaultStyle.group) || {};
     var spine = {};
 
-    spine.kind = ('simple' === type) ? style.simple_kind : style.kind;
+    spine.kind = ('simple' === type) ? style.simple.kind : style.kind;
     spine.color = style.color;
-    spine.width = style.width;
+    spine.width =  ('simple' === type) ? style.simple.width : style.width;
     spine.padding = style.padding;
     spine.visible = true;
     return spine;

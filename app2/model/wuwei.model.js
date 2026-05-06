@@ -671,10 +671,10 @@ wuwei.model = (function () {
       x: 0,
       y: 0,
       size: { width: 0, height: 0 },
-      audit: makeAudit(),
       font: defaultFont,
       color: 'none',
-      outline: common.defaultStyle.group.color
+      outline: common.defaultStyle.group.color,
+      audit: makeAudit()
     };
   }
 
@@ -724,7 +724,7 @@ wuwei.model = (function () {
       groupRef: group.id,
       visible: true,
       color: (group.spine && group.spine.color) || common.defaultStyle.group.color,
-      size: (group.spine && group.spine.width) || common.defaultStyle.group.timeline_width,
+      size: (group.spine && group.spine.width) || common.defaultStyle.group.timeline.width,
       font: defaultLink.style.font,
       audit: makeAudit()
     };
@@ -765,8 +765,7 @@ wuwei.model = (function () {
         return;
       }
 
-      if ('contents' === group.type && wuwei.contents &&
-        typeof wuwei.contents.buildContentsAxisPseudoLink === 'function') {
+      if ('contents' === group.type) {
         link = wuwei.contents.buildContentsAxisPseudoLink(group);
         if (link) {
           result.links.push(link);
@@ -774,10 +773,7 @@ wuwei.model = (function () {
         return;
       }
 
-      if (wuwei.timeline &&
-        typeof wuwei.timeline.isAxisGroup === 'function' &&
-        wuwei.timeline.isAxisGroup(group) &&
-        typeof wuwei.timeline.buildTimelineAxisPseudoLink === 'function') {
+      if (wuwei.timeline && wuwei.timeline.isAxisGroup(group)) {
         link = wuwei.timeline.buildTimelineAxisPseudoLink(group);
         if (link) {
           result.links.push(link);
@@ -857,9 +853,6 @@ wuwei.model = (function () {
     assertNoLegacyRuntimeFields(param, 'Node');
     var self = {};
     var pos;
-    // var currentUser = (state && state.currentUser) ? state.currentUser : {};
-    // var userName = currentUser.name || currentUser.login || 'guest';
-    // var userId = currentUser.user_id || common.TEMP_OWNER_ID;
 
     Object.keys(param).forEach(function (key) {
       self[key] = param[key];
@@ -8204,10 +8197,10 @@ wuwei.model = (function () {
   function setGraphFromCurrentPage() {
     const current = getCurrent();
     const page = getCurrentPage();
-    if (page && wuwei.timeline && typeof wuwei.timeline.normalizeAllAxisGroups === 'function') {
+    if (page) {
       wuwei.timeline.normalizeAllAxisGroups(page);
     }
-    if (page && wuwei.contents && typeof wuwei.contents.normalizeAllAxisGroups === 'function') {
+    if (page) {
       wuwei.contents.normalizeAllAxisGroups(page);
     }
     const pseudo = buildGroupPseudoGroups(page);

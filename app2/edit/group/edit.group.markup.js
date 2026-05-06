@@ -1,6 +1,12 @@
 /**
  * edit.group.markup.js
  * group editor template
+ *
+ * WuWei is a free, open-source knowledge modelling tool.
+ *
+ * Licensed under the MIT License.
+ * Copyright (c) 2026 SAMBUICHI, Nobuyuki
+ * (Sambuichi Professional Engineers Office)
  */
 wuwei.edit = wuwei.edit || {};
 wuwei.edit.group = wuwei.edit.group || {};
