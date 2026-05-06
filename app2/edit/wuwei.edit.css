@@ -55,7 +55,8 @@
 #edit.widen>header {
   width: 420px;
 }
-#edit-generic {
+#edit-generic,
+#edit-group {
   padding: 8px;
 }
 #edit header h2:hover #editIcon {

@@ -2058,7 +2058,11 @@ wuwei.menu = wuwei.menu || {};
         return;
       }
 
-      if (util.isNode(node)) {
+      if (node.groupRef && model && typeof model.findGroupById === 'function' &&
+        model.findGroupById(node.groupRef)) {
+        wuwei.edit.open(node, { editor: false, citation: false, cc: false });
+      }
+      else if (util.isNode(node)) {
         if ('Topic' === node.type) {
           wuwei.edit.open(node, { editor: false, citation: false, cc: false });
         }

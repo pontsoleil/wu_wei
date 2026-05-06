@@ -35,6 +35,7 @@ wuwei.edit.markup = (function () {
 
     html.push(`
   <div id="edit-generic"></div>
+  <div id="edit-group"></div>
   <div id="edit-link"></div>
   <div id="edit-uploaded"></div>
   <div id="edit-video"></div>

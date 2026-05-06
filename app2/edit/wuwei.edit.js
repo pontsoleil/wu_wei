@@ -24,6 +24,7 @@ wuwei.edit = wuwei.edit || {};
     stateMap = {
       node: null,
       link: null,
+      group: null,
       selecteds: [],
       option: null,
       param: {}
@@ -73,6 +74,96 @@ wuwei.edit = wuwei.edit || {};
   function getCurrentPage() {
     var common = wuwei.common;
     return common && common.current ? common.current.page || null : null;
+  }
+
+  function isEditableGroup(group) {
+    return !!(group && ('simple' === group.type || 'horizontal' === group.type || 'vertical' === group.type));
+  }
+
+  function resolveEditableGroup(target) {
+    var groupId;
+    if (!target || !model || typeof model.findGroupById !== 'function') {
+      return null;
+    }
+    groupId = target.groupRef || target.id || '';
+    return isEditableGroup(model.findGroupById(groupId)) ? model.findGroupById(groupId) : null;
+  }
+
+  function escapeEditHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function numberOr(value, fallback) {
+    var number = Number(value);
+    return Number.isFinite(number) ? number : fallback;
+  }
+
+  function checkedAttr(value) {
+    return value === false ? '' : ' checked';
+  }
+
+  function selectedAttr(value, expected) {
+    return String(value || '') === expected ? ' selected' : '';
+  }
+
+  function translate(value) {
+    return wuwei.edit.markup && typeof wuwei.edit.markup.translate === 'function'
+      ? wuwei.edit.markup.translate(value)
+      : value;
+  }
+
+  function renderGroupEditor(group) {
+    var pane = document.getElementById('edit-group');
+    var description = (group.description && 'object' === typeof group.description)
+      ? group.description
+      : { format: 'plain', body: '' };
+    var spine = (group.spine && 'object' === typeof group.spine) ? group.spine : {};
+    var axisControls = '';
+
+    if (!pane || !group) {
+      return;
+    }
+
+    if ('horizontal' === group.type || 'vertical' === group.type) {
+      axisControls = `
+  <div class="w3-row">
+    <label for="editGroupType" class="w3-col s4">${translate('Shape')}</label>
+    <select id="editGroupType" class="w3-col s8">
+      <option value="horizontal"${selectedAttr(group.type, 'horizontal')}>Horizontal group</option>
+      <option value="vertical"${selectedAttr(group.type, 'vertical')}>Vertical group</option>
+    </select>
+  </div>
+  <div class="w3-row">
+    <label for="editGroupSpineWidth" class="w3-col s4">${translate('Size')}</label>
+    <input type="number" id="editGroupSpineWidth" class="w3-col s4" value="${numberOr(spine.width, 6)}">
+    <input type="color" id="editGroupSpineColor" class="w3-col s4 pointer" value="${escapeEditHtml(spine.color || '#888888')}">
+  </div>
+  <div class="w3-row">
+    <label for="editGroupSpinePadding" class="w3-col s4">Padding</label>
+    <input type="number" id="editGroupSpinePadding" class="w3-col s4" value="${numberOr(spine.padding, 12)}">
+    <label class="w3-col s4"><input type="checkbox" id="editGroupSpineVisible"${checkedAttr(spine.visible)}> Visible</label>
+  </div>`;
+    }
+
+    pane.innerHTML = `
+<form id="editform" class="group form-group content">
+  <div class="w3-row">
+    <textarea id="editGroupName" class="w3-col s12" rows="2" placeholder="${translate('Label')}">${escapeEditHtml(group.name || '')}</textarea>
+  </div>
+  <div class="w3-row">
+    <textarea id="editGroupDescription" class="w3-col s12" rows="4" placeholder="${translate('Description')}">${escapeEditHtml(description.body || '')}</textarea>
+  </div>
+  <div class="w3-row">
+    <label class="w3-col s6"><input type="checkbox" id="editGroupVisible"${checkedAttr(group.visible)}> Visible</label>
+    <label class="w3-col s6"><input type="checkbox" id="editGroupMoveTogether"${checkedAttr(group.moveTogether)}> Move together</label>
+  </div>
+${axisControls}
+</form>`;
+    pane.style.display = 'block';
   }
 
   function detectMediaFromUrl(rawUrl) {
@@ -730,6 +821,13 @@ wuwei.edit = wuwei.edit || {};
         if (!isNaN(value)) {
           value = +value;
         }
+        if (stateMap.group && target.closest && target.closest('#edit-group')) {
+          flushGroupEditFields();
+          if (draw && typeof draw.refresh === 'function') {
+            draw.refresh();
+          }
+          return;
+        }
         if (path) {
           if (stateMap.node) {
             if ('resource.uri' === path) {
@@ -1219,6 +1317,7 @@ wuwei.edit = wuwei.edit || {};
   function hideEdits() {
     if (!document.getElementById('edit').innerHTML) { return; }
     if (document.getElementById('edit-generic')) { document.getElementById('edit-generic').style.display = 'none'; }
+    if (document.getElementById('edit-group')) { document.getElementById('edit-group').style.display = 'none'; }
     if (document.getElementById('edit-uploaded')) { document.getElementById('edit-uploaded').style.display = 'none'; }
     if (document.getElementById('edit-video')) { document.getElementById('edit-video').style.display = 'none'; }
     if (document.getElementById('edit-link')) { document.getElementById('edit-link').style.display = 'none'; }
@@ -1241,6 +1340,7 @@ wuwei.edit = wuwei.edit || {};
 
     stateMap.node = null;
     stateMap.link = null;
+    stateMap.group = null;
     stateMap.selecteds = [];
     stateMap.option = {};
     stateMap.param = {};
@@ -1296,6 +1396,7 @@ wuwei.edit = wuwei.edit || {};
     beginEditSession();
 
     let link;
+    stateMap.group = null;
     if (state.Selecting) {
       var
         selecteds = document.querySelectorAll('g.selected'),
@@ -1312,15 +1413,32 @@ wuwei.edit = wuwei.edit || {};
       }
     }
 
+    var editableGroup = resolveEditableGroup(node);
+    if (editableGroup) {
+      stateMap.node = null;
+      stateMap.link = null;
+      stateMap.group = editableGroup;
+      stateMap.option = (option && 'object' === typeof option) ? option : {};
+      editPane.style.display = 'block';
+      renderGroupEditor(editableGroup);
+      document.getElementById('editform').addEventListener('change', update, false);
+      editPane.dataset.node_id = undefined;
+      editPane.dataset.link_id = undefined;
+      editPane.dataset.group_id = editableGroup.id;
+      return true;
+    }
+
     if (util.isNode(node)) {
       syncNodePositionFromRenderedElement(node);
       stateMap.node = node;
+      stateMap.group = null;
       if (!option && !state.Selecting) {
         option = (node && node.option) || null;
       }
     }
     else if (util.isLink(node)) {
       stateMap.link = node;
+      stateMap.group = null;
     }
 
     if (isContentsAxisTarget(node)) {
@@ -1637,12 +1755,74 @@ wuwei.edit = wuwei.edit || {};
     applyMediaDetectionToNode(stateMap.node, '');
   }
 
+  function flushGroupEditFields() {
+    var group, pane, nameEl, descriptionEl, visibleEl, moveTogetherEl;
+    var typeEl, spineWidthEl, spineColorEl, spinePaddingEl, spineVisibleEl;
+    if (!stateMap.group) {
+      return true;
+    }
+    group = stateMap.group;
+    pane = document.getElementById('edit-group');
+    if (!pane || pane.style.display === 'none') {
+      return true;
+    }
+
+    nameEl = document.getElementById('editGroupName');
+    descriptionEl = document.getElementById('editGroupDescription');
+    visibleEl = document.getElementById('editGroupVisible');
+    moveTogetherEl = document.getElementById('editGroupMoveTogether');
+
+    if (nameEl) {
+      group.name = nameEl.value || '';
+    }
+    group.description = (group.description && 'object' === typeof group.description)
+      ? group.description
+      : { format: 'plain', body: '' };
+    if (descriptionEl) {
+      group.description.body = descriptionEl.value || '';
+    }
+    if (visibleEl) {
+      group.visible = !!visibleEl.checked;
+    }
+    if (moveTogetherEl) {
+      group.moveTogether = !!moveTogetherEl.checked;
+    }
+
+    typeEl = document.getElementById('editGroupType');
+    if (typeEl && ('horizontal' === typeEl.value || 'vertical' === typeEl.value)) {
+      group.type = typeEl.value;
+      group.orientation = typeEl.value;
+    }
+
+    if ('horizontal' === group.type || 'vertical' === group.type) {
+      spineWidthEl = document.getElementById('editGroupSpineWidth');
+      spineColorEl = document.getElementById('editGroupSpineColor');
+      spinePaddingEl = document.getElementById('editGroupSpinePadding');
+      spineVisibleEl = document.getElementById('editGroupSpineVisible');
+      group.spine = (group.spine && 'object' === typeof group.spine) ? group.spine : {};
+      group.spine.width = numberOr(spineWidthEl && spineWidthEl.value, 6);
+      group.spine.color = (spineColorEl && spineColorEl.value) || '#888888';
+      group.spine.padding = numberOr(spinePaddingEl && spinePaddingEl.value, 12);
+      group.spine.visible = spineVisibleEl ? !!spineVisibleEl.checked : true;
+    }
+
+    group.audit = (group.audit && 'object' === typeof group.audit) ? group.audit : {};
+    group.audit.lastModifiedBy = (common.state.currentUser && common.state.currentUser.user_id) || common.state.user_id || '';
+    group.audit.lastModifiedAt = new Date().toISOString();
+
+    if (model && typeof model.setGraphFromCurrentPage === 'function') {
+      model.setGraphFromCurrentPage();
+    }
+    return true;
+  }
+
   function commit() {
     var committed = true;
     flushVideoEditFields();
     flushVideoResourceFields();
     flushNetworkResourceFields();
     flushContentsEntryFields();
+    flushGroupEditFields();
     // Timeline edits are buffered in the timeline panel fields,
     // so the global save icon must apply them before storing the log.
     if (state.timelineEdit) {
@@ -1726,6 +1906,9 @@ wuwei.edit = wuwei.edit || {};
     }
     else if (stateMap.link) {
       wuwei.edit.link.close();
+    }
+    else if (stateMap.group) {
+      stateMap.group = null;
     }
 
     wuwei.edit.timeline.close();
