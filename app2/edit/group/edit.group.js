@@ -1,12 +1,6 @@
 /**
  * edit.group.js
  * group editor controller
- *
- * WuWei is a free, open-source knowledge modelling tool.
- *
- * Licensed under the MIT License.
- * Copyright (c) 2026 SAMBUICHI, Nobuyuki
- * (Sambuichi Professional Engineers Office)
  */
 wuwei.edit = wuwei.edit || {};
 wuwei.edit.group = wuwei.edit.group || {};
@@ -30,55 +24,53 @@ wuwei.edit.group = wuwei.edit.group || {};
 
   function defaultSpineForType(type) {
     var style = (wuwei.common && wuwei.common.defaultStyle && wuwei.common.defaultStyle.group) || {};
+    var simple = style.simple || {};
     var spine = {};
 
-    spine.kind = ('simple' === type) ? style.simple.kind : style.kind;
-    spine.color = style.color;
-    spine.width =  ('simple' === type) ? style.simple.width : style.width;
-    spine.padding = style.padding;
+    spine.kind = ('simple' === type) ? (simple.kind || style.kind || 'DASHED') : (style.kind || 'SOLID');
+    spine.color = style.color || '#888888';
+    spine.width = ('simple' === type) ? toNumber(simple.width, 2) : toNumber(style.width, 6);
+    spine.padding = toNumber(style.padding, 'simple' === type ? 16 : 12);
+    spine.paddingTop = spine.padding;
+    spine.paddingRight = spine.padding;
+    spine.paddingBottom = spine.padding;
+    spine.paddingLeft = spine.padding;
     spine.visible = true;
     return spine;
   }
 
-  function applySpineToFields(spine, spineKindEl, spineWidthEl, spineColorEl, spinePaddingEl, spineVisibleEl) {
-    if (spineKindEl) {
-      spineKindEl.value = spine.kind || '';
-    }
-    if (spineWidthEl) {
-      spineWidthEl.value = spine.width;
-    }
-    if (spineColorEl) {
-      spineColorEl.value = spine.color || '';
-    }
-    if (spinePaddingEl) {
-      spinePaddingEl.value = spine.padding;
-    }
-    if (spineVisibleEl) {
-      spineVisibleEl.checked = false !== spine.visible;
-    }
-  }
+  function applySpineToFields(spine) {
+    var fieldMap = {
+      spine_kind: 'kind',
+      spine_width: 'width',
+      spine_color: 'color',
+      spine_padding: 'padding',
+      spine_padding_top: 'paddingTop',
+      spine_padding_right: 'paddingRight',
+      spine_padding_bottom: 'paddingBottom',
+      spine_padding_left: 'paddingLeft'
+    };
 
-  function applyDefaultSpineForSelectedType() {
-    var typeEl = $('editGroupType');
-    var spine = defaultSpineForType(typeEl ? typeEl.value : 'simple');
-
-    applySpineToFields(
-      spine,
-      $('editGroupSpineKind'),
-      $('editGroupSpineWidth'),
-      $('editGroupSpineColor'),
-      $('editGroupSpinePadding'),
-      $('editGroupSpineVisible')
-    );
+    Object.keys(fieldMap).forEach(function (id) {
+      var el = $(id);
+      if (el) {
+        el.value = spine[fieldMap[id]];
+      }
+    });
+    if ($('spine_visible')) {
+      $('spine_visible').checked = false !== spine.visible;
+    }
   }
 
   function bindTypeChangeHandler() {
-    var typeEl = $('editGroupType');
+    var typeEl = $('type');
 
     if (!typeEl) {
       return;
     }
-    typeEl.onchange = applyDefaultSpineForSelectedType;
+    typeEl.onchange = function () {
+      applySpineToFields(defaultSpineForType(typeEl.value || 'simple'));
+    };
   }
 
   function resolveGroup(target) {
@@ -123,23 +115,31 @@ wuwei.edit.group = wuwei.edit.group || {};
     var previousType;
     var typeEl, nameEl, descriptionEl, visibleEl, moveTogetherEl;
     var spineKindEl, spineWidthEl, spineColorEl, spinePaddingEl, spineVisibleEl;
-    var nextType, typeChanged, defaultSpine;
+    var spinePaddingTopEl, spinePaddingRightEl, spinePaddingBottomEl, spinePaddingLeftEl;
+    var nextType;
+    var typeChanged;
+    var defaultSpine;
+    var basePadding;
 
     if (!group || !$('edit-group')) {
       return true;
     }
 
     previousType = stateMap.previousType || group.type || 'simple';
-    typeEl = $('editGroupType');
-    nameEl = $('editGroupName');
-    descriptionEl = $('editGroupDescription');
-    visibleEl = $('editGroupVisible');
-    moveTogetherEl = $('editGroupMoveTogether');
-    spineKindEl = $('editGroupSpineKind');
-    spineWidthEl = $('editGroupSpineWidth');
-    spineColorEl = $('editGroupSpineColor');
-    spinePaddingEl = $('editGroupSpinePadding');
-    spineVisibleEl = $('editGroupSpineVisible');
+    typeEl = $('type');
+    nameEl = $('name');
+    descriptionEl = $('description_body');
+    visibleEl = $('visible');
+    moveTogetherEl = $('moveTogether');
+    spineKindEl = $('spine_kind');
+    spineWidthEl = $('spine_width');
+    spineColorEl = $('spine_color');
+    spinePaddingEl = $('spine_padding');
+    spinePaddingTopEl = $('spine_padding_top');
+    spinePaddingRightEl = $('spine_padding_right');
+    spinePaddingBottomEl = $('spine_padding_bottom');
+    spinePaddingLeftEl = $('spine_padding_left');
+    spineVisibleEl = $('spine_visible');
 
     if (nameEl) {
       group.name = nameEl.value || '';
@@ -171,18 +171,35 @@ wuwei.edit.group = wuwei.edit.group || {};
       group.spine.width = defaultSpine.width;
       group.spine.color = defaultSpine.color;
       group.spine.padding = defaultSpine.padding;
+      group.spine.paddingTop = defaultSpine.paddingTop;
+      group.spine.paddingRight = defaultSpine.paddingRight;
+      group.spine.paddingBottom = defaultSpine.paddingBottom;
+      group.spine.paddingLeft = defaultSpine.paddingLeft;
       group.spine.visible = defaultSpine.visible;
-      applySpineToFields(group.spine, spineKindEl, spineWidthEl, spineColorEl, spinePaddingEl, spineVisibleEl);
+      applySpineToFields(group.spine);
     }
     else {
-      group.spine.kind = spineKindEl ? (spineKindEl.value || group.spine.kind || 'SOLID') : (group.spine.kind || 'SOLID');
-      group.spine.width = toNumber(spineWidthEl && spineWidthEl.value, toNumber(group.spine.width, 6));
+      group.spine.kind = spineKindEl ? (spineKindEl.value || 'SOLID') : (group.spine.kind || 'SOLID');
+      group.spine.width = toNumber(spineWidthEl && spineWidthEl.value, 'simple' === group.type ? 2 : 6);
       group.spine.color = (spineColorEl && spineColorEl.value) || group.spine.color || '#888888';
-      group.spine.padding = toNumber(spinePaddingEl && spinePaddingEl.value, toNumber(group.spine.padding, 12));
-      group.spine.visible = spineVisibleEl ? !!spineVisibleEl.checked : false !== group.spine.visible;
+      group.spine.padding = toNumber(spinePaddingEl && spinePaddingEl.value, 'simple' === group.type ? 16 : 12);
+      basePadding = group.spine.padding;
+      group.spine.paddingTop = toNumber(spinePaddingTopEl && spinePaddingTopEl.value, basePadding);
+      group.spine.paddingRight = toNumber(spinePaddingRightEl && spinePaddingRightEl.value, basePadding);
+      group.spine.paddingBottom = toNumber(spinePaddingBottomEl && spinePaddingBottomEl.value, basePadding);
+      group.spine.paddingLeft = toNumber(spinePaddingLeftEl && spinePaddingLeftEl.value, basePadding);
+      group.spine.visible = spineVisibleEl ? !!spineVisibleEl.checked : true;
     }
 
-    wuwei.model.reflowGroupMembers(group, group.type);
+    if (('vertical' === previousType && 'horizontal' === group.type) ||
+      ('horizontal' === previousType && 'vertical' === group.type)) {
+      if (wuwei.model && typeof wuwei.model.reflowGroupMembers === 'function') {
+        wuwei.model.reflowGroupMembers(group, group.type);
+      }
+    }
+    else if (wuwei.model && typeof wuwei.model.setGraphFromCurrentPage === 'function') {
+      wuwei.model.setGraphFromCurrentPage();
+    }
 
     group.audit = (group.audit && 'object' === typeof group.audit) ? group.audit : {};
     group.audit.lastModifiedBy =

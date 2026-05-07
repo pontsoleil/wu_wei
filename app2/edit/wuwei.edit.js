@@ -42,6 +42,14 @@ wuwei.edit = wuwei.edit || {};
 
   var snapshotTaken = false;
 
+  function hasTimelineEditor() {
+    return !!(
+      wuwei.edit &&
+      wuwei.edit.timeline &&
+      typeof wuwei.edit.timeline.open === 'function'
+    );
+  }
+
   function beginEditSession() {
     if (!snapshotTaken) {
       log.savePrevious();
@@ -579,9 +587,9 @@ wuwei.edit = wuwei.edit || {};
   }
 
   function updateShapeInputsForNode(node, shape) {
-    var radiusInput = document.getElementById('nSize_radius');
-    var widthInput = document.getElementById('nSize_width');
-    var heightInput = document.getElementById('nSize_height');
+    var radiusInput = document.getElementById('size_radius');
+    var widthInput = document.getElementById('size_width');
+    var heightInput = document.getElementById('size_height');
     var radiusEl = document.getElementById('radius');
     var widthHeightEl = document.getElementById('width-height');
     var radius, width, height;
@@ -616,27 +624,394 @@ wuwei.edit = wuwei.edit || {};
     }
   }
 
-  function normalizeEditFieldPaths(root) {
-    var scope = root || document;
-    var map = {
-      nFont_size: 'style.font.size',
-      lFont_size: 'style.font.size',
+  function pathToFieldId(path) {
+    if (!path) {
+      return '';
+    }
+    return String(path).replace(/\./g, '_');
+  }
+
+  function fieldIdToPath(id, el) {
+    var aliases;
+    id = String(id || '');
+    aliases = {
+      label: 'label',
+      description_body: 'description.body',
+      resource_uri: 'resource.uri',
+      resource_kind: 'resource.kind',
+      resource_canonicalUri: 'resource.canonicalUri',
+      thumbnailUri: 'thumbnailUri',
+      shape: 'shape',
+      style_fill: 'style.fill',
+      style_font_color: 'style.font.color',
+      style_font_size: 'style.font.size',
+      size_radius: 'size.radius',
+      size_width: 'size.width',
+      size_height: 'size.height',
+      text_position: 'text.position',
+      text_width: 'text.width',
+      text_height: 'text.height',
+      group: 'group',
+      style_line_kind: 'style.line.kind',
+      routing_startArrow_kind: 'routing.startArrow.kind',
+      routing_startArrow_size: 'routing.startArrow.size',
+      routing_endArrow_kind: 'routing.endArrow.kind',
+      routing_endArrow_size: 'routing.endArrow.size',
+      style_line_width: 'style.line.width',
+      style_line_size: 'style.line.width',
+      style_line_color: 'style.line.color',
+      relation: 'relation',
+      name: 'name',
+      visible: 'visible',
+      moveTogether: 'moveTogether',
+      type: 'type',
+      spine_kind: 'spine.kind',
+      spine_width: 'spine.width',
+      spine_color: 'spine.color',
+      spine_padding: 'spine.padding',
+      spine_padding_top: 'spine.paddingTop',
+      spine_padding_right: 'spine.paddingRight',
+      spine_padding_bottom: 'spine.paddingBottom',
+      spine_padding_left: 'spine.paddingLeft',
+      spine_visible: 'spine.visible',
+      pageNumber: 'pageNumber',
+      timeRange_start: 'timeRange.start',
+      timeRange_end: 'timeRange.end',
+
+      // Legacy edit field ids kept as a fallback during transition.
+      rName: 'label',
+      rValue: 'description.body',
+      rValue_comment: 'description.body',
+      rUri: 'resource.uri',
+      rMedia_kind: 'resource.kind',
       nShape: 'shape',
+      nColor: 'style.fill',
+      nFont_color: 'style.font.color',
+      nFont_size: 'style.font.size',
+      nSize_radius: 'size.radius',
+      nSize_width: 'size.width',
+      nSize_height: 'size.height',
+      nText_position: 'text.position',
+      nText_width: 'text.width',
+      nText_height: 'text.height',
+      nGroup: 'group',
+      lLabel: 'label',
       lShape: 'shape',
       lStrokedash: 'style.line.kind',
       lStartArrow_kind: 'routing.startArrow.kind',
+      lStartArrow_size: 'routing.startArrow.size',
       lEndArrow_kind: 'routing.endArrow.kind',
-      rMedia_kind: 'resource.kind'
+      lEndArrow_size: 'routing.endArrow.size',
+      lSize: 'style.line.width',
+      lColor: 'style.line.color',
+      lFont_color: 'style.font.color',
+      lFont_size: 'style.font.size',
+      lRelation: 'relation',
+      contentsPageNumber: 'pageNumber',
+      editVideoStart: 'timeRange.start',
+      editVideoEnd: 'timeRange.end',
+      rMedia_start: 'timeRange.start',
+      rMedia_end: 'timeRange.end',
+      editTimelinePointColor: 'style.fill',
+      editTimelinePointOutlineWidth: 'style.line.width',
+      editTimelinePointOutlineColor: 'style.line.color',
+      editTimelinePointFontColor: 'style.font.color'
     };
-    Object.keys(map).forEach(function (id) {
-      var el = scope.querySelector ? scope.querySelector('#' + id) : document.getElementById(id);
-      if (!el) {
+    if (aliases[id]) {
+      return aliases[id];
+    }
+    if ('source_position' === id || 'target_position' === id) {
+      return id;
+    }
+    if (id) {
+      return id.replace(/_/g, '.');
+    }
+    if (el && el.name) {
+      return String(el.name || '').replace(/_/g, '.');
+    }
+    return '';
+  }
+
+  function normalizeEditFieldPaths(root) {
+    var scope = root || document;
+    var fields;
+    if (!scope || !scope.querySelectorAll) {
+      return;
+    }
+    fields = scope.querySelectorAll('input[id], textarea[id], select[id]');
+    fields.forEach(function (el) {
+      var path = fieldIdToPath(el.id, el);
+      if (!path || /^edit[A-Z]/.test(el.id) || 'editRole' === el.id || 'applyToGroup' === el.id ||
+        'applyToTimelineGroup' === el.id || 'applyToContentsGroup' === el.id) {
         return;
       }
-      el.setAttribute('name', map[id]);
-      el.setAttribute('data-path', map[id]);
+      el.classList.add('edit-value');
+      if (!el.name) {
+        el.name = path;
+      }
+      if (el.hasAttribute('data-path')) {
+        el.removeAttribute('data-path');
+      }
     });
   }
+
+  function getCurrentEditableTarget(el) {
+    var group;
+    if (stateMap.group || (el && el.closest && el.closest('#edit-group'))) {
+      group = stateMap.group || resolveEditableGroup(stateMap.link || stateMap.node);
+      if (group) {
+        return { kind: 'group', object: group };
+      }
+    }
+    if (stateMap.link) {
+      group = resolveEditableGroup(stateMap.link);
+      if (group && stateMap.link.type === 'Group') {
+        return { kind: 'group', object: group };
+      }
+      return { kind: 'link', object: stateMap.link };
+    }
+    if (stateMap.node) {
+      return { kind: 'node', object: stateMap.node };
+    }
+    return null;
+  }
+
+  function readEditValue(el) {
+    var value;
+    if (!el) {
+      return null;
+    }
+    if ('checkbox' === el.type) {
+      return !!el.checked;
+    }
+    value = el.value;
+    if ('number' === el.type) {
+      if ('' === value || value === null || typeof value === 'undefined') {
+        return null;
+      }
+      value = Number(value);
+      return Number.isFinite(value) ? value : null;
+    }
+    return value;
+  }
+
+  function markEditedTarget(kind, object) {
+    if (!object) {
+      return;
+    }
+    object.changed = true;
+    if ('group' === kind) {
+      object.audit = (object.audit && 'object' === typeof object.audit) ? object.audit : {};
+      object.audit.lastModifiedBy =
+        (wuwei.common.state.currentUser && wuwei.common.state.currentUser.user_id) ||
+        wuwei.common.state.user_id ||
+        '';
+      object.audit.lastModifiedAt = new Date().toISOString();
+    }
+  }
+
+  function redrawEditedGraph() {
+    if ('draw' === graph.mode) {
+      draw.refresh();
+    }
+    else if ('simulation' === graph.mode) {
+      draw.restart();
+    }
+  }
+
+  function setGroupPath(group, path, value) {
+    var previousType;
+    if (!group || !path) {
+      return;
+    }
+    previousType = group.type || 'simple';
+    if ('description.body' === path) {
+      group.description = (group.description && 'object' === typeof group.description)
+        ? group.description
+        : { format: 'plain', body: '' };
+      group.description.body = String(value || '');
+      return;
+    }
+    setPathValue(group, path, value);
+    if ('type' === path && ['simple', 'horizontal', 'vertical'].indexOf(value) >= 0) {
+      group.orientation = ('simple' === value) ? 'auto' : value;
+      if ((previousType === 'vertical' && value === 'horizontal') ||
+        (previousType === 'horizontal' && value === 'vertical')) {
+        if (model && typeof model.reflowGroupMembers === 'function') {
+          model.reflowGroupMembers(group, value);
+        }
+      }
+    }
+  }
+
+  function applyEditPath(targetInfo, path, value, el) {
+    if (!targetInfo || !targetInfo.object || !path) {
+      return false;
+    }
+    if ('node' === targetInfo.kind) {
+      applyNodeEditPath(targetInfo.object, path, value, el);
+    }
+    else if ('link' === targetInfo.kind) {
+      setLinkPath(targetInfo.object, path, value || null);
+    }
+    else if ('group' === targetInfo.kind) {
+      setGroupPath(targetInfo.object, path, value);
+      if (model && typeof model.setGraphFromCurrentPage === 'function') {
+        model.setGraphFromCurrentPage();
+      }
+    }
+    markEditedTarget(targetInfo.kind, targetInfo.object);
+    return true;
+  }
+
+  function applyNodeEditPath(node, path, value, el) {
+    var pageEl, page, detectedMedia, kindEl;
+    if (!node) {
+      return;
+    }
+    if ('resource.uri' === path || 'resource.canonicalUri' === path) {
+      pageEl = document.getElementById('pdfPage');
+      page = pageEl ? (pageEl.value || pageEl.innerText || '') : '';
+      if (page) {
+        value = String(value || '').split('#')[0] + '#page=' + page;
+        if (el) {
+          el.value = value;
+        }
+      }
+    }
+    if (state.Selecting && Array.isArray(stateMap.selecteds) &&
+      ['shape', 'size.radius', 'size.width', 'size.height', 'style.fill', 'style.line.color',
+        'style.line.width', 'style.font.color', 'style.font.size', 'style.font.family',
+        'style.font.align'].indexOf(path) >= 0) {
+      stateMap.selecteds.forEach(function (selectedNode) {
+        setNodePath(selectedNode, path, value);
+        selectedNode.changed = true;
+      });
+    }
+    else {
+      setNodePath(node, path, value);
+    }
+    if (('resource.uri' === path || 'resource.canonicalUri' === path) && node.resource) {
+      if (wuwei.util && typeof wuwei.util.toStorageRelativePath === 'function' &&
+        (String(value || '').match(/^(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i) ||
+          String(value || '').match(/(?:^|\/)upload\//))) {
+        value = wuwei.util.toStorageRelativePath(value, null, 'upload');
+        if (el) {
+          el.value = value;
+        }
+        setNodePath(node, path, value);
+      }
+      detectedMedia = detectMediaFromUrl(value || '');
+      if (detectedMedia.kind === 'video' || node.option === 'video' || node.resource.kind === 'video') {
+        normalizeVideoResourceSource(node, value);
+      }
+      if (!node.resource.kind || detectedMedia.kind === 'video' || node.resource.kind === 'web' || node.resource.kind === 'webpage') {
+        applyMediaDetectionToNode(node, detectedMedia.kind || '');
+        kindEl = document.getElementById('resource_kind');
+        if (kindEl && detectedMedia.kind) {
+          kindEl.value = detectedMedia.kind;
+        }
+      }
+    }
+    if ('thumbnailUri' === path) {
+      if (wuwei.util && typeof wuwei.util.toStorageRelativePath === 'function' &&
+        (String(value || '').match(/^(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i) ||
+          String(value || '').match(/(?:^|\/)(resource|note)\//))) {
+        value = wuwei.util.toStorageRelativePath(value, null, /(?:^|\/)note\//.test(String(value || '')) ? 'note' : 'resource');
+        if (el) {
+          el.value = value;
+        }
+        setNodePath(node, path, value);
+      }
+    }
+    if ('shape' === path) {
+      updateShapeInputsForNode(node, value);
+    }
+    if ('description.body' === path) {
+      autoExpand(el);
+    }
+    if ('label' === path) {
+      autoExpand(el);
+    }
+  }
+
+  function handleEditPaneValueEvent(event) {
+    var target, path, value, targetInfo;
+    target = event && event.target;
+    if (!target || !target.id || !target.closest || !target.closest('#edit')) {
+      return;
+    }
+    if ('applyToGroup' === target.id || 'applyToTimelineGroup' === target.id || 'applyToContentsGroup' === target.id) {
+      if (!stateMap.option || 'object' !== typeof stateMap.option) {
+        stateMap.option = {};
+      }
+      stateMap.option[target.id] = !!target.checked;
+      return;
+    }
+    if ('editRole' === target.id) {
+      return;
+    }
+    if ('pdfPage' === target.id && stateMap.node && stateMap.node.resource && stateMap.node.resource.uri) {
+      stateMap.node.resource.uri = stateMap.node.resource.uri.split('#')[0] + '#page=' + target.value;
+      stateMap.node.changed = true;
+      redrawEditedGraph();
+      return;
+    }
+    if (!/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) {
+      return;
+    }
+    path = fieldIdToPath(target.id, target);
+    if (!path || /^edit[A-Z]/.test(target.id)) {
+      return;
+    }
+    value = readEditValue(target);
+    targetInfo = getCurrentEditableTarget(target);
+    if (applyEditPath(targetInfo, path, value, target)) {
+      if (stateMap.node && 'Topic' === stateMap.node.type &&
+        ['shape', 'size.radius', 'size.width', 'size.height', 'style.fill', 'style.line.color',
+          'style.line.width', 'style.font.color', 'style.font.size'].indexOf(path) >= 0) {
+        var applyToGroupEl = document.getElementById('applyToGroup');
+        if (applyToGroupEl && applyToGroupEl.checked && model && typeof model.applyNodeStyleToGroup === 'function') {
+          model.applyNodeStyleToGroup(stateMap.node);
+        }
+      }
+      redrawEditedGraph();
+    }
+  }
+
+  function handleEditPaneClickEvent(event) {
+    var target, value, targetInfo;
+    target = event && event.target;
+    if (!target || !target.closest || !target.closest('#edit')) {
+      return;
+    }
+    if (!(target.classList && target.classList.contains('nFont_text-anchor'))) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    value = target.classList.contains('start') ? 'left' :
+      (target.classList.contains('end') ? 'right' : 'center');
+    document.querySelectorAll('#edit .nFont_text-anchor.checked').forEach(function (el) {
+      el.classList.remove('checked');
+    });
+    target.classList.add('checked');
+    targetInfo = getCurrentEditableTarget(target);
+    if (applyEditPath(targetInfo, 'style.font.align', value, target)) {
+      redrawEditedGraph();
+    }
+  }
+
+  function bindEditPaneValueEvents(root) {
+    if (!root || root.__wuweiEditValueBound) {
+      return;
+    }
+    root.__wuweiEditValueBound = true;
+    root.addEventListener('input', handleEditPaneValueEvent, false);
+    root.addEventListener('change', handleEditPaneValueEvent, false);
+    root.addEventListener('click', handleEditPaneClickEvent, false);
+  }
+
 
   function getRenderedNodeCenter(node) {
     var el, transform, matrix, match;
@@ -688,420 +1063,15 @@ wuwei.edit = wuwei.edit || {};
   }
 
   function update(event) {
-    Promise.resolve()
-      .then(() => {
-        var i, len;
-        if (state.Selecting) {
-          var
-            selecteds = document.querySelectorAll('g.selected');
-          len = selecteds.length;
-          if (len > 0) {
-            node = model.findNodeById(selecteds[0].id);
-            stateMap.node = node;
-            stateMap.selecteds = [];
-            for (i = 0; i < len; i++) {
-              var _node = model.findNodeById(selecteds[i].id);
-              stateMap.selecteds.push(_node);
-            }
-          }
-        }
-        var
-          target = event.target,
-          id = target.id,
-          path = target.dataset && target.dataset.path,
-          value = target.value,
-          pathParts;
-        if (!path) {
-          path = {
-            nFont_size: 'style.font.size',
-            lFont_size: 'style.font.size',
-            nShape: 'shape',
-            lShape: 'shape',
-            lStrokedash: 'style.line.kind',
-            lStartArrow_kind: 'routing.startArrow.kind',
-            lEndArrow_kind: 'routing.endArrow.kind',
-            rMedia_kind: 'resource.kind'
-          }[id] || '';
-        }
-        if ('editGroup' == id || 'edirRole' == id) {
-          return;
-        }
-        if ('applyToGroup' === id || 'applyToTimelineGroup' === id || 'applyToContentsGroup' === id) {
-          if (!stateMap.option || 'object' !== typeof stateMap.option) {
-            stateMap.option = {};
-          }
-          stateMap.option[id] = !!target.checked;
-          return;
-        }
-        if (target.classList &&
-          target.classList.contains('nFont_text-anchor')) {
-          id = 'nFont_text-anchor';
-          path = 'style.font.align';
-          if (target.classList.contains('start')) { value = 'left'; }
-          if (target.classList.contains('middle')) { value = 'center'; }
-          if (target.classList.contains('end')) { value = 'right'; }
-        }
-        if (!isNaN(value)) {
-          value = +value;
-        }
-        if (stateMap.group && target.closest && target.closest('#edit-group')) {
-          flushGroupEditFields();
-          if (draw && typeof draw.refresh === 'function') {
-            draw.refresh();
-          }
-          return;
-        }
-        if (path) {
-          if (stateMap.node) {
-            if ('resource.uri' === path) {
-              const pageEl = document.getElementById('pdfPage');
-              const page = pageEl ? (pageEl.value || pageEl.innerText || '') : '';
-              if (page) {
-                value = String(value || '').split('#')[0] + '#page=' + page;
-              }
-            }
-            if (state.Selecting && Array.isArray(stateMap.selecteds) &&
-              ['shape', 'size.radius', 'size.width', 'size.height', 'style.fill', 'style.line.color', 'style.line.width', 'style.font.color', 'style.font.size'].indexOf(path) >= 0) {
-              stateMap.selecteds.forEach(function (selectedNode) {
-                setNodePath(selectedNode, path, value);
-              });
-            }
-            else {
-              setNodePath(stateMap.node, path, value);
-            }
-            if (('resource.uri' === path || 'resource.canonicalUri' === path) && stateMap.node.resource) {
-              if (wuwei.util && typeof wuwei.util.toStorageRelativePath === 'function' &&
-                (String(value || '').match(/^(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i) ||
-                  String(value || '').match(/(?:^|\/)upload\//))) {
-                value = wuwei.util.toStorageRelativePath(value, null, 'upload');
-                target.value = value;
-                setNodePath(stateMap.node, path, value);
-              }
-              var detectedMedia = detectMediaFromUrl(value || '');
-              if (detectedMedia.kind === 'video' ||
-                stateMap.node.option === 'video' ||
-                stateMap.node.resource.kind === 'video') {
-                normalizeVideoResourceSource(stateMap.node, value);
-              }
-              if (!stateMap.node.resource.kind ||
-                detectedMedia.kind === 'video' ||
-                stateMap.node.resource.kind === 'web' ||
-                stateMap.node.resource.kind === 'webpage') {
-                applyMediaDetectionToNode(stateMap.node, detectedMedia.kind || '');
-                var kindEl = document.getElementById('rMedia_kind');
-                if (kindEl && detectedMedia.kind) {
-                  kindEl.value = detectedMedia.kind;
-                }
-              }
-            }
-            if ('thumbnailUri' === path && stateMap.node) {
-              if (wuwei.util && typeof wuwei.util.toStorageRelativePath === 'function' &&
-                (String(value || '').match(/^(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i) ||
-                  String(value || '').match(/(?:^|\/)(resource|note)\//))) {
-                value = wuwei.util.toStorageRelativePath(value, null, /(?:^|\/)note\//.test(String(value || '')) ? 'note' : 'resource');
-                target.value = value;
-                setNodePath(stateMap.node, path, value);
-              }
-            }
-            if ('shape' === path) {
-              updateShapeInputsForNode(stateMap.node, value);
-            }
-          }
-          else if (stateMap.link) {
-            setLinkPath(stateMap.link, path, value || null);
-          }
-        }
-        /** group edit */
-        var editNodes = [];
-        var editGroup = document.getElementById('editGroup');
-        if (editGroup) {
-          editGroup = editGroup.checked;
-        }
-        var group = document.getElementById('nGroup');
-        if (group) {
-          group = group.value
-        }
-        if (editGroup && group) {
-          editNodes = graph.nodes.filter(function (n) { return group === n.group });
-        }
-        /** role edit */
-        var editLinks = [];
-        var editRole = document.getElementById('editRole');
-        if (editRole) {
-          editRole = editRole.checked;
-        }
-        var role = document.getElementById('lRole');
-        if (!role) {
-          role = document.getElementById('lRelation');
-        }
-        if (role) {
-          role = role.value;
-        }
-        if (editRole && role) {
-          editLinks = (graph.links || []).filter(function (l) { return role === l.relation });
-        }
-        if (path) {
-          // handled by data-model path above
-        }
-        else if ('pdfPage' === id && stateMap.node.resource && stateMap.node.resource.uri) {
-          stateMap.node.resource.uri = stateMap.node.resource.uri.split('#')[0] + '#page=' + value;
-        }
-        else if ('n' === id[0]) {
-          id = id.substring(1).toLowerCase();
-          if (id.indexOf('_') > 0) {
-            if (state.Selecting) {
-              var selecteds = stateMap.selecteds;
-              len = selecteds && selecteds.length;
-              for (i = 0; i < len; i++) {
-                pathParts = id.split('_');
-                stateMap.selecteds[i][pathParts[0]][pathParts[1]] = value;
-              }
-            }
-            else {
-              pathParts = id.split('_');
-              if ('cols' === pathParts[2]) {
-                let col_ = +pathParts[3],
-                  cols_ = {},
-                  cols = stateMap.node.size.cols,
-                  colEls = document.querySelectorAll('#nSize_cols input');
-                colEls.forEach(c => {
-                  let i = c.id.substr(c.id.lastIndexOf('_') + 1),
-                    v = +c.value;
-                  cols_[i] = v;
-                });
-                let sum = 0;
-                for (let i in cols_) {
-                  sum += cols_[i];
-                };
-                if (12 === sum) {
-                  for (let i = 0; i < stateMap.node.size.cols.length; i++) {
-                    stateMap.node.size.cols[i] = +cols_[i];
-                  }
-                }
-                else {
-                  return null;
-                }
-              }
-              else {
-                stateMap.node[pathParts[0]][pathParts[1]] = value;
-              }
-            }
-          }
-          else {
-            if (state.Selecting) {
-              var selecteds = stateMap.selecteds;
-              len = selecteds && selecteds.length;
-              for (i = 0; i < len; i++) {
-                stateMap.selecteds[i][id] = value;
-              }
-            }
-            else {
-              stateMap.node[id] = value;
-            }
-            if ('shape' === id) {
-              var radiusInput = document.getElementById('nSize_radius');
-              var widthInput = document.getElementById('nSize_width');
-              var heightInput = document.getElementById('nSize_height');
-              var radius, width, height;
-              if ('CIRCLE' === value) {
-                document.getElementById('radius').style.display = 'block';
-                document.getElementById('width-height').style.display = 'none';
-                radius = Math.sqrt((stateMap.node.size.width * stateMap.node.size.height) / Math.PI);
-                radius = Math.round(radius);
-                if (state.Selecting) {
-                  var selecteds = stateMap.selecteds;
-                  len = selecteds && selecteds.length;
-                  for (i = 0; i < len; i++) {
-                    stateMap.selecteds[i].size.radius = radius;
-                    delete stateMap.selecteds[i].size.width;
-                    delete stateMap.selecteds[i].size.height;
-                  }
-                }
-                else {
-                  stateMap.node.size.radius = radius;
-                  delete stateMap.node.size.width;
-                  delete stateMap.node.size.height;
-                }
-                radiusInput.value = radius;
-                widthInput.value = '';
-                heightInput.value = '';
-              }
-              else {
-                var radiusEl = document.getElementById('radius');
-                if (radiusEl && 'block' === radiusEl.style.display) {
-                  document.getElementById('radius').style.display = 'none';
-                  document.getElementById('width-height').style.display = 'block';
-                  height = Math.sqrt(Math.PI * stateMap.node.size.radius * stateMap.node.size.radius / 3);
-                  height = Math.round(height);
-                  width = height * 3;
-                  if (state.Selecting) {
-                    var selecteds = stateMap.selecteds;
-                    len = selecteds && selecteds.length;
-                    for (i = 0; i < len; i++) {
-                      delete stateMap.selecteds[i].size.radius;
-                      stateMap.selecteds[i].size.width = width;
-                      stateMap.selecteds[i].size.height = height;
-                    }
-                    widthInput.value = stateMap.selecteds[0].size.width;
-                    heightInput.value = stateMap.selecteds[0].size.height;
-                  }
-                  else {
-                    delete stateMap.node.size.radius;
-                    stateMap.node.size.width = width;
-                    stateMap.node.size.height = height;
-                    widthInput.value = stateMap.node.size.width;
-                    heightInput.value = stateMap.node.size.height;
-                  }
-                  radiusInput.value = '';
-                }
-              }
-            }
-          }
-        }
-        else if ('l' === id[0]) {
-          let match = id.match(/l((Source|Target)_position)$/);
-          if (match) {
-            id = match[1].toLowerCase();
-            stateMap.link[id] = value || null;
-          }
-          else {
-            match = id.match(/^l(Font_(.*))$/);
-            if (match) {
-              id = match[2];
-              stateMap.link.font[id] = value || null;
-            }
-            else {
-              id = id.substring(1).toLowerCase();
-              stateMap.link[id] = value || null;
-            }
-          }
-        }
-        else if ('r' === id[0]) {
-          id = id.substring(1).toLowerCase();
-          if (id.indexOf('_') > 0) {
-            if (id === 'media_kind') {
-              applyMediaDetectionToNode(stateMap.node, value || '');
-            }
-            else {
-              pathParts = id.split('_');
-              if ('object' !== typeof stateMap.node[pathParts[0]]) {
-                stateMap.node[pathParts[0]] = {};
-              }
-              stateMap.node[pathParts[0]][pathParts[1]] = value;
-            }
-          }
-          else if ('uri' == id) {
-            let resourceUri = value;
-            const pageEl = document.getElementById('pdfPage');
-            const page = pageEl ? pageEl.innerText : '';
-            if (page) {
-              resourceUri += '#page=' + page;
-            }
-            stateMap.node.resource = stateMap.node.resource || {};
-            stateMap.node.resource.uri = resourceUri;
-
-            var currentResourceKind = stateMap.node.resource && stateMap.node.resource.kind;
-            if (!currentResourceKind) {
-              applyMediaDetectionToNode(stateMap.node, '');
-            }
-          }
-          else {
-            stateMap.node[id] = value;
-          }
-          /** node */
-          let ids = id.split('_');
-          if (stateMap.node) {
-            if ('name' === id) {
-              stateMap.node.label = value;
-            }
-            else if ('thumbnail' === id) {
-              stateMap.node.thumbnail = value;
-            }
-            else if ('value' === id) {
-              stateMap.node.description = Object.assign(
-                {},
-                (stateMap.node.description && 'object' === typeof stateMap.node.description)
-                  ? stateMap.node.description
-                  : {},
-                {
-                  format: 'asciidoc',
-                  body: String(value || '')
-                }
-              );
-            }
-          }
-        }
-        // associations are deprecated (links carry their own label/rtype)
-        var styleChanged = ['nShape', 'nColor', 'nOutline', 'nSize_radius', 'nSize_width', 'nSize_height'].indexOf(target.id) >= 0 ||
-          ['shape', 'size.radius', 'size.width', 'size.height', 'style.fill', 'style.line.color', 'style.line.width'].indexOf(path) >= 0;
-        if (stateMap.node) {
-          stateMap.node.changed = true;
-        }
-        if (state.Selecting && Array.isArray(stateMap.selecteds)) {
-          stateMap.selecteds.forEach(function (n) {
-            if (n) { n.changed = true; }
-          });
-        }
-        var applyToGroupEl = document.getElementById('applyToGroup');
-        if (styleChanged && applyToGroupEl && applyToGroupEl.checked && stateMap.node && 'Topic' === stateMap.node.type) {
-          const page = getCurrentPage();
-          model.applyNodeStyleToGroup(stateMap.node);
-        }
-        if ('draw' === graph.mode) {
-          draw.refresh();
-        }
-        else if ('simulation' === graph.mode) {
-          draw.restart();
-        }
-
-        if (state.Selecting) {
-          var selecteds = stateMap.selecteds;
-          len = selecteds && selecteds.length;
-          for (i = 0; i < len; i++) {
-            var _node = selecteds[i];
-            var d3node = d3.select(`g.node#${_node.id}`);
-            d3node
-              .classed('selected', true)
-              .append('circle')
-              .attr('class', 'selected')
-              .attr('r', 32)
-              .attr('fill', 'none')
-              .attr('stroke', common.Color.outerSelected)
-              .attr('stroke-width', 2)
-              .datum(_node);
-          }
-        }
-        else {
-          d3.select('#Editing').raise();
-        }
-
-        if (stateMap.node) {
-          const page = getCurrentPage();
-          stateMap.node.groupNames = model.findGroupsByNodeId(stateMap.node.id).map(function (g) { return g.name || g.id; });
-        }
-        const param = {
-          node: stateMap.node,
-          link: stateMap.link,
-          option: stateMap.option || {}
-        };
-        stateMap.param = param;
-        refreshTemplate(param)
-          .then(() => {
-            normalizeEditFieldPaths(document.getElementById('editform'));
-            var inputs = document.getElementById('editform').querySelectorAll('input, textarea, select');
-            for (var input of inputs) {
-              input.addEventListener('change', update, false);
-            }
-            var is = document.querySelectorAll('i.nFont_text-anchor, svg.nFont_text-anchor, .svg-inline--fa.nFont_text-anchor');
-            for (var i of is) {
-              i.addEventListener('click', update, false);
-            }
-          });
-      });
+    handleEditPaneValueEvent(event);
   }
+
 
   // see https://gomakethings.com/automatically-expand-a-textarea-as-the-user-types-using-vanilla-javascript/
   function autoExpand(field) {
+    if (!field || !field.style) {
+      return;
+    }
     // Reset field height
     field.style.height = 'inherit';
     // Get the computed styles for the element
@@ -1121,6 +1091,7 @@ wuwei.edit = wuwei.edit || {};
       // open
       var editPane = document.getElementById('edit');
       editPane.innerHTML = wuwei.edit.markup.template();
+    bindEditPaneValueEvents(editPane);
       editPane.style.display = 'block';
       hideEdits();
 
@@ -1130,16 +1101,17 @@ wuwei.edit = wuwei.edit || {};
       else if (param.node && isContentsAxisTarget(param.node)) {
         resolve(wuwei.edit.contents.openAxisProperties(param.node, param.option || {}));
       }
-      else if (param.link && isTimelineAxisLink(param.link)) {
+      else if (param.link && isTimelineAxisLink(param.link) && hasTimelineEditor()) {
         resolve(wuwei.edit.timeline.open(param.link, param.option || {}));
       }
-      else if (param.node && isTimelinePointNode(param.node)) {
+      else if (param.node && isTimelinePointNode(param.node) && hasTimelineEditor()) {
         resolve(wuwei.edit.timeline.open(param.node, param.option || {}));
       }
       else if (param.node &&
         wuwei.menu &&
         wuwei.menu.timeline &&
-        wuwei.menu.timeline.isAxisGroup(param.node)) {
+        wuwei.menu.timeline.isAxisGroup(param.node) &&
+        hasTimelineEditor()) {
         resolve(wuwei.edit.timeline.open(param.node, param.option || {}));
       }
       else if (param.link && param.link.id) {
@@ -1273,6 +1245,7 @@ wuwei.edit = wuwei.edit || {};
     }
     if (editPane && wuwei.edit.markup && typeof wuwei.edit.markup.template === 'function') {
       editPane.innerHTML = wuwei.edit.markup.template();
+    bindEditPaneValueEvents(editPane);
       editPane.style.display = 'block';
     }
     if (openControls) {
@@ -1308,6 +1281,7 @@ wuwei.edit = wuwei.edit || {};
     /** open */
     var editPane = document.getElementById('edit');
     editPane.innerHTML = wuwei.edit.markup.template();
+    bindEditPaneValueEvents(editPane);
     common.state.Editing = true;
     document.getElementById('open_controls').style.display = 'none';
     if (cb) {
@@ -1439,48 +1413,22 @@ wuwei.edit = wuwei.edit || {};
         .then(() => {
           normalizeEditFieldPaths(document.getElementById('editform'));
           if (!state.Selecting) {
-            document.querySelectorAll('i.nFont_text-anchor, svg.nFont_text-anchor, .svg-inline--fa.nFont_text-anchor').forEach(function (el) {
-              el.addEventListener('click', function (ev) {
-                ev.stopPropagation();
-                document.querySelectorAll('i.nFont_text-anchor, svg.nFont_text-anchor, .svg-inline--fa.nFont_text-anchor').forEach(function (el_) {
-                  el_.classList.remove('checked');
-                });
-                ev.target.classList.add('checked');
-                var text_anchor;
-                if (ev.target.classList.contains('start')) {
-                  text_anchor = 'start';
-                }
-                else if (ev.target.classList.contains('middle')) {
-                  text_anchor = 'middle';
-                }
-                else if (ev.target.classList.contains('end')) {
-                  text_anchor = 'end';
-                }
-                wuwei.edit.update({
-                  target: {
-                    id: 'nFont_text-anchor',
-                    value: text_anchor
-                  }
-                });
-              });
-            });
-
-            var labelEl = document.getElementById('rName');
+            var labelEl = document.getElementById('label');
             if (labelEl) {
               labelEl.addEventListener('input', function (event) {
                 autoExpand(event.target);
               }, false);
             }
 
-            var descriptionBodyEl = document.getElementById('rValue');
+            var descriptionBodyEl = document.getElementById('description_body');
             if (!param.option.editor && descriptionBodyEl) {
               descriptionBodyEl.addEventListener('input', function (event) {
                 autoExpand(event.target);
               }, false);
             }
 
-            var resourceUriEl = document.getElementById('rUri');
-            var resourceKindSelect = document.getElementById('rMedia_kind');
+            var resourceUriEl = document.getElementById('resource_uri');
+            var resourceKindSelect = document.getElementById('resource_kind');
             if (resourceUriEl && resourceKindSelect) {
               resourceUriEl.addEventListener('change', function () {
                 var detected = detectMediaFromUrl(resourceUriEl.value || '');
@@ -1516,7 +1464,6 @@ wuwei.edit = wuwei.edit || {};
           }
         })
         .then(() => {
-          document.getElementById('editform').addEventListener('change', update, false);
         });
     }
     else if (util.isLink(node)) {
@@ -1524,6 +1471,7 @@ wuwei.edit = wuwei.edit || {};
       stateMap.node = null;
       var editPane = document.getElementById('edit');
       editPane.innerHTML = wuwei.edit.markup.template();
+    bindEditPaneValueEvents(editPane);
       editPane.style.display = 'block';
       stateMap.link = link;
       // editing circle
@@ -1546,7 +1494,6 @@ wuwei.edit = wuwei.edit || {};
       stateMap.param = param;
       refreshTemplate(param).then(() => {
         normalizeEditFieldPaths(document.getElementById('editform'));
-        document.getElementById('editform').addEventListener('change', update, false);
         let editPane = document.getElementById('edit');
         editPane.dataset.node_id = undefined;
         editPane.dataset.link_id = link.id;
@@ -1595,7 +1542,7 @@ wuwei.edit = wuwei.edit || {};
     if (!stateMap.node || stateMap.node.topicKind !== 'contents-page') {
       return;
     }
-    pageNumberEl = document.getElementById('contentsPageNumber');
+    pageNumberEl = document.getElementById('pageNumber');
     if (!pageNumberEl) {
       return;
     }
@@ -1615,7 +1562,7 @@ wuwei.edit = wuwei.edit || {};
       return;
     }
 
-    labelEl = document.getElementById('rName');
+    labelEl = document.getElementById('label');
     if (labelEl) {
       setNodePath(stateMap.node, 'label', labelEl.value || '');
       if (stateMap.node.resource && 'object' === typeof stateMap.node.resource) {
@@ -1628,17 +1575,17 @@ wuwei.edit = wuwei.edit || {};
       }
     }
 
-    descriptionEl = document.getElementById('rValue_comment') || document.getElementById('rValue');
+    descriptionEl = document.getElementById('description_body') || document.getElementById('description_body');
     if (descriptionEl) {
       setNodePath(stateMap.node, 'description.body', descriptionEl.value || '');
     }
 
-    kindEl = document.getElementById('rMedia_kind') || document.getElementById('resource_kind');
+    kindEl = document.getElementById('resource_kind') || document.getElementById('resource_kind');
     if (kindEl) {
       applyMediaDetectionToNode(stateMap.node, kindEl.value || '');
     }
 
-    uriEl = document.getElementById('rUri');
+    uriEl = document.getElementById('resource_canonicalUri') || document.getElementById('resource_uri');
     if (uriEl) {
       uri = String(uriEl.value || '').trim();
       if (uri) {
@@ -1657,7 +1604,7 @@ wuwei.edit = wuwei.edit || {};
     if (!stateMap.node || stateMap.node.option !== 'video') {
       return;
     }
-    uriEl = document.getElementById('rUri');
+    uriEl = document.getElementById('resource_canonicalUri') || document.getElementById('resource_uri');
     normalizeVideoResourceSource(stateMap.node, uriEl ? uriEl.value : '');
   }
 
@@ -1666,7 +1613,7 @@ wuwei.edit = wuwei.edit || {};
     if (!stateMap.node || !stateMap.node.resource || stateMap.node.resource.storage) {
       return;
     }
-    uriEl = document.getElementById('rUri');
+    uriEl = document.getElementById('resource_uri') || document.getElementById('resource_canonicalUri');
     if (!uriEl) {
       return;
     }
@@ -1698,7 +1645,9 @@ wuwei.edit = wuwei.edit || {};
     flushGroupEditFields();
     // Timeline edits are buffered in the timeline panel fields,
     // so the global save icon must apply them before storing the log.
-    if (state.timelineEdit) {
+    if (state.timelineEdit &&
+      wuwei.edit.timeline &&
+      typeof wuwei.edit.timeline.commit === 'function') {
       committed = wuwei.edit.timeline.commit();
     }
     if (state.contentsEdit) {
@@ -1799,7 +1748,9 @@ wuwei.edit = wuwei.edit || {};
       stateMap.group = null;
     }
 
-    wuwei.edit.timeline.close();
+    if (wuwei.edit.timeline && typeof wuwei.edit.timeline.close === 'function') {
+      wuwei.edit.timeline.close();
+    }
     if (wuwei.edit.contents && typeof wuwei.edit.contents.close === 'function') {
       wuwei.edit.contents.close();
     }
@@ -1829,6 +1780,7 @@ wuwei.edit = wuwei.edit || {};
     }
 
     editPane.innerHTML = wuwei.edit.markup.template();
+    bindEditPaneValueEvents(editPane);
 
     if (wuwei.edit.generic && typeof wuwei.edit.generic.initModule === 'function') {
       wuwei.edit.generic.initModule();
@@ -1895,6 +1847,8 @@ wuwei.edit = wuwei.edit || {};
   ns.closeEdit = closeEdit;
   ns.resetForExternalEditor = resetForExternalEditor;
   ns.update = update;
+  ns.fieldIdToPath = fieldIdToPath;
+  ns.pathToFieldId = pathToFieldId;
   ns.asciiDocToPlainText = asciiDocToPlainText;
   ns.asciiDocToHtml = asciiDocToHtml;
   ns.detectMediaFromUrl = detectMediaFromUrl;

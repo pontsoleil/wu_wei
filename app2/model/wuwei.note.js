@@ -659,6 +659,12 @@ wuwei.note = (function () {
       type = 'contents';
     }
 
+    var baseSpinePadding = Number.isFinite(Number(spine.padding)) ? Number(spine.padding) : (type === 'simple' ? 16 : 12);
+
+    function spinePaddingSide(key) {
+      return Number.isFinite(Number(spine[key])) ? Number(spine[key]) : baseSpinePadding;
+    }
+
     if (type === 'contents' && !members.length && entries.length) {
       members = entries.map(function (entry, index) {
         return {
@@ -681,11 +687,15 @@ wuwei.note = (function () {
       visible: (typeof src.visible === 'boolean') ? src.visible : (src.enabled !== false),
       moveTogether: (false !== src.moveTogether),
       orientation: src.orientation || 'auto',
-      spine: (type === 'simple') ? undefined : {
-        kind: spine.kind || 'SOLID',
+      spine: {
+        kind: spine.kind || (type === 'simple' ? 'DASHED' : 'SOLID'),
         color: spine.color || '#888888',
-        width: Number(spine.width || 2),
-        padding: Number(spine.padding || 12)
+        width: Number(spine.width || (type === 'simple' ? 2 : 6)),
+        padding: baseSpinePadding,
+        paddingTop: spinePaddingSide('paddingTop'),
+        paddingRight: spinePaddingSide('paddingRight'),
+        paddingBottom: spinePaddingSide('paddingBottom'),
+        paddingLeft: spinePaddingSide('paddingLeft')
       },
       timeline: (type === 'timeline') ? {
         unit: timeline.unit || axis.unit || 'second',

@@ -806,11 +806,17 @@ wuwei.model = (function () {
         return !!member.nodeId;
       })
       : [];
+    var groupType = param.type || 'simple';
+    var baseSpinePadding = Number.isFinite(Number(spine.padding)) ? Number(spine.padding) : ('simple' === groupType ? 16 : 12);
+
+    function spinePaddingSide(key) {
+      return Number.isFinite(Number(spine[key])) ? Number(spine[key]) : baseSpinePadding;
+    }
 
     return {
       id: param.id || util.createUuid(),
       name: param.name || '',
-      type: param.type || 'simple',
+      type: groupType,
       groupType: param.groupType,
       description: (param.description && 'object' === typeof param.description)
         ? param.description
@@ -818,11 +824,15 @@ wuwei.model = (function () {
       visible: (typeof param.visible === 'boolean') ? param.visible : (param.enabled !== false),
       moveTogether: (false !== param.moveTogether),
       orientation: param.orientation || 'auto',
-      spine: ('simple' === param.type) ? undefined : {
-        kind: spine.kind || 'SOLID',
+      spine: {
+        kind: spine.kind || ('simple' === groupType ? 'DASHED' : 'SOLID'),
         color: spine.color || '#888888',
-        width: Number(spine.width || 6),
-        padding: Number(spine.padding || 12)
+        width: Number(spine.width || ('simple' === groupType ? 2 : 6)),
+        padding: baseSpinePadding,
+        paddingTop: spinePaddingSide('paddingTop'),
+        paddingRight: spinePaddingSide('paddingRight'),
+        paddingBottom: spinePaddingSide('paddingBottom'),
+        paddingLeft: spinePaddingSide('paddingLeft')
       },
       timeline: ('timeline' === param.type) ? {
         unit: timeline.unit || 'second',
@@ -8555,12 +8565,16 @@ wuwei.model = (function () {
     const spine = (group.spine && 'object' === typeof group.spine) ? group.spine : {};
     const strokeWidth = Number(spine.width || 2);
     const padding = Number.isFinite(Number(spine.padding)) ? Number(spine.padding) : 16;
+    const paddingTop = Number.isFinite(Number(spine.paddingTop)) ? Number(spine.paddingTop) : padding;
+    const paddingRight = Number.isFinite(Number(spine.paddingRight)) ? Number(spine.paddingRight) : padding;
+    const paddingBottom = Number.isFinite(Number(spine.paddingBottom)) ? Number(spine.paddingBottom) : padding;
+    const paddingLeft = Number.isFinite(Number(spine.paddingLeft)) ? Number(spine.paddingLeft) : padding;
     return {
       group: group.id,
-      x: border.left - padding,
-      y: border.top - padding,
-      width: border.width + padding * 2,
-      height: border.height + padding * 2,
+      x: border.left - paddingLeft,
+      y: border.top - paddingTop,
+      width: border.width + paddingLeft + paddingRight,
+      height: border.height + paddingTop + paddingBottom,
       stroke: spine.color || '#666666',
       strokeWidth: strokeWidth,
       dasharray: strokeDasharrayForLineKind(spine.kind || 'DASHED', strokeWidth)
