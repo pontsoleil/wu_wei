@@ -322,8 +322,8 @@ wuwei.contents = wuwei.contents || {};
     group.orientation = (group.orientation === 'vertical') ? 'vertical' : 'horizontal';
     group.spine = group.spine || {};
     group.spine.visible = (false !== group.spine.visible);
-    group.spine.color = group.spine.color || group.strokeColor || '#4c6b8a';
-    group.spine.width = Math.max(1, Number(group.spine.width || group.strokeWidth || 4));
+    group.spine.color = group.spine.color || group.strokeColor || common.defaultStyle.group.contents.color;
+    group.spine.width = Math.max(1, Number(group.spine.width || group.strokeWidth || common.defaultStyle.group.contents.width));
     group.strokeColor = group.spine.color;
     group.strokeWidth = group.spine.width;
     group.axisPseudoLinkId = group.axisPseudoLinkId || makeUuid();
@@ -442,7 +442,12 @@ wuwei.contents = wuwei.contents || {};
       orientation: axis === 'vertical' ? 'vertical' : 'horizontal',
       documentRef: documentNode.id,
       pageCount: pageCount,
-      spine: { visible: true, color: '#4c6b8a', width: 4, padding: 12 },
+      spine: {
+        visible: true,
+        color: common.defaultStyle.group.contents.color,
+        width: common.defaultStyle.group.contents.width,
+        padding: common.defaultStyle.group.padding
+      },
       axis: { mode: 'document', unit: 'page', start: 1, end: pageCount, anchor: { x: origin.x, y: origin.y } },
       origin: origin,
       length: AXIS_LENGTH,
@@ -464,13 +469,26 @@ wuwei.contents = wuwei.contents || {};
   }
 
   function updateAxisGroup(group, props) {
+    var orientationChanged = false;
+    var resetStyle;
     if (!group || !isContentsGroup(group)) { return false; }
     props = props || {};
     if (props.orientation === 'vertical' || props.orientation === 'horizontal') {
+      orientationChanged = group.orientation !== props.orientation;
       group.orientation = props.orientation;
     }
+    resetStyle = orientationChanged &&
+      !Object.prototype.hasOwnProperty.call(props, 'strokeWidth') &&
+      !Object.prototype.hasOwnProperty.call(props, 'strokeColor');
     if (Number.isFinite(Number(props.length))) {
       group.length = Math.max(60, Number(props.length));
+    }
+    if (resetStyle) {
+      group.spine = group.spine || {};
+      group.spine.color = common.defaultStyle.group.contents.color;
+      group.spine.width = Math.max(1, Number(common.defaultStyle.group.contents.width || 4));
+      group.strokeColor = group.spine.color;
+      group.strokeWidth = group.spine.width;
     }
     if (Number.isFinite(Number(props.strokeWidth))) {
       group.spine = group.spine || {};
@@ -644,6 +662,55 @@ wuwei.contents = wuwei.contents || {};
     return '/wu_wei2/';
   }
 
+  function getResourceOwnerId(resource, node) {
+    var audit = (resource && resource.audit && typeof resource.audit === 'object') ? resource.audit : {};
+    var rights = (resource && resource.rights && typeof resource.rights === 'object') ? resource.rights : {};
+    var nodeAudit = (node && node.audit && typeof node.audit === 'object') ? node.audit : {};
+
+    return String(
+      audit.owner ||
+      audit.createdBy ||
+      rights.owner ||
+      nodeAudit.owner ||
+      nodeAudit.createdBy ||
+      (util && typeof util.getCurrentUserId === 'function' ? util.getCurrentUserId() : '') ||
+      ''
+    ).trim();
+  }
+
+  function toDirectUploadPdfUriFromPath(path, userId) {
+    var rel = String(path || '').replace(/\\/g, '/').replace(/^\/+/, '');
+    var uid = String(userId || '').trim();
+
+    if (!rel || !uid || !/\.pdf$/i.test(rel)) {
+      return '';
+    }
+    if (rel.indexOf('upload/') === 0) {
+      rel = rel.slice('upload/'.length);
+    }
+    if (uid && rel.indexOf(uid + '/') === 0) {
+      rel = rel.slice(uid.length + 1);
+    }
+    return new URL(
+      getAppBasePath() + 'data/' + encodeURIComponent(uid) + '/upload/' + encodeStoragePath(rel),
+      window.location.origin
+    ).href;
+  }
+
+  function getDirectDocumentPdfUri(documentNode) {
+    var resource = (documentNode && documentNode.resource && typeof documentNode.resource === 'object') ? documentNode.resource : {};
+    var uid = getResourceOwnerId(resource, documentNode);
+    var previewPath = '';
+    var originalPath = '';
+
+    if (util && typeof util.getResourceFilePath === 'function') {
+      previewPath = util.getResourceFilePath(resource, 'preview', documentNode);
+      originalPath = util.getResourceFilePath(resource, 'original', documentNode);
+    }
+    return toDirectUploadPdfUriFromPath(previewPath, uid) ||
+      toDirectUploadPdfUriFromPath(originalPath, uid);
+  }
+
   function toDirectUploadPdfUri(uri) {
     var parsed, area, path, uid;
     if (!uri || typeof window === 'undefined' || !window.location) { return uri; }
@@ -666,8 +733,11 @@ wuwei.contents = wuwei.contents || {};
   }
 
   function getDocumentViewerUrl(documentNode, pageNumber) {
-    var uri = '';
+    var uri = getDirectDocumentPdfUri(documentNode);
     if (!documentNode) { return ''; }
+    if (uri) {
+      return appendPageFragment(uri, pageNumber);
+    }
     if (util && typeof util.getResourcePreviewUri === 'function') {
       uri = util.getResourcePreviewUri(documentNode) || '';
     }

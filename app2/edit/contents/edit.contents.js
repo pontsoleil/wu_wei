@@ -41,6 +41,29 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     return fallback || '#4c6b8a';
   }
 
+  function getContentsAxisDefaultStyle() {
+    var groupStyle = (common && common.defaultStyle && common.defaultStyle.group) || {};
+    var contentsStyle = (groupStyle.contents && typeof groupStyle.contents === 'object') ? groupStyle.contents : {};
+
+    return {
+      color: contentsStyle.color || groupStyle.color || '#4c6b8a',
+      width: Number(contentsStyle.width || groupStyle.width || 4)
+    };
+  }
+
+  function applyDefaultAxisStyleToFields() {
+    var style = getContentsAxisDefaultStyle();
+    var widthEl = $('editContentsAxisStrokeWidth');
+    var colorEl = $('editContentsAxisStrokeColor');
+
+    if (widthEl) {
+      widthEl.value = style.width;
+    }
+    if (colorEl) {
+      colorEl.value = toHexColor(style.color, '#4c6b8a');
+    }
+  }
+
   function getAxisSpec(target) {
     if (!target || !wuwei.contents || typeof wuwei.contents.getPageTargetSpec !== 'function') {
       return null;
@@ -107,7 +130,7 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     initPalette('editContentsAxisStrokeColorPalette', 'editContentsAxisStrokeColor');
     initPalette('editContentsPageFillPalette', 'style_fill');
     initPalette('editContentsPageOutlinePalette', 'style_line_color');
-    initPalette('editContentsPageFontPalette', 'nFont_color');
+    initPalette('editContentsPageFontPalette', 'style_font_color');
   }
 
   function initPalette(paletteId, inputId) {
@@ -141,6 +164,9 @@ wuwei.edit.contents = wuwei.edit.contents || {};
       if (target && target.id === 'applyToContentsGroup') {
         applyToContentsGroup = !!target.checked;
         return;
+      }
+      if (target && target.id === 'editContentsAxisDirection') {
+        applyDefaultAxisStyleToFields();
       }
       if (currentMode === 'axis' && currentGroup) {
         save();
@@ -182,16 +208,16 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     var font = style.font || point.font || {};
 
     $('editContentsPageMarkerId').value = point.id || '';
-    $('rName').value = point.label || '';
-    $('rValue').value = getDescriptionBody(point);
-    $('contentsPageNumber').value = Number(point.pageNumber || 1);
+    $('label').value = point.label || '';
+    $('description_body').value = getDescriptionBody(point);
+    $('pageNumber').value = Number(point.pageNumber || 1);
     $('style_fill').value = toHexColor(style.fill || point.color || '#ffffff', '#ffffff');
     $('style_line_width').value = Number(
       Number.isFinite(Number(line.width)) ? line.width : (point.outlineWidth || 1)
     );
     $('style_line_color').value = toHexColor(line.color || point.outline || '#4c6b8a', '#4c6b8a');
-    $('nFont_color').value = toHexColor(font.color || '#303030', '#303030');
-    $('nFont_size').value = font.size || '12pt';
+    $('style_font_color').value = toHexColor(font.color || '#303030', '#303030');
+    $('style_font_size').value = font.size || '12pt';
     if ($('applyToContentsGroup')) {
       $('applyToContentsGroup').checked = !!applyToContentsGroup;
     }
@@ -271,19 +297,19 @@ wuwei.edit.contents = wuwei.edit.contents || {};
   }
 
   function savePageMarker() {
-    var pageNumberEl = $('contentsPageNumber');
+    var pageNumberEl = $('pageNumber');
     if (!currentPoint) {
       return false;
     }
-    if (!$('rName') || !$('rValue') || !pageNumberEl ||
+    if (!$('label') || !$('description_body') || !pageNumberEl ||
       !$('style_fill') || !$('style_line_color') || !$('style_line_width') ||
-      !$('nFont_color') || !$('nFont_size')) {
+      !$('style_font_color') || !$('style_font_size')) {
       return false;
     }
-    currentPoint.label = $('rName').value || '';
+    currentPoint.label = $('label').value || '';
     currentPoint.description = {
       format: 'plain/text',
-      body: $('rValue').value || ''
+      body: $('description_body').value || ''
     };
     if (String(pageNumberEl.value || '').trim()) {
       currentPoint.pageNumber = Math.max(1, Math.floor(Number(pageNumberEl.value || currentPoint.pageNumber || 1)));
@@ -291,8 +317,8 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     currentPoint.style = currentPoint.style || {};
     currentPoint.style.fill = $('style_fill').value || '#ffffff';
     currentPoint.style.font = currentPoint.style.font || {};
-    currentPoint.style.font.color = $('nFont_color').value || '#303030';
-    currentPoint.style.font.size = $('nFont_size').value || currentPoint.style.font.size || '12pt';
+    currentPoint.style.font.color = $('style_font_color').value || '#303030';
+    currentPoint.style.font.size = $('style_font_size').value || currentPoint.style.font.size || '12pt';
     currentPoint.style.line = currentPoint.style.line || {};
     currentPoint.style.line.kind = currentPoint.style.line.kind || 'SOLID';
     currentPoint.style.line.color = $('style_line_color').value || '#4c6b8a';
