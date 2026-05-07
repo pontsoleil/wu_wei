@@ -59,7 +59,7 @@ wuwei.info.uploaded.markup = ( function () {
 <form id="infoform" class="form-group info">
   ${label
     ? `<div class="w3-row">
-        <textarea id="rName" name="label" data-path="label" class="w3-col s12" rows="${rowcount(label)}" 
+        <textarea id="label" name="label" class="w3-col s12" rows="${rowcount(label)}"
             placeholder="${translate('Label')}" disabled>${label}</textarea>
       </div>`
     : ''
@@ -77,7 +77,7 @@ wuwei.info.uploaded.markup = ( function () {
   }
   ${node.value && 'string' === typeof node.value && node.value.length > 0
     ? `<div class="w3-row">
-        <textarea id="rValue" name="description.body" data-path="description.body" class="w3-col s12" rows="${rowcount(node.value)}"
+        <textarea id="description_body" name="description.body" class="w3-col s12" rows="${rowcount(node.value)}"
             placeholder="${translate('Comment')}" disabled>${toText(node.value)}</textarea>
       </div>`
     : ''
@@ -148,12 +148,12 @@ wuwei.info.uploaded.markup = ( function () {
     var viewer = (resource.viewer && 'object' === typeof resource.viewer) ? resource.viewer : {};
     var embed = (viewer.embed && 'object' === typeof viewer.embed) ? viewer.embed : {};
     var snapshotSources = (resource.snapshotSources && 'object' === typeof resource.snapshotSources) ? resource.snapshotSources : {};
+    if (isOfficeResource(resource, mimeType)) {
+      return resolveOfficeInfoUri(node, resource, viewer, embed, snapshotSources);
+    }
     var previewUri = getOfficePreviewUri(node, resource, viewer, embed, snapshotSources);
     if (previewUri) {
       return previewUri;
-    }
-    if (isOfficeResource(resource, mimeType)) {
-      return resolveOfficeInfoUri(node, resource, viewer, embed, snapshotSources);
     }
     if (wuwei.util && typeof wuwei.util.getResourceOriginalUri === 'function' &&
       (isPdfResource(node, resource, mimeType) ||
@@ -187,7 +187,7 @@ wuwei.info.uploaded.markup = ( function () {
     var previewUri = getOfficePreviewUri(node, resource, viewer, embed, snapshotSources);
     var originalUri;
 
-    if (previewUri) {
+    if (previewUri && wuwei.util && typeof wuwei.util.isLocalHost === 'function' && wuwei.util.isLocalHost()) {
       return previewUri;
     }
     originalUri = wuwei.util && typeof wuwei.util.getResourceOriginalUri === 'function'

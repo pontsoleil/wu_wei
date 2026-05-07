@@ -1513,9 +1513,13 @@ wuwei.menu = wuwei.menu || {};
   getOpenUrl = function (node) {
     var resource = getNodeResource(node);
     var href = (resource && (resource.canonicalUri || resource.uri)) || '';
+    var previewUrl = getOfficePreviewOpenUrl(node);
     var officeUrl = getOfficeViewerOpenUrl(node);
     var base;
 
+    if (previewUrl) {
+      return previewUrl;
+    }
     if (officeUrl) {
       return officeUrl;
     }
@@ -1540,11 +1544,33 @@ wuwei.menu = wuwei.menu || {};
     return new URL(href, base).href;
   };
 
+  function getOfficePreviewOpenUrl(node, pageNumber) {
+    var resource = getNodeResource(node);
+    var previewUri;
+
+    if (!resource || !util.isLocalHost() || !isUploadedContent([node]) || !isOfficeResource(resource)) {
+      return '';
+    }
+    if (wuwei.contents && typeof wuwei.contents.getDocumentViewerUrl === 'function') {
+      previewUri = wuwei.contents.getDocumentViewerUrl(node, pageNumber || 1);
+      if (previewUri && /\.pdf(?:#|$|\?)/i.test(previewUri)) {
+        return previewUri;
+      }
+    }
+    if (wuwei.util && typeof wuwei.util.getResourcePreviewUri === 'function') {
+      previewUri = wuwei.util.getResourcePreviewUri(node);
+      if (previewUri && /\.pdf(?:[?#].*)?$/i.test(String(previewUri).split('?path=').pop() || previewUri)) {
+        return previewUri;
+      }
+    }
+    return '';
+  }
+
   function getOfficeViewerOpenUrl(node) {
     var resource = getNodeResource(node);
     var href, fetchUrl;
 
-    if (!resource || isOfficeUploaded([node])) {
+    if (!resource || (util.isLocalHost() && isUploadedContent([node]) && isOfficeResource(resource))) {
       return '';
     }
 
@@ -2285,20 +2311,6 @@ wuwei.menu = wuwei.menu || {};
         typeof wuwei.contents.isContentsPageNode === 'function' &&
         wuwei.contents.isContentsPageNode(node)) {
         wuwei.menu.contents.openPageInInfo(node);
-        closeContextMenu();
-        return;
-      }
-      if (isOfficeUploaded([node])) {
-        const href = getDownloadUrl(node);
-        if (href) {
-          const a = document.createElement('a');
-          a.href = href;
-          a.rel = 'noopener';
-          a.setAttribute('download', getDownloadFilename(node, href));
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-        }
         closeContextMenu();
         return;
       }
