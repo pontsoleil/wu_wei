@@ -53,6 +53,58 @@ wuwei.contents = wuwei.contents || {};
     return !!(group && group.type === 'contents');
   }
 
+  function normalizeHtmlAnchorHref(value) {
+    var text = String(value || '').trim();
+    var hashIndex;
+
+    if (!text) { return ''; }
+    hashIndex = text.indexOf('#');
+    if (hashIndex >= 0) {
+      text = text.slice(hashIndex);
+    }
+    else if (/^[a-z][a-z0-9+.-]*:\/\//i.test(text)) {
+      return '';
+    }
+    if (!text) { return ''; }
+    return text.charAt(0) === '#' ? text : ('#' + text.replace(/^#+/, ''));
+  }
+
+  function anchorHrefToSectionId(anchorHref) {
+    return String(anchorHref || '').replace(/^#/, '');
+  }
+
+  function setCanonicalHtmlAnchor(point, anchorHref, documentNode) {
+    var anchor = normalizeHtmlAnchorHref(anchorHref);
+
+    if (!point || !anchor) {
+      return '';
+    }
+
+    point.anchorHref = anchor;
+    point.href = anchor;
+    point.sectionId = anchorHrefToSectionId(anchor);
+    point.contentsKind = 'html-toc';
+    point.targetHref = documentNode
+      ? makeHtmlAnchorUrl(documentNode, anchor)
+      : (point.targetHref ? String(point.targetHref).replace(/#.*$/, '') + anchor : '');
+    if (!point.axisPositionMode) {
+      point.axisPositionMode = 'axis';
+    }
+    return anchor;
+  }
+
+  function isHtmlContentsGroup(group) {
+    var axis = (group && group.axis && typeof group.axis === 'object') ? group.axis : {};
+    return !!(group && isContentsGroup(group) &&
+      (group.contentsKind === 'html-toc' || axis.mode === 'html' || axis.unit === 'section'));
+  }
+
+  function isHtmlAnchorPageNode(node, group) {
+    var href = normalizeHtmlAnchorHref(node && node.anchorHref || '');
+    return !!(node && isContentsPageNode(node) && href.charAt(0) === '#' &&
+      (!group || isHtmlContentsGroup(group) || node.contentsKind === 'html-toc'));
+  }
+
   function isContentsPageNode(node) {
     return !!(node && node.topicKind === 'contents-page' && node.contentsRef);
   }
@@ -90,6 +142,55 @@ wuwei.contents = wuwei.contents || {};
         /\.pdf(?:[?#].*)?$/.test(fileName) ||
         /\.pdf(?:[?#].*)?$/.test(previewName) ||
         hasPageAxis));
+  }
+
+
+  function isHtmlResourceNode(node) {
+    var resource = (node && node.resource && typeof node.resource === 'object') ? node.resource : {};
+    var media = (resource.media && typeof resource.media === 'object') ? resource.media : {};
+    var origin = (resource.origin && typeof resource.origin === 'object') ? resource.origin : {};
+    var storageFiles = (resource.storage && Array.isArray(resource.storage.files)) ? resource.storage.files : [];
+    var originalFile = storageFiles.find(function (file) {
+      return file && String(file.role || '').toLowerCase() === 'original';
+    }) || {};
+    var previewFile = storageFiles.find(function (file) {
+      return file && String(file.role || '').toLowerCase() === 'preview';
+    }) || {};
+    var mime = String(
+      resource.mimeType ||
+      media.mimeType ||
+      originalFile.mimeType ||
+      node && (node.contenttype || node.contentType) ||
+      ''
+    ).toLowerCase();
+    var kind = String(resource.kind || media.kind || origin.type || origin.subtype || '').toLowerCase();
+    var fileName = String(
+      resource.file ||
+      resource.filename ||
+      originalFile.path ||
+      originalFile.file ||
+      previewFile.path ||
+      previewFile.file ||
+      ''
+    ).toLowerCase();
+    var uri = String(
+      (util && typeof util.getResourceOriginalUri === 'function' ? util.getResourceOriginalUri(node) : '') ||
+      resource.canonicalUri ||
+      resource.uri ||
+      ''
+    ).toLowerCase();
+
+    return !!(node && node.type === 'Content' &&
+      (kind === 'webpage' ||
+        kind === 'html' ||
+        mime.indexOf('text/html') === 0 ||
+        mime.indexOf('application/xhtml+xml') === 0 ||
+        /\.(?:html?|xhtml)(?:[?#].*)?$/.test(uri) ||
+        /\.(?:html?|xhtml)(?:[?#].*)?$/.test(fileName)));
+  }
+
+  function isContentsDocumentResourceNode(node) {
+    return isPdfResourceNode(node) || isHtmlResourceNode(node);
   }
 
   function getDocumentPageCount(node) {
@@ -163,11 +264,18 @@ wuwei.contents = wuwei.contents || {};
 
   function ensureDocumentEntryLink(group) {
     var page = getCurrentPage();
-    var documentNode, entryNode, exists;
+    var documentNode, entryNode, firstEntryId, exists;
     if (!page || !group || !Array.isArray(group.members) || !group.members.length) { return null; }
     documentNode = findDocumentNodeForGroup(group, null);
-    entryNode = model.findNodeById(memberId(group.members[0]));
+    firstEntryId = memberId(group.members[0]);
+    entryNode = model.findNodeById(firstEntryId);
     if (!documentNode || !entryNode) { return null; }
+    page.links = (page.links || []).filter(function (link) {
+      if (!link || link.from !== documentNode.id || link.contentsRef !== group.id) {
+        return true;
+      }
+      return link.to === firstEntryId;
+    });
     exists = (page.links || []).some(function (link) {
       return link && link.from === documentNode.id && link.to === entryNode.id &&
         (link.linkRole === 'contents-entry' || link.contentsRef === group.id || link.relation === 'contents');
@@ -179,14 +287,33 @@ wuwei.contents = wuwei.contents || {};
   }
 
   function createPageNode(group, pageNumber, option) {
+    var anchorHref;
+    var documentNode;
+    var node;
+
     option = option || {};
-    return {
+    anchorHref = normalizeHtmlAnchorHref(option.anchorHref || '');
+    documentNode = (anchorHref || option.contentsKind === 'html-toc')
+      ? findDocumentNodeForGroup(group, null)
+      : null;
+
+    node = {
       id: option.id || makeUuid(),
       type: 'PageMarker',
       topicKind: 'contents-page',
       contentsRef: group.id,
       documentRef: group.documentRef,
       pageNumber: pageNumber,
+      order: Number.isFinite(Number(option.order)) ? Number(option.order) : pageNumber,
+      level: Math.max(1, Math.floor(Number(option.level || 1))),
+      anchorHref: anchorHref,
+      href: anchorHref,
+      targetHref: (!anchorHref && option.contentsKind === 'html-toc' && documentNode) ? makeHtmlContentUrl(documentNode) : '',
+      sectionId: anchorHref ? anchorHrefToSectionId(anchorHref) : '',
+      contentsKind: option.contentsKind || (anchorHref ? 'html-toc' : ''),
+      axisPosition: Number.isFinite(Number(option.axisPosition)) ? Number(option.axisPosition) : null,
+      axisPositionMode: option.axisPositionMode || ((anchorHref || option.contentsKind === 'html-toc') ? 'axis' : 'auto'),
+      manualPosition: !!option.manualPosition,
       axisRole: option.axisRole || 'entry',
       label: option.label || ('p.' + pageNumber),
       description: { format: 'plain/text', body: option.comment || option.description || '' },
@@ -207,6 +334,10 @@ wuwei.contents = wuwei.contents || {};
       fy: null,
       audit: makeAudit()
     };
+    if (anchorHref) {
+      setCanonicalHtmlAnchor(node, anchorHref, documentNode);
+    }
+    return node;
   }
 
   function ensurePageNodeDefaults(group, node, index) {
@@ -215,9 +346,38 @@ wuwei.contents = wuwei.contents || {};
     node.topicKind = 'contents-page';
     node.contentsRef = group.id;
     node.documentRef = group.documentRef;
-    node.pageNumber = Math.max(1, Math.floor(Number(node.pageNumber || index + 1)));
+    node.pageNumber = Math.max(1, Math.floor(Number(node.pageNumber || node.order || index + 1)));
+    node.order = Math.max(1, Math.floor(Number(node.order || node.pageNumber || index + 1)));
+    node.level = Math.max(1, Math.floor(Number(node.level || 1)));
+    node.anchorHref = normalizeHtmlAnchorHref(node.anchorHref || '');
+    if (node.anchorHref) {
+      setCanonicalHtmlAnchor(node, node.anchorHref, findDocumentNodeForGroup(group, node));
+    }
+    else {
+      node.href = '';
+      node.sectionId = '';
+      if (isHtmlContentsGroup(group) || node.contentsKind === 'html-toc') {
+        node.contentsKind = 'html-toc';
+        node.targetHref = makeHtmlContentUrl(findDocumentNodeForGroup(group, node));
+        if (!node.axisPositionMode) {
+          node.axisPositionMode = 'axis';
+        }
+      }
+      else {
+        node.targetHref = '';
+        node.contentsKind = '';
+      }
+    }
+    if (node.anchorHref && !node.axisPositionMode) {
+      node.axisPositionMode = 'axis';
+    }
+    if (node.axisPositionMode &&
+      !Number.isFinite(Number(node.axisPosition)) &&
+      Number.isFinite(Number(node.axisDistance))) {
+      node.axisPosition = Number(node.axisDistance);
+    }
     node.axisRole = node.axisRole || 'entry';
-    node.label = node.label || ('p.' + node.pageNumber);
+    node.label = node.label || (node.anchorHref ? ('§' + node.order) : ('p.' + node.pageNumber));
     node.shape = 'CIRCLE';
     node.size = { radius: Number((node.size && node.size.radius) || 18) };
     node.color = node.color || '#ffffff';
@@ -245,14 +405,188 @@ wuwei.contents = wuwei.contents || {};
     return value;
   }
 
+  function getAxisOrientation(group) {
+    return (group && group.orientation === 'vertical') ? 'vertical' : 'horizontal';
+  }
+
+  function getAxisAnchor(group) {
+    var axis = (group && group.axis && typeof group.axis === 'object') ? group.axis : {};
+    return {
+      x: (axis.anchor && Number.isFinite(Number(axis.anchor.x)))
+        ? Number(axis.anchor.x)
+        : ((group && group.origin && Number.isFinite(Number(group.origin.x))) ? Number(group.origin.x) : 0),
+      y: (axis.anchor && Number.isFinite(Number(axis.anchor.y)))
+        ? Number(axis.anchor.y)
+        : ((group && group.origin && Number.isFinite(Number(group.origin.y))) ? Number(group.origin.y) : 0)
+    };
+  }
+
+  function ensureAxisAnchor(group) {
+    var anchor = getAxisAnchor(group);
+    group.axis = group.axis || {};
+    group.axis.anchor = group.axis.anchor || {};
+    group.axis.anchor.x = anchor.x;
+    group.axis.anchor.y = anchor.y;
+    group.origin = { x: anchor.x, y: anchor.y };
+    return anchor;
+  }
+
+  function getAxisLength(group) {
+    return Math.max(60, Number(group && (group.length || (group.axis && group.axis.length)) || AXIS_LENGTH));
+  }
+
+  function getLevelOffset(node) {
+    return Math.max(0, Math.floor(Number(node && node.level || 1)) - 1) * 28;
+  }
+
+  function getAxisDistanceFromNode(group, node, fallbackDistance) {
+    var orientation = getAxisOrientation(group);
+    var anchor = getAxisAnchor(group);
+    if (Number.isFinite(Number(node && node.axisPosition))) {
+      return Number(node.axisPosition);
+    }
+    if (node && Number.isFinite(Number(node.axisDistance))) {
+      return Number(node.axisDistance);
+    }
+    if (node && node.axisPositionMode && Number.isFinite(Number(orientation === 'vertical' ? node.y : node.x))) {
+      return Number(orientation === 'vertical' ? node.y : node.x) - Number(orientation === 'vertical' ? anchor.y : anchor.x);
+    }
+    return Number.isFinite(Number(fallbackDistance)) ? Number(fallbackDistance) : 0;
+  }
+
+  function setHtmlMarkerOnAxis(group, node, distance, options) {
+    var orientation, anchor, levelOffset;
+    if (!group || !node) { return node; }
+    options = options || {};
+    orientation = getAxisOrientation(group);
+    anchor = ensureAxisAnchor(group);
+    levelOffset = getLevelOffset(node);
+    distance = Number.isFinite(Number(distance)) ? Number(distance) : 0;
+
+    node.axisPosition = distance;
+    node.axisDistance = distance;
+    node.axisPositionMode = 'axis';
+    node.positionMode = 'axis';
+    node.manualPosition = !!(options.manual || node.manualPosition);
+
+    if (orientation === 'vertical') {
+      node.x = anchor.x + levelOffset;
+      node.y = anchor.y + distance;
+    }
+    else {
+      node.x = anchor.x + distance;
+      node.y = anchor.y + levelOffset;
+    }
+    node.fx = node.x;
+    node.fy = node.y;
+    node.vx = 0;
+    node.vy = 0;
+    node.changed = true;
+    return node;
+  }
+
+  function updateHtmlAxisGeometryFromMarkers(group, options) {
+    var members, orientation, axisKey, anchor, length, minAbs, maxAbs, currentStart, newStart, newLength;
+    if (!group || !isHtmlContentsGroup(group)) { return group; }
+    options = options || {};
+    members = getMemberNodes(group).filter(function (node) {
+      return isHtmlAnchorPageNode(node, group);
+    });
+    if (!members.length) { return group; }
+
+    orientation = getAxisOrientation(group);
+    axisKey = (orientation === 'vertical') ? 'y' : 'x';
+    anchor = ensureAxisAnchor(group);
+    length = getAxisLength(group);
+    currentStart = Number(anchor[axisKey]);
+
+    members.forEach(function (node, index) {
+      var fallback = members.length > 1 ? (length * index / Math.max(members.length - 1, 1)) : 0;
+      var distance = getAxisDistanceFromNode(group, node, fallback);
+      var abs = currentStart + distance;
+      if (Number.isFinite(Number(node[axisKey])) && node.axisPositionMode === 'axis') {
+        abs = Number(node[axisKey]);
+      }
+      if (!Number.isFinite(Number(minAbs)) || abs < minAbs) { minAbs = abs; }
+      if (!Number.isFinite(Number(maxAbs)) || abs > maxAbs) { maxAbs = abs; }
+    });
+
+    if (!Number.isFinite(Number(minAbs)) || !Number.isFinite(Number(maxAbs))) {
+      return group;
+    }
+
+    newStart = minAbs;
+    if (members.length === 1) {
+      newLength = options.keepSingleLength === false ? 60 : Math.max(AXIS_LENGTH, length);
+    }
+    else {
+      newLength = Math.max(60, maxAbs - minAbs);
+    }
+
+    group.axis = group.axis || {};
+    group.axis.anchor = group.axis.anchor || {};
+    group.axis.anchor[axisKey] = newStart;
+    group.axis.anchor[orientation === 'vertical' ? 'x' : 'y'] = anchor[orientation === 'vertical' ? 'x' : 'y'];
+    group.origin = { x: Number(group.axis.anchor.x || 0), y: Number(group.axis.anchor.y || 0) };
+    group.length = newLength;
+
+    members.forEach(function (node, index) {
+      var abs = Number.isFinite(Number(node[axisKey]))
+        ? Number(node[axisKey])
+        : (currentStart + getAxisDistanceFromNode(group, node, index));
+      setHtmlMarkerOnAxis(group, node, abs - newStart, { manual: !!node.manualPosition });
+    });
+
+    group.axis.start = 1;
+    group.axis.end = Math.max(1, members.length);
+    group.axis.unit = 'section';
+    group.pageCount = Math.max(1, members.length);
+    return group;
+  }
+
+  function layoutHtmlAxisGroup(group) {
+    var members, length, range;
+    if (!group) { return null; }
+    group.axis = group.axis || {};
+    group.axis.mode = 'html';
+    group.axis.unit = 'section';
+    group.contentsKind = group.contentsKind || 'html-toc';
+    ensureAxisAnchor(group);
+    length = getAxisLength(group);
+    group.length = length;
+    members = getMemberNodes(group).sort(function (a, b) {
+      return Number(a.order || a.pageNumber || 0) - Number(b.order || b.pageNumber || 0);
+    });
+    range = Math.max(members.length - 1, 1);
+
+    members.forEach(function (node, index) {
+      var order = Math.max(1, Math.floor(Number(node.order || node.pageNumber || index + 1)));
+      var fallback = (members.length > 1) ? (length * index / range) : 0;
+      var distance;
+      ensurePageNodeDefaults(group, node, index);
+      node.order = order;
+      node.pageNumber = order;
+      node.contentsKind = node.contentsKind || 'html-toc';
+      distance = getAxisDistanceFromNode(group, node, fallback);
+      setHtmlMarkerOnAxis(group, node, distance, { manual: !!node.manualPosition });
+    });
+
+    updateHtmlAxisGeometryFromMarkers(group, { keepSingleLength: true });
+    return group;
+  }
+
   function layoutAxisGroup(group) {
     var axis, pageCount, length, orientation, anchor, members, range;
     if (!group) { return null; }
 
+    if (isHtmlContentsGroup(group)) {
+      return layoutHtmlAxisGroup(group);
+    }
+
     axis = group.axis || {};
     pageCount = Math.max(1, Math.floor(Number(group.pageCount || axis.end || 1)));
     getMemberNodes(group).forEach(function (node) {
-      pageCount = Math.max(pageCount, clampPageNumber(group, node && node.pageNumber));
+      pageCount = Math.max(pageCount, clampPageNumber(group, node && (node.order || node.pageNumber)));
     });
     length = Math.max(60, Number(group.length || AXIS_LENGTH));
     orientation = (group.orientation === 'vertical') ? 'vertical' : 'horizontal';
@@ -272,14 +606,16 @@ wuwei.contents = wuwei.contents || {};
     range = Math.max(pageCount - 1, 1);
 
     members = getMemberNodes(group).sort(function (a, b) {
-      return Number(a.pageNumber || 0) - Number(b.pageNumber || 0);
+      return Number(a.order || a.pageNumber || 0) - Number(b.order || b.pageNumber || 0);
     });
     members.forEach(function (node, index) {
-      var pageNumber = clampPageNumber(group, node.pageNumber || index + 1);
+      var pageNumber = clampPageNumber(group, node.order || node.pageNumber || index + 1);
       var ratio = (pageNumber - 1) / range;
+      var levelOffset = Math.max(0, Math.floor(Number(node.level || 1)) - 1) * 28;
+      node.order = pageNumber;
       node.pageNumber = pageNumber;
-      node.x = (orientation === 'vertical') ? anchor.x : (anchor.x + (length * ratio));
-      node.y = (orientation === 'vertical') ? (anchor.y + (length * ratio)) : anchor.y;
+      node.x = (orientation === 'vertical') ? (anchor.x + levelOffset) : (anchor.x + (length * ratio));
+      node.y = (orientation === 'vertical') ? (anchor.y + (length * ratio)) : (anchor.y + levelOffset);
       node.fx = node.x;
       node.fy = node.y;
       ensurePageNodeDefaults(group, node, index);
@@ -299,12 +635,12 @@ wuwei.contents = wuwei.contents || {};
     ].filter(Boolean);
     for (var i = 0; i < ids.length; i += 1) {
       found = model.findNodeById(ids[i]);
-      if (isPdfResourceNode(found)) {
+      if (isContentsDocumentResourceNode(found)) {
         return found;
       }
     }
     nodes = (page.nodes || []).filter(function (node) {
-      return isPdfResourceNode(node);
+      return isContentsDocumentResourceNode(node);
     });
     if (nodes.length === 1) {
       return nodes[0];
@@ -322,14 +658,14 @@ wuwei.contents = wuwei.contents || {};
     group.orientation = (group.orientation === 'vertical') ? 'vertical' : 'horizontal';
     group.spine = group.spine || {};
     group.spine.visible = (false !== group.spine.visible);
-    group.spine.color = group.spine.color || group.strokeColor || common.defaultStyle.group.contents.color;
-    group.spine.width = Math.max(1, Number(group.spine.width || group.strokeWidth || common.defaultStyle.group.contents.width));
+    group.spine.color = group.spine.color || group.strokeColor || '#4c6b8a';
+    group.spine.width = Math.max(1, Number(group.spine.width || group.strokeWidth || 4));
     group.strokeColor = group.spine.color;
     group.strokeWidth = group.spine.width;
     group.axisPseudoLinkId = group.axisPseudoLinkId || makeUuid();
     group.axis = group.axis || {};
-    group.axis.mode = group.axis.mode || 'document';
-    group.axis.unit = 'page';
+    group.axis.mode = group.axis.mode || (group.contentsKind === 'html-toc' ? 'html' : 'document');
+    group.axis.unit = group.axis.unit || (group.contentsKind === 'html-toc' ? 'section' : 'page');
     group.axis.anchor = group.axis.anchor || {};
     if (!Number.isFinite(Number(group.axis.anchor.x))) {
       group.axis.anchor.x = Number.isFinite(Number(group.origin && group.origin.x)) ? Number(group.origin.x) : 0;
@@ -400,8 +736,8 @@ wuwei.contents = wuwei.contents || {};
       groupType: 'contentsAxis',
       groupRef: group.id,
       visible: true,
-      color: (group.spine && group.spine.color) || group.strokeColor || common.defaultStyle.group.contents.color,
-      size: (group.spine && group.spine.width) || group.strokeWidth || common.defaultStyle.group.contents.width,
+      color: (group.spine && group.spine.color) || group.strokeColor || '#4c6b8a',
+      size: (group.spine && group.spine.width) || group.strokeWidth || 4,
       font: { size: '12pt', color: common.Color.linkText, family: 'Arial' },
       audit: makeAudit()
     };
@@ -442,12 +778,7 @@ wuwei.contents = wuwei.contents || {};
       orientation: axis === 'vertical' ? 'vertical' : 'horizontal',
       documentRef: documentNode.id,
       pageCount: pageCount,
-      spine: {
-        visible: true,
-        color: common.defaultStyle.group.contents.color,
-        width: common.defaultStyle.group.contents.width,
-        padding: common.defaultStyle.group.padding
-      },
+      spine: { visible: true, color: '#4c6b8a', width: 4, padding: 12 },
       axis: { mode: 'document', unit: 'page', start: 1, end: pageCount, anchor: { x: origin.x, y: origin.y } },
       origin: origin,
       length: AXIS_LENGTH,
@@ -468,27 +799,357 @@ wuwei.contents = wuwei.contents || {};
     return group;
   }
 
+
+  function normalizeHref(href) {
+    var text = String(href || '').trim();
+    if (!text || /^javascript:/i.test(text)) { return ''; }
+    return text;
+  }
+
+  function getHtmlDocumentUri(documentNode) {
+    var resource = (documentNode && documentNode.resource && typeof documentNode.resource === 'object') ? documentNode.resource : {};
+    var uri = '';
+    if (util && typeof util.getResourceOriginalUri === 'function') {
+      uri = util.getResourceOriginalUri(documentNode) || '';
+    }
+    if (!uri && util && typeof util.getResourcePreviewUri === 'function') {
+      uri = util.getResourcePreviewUri(documentNode) || '';
+    }
+    return String(uri || resource.canonicalUri || resource.uri || '').trim();
+  }
+
+  function makeHtmlTopUrl(documentNode) {
+    var base = getHtmlDocumentUri(documentNode);
+    if (!base) { return ''; }
+    try {
+      return new URL(base, window.location.href).href.replace(/#.*$/, '');
+    }
+    catch (e) {
+      return String(base || '').replace(/#.*$/, '');
+    }
+  }
+
+  function makeHtmlContentUrl(documentNode) {
+    var base = getHtmlDocumentUri(documentNode);
+    if (!base) { return ''; }
+    try {
+      return new URL(base, window.location.href).href;
+    }
+    catch (e) {
+      return String(base || '');
+    }
+  }
+
+  function makeHtmlAnchorUrl(documentNode, href) {
+    var base = getHtmlDocumentUri(documentNode);
+    var anchor = normalizeHref(href);
+    if (!base) { return anchor; }
+    if (!anchor) { return makeHtmlTopUrl(documentNode); }
+    try {
+      return new URL(anchor, new URL(base, window.location.href).href.replace(/#.*$/, '')).href;
+    }
+    catch (e) {
+      return base.replace(/#.*$/, '') + anchor;
+    }
+  }
+
+  function directChildElements(element, tagName) {
+    var out = [];
+    var name = String(tagName || '').toUpperCase();
+    var children = element && element.children ? element.children : [];
+    Array.prototype.forEach.call(children, function (child) {
+      if (!name || child.tagName === name) {
+        out.push(child);
+      }
+    });
+    return out;
+  }
+
+  function isTocWrapper(element) {
+    var tag = String(element && element.tagName || '').toUpperCase();
+    return !!(element &&
+      (tag === 'DIV' || tag === 'NAV' || tag === 'SECTION' || tag === 'ASIDE') &&
+      ((element.classList && element.classList.contains('toc')) ||
+        element.id === 'toc' ||
+        element.getAttribute('role') === 'doc-toc'));
+  }
+
+  function findFirstTocList(root) {
+    var tag = String(root && root.tagName || '').toUpperCase();
+    var directLists, found;
+    if (!root) { return null; }
+    if (tag === 'UL' || tag === 'OL') { return root; }
+    directLists = directChildElements(root, 'UL').concat(directChildElements(root, 'OL'));
+    if (directLists.length) {
+      return directLists[0];
+    }
+    Array.prototype.some.call(root.children || [], function (child) {
+      if (!isTocWrapper(child)) {
+        return false;
+      }
+      found = findFirstTocList(child);
+      return !!found;
+    });
+    return found || null;
+  }
+
+  function firstDirectChildAnchor(li) {
+    var children = li && li.children ? li.children : [];
+    var found = null;
+    Array.prototype.some.call(children, function (child) {
+      if (child.tagName === 'A' && normalizeHref(child.getAttribute('href'))) {
+        found = child;
+        return true;
+      }
+      return false;
+    });
+    return found;
+  }
+
+  function getDirectSecNo(li) {
+    var children = li && li.children ? li.children : [];
+    var parts = [];
+    Array.prototype.forEach.call(children, function (child) {
+      if (child.tagName === 'SPAN' && /(?:^|\s)secno(?:\s|$)/.test(child.className || '')) {
+        parts.push(String(child.textContent || '').replace(/ | | | | | | | | | | | | |　/g, ' ').trim());
+      }
+    });
+    return parts.filter(Boolean).join(' ');
+  }
+
+  function getDirectLiLabel(li, anchor) {
+    var parts = [];
+    if (!li) { return ''; }
+    if (anchor) {
+      return normalizeLabel(anchor.textContent || '');
+    }
+    Array.prototype.forEach.call(li.childNodes || [], function (child) {
+      var tagName;
+      if (child.nodeType === 3) {
+        parts.push(child.nodeValue || '');
+      }
+      else if (child.nodeType === 1) {
+        tagName = String(child.tagName || '').toUpperCase();
+        if (tagName !== 'UL' && tagName !== 'OL') {
+          parts.push(child.textContent || '');
+        }
+      }
+    });
+    return normalizeLabel(parts.join(' '));
+  }
+
+  function getTopLevelTocEntries(root, documentNode) {
+    var list = findFirstTocList(root);
+    var entries = [];
+    if (!list) { return entries; }
+    directChildElements(list, 'LI').forEach(function (li, index) {
+      var anchor = firstDirectChildAnchor(li);
+      var href = anchor ? normalizeHref(anchor.getAttribute('href')) : '';
+      var secno, label;
+      if (href && href.charAt(0) !== '#') { return; }
+      if (href && (href === '#' || /^#(?:top|contents?|toc)$/i.test(href))) { return; }
+      secno = getDirectSecNo(li);
+      label = normalizeLabel((secno ? secno + ' ' : '') + getDirectLiLabel(li, anchor));
+      if (!label) { return; }
+      entries.push({
+        order: index + 1,
+        level: 1,
+        label: label,
+        anchorHref: href
+      });
+    });
+    return entries;
+  }
+
+  function normalizeLabel(text) {
+    return String(text || '')
+      .replace(/ | | | | | | | | | | | | |　/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function parseTocEntries(html, documentNode) {
+    var parser = new DOMParser();
+    var doc = parser.parseFromString(String(html || ''), 'text/html');
+    var root = doc.querySelector('.toc') || doc.querySelector('nav[role="doc-toc"]') || doc.querySelector('nav.toc') || doc.body;
+    return getTopLevelTocEntries(root, documentNode);
+  }
+
+  function createHtmlTocEntryNode(group, entry, documentNode) {
+    return createPageNode(group, entry.order, {
+      axisRole: 'entry',
+      label: entry.label,
+      comment: entry.anchorHref,
+      order: entry.order,
+      level: entry.level,
+      anchorHref: entry.anchorHref,
+      contentsKind: 'html-toc'
+    });
+  }
+
+  function createHtmlTableOfContentsGroup(documentNode, entries, option) {
+    var page, origin, group, nodes, axis;
+    option = option || {};
+    page = getCurrentPage();
+    if (!page || !documentNode || !entries || !entries.length) { return null; }
+    ensurePageCollections(page);
+    axis = option.axis === 'vertical' ? 'vertical' : 'horizontal';
+    origin = defaultAxisOrigin(documentNode);
+    group = model.createGroup({
+      id: makeUuid(),
+      name: option.name || 'Table of contents',
+      type: 'contents',
+      groupType: 'axis',
+      contentsKind: 'html-toc',
+      orientation: axis,
+      documentRef: documentNode.id,
+      pageCount: entries.length,
+      spine: { visible: true, color: '#4c6b8a', width: 4, padding: 12 },
+      axis: { mode: 'html', unit: 'section', start: 1, end: entries.length, anchor: { x: origin.x, y: origin.y } },
+      origin: origin,
+      length: Math.max(60, Number(option.length || Math.max(AXIS_LENGTH, entries.length * 42))),
+      targetHref: makeHtmlContentUrl(documentNode),
+      documentHref: makeHtmlContentUrl(documentNode),
+      members: []
+    });
+    group.documentRef = documentNode.id;
+    group.mediaRef = documentNode.id;
+    page.groups.push(group);
+    nodes = entries.map(function (entry) {
+      return createHtmlTocEntryNode(group, entry, documentNode);
+    });
+    nodes.forEach(function (node) {
+      page.nodes.push(node);
+    });
+    setMemberIds(group, nodes.map(function (node) { return node.id; }));
+    normalizeAxisGroup(group);
+    rebuildGraphAndRefresh();
+    return group;
+  }
+
+
+  function getHtmlDocumentFragment(documentNode) {
+    var uri = getHtmlDocumentUri(documentNode);
+    var match;
+
+    if (!uri) { return ''; }
+    try {
+      return normalizeHtmlAnchorHref(new URL(uri, window.location.href).hash || '');
+    }
+    catch (e) {
+      match = String(uri).match(/#.*$/);
+      return normalizeHtmlAnchorHref(match ? match[0] : '');
+    }
+  }
+
+  function makeFallbackFragmentLabel(fragment, documentNode) {
+    var label = '';
+
+    if (fragment) {
+      label = anchorHrefToSectionId(fragment);
+      try {
+        label = decodeURIComponent(label);
+      }
+      catch (e) {
+        label = anchorHrefToSectionId(fragment);
+      }
+      label = normalizeLabel(label.replace(/[-_]+/g, ' '));
+    }
+    if (!label && documentNode) {
+      label = normalizeLabel(documentNode.label || documentNode.name || documentNode.title || '');
+    }
+    return label || 'Top';
+  }
+
+  function createHtmlFallbackContentsGroup(documentNode, option, reason) {
+    var fragment = getHtmlDocumentFragment(documentNode);
+    var entry;
+    var nextOption = {};
+
+    if (!fragment && reason && typeof window !== 'undefined' && window.console && typeof window.console.warn === 'function') {
+      window.console.warn('HTML TOC was not detected and the URL has no fragment; created top fallback Contents axis.', reason);
+    }
+
+    entry = {
+      order: 1,
+      level: 1,
+      label: makeFallbackFragmentLabel(fragment, documentNode),
+      anchorHref: fragment
+    };
+    Object.keys(option || {}).forEach(function (key) {
+      nextOption[key] = option[key];
+    });
+    nextOption.axis = 'vertical';
+    nextOption.length = AXIS_LENGTH;
+    nextOption.name = 'Contents';
+    nextOption.fallback = true;
+    if (reason && typeof window !== 'undefined' && window.console && typeof window.console.warn === 'function') {
+      window.console.warn('HTML TOC was not detected; created fallback Contents axis with one PageMarker.', reason);
+    }
+    return createHtmlTableOfContentsGroup(documentNode, [entry], nextOption);
+  }
+
+  async function addTableOfContents(documentCandidate, option) {
+    var documentNode, uri, response, html, entries;
+    option = option || {};
+    if (model && typeof model.syncPageFromGraph === 'function') {
+      model.syncPageFromGraph();
+    }
+    documentNode = documentCandidate && documentCandidate.id
+      ? (model.findNodeById(documentCandidate.id) || documentCandidate)
+      : null;
+    if (!isHtmlResourceNode(documentNode)) {
+      if (!option.silent) {
+        window.alert('HTMLページを 1 件選択してから Contents を作成してください。');
+      }
+      return null;
+    }
+    uri = getHtmlDocumentUri(documentNode);
+    if (!uri) {
+      if (!option.silent) { window.alert('HTMLページのURLを取得できません。'); }
+      return null;
+    }
+    response = await fetch(uri.replace(/#.*$/, ''), { credentials: 'same-origin' });
+    if (!response.ok) {
+      throw new Error('HTMLページの取得に失敗しました: HTTP ' + response.status);
+    }
+    html = await response.text();
+    entries = parseTocEntries(html, documentNode);
+    if (!entries.length) {
+      return createHtmlFallbackContentsGroup(documentNode, option, 'no top-level toc entries');
+    }
+    return createHtmlTableOfContentsGroup(documentNode, entries, option);
+  }
+
+  function handleHtmlPageMarkerAxisDrag(node, x, y, option) {
+    var group, orientation, anchor, distance;
+    option = option || {};
+    if (!node || !isContentsPageNode(node)) { return false; }
+    group = model.findGroupById(node.contentsRef);
+    if (!group || !isHtmlAnchorPageNode(node, group)) { return false; }
+
+    orientation = getAxisOrientation(group);
+    anchor = ensureAxisAnchor(group);
+    distance = (orientation === 'vertical')
+      ? (Number(y) - Number(anchor.y))
+      : (Number(x) - Number(anchor.x));
+    if (!Number.isFinite(Number(distance))) {
+      distance = 0;
+    }
+
+    setHtmlMarkerOnAxis(group, node, distance, { manual: true });
+    updateHtmlAxisGeometryFromMarkers(group, { keepSingleLength: true });
+    return true;
+  }
+
   function updateAxisGroup(group, props) {
-    var orientationChanged = false;
-    var resetStyle;
     if (!group || !isContentsGroup(group)) { return false; }
     props = props || {};
     if (props.orientation === 'vertical' || props.orientation === 'horizontal') {
-      orientationChanged = group.orientation !== props.orientation;
       group.orientation = props.orientation;
     }
-    resetStyle = orientationChanged &&
-      !Object.prototype.hasOwnProperty.call(props, 'strokeWidth') &&
-      !Object.prototype.hasOwnProperty.call(props, 'strokeColor');
     if (Number.isFinite(Number(props.length))) {
       group.length = Math.max(60, Number(props.length));
-    }
-    if (resetStyle) {
-      group.spine = group.spine || {};
-      group.spine.color = common.defaultStyle.group.contents.color;
-      group.spine.width = Math.max(1, Number(common.defaultStyle.group.contents.width || 4));
-      group.strokeColor = group.spine.color;
-      group.strokeWidth = group.spine.width;
     }
     if (Number.isFinite(Number(props.strokeWidth))) {
       group.spine = group.spine || {};
@@ -662,55 +1323,6 @@ wuwei.contents = wuwei.contents || {};
     return '/wu_wei2/';
   }
 
-  function getResourceOwnerId(resource, node) {
-    var audit = (resource && resource.audit && typeof resource.audit === 'object') ? resource.audit : {};
-    var rights = (resource && resource.rights && typeof resource.rights === 'object') ? resource.rights : {};
-    var nodeAudit = (node && node.audit && typeof node.audit === 'object') ? node.audit : {};
-
-    return String(
-      audit.owner ||
-      audit.createdBy ||
-      rights.owner ||
-      nodeAudit.owner ||
-      nodeAudit.createdBy ||
-      (util && typeof util.getCurrentUserId === 'function' ? util.getCurrentUserId() : '') ||
-      ''
-    ).trim();
-  }
-
-  function toDirectUploadPdfUriFromPath(path, userId) {
-    var rel = String(path || '').replace(/\\/g, '/').replace(/^\/+/, '');
-    var uid = String(userId || '').trim();
-
-    if (!rel || !uid || !/\.pdf$/i.test(rel)) {
-      return '';
-    }
-    if (rel.indexOf('upload/') === 0) {
-      rel = rel.slice('upload/'.length);
-    }
-    if (uid && rel.indexOf(uid + '/') === 0) {
-      rel = rel.slice(uid.length + 1);
-    }
-    return new URL(
-      getAppBasePath() + 'data/' + encodeURIComponent(uid) + '/upload/' + encodeStoragePath(rel),
-      window.location.origin
-    ).href;
-  }
-
-  function getDirectDocumentPdfUri(documentNode) {
-    var resource = (documentNode && documentNode.resource && typeof documentNode.resource === 'object') ? documentNode.resource : {};
-    var uid = getResourceOwnerId(resource, documentNode);
-    var previewPath = '';
-    var originalPath = '';
-
-    if (util && typeof util.getResourceFilePath === 'function') {
-      previewPath = util.getResourceFilePath(resource, 'preview', documentNode);
-      originalPath = util.getResourceFilePath(resource, 'original', documentNode);
-    }
-    return toDirectUploadPdfUriFromPath(previewPath, uid) ||
-      toDirectUploadPdfUriFromPath(originalPath, uid);
-  }
-
   function toDirectUploadPdfUri(uri) {
     var parsed, area, path, uid;
     if (!uri || typeof window === 'undefined' || !window.location) { return uri; }
@@ -732,11 +1344,22 @@ wuwei.contents = wuwei.contents || {};
     ).href;
   }
 
-  function getDocumentViewerUrl(documentNode, pageNumber) {
-    var uri = getDirectDocumentPdfUri(documentNode);
+  function buildHtmlViewerUrl(documentNode, point) {
+    var href = point && point.anchorHref;
+    if (href) {
+      return makeHtmlAnchorUrl(documentNode, href);
+    }
+    if (point && point.targetHref) {
+      return String(point.targetHref);
+    }
+    return makeHtmlContentUrl(documentNode);
+  }
+
+  function getDocumentViewerUrl(documentNode, pageNumber, point) {
+    var uri = '';
     if (!documentNode) { return ''; }
-    if (uri) {
-      return appendPageFragment(uri, pageNumber);
+    if (isHtmlResourceNode(documentNode)) {
+      return buildHtmlViewerUrl(documentNode, point);
     }
     if (util && typeof util.getResourcePreviewUri === 'function') {
       uri = util.getResourcePreviewUri(documentNode) || '';
@@ -749,13 +1372,19 @@ wuwei.contents = wuwei.contents || {};
 
   ns.getCurrentPage = getCurrentPage;
   ns.isContentsGroup = isContentsGroup;
+  ns.isHtmlContentsGroup = isHtmlContentsGroup;
+  ns.isHtmlAnchorPageNode = isHtmlAnchorPageNode;
   ns.isContentsPageNode = isContentsPageNode;
   ns.isContentsAxisLink = isContentsAxisLink;
   ns.isPdfResourceNode = isPdfResourceNode;
+  ns.isHtmlResourceNode = isHtmlResourceNode;
+  ns.isContentsDocumentResourceNode = isContentsDocumentResourceNode;
   ns.getDocumentPageCount = getDocumentPageCount;
   ns.createAxisGroup = createAxisGroup;
   ns.updateAxisGroup = updateAxisGroup;
+  ns.handleHtmlPageMarkerAxisDrag = handleHtmlPageMarkerAxisDrag;
   ns.addEntry = addEntry;
+  ns.addTableOfContents = addTableOfContents;
   ns.createEntryDraft = createEntryDraft;
   ns.commitEntryDraft = commitEntryDraft;
   ns.updateEntryFromNode = updateEntryFromNode;

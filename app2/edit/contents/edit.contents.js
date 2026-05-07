@@ -189,6 +189,81 @@ wuwei.edit.contents = wuwei.edit.contents || {};
       : value;
   }
 
+  function normalizeTextAlign(value) {
+    var text = String(value || '').toLowerCase();
+    if (text === 'start') { return 'left'; }
+    if (text === 'end') { return 'right'; }
+    return (text === 'left' || text === 'right') ? text : 'center';
+  }
+
+  function textAnchorForAlign(align) {
+    if (align === 'left') { return 'start'; }
+    if (align === 'right') { return 'end'; }
+    return 'middle';
+  }
+
+  function normalizeAnchorHref(value) {
+    var text = String(value || '').trim();
+    var hashIndex;
+
+    if (!text) {
+      return '';
+    }
+    hashIndex = text.indexOf('#');
+    if (hashIndex >= 0) {
+      text = text.slice(hashIndex);
+    }
+    if (!text) {
+      return '';
+    }
+    return text.charAt(0) === '#' ? text : ('#' + text);
+  }
+
+  function anchorToSectionId(anchorHref) {
+    return String(anchorHref || '').replace(/^#/, '');
+  }
+
+  function isHtmlPageMarker(point) {
+    var documentNode;
+
+    if (!point) {
+      return false;
+    }
+    if (point.anchorHref || point.contentsKind === 'html-toc') {
+      return true;
+    }
+    documentNode = model && typeof model.findNodeById === 'function'
+      ? model.findNodeById(point.documentRef || (currentGroup && currentGroup.documentRef))
+      : null;
+    return !!(documentNode && wuwei.contents &&
+      typeof wuwei.contents.isHtmlResourceNode === 'function' &&
+      wuwei.contents.isHtmlResourceNode(documentNode));
+  }
+
+  function setRowVisible(id, visible) {
+    var row = $(id);
+    if (row) {
+      row.style.display = visible ? '' : 'none';
+    }
+  }
+
+  function updateTargetHrefAnchor(point, anchorHref) {
+    var targetHref;
+
+    if (!point) {
+      return;
+    }
+    targetHref = String(point.targetHref || '');
+    if (targetHref) {
+      point.targetHref = targetHref.replace(/#.*$/, '') + anchorHref;
+    }
+  }
+
+  function alignForPageMarker(point, font) {
+    font = font || {};
+    return normalizeTextAlign(font.align || point.labelAlign || font['text-anchor']);
+  }
+
   function configureAxis(group) {
     $('editContentsAxisId').value = group.id || '';
     $('editContentsAxisDirection').value = group.orientation || 'horizontal';
@@ -207,10 +282,20 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     var line = style.line || {};
     var font = style.font || point.font || {};
 
+    var htmlMarker = isHtmlPageMarker(point);
+    var anchorHref = normalizeAnchorHref(point.anchorHref || '');
+
     $('editContentsPageMarkerId').value = point.id || '';
     $('label').value = point.label || '';
     $('description_body').value = getDescriptionBody(point);
-    $('pageNumber').value = Number(point.pageNumber || 1);
+    if ($('pageNumber')) {
+      $('pageNumber').value = Number(point.pageNumber || 1);
+    }
+    if ($('anchorHref')) {
+      $('anchorHref').value = anchorHref;
+    }
+    setRowVisible('pageNumberRow', !htmlMarker);
+    setRowVisible('anchorHrefRow', htmlMarker);
     $('style_fill').value = toHexColor(style.fill || point.color || '#ffffff', '#ffffff');
     $('style_line_width').value = Number(
       Number.isFinite(Number(line.width)) ? line.width : (point.outlineWidth || 1)
@@ -218,6 +303,12 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     $('style_line_color').value = toHexColor(line.color || point.outline || '#4c6b8a', '#4c6b8a');
     $('style_font_color').value = toHexColor(font.color || '#303030', '#303030');
     $('style_font_size').value = font.size || '12pt';
+    if ($('style_font_align')) {
+      $('style_font_align').value = alignForPageMarker(point, font);
+    }
+    if ($('labelOffset')) {
+      $('labelOffset').value = Number.isFinite(Number(point.labelOffset)) ? Number(point.labelOffset) : 6;
+    }
     if ($('applyToContentsGroup')) {
       $('applyToContentsGroup').checked = !!applyToContentsGroup;
     }
@@ -298,27 +389,54 @@ wuwei.edit.contents = wuwei.edit.contents || {};
 
   function savePageMarker() {
     var pageNumberEl = $('pageNumber');
+    var anchorHrefEl = $('anchorHref');
+    var htmlMarker = isHtmlPageMarker(currentPoint);
+    var anchorHref;
+
     if (!currentPoint) {
       return false;
     }
-    if (!$('label') || !$('description_body') || !pageNumberEl ||
+    if (!$('label') || !$('description_body') ||
       !$('style_fill') || !$('style_line_color') || !$('style_line_width') ||
-      !$('style_font_color') || !$('style_font_size')) {
+      !$('style_font_color') || !$('style_font_size') ||
+      !$('style_font_align') || !$('labelOffset')) {
       return false;
     }
+    if (htmlMarker && !anchorHrefEl) {
+      return false;
+    }
+    if (!htmlMarker && !pageNumberEl) {
+      return false;
+    }
+
+    var align = normalizeTextAlign($('style_font_align').value);
+    var labelOffset = Math.max(0, Number($('labelOffset').value || 0));
     currentPoint.label = $('label').value || '';
     currentPoint.description = {
       format: 'plain/text',
       body: $('description_body').value || ''
     };
-    if (String(pageNumberEl.value || '').trim()) {
+    if (htmlMarker) {
+      anchorHref = normalizeAnchorHref(anchorHrefEl.value || '');
+      if (!anchorHref) {
+        window.alert('HTML PageMarker には # で始まる anchorHref を指定してください。');
+        return false;
+      }
+      currentPoint.anchorHref = anchorHref;
+      currentPoint.href = anchorHref;
+      currentPoint.sectionId = anchorToSectionId(anchorHref);
+      currentPoint.contentsKind = 'html-toc';
+      updateTargetHrefAnchor(currentPoint, anchorHref);
+    }
+    else if (String(pageNumberEl.value || '').trim()) {
       currentPoint.pageNumber = Math.max(1, Math.floor(Number(pageNumberEl.value || currentPoint.pageNumber || 1)));
     }
     currentPoint.style = currentPoint.style || {};
     currentPoint.style.fill = $('style_fill').value || '#ffffff';
-    currentPoint.style.font = currentPoint.style.font || {};
+    currentPoint.style.font = clonePlain(currentPoint.style.font || currentPoint.font || {});
     currentPoint.style.font.color = $('style_font_color').value || '#303030';
     currentPoint.style.font.size = $('style_font_size').value || currentPoint.style.font.size || '12pt';
+    currentPoint.style.font.align = align;
     currentPoint.style.line = currentPoint.style.line || {};
     currentPoint.style.line.kind = currentPoint.style.line.kind || 'SOLID';
     currentPoint.style.line.color = $('style_line_color').value || '#4c6b8a';
@@ -329,6 +447,10 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     currentPoint.font = currentPoint.font || {};
     currentPoint.font.color = currentPoint.style.font.color;
     currentPoint.font.size = currentPoint.style.font.size;
+    currentPoint.font.align = align;
+    currentPoint.font['text-anchor'] = textAnchorForAlign(align);
+    currentPoint.labelAlign = align;
+    currentPoint.labelOffset = labelOffset;
     currentPoint.changed = true;
     applyPageMarkerStyleToGroup(currentPoint);
     return true;
@@ -366,6 +488,8 @@ wuwei.edit.contents = wuwei.edit.contents || {};
       node.outlineWidth = sourcePoint.outlineWidth;
       node.style = clonePlain(sourcePoint.style || {});
       node.font = clonePlain(sourcePoint.font || {});
+      node.labelAlign = sourcePoint.labelAlign;
+      node.labelOffset = sourcePoint.labelOffset;
       node.changed = true;
     });
     if (wuwei.draw && typeof wuwei.draw.refresh === 'function') {

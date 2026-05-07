@@ -21,7 +21,7 @@ wuwei.menu.contents = wuwei.menu.contents || {};
     if (!spec || !spec.documentNode || !contents || typeof contents.getDocumentViewerUrl !== 'function') {
       return '';
     }
-    return contents.getDocumentViewerUrl(spec.documentNode, spec.pageNumber);
+    return contents.getDocumentViewerUrl(spec.documentNode, spec.pageNumber, spec.point);
   }
 
   function openPageInInfo(target) {
@@ -32,9 +32,46 @@ wuwei.menu.contents = wuwei.menu.contents || {};
     wuwei.info.open(spec.documentNode, {
       page: spec.pageNumber,
       contentsPage: true,
-      pdfjsUri: contents.getDocumentViewerUrl(spec.documentNode, spec.pageNumber)
+      contentsPoint: spec.point || target,
+      displayedPageMarker: spec.point || target,
+      editTarget: spec.point || target,
+      pdfjsUri: contents.getDocumentViewerUrl(spec.documentNode, spec.pageNumber, spec.point)
     });
     return true;
+  }
+
+
+  function snackbar(type, message) {
+    if (wuwei.menu && wuwei.menu.snackbar && typeof wuwei.menu.snackbar.open === 'function') {
+      wuwei.menu.snackbar.open({ type: type || 'info', message: message });
+    }
+    else if (message) {
+      window.alert(message);
+    }
+  }
+
+  async function addTableOfContents(target) {
+    var group;
+    if (!contents || typeof contents.addTableOfContents !== 'function') {
+      snackbar('error', wuwei.nls.translate('Contents module is not available.'));
+      return null;
+    }
+    try {
+      if (wuwei.log && typeof wuwei.log.savePrevious === 'function') {
+        wuwei.log.savePrevious();
+      }
+      group = await contents.addTableOfContents(target, { silent: false, axis: 'horizontal' });
+      if (group && wuwei.log && typeof wuwei.log.storeLog === 'function') {
+        wuwei.log.storeLog({ operation: 'edit' });
+        snackbar('success', wuwei.nls.translate('Table of contents was added.'));
+      }
+      return group;
+    }
+    catch (e) {
+      console.error(e);
+      snackbar('error', e && e.message ? e.message : wuwei.nls.translate('Failed to add table of contents.'));
+      return null;
+    }
   }
 
   function initModule() {
@@ -45,4 +82,5 @@ wuwei.menu.contents = wuwei.menu.contents || {};
   ns.getPageTargetSpec = getPageTargetSpec;
   ns.getPageOpenUrl = getPageOpenUrl;
   ns.openPageInInfo = openPageInInfo;
+  ns.addTableOfContents = addTableOfContents;
 })(wuwei.menu.contents);

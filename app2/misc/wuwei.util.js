@@ -4081,6 +4081,12 @@ wuwei.util = (function () {
       return path;
     }
     text = String((resource && (resource.canonicalUri || resource.uri)) || '').replace(/\\/g, '/').trim();
+    if (/^https?:\/\//i.test(text) &&
+      text.indexOf('/wu_wei2/data/') < 0 &&
+      !/(?:[?&]area=upload\b|\/(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?)/i.test(text) &&
+      !/\/wu_wei2\/upload\//i.test(text)) {
+      return text;
+    }
     if (!text || /^https?:\/\//i.test(text) && text.indexOf('/wu_wei2/') < 0) {
       return text;
     }

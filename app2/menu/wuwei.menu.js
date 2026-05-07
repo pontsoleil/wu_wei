@@ -804,6 +804,7 @@ wuwei.menu = wuwei.menu || {};
         const node = ctx && ctx.node;
         const link = ctx && ctx.link;
         const groupOverlay = ctx && ctx.groupOverlay;
+        const contextAnchor = ctx && ctx.anchor;
         const position = ctx && ctx.position;
         let d3node = null;
         let d3link = null;
@@ -987,13 +988,23 @@ wuwei.menu = wuwei.menu || {};
                 if (!Array.isArray(state.selectedGroupIds)) {
                   state.selectedGroupIds = [];
                 }
+                if (!state.selectedGroupPoints || typeof state.selectedGroupPoints !== 'object') {
+                  state.selectedGroupPoints = {};
+                }
                 if (state.selectedGroupIds.indexOf(selectableGroupId) >= 0) {
                   state.selectedGroupIds = state.selectedGroupIds.filter(function (gid) {
                     return gid !== selectableGroupId;
                   });
+                  delete state.selectedGroupPoints[selectableGroupId];
                 }
                 else {
                   state.selectedGroupIds.push(selectableGroupId);
+                  if (contextAnchor && Number.isFinite(Number(contextAnchor.x)) && Number.isFinite(Number(contextAnchor.y))) {
+                    state.selectedGroupPoints[selectableGroupId] = {
+                      x: Number(contextAnchor.x),
+                      y: Number(contextAnchor.y)
+                    };
+                  }
                 }
                 restartCurrentDraw();
               }
@@ -1793,6 +1804,7 @@ wuwei.menu = wuwei.menu || {};
 
   function clearSelectionState() {
     state.selectedGroupIds = [];
+    state.selectedGroupPoints = {};
     d3.selectAll('g.node.selected circle.selected').remove();
     d3.selectAll('g.node.selected')
       .each(function () {
@@ -1843,6 +1855,36 @@ wuwei.menu = wuwei.menu || {};
     });
   }
 
+  function getDefaultGroupSpine(type) {
+    var style = (common && common.defaultStyle && common.defaultStyle.group) || {};
+    var typed = style[type] || {};
+    var padding;
+
+    function num(value, fallback) {
+      var n = Number(value);
+      return Number.isFinite(n) ? n : fallback;
+    }
+
+    if (model && typeof model.groupStyleDefaults === 'function') {
+      return model.groupStyleDefaults(type || 'simple');
+    }
+
+    padding = num(typed.padding, style.padding);
+    return {
+      visible: (typeof typed.visible === 'boolean')
+        ? typed.visible
+        : ((typeof style.visible === 'boolean') ? style.visible : true),
+      kind: typed.kind || style.kind,
+      color: typed.color || style.color,
+      width: num(typed.width, style.width),
+      padding: padding,
+      paddingTop: num(typed.paddingTop, padding),
+      paddingRight: num(typed.paddingRight, padding),
+      paddingBottom: num(typed.paddingBottom, padding),
+      paddingLeft: num(typed.paddingLeft, padding)
+    };
+  }
+
   function definePersistentGroup(kind, selectedNodes) {
     var page = getCurrentPage();
     var nodes;
@@ -1867,6 +1909,7 @@ wuwei.menu = wuwei.menu || {};
     var isVertical = ('topicGroupVertical' === kind);
     var selectedGroupIds;
     var selectedGroups, preserveGroup, preserveMetaGroup, nameBase, memberMap, existingItemByNodeId, members, avg, group, selectedNodeIds;
+    var nextGroupType, defaultSpine;
 
     if (!page) {
       return null;
@@ -1972,26 +2015,26 @@ wuwei.menu = wuwei.menu || {};
     }
 
     nameBase = (isHorizontal || isVertical) ? 'Topic Group' : 'Simple Group';
+    nextGroupType = isHorizontal ? 'horizontal' : (isVertical ? 'vertical' : 'simple');
+    defaultSpine = getDefaultGroupSpine(nextGroupType);
     group = model.createGroup({
       id: preserveGroup ? preserveGroup.id : undefined,
       name: (preserveMetaGroup && preserveMetaGroup.name && 1 === selectedGroups.length) ? preserveMetaGroup.name : (nameBase + ' ' + (page.groups.length + 1)),
-      type: isHorizontal ? 'horizontal' : (isVertical ? 'vertical' : 'simple'),
+      type: nextGroupType,
       enabled: preserveMetaGroup ? (false !== preserveMetaGroup.enabled) : true,
       moveTogether: preserveMetaGroup ? (false !== preserveMetaGroup.moveTogether) : true,
       orientation: isHorizontal ? 'horizontal' : (isVertical ? 'vertical' : 'auto'),
-      spine: (isHorizontal || isVertical)
-        ? {
-          visible: true,
-          color: (preserveMetaGroup && preserveMetaGroup.spine && preserveMetaGroup.spine.color) || common.defaultStyle.group.color,
-          width: (preserveMetaGroup && preserveMetaGroup.spine && preserveMetaGroup.spine.width) || common.defaultStyle.group.width,
-          padding: (preserveMetaGroup && preserveMetaGroup.spine && preserveMetaGroup.spine.padding) || common.defaultStyle.group.padding
-        }
-        : {
-          visible: false,
-          color: (preserveMetaGroup && preserveMetaGroup.spine && preserveMetaGroup.spine.color) || common.defaultStyle.group.color,
-          width: (preserveMetaGroup && preserveMetaGroup.spine && preserveMetaGroup.spine.width) || common.defaultStyle.group.width,
-          padding: (preserveMetaGroup && preserveMetaGroup.spine && preserveMetaGroup.spine.padding) || common.defaultStyle.group.padding
-        },
+      spine: {
+        visible: defaultSpine.visible,
+        kind: defaultSpine.kind,
+        color: defaultSpine.color,
+        width: defaultSpine.width,
+        padding: defaultSpine.padding,
+        paddingTop: defaultSpine.paddingTop,
+        paddingRight: defaultSpine.paddingRight,
+        paddingBottom: defaultSpine.paddingBottom,
+        paddingLeft: defaultSpine.paddingLeft
+      },
       axis: undefined,
       members: members.map(function (n, index) {
         var existing = existingItemByNodeId[n.id] || {};

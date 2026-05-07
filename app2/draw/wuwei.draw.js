@@ -333,12 +333,75 @@ wuwei.draw = wuwei.draw || {};
     if (!Array.isArray(state.selectedGroupIds)) {
       state.selectedGroupIds = [];
     }
+    if (!state.selectedGroupPoints || typeof state.selectedGroupPoints !== 'object') {
+      state.selectedGroupPoints = {};
+    }
     if (state.selectedGroupIds.indexOf(groupId) >= 0) {
       state.selectedGroupIds = state.selectedGroupIds.filter(function (id) { return id !== groupId; });
+      delete state.selectedGroupPoints[groupId];
     }
     else {
       state.selectedGroupIds.push(groupId);
+      if (d3.event && Number.isFinite(Number(d3.event.x)) && Number.isFinite(Number(d3.event.y))) {
+        state.selectedGroupPoints[groupId] = { x: Number(d3.event.x), y: Number(d3.event.y) };
+      }
     }
+    renderSelectedGroupMarks();
+  }
+
+  function getSelectedGroupPoint(groupId) {
+    var point = state.selectedGroupPoints && state.selectedGroupPoints[groupId];
+    var group, box, spine;
+
+    if (point && Number.isFinite(Number(point.x)) && Number.isFinite(Number(point.y))) {
+      return { x: Number(point.x), y: Number(point.y) };
+    }
+
+    group = model && typeof model.findGroupById === 'function' ? model.findGroupById(groupId) : null;
+    if (!group) {
+      return null;
+    }
+
+    if ('simple' === group.type && model && typeof model.resolveGroupBox === 'function') {
+      box = model.resolveGroupBox(groupId);
+      if (box) {
+        return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+      }
+    }
+    if (model && typeof model.resolveGroupSpine === 'function') {
+      spine = model.resolveGroupSpine(groupId);
+      if (spine) {
+        return { x: (spine.x1 + spine.x2) / 2, y: (spine.y1 + spine.y2) / 2 };
+      }
+    }
+    return null;
+  }
+
+  function renderSelectedGroupMarks() {
+    var canvasSel = d3.select('g#' + state.canvasId);
+    var marks;
+
+    d3.selectAll('g.group-selection-marks').remove();
+    if (!canvasSel.node() || !Array.isArray(state.selectedGroupIds) || !state.selectedGroupIds.length) {
+      return;
+    }
+
+    marks = canvasSel.append('g').attr('class', 'group-selection-marks');
+    state.selectedGroupIds.forEach(function (groupId) {
+      var point = getSelectedGroupPoint(groupId);
+      if (!point) {
+        return;
+      }
+      marks.append('circle')
+        .attr('class', 'selected group-selected')
+        .attr('cx', point.x)
+        .attr('cy', point.y)
+        .attr('r', 14)
+        .attr('fill', 'none')
+        .attr('stroke', common.Color.outerSelected)
+        .attr('stroke-width', 4)
+        .datum({ type: 'Group', groupRef: groupId });
+    });
   }
 
   function bindGroupOverlayHover(selection) {
@@ -812,6 +875,7 @@ wuwei.draw = wuwei.draw || {};
         model.renderNode(d);
       }
     });
+    renderSelectedGroupMarks();
   };
 
   refresh = function () {
@@ -821,6 +885,7 @@ wuwei.draw = wuwei.draw || {};
     if (model && typeof model.setGraphFromCurrentPage === 'function') {
       model.setGraphFromCurrentPage();
     }
+    d3.selectAll('g.group-selection-marks').remove();
     /** Node */
     d3.selectAll('g.node').remove();
     for (let node of graph.nodes) {
@@ -843,6 +908,7 @@ wuwei.draw = wuwei.draw || {};
     }
 
     model.updateLinkCount();
+    renderSelectedGroupMarks();
     /** miniature */
     util.drawMiniature();
   };

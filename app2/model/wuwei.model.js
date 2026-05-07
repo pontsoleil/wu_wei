@@ -655,11 +655,70 @@ wuwei.model = (function () {
     return holder[key];
   }
 
+  function numberOrDefault(value, fallback) {
+    var n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+  }
+
+  function groupStyleDefaults(type) {
+    var groupStyle = (common && common.defaultStyle && common.defaultStyle.group) || {};
+    var typeStyle = (groupStyle && groupStyle[type]) || {};
+    var padding = numberOrDefault(typeStyle.padding, groupStyle.padding);
+
+    return {
+      /*
+       * Do not duplicate literal fallbacks here. The group default source of
+       * truth is common.defaultStyle.group, with type-specific overrides such
+       * as common.defaultStyle.group.simple.
+       */
+      kind: typeStyle.kind || groupStyle.kind,
+      color: typeStyle.color || groupStyle.color,
+      width: numberOrDefault(typeStyle.width, groupStyle.width),
+      padding: padding,
+      paddingTop: numberOrDefault(typeStyle.paddingTop, padding),
+      paddingRight: numberOrDefault(typeStyle.paddingRight, padding),
+      paddingBottom: numberOrDefault(typeStyle.paddingBottom, padding),
+      paddingLeft: numberOrDefault(typeStyle.paddingLeft, padding),
+      visible: (typeof typeStyle.visible === 'boolean')
+        ? typeStyle.visible
+        : ((typeof groupStyle.visible === 'boolean') ? groupStyle.visible : true)
+    };
+  }
+
+  function applyGroupDefaultStyle(group, type) {
+    var nextType = type || (group && group.type) || 'simple';
+    var defaults;
+
+    if (!group) {
+      return null;
+    }
+
+    defaults = groupStyleDefaults(nextType);
+    group.spine = group.spine && typeof group.spine === 'object' ? group.spine : {};
+    group.spine.kind = defaults.kind;
+    group.spine.color = defaults.color;
+    group.spine.width = defaults.width;
+    group.spine.padding = defaults.padding;
+    group.spine.paddingTop = defaults.paddingTop;
+    group.spine.paddingRight = defaults.paddingRight;
+    group.spine.paddingBottom = defaults.paddingBottom;
+    group.spine.paddingLeft = defaults.paddingLeft;
+    group.spine.visible = defaults.visible;
+    return group.spine;
+  }
+
   // simple は page.groups を正本とし、表示時だけ pseudo node を生成する。
   function buildSimpleGroupPseudoNode(group) {
+    var defaults;
+    var spine;
+
     if (!group || false === group.visible || 'simple' !== group.type) {
       return null;
     }
+
+    defaults = groupStyleDefaults('simple');
+    spine = (group.spine && 'object' === typeof group.spine) ? group.spine : {};
+
     return {
       id: makeStablePseudoId(group, 'pseudoNodeId'),
       type: 'Group',
@@ -673,19 +732,34 @@ wuwei.model = (function () {
       size: { width: 0, height: 0 },
       font: defaultFont,
       color: 'none',
-      outline: common.defaultStyle.group.color,
+      outline: spine.color || defaults.color,
+      style: {
+        line: {
+          kind: spine.kind || defaults.kind,
+          color: spine.color || defaults.color,
+          width: numberOrDefault(spine.width, defaults.width)
+        },
+        font: defaultFont
+      },
       audit: makeAudit()
     };
   }
 
   // vertical / horizontal group は spine 表示用の pseudo link を持つ。
   function buildTopicGroupPseudoLink(group) {
+    var defaults;
+    var spine;
+
     if (!group || false === group.visible) {
       return null;
     }
     if (!('vertical' === group.type || 'horizontal' === group.type)) {
       return null;
     }
+
+    defaults = groupStyleDefaults(group.type);
+    spine = (group.spine && 'object' === typeof group.spine) ? group.spine : {};
+
     return {
       id: makeStablePseudoId(group, 'pseudoLinkId'),
       type: 'Group',
@@ -694,13 +768,13 @@ wuwei.model = (function () {
       groupType: group.type,
       groupRef: group.id,
       visible: true,
-      color: (group.spine && group.spine.color) || common.defaultStyle.group.color,
-      size: (group.spine && group.spine.width) || common.defaultStyle.group.width,
+      color: spine.color || defaults.color,
+      size: numberOrDefault(spine.width, defaults.width),
       style: {
         line: {
-          kind: (group.spine && group.spine.kind) || common.defaultStyle.group.kind,
-          color: (group.spine && group.spine.color) || common.defaultStyle.group.color,
-          width: (group.spine && group.spine.width) || common.defaultStyle.group.width
+          kind: spine.kind || defaults.kind,
+          color: spine.color || defaults.color,
+          width: numberOrDefault(spine.width, defaults.width)
         },
         font: defaultLink.style.font
       },
@@ -807,10 +881,11 @@ wuwei.model = (function () {
       })
       : [];
     var groupType = param.type || 'simple';
-    var baseSpinePadding = Number.isFinite(Number(spine.padding)) ? Number(spine.padding) : ('simple' === groupType ? 16 : 12);
+    var defaultSpine = groupStyleDefaults(groupType);
+    var baseSpinePadding = Number.isFinite(Number(spine.padding)) ? Number(spine.padding) : defaultSpine.padding;
 
-    function spinePaddingSide(key) {
-      return Number.isFinite(Number(spine[key])) ? Number(spine[key]) : baseSpinePadding;
+    function spinePaddingSide(key, defaultKey) {
+      return Number.isFinite(Number(spine[key])) ? Number(spine[key]) : Number(defaultSpine[defaultKey || key] || baseSpinePadding);
     }
 
     return {
@@ -825,14 +900,15 @@ wuwei.model = (function () {
       moveTogether: (false !== param.moveTogether),
       orientation: param.orientation || 'auto',
       spine: {
-        kind: spine.kind || ('simple' === groupType ? 'DASHED' : 'SOLID'),
-        color: spine.color || '#888888',
-        width: Number(spine.width || ('simple' === groupType ? 2 : 6)),
+        kind: spine.kind || defaultSpine.kind,
+        color: spine.color || defaultSpine.color,
+        width: numberOrDefault(spine.width, defaultSpine.width),
         padding: baseSpinePadding,
         paddingTop: spinePaddingSide('paddingTop'),
         paddingRight: spinePaddingSide('paddingRight'),
         paddingBottom: spinePaddingSide('paddingBottom'),
-        paddingLeft: spinePaddingSide('paddingLeft')
+        paddingLeft: spinePaddingSide('paddingLeft'),
+        visible: (typeof spine.visible === 'boolean') ? spine.visible : defaultSpine.visible
       },
       timeline: ('timeline' === param.type) ? {
         unit: timeline.unit || 'second',
@@ -8563,21 +8639,22 @@ wuwei.model = (function () {
       return null;
     }
     const spine = (group.spine && 'object' === typeof group.spine) ? group.spine : {};
-    const strokeWidth = Number(spine.width || 2);
-    const padding = Number.isFinite(Number(spine.padding)) ? Number(spine.padding) : 16;
-    const paddingTop = Number.isFinite(Number(spine.paddingTop)) ? Number(spine.paddingTop) : padding;
-    const paddingRight = Number.isFinite(Number(spine.paddingRight)) ? Number(spine.paddingRight) : padding;
-    const paddingBottom = Number.isFinite(Number(spine.paddingBottom)) ? Number(spine.paddingBottom) : padding;
-    const paddingLeft = Number.isFinite(Number(spine.paddingLeft)) ? Number(spine.paddingLeft) : padding;
+    const defaults = groupStyleDefaults('simple');
+    const strokeWidth = numberOrDefault(spine.width, defaults.width);
+    const padding = Number.isFinite(Number(spine.padding)) ? Number(spine.padding) : defaults.padding;
+    const paddingTop = Number.isFinite(Number(spine.paddingTop)) ? Number(spine.paddingTop) : numberOrDefault(defaults.paddingTop, padding);
+    const paddingRight = Number.isFinite(Number(spine.paddingRight)) ? Number(spine.paddingRight) : numberOrDefault(defaults.paddingRight, padding);
+    const paddingBottom = Number.isFinite(Number(spine.paddingBottom)) ? Number(spine.paddingBottom) : numberOrDefault(defaults.paddingBottom, padding);
+    const paddingLeft = Number.isFinite(Number(spine.paddingLeft)) ? Number(spine.paddingLeft) : numberOrDefault(defaults.paddingLeft, padding);
     return {
       group: group.id,
       x: border.left - paddingLeft,
       y: border.top - paddingTop,
       width: border.width + paddingLeft + paddingRight,
       height: border.height + paddingTop + paddingBottom,
-      stroke: spine.color || '#666666',
+      stroke: spine.color || defaults.color,
       strokeWidth: strokeWidth,
-      dasharray: strokeDasharrayForLineKind(spine.kind || 'DASHED', strokeWidth)
+      dasharray: strokeDasharrayForLineKind(spine.kind || defaults.kind, strokeWidth)
     };
   }
 
@@ -8588,6 +8665,7 @@ wuwei.model = (function () {
       return null;
     }
     const spine = group.spine || {};
+    const defaults = groupStyleDefaults(group.type);
     if (false === spine.visible) {
       return null;
     }
@@ -8603,7 +8681,7 @@ wuwei.model = (function () {
     const maxX = Math.max.apply(null, xs);
     const minY = Math.min.apply(null, ys);
     const maxY = Math.max.apply(null, ys);
-    const padding = Number(spine.padding || 12);
+    const padding = numberOrDefault(spine.padding, defaults.padding);
     const orientation = getGroupOrientation(groupId);
     if (!orientation) {
       return null;
@@ -8618,9 +8696,9 @@ wuwei.model = (function () {
         y1: minY - padding,
         x2: anchorX,
         y2: maxY + padding,
-        stroke: spine.color || '#666666',
-        strokeWidth: Number(spine.width || 6),
-        dasharray: strokeDasharrayForLineKind(spine.kind || 'SOLID', Number(spine.width || 6))
+        stroke: spine.color || defaults.color,
+        strokeWidth: numberOrDefault(spine.width, defaults.width),
+        dasharray: strokeDasharrayForLineKind(spine.kind || defaults.kind, numberOrDefault(spine.width, defaults.width))
       };
     }
     const anchorY = group.axis && group.axis.anchor && Number.isFinite(Number(group.axis.anchor.y))
@@ -8632,9 +8710,9 @@ wuwei.model = (function () {
       y1: anchorY,
       x2: maxX + padding,
       y2: anchorY,
-      stroke: spine.color || '#666666',
-      strokeWidth: Number(spine.width || 6),
-      dasharray: strokeDasharrayForLineKind(spine.kind || 'SOLID', Number(spine.width || 6))
+      stroke: spine.color || defaults.color,
+      strokeWidth: numberOrDefault(spine.width, defaults.width),
+      dasharray: strokeDasharrayForLineKind(spine.kind || defaults.kind, numberOrDefault(spine.width, defaults.width))
     };
   }
 
@@ -8730,6 +8808,8 @@ wuwei.model = (function () {
     setVisible: setVisible,
     /** group */
     createGroup: createGroup,
+    groupStyleDefaults: groupStyleDefaults,
+    applyGroupDefaultStyle: applyGroupDefaultStyle,
     groupDragStarted: groupDragStarted,
     groupDragged: groupDragged,
     groupDragEnded: groupDragEnded,
