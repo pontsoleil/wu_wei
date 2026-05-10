@@ -70,44 +70,44 @@ wuwei.edit.link.markup = ( function () {
     var html = `
 <form id="editform" class="link form-group content">
   <div class="w3-row">
-    <textarea id="lLabel" name="label" data-path="label" class="w3-col s12" rows="${rowcount(label)}" 
-        placeholder="${translate('Label')}">${escapeHtml(label)}</textarea>
+    <textarea id="label" name="label" class="w3-col s12 edit-value" rows="${rowcount(label)}" 
+        placeholder="${t('Label')}">${escapeHtml(label)}</textarea>
   </div>
   <div class="w3-row">
-    <label for="lShape" class="w3-col s4">${translate('Shape')}</label>`;  
+    <label for="shape" class="w3-col s4">${t('Shape')}</label>`;  
 html += 'draw'==wuwei.common.graph.mode
-  ? `    ${selectOptions('lShape', shapeValue, shapes, translate('Shape'), 's4').replace('name="lShape"', 'name="shape" data-path="shape"')}`
+  ? `    ${selectOptions('shape', shapeValue, shapes, t('Shape'), 's4')}`
   : '';
-html += `    ${selectOptions('lStrokedash', lineKindValue, strokeDasharray, translate('Stroke'), 's4').replace('name="lStrokedash"', 'name="style.line.kind" data-path="style.line.kind"')}
+html += `    ${selectOptions('style.line.kind', lineKindValue, strokeDasharray, t('Stroke'), 's4')}
   </div>
   <div class="w3-row">
-    <label for="lStartArrow_kind" class="w3-col s3">${translate('Start arrow')}</label>
-    ${selectOptions('lStartArrow_kind', startArrow.kind || '', arrowShapes, '', 's3').replace('name="lStartArrow_kind"', 'name="routing.startArrow.kind" data-path="routing.startArrow.kind"')}
-    <label for="lStartArrow_size" class="w3-col s3">${translate('Size')}</label>
-    <input type="number" id="lStartArrow_size" name="routing.startArrow.size" data-path="routing.startArrow.size" value="${finiteOr(startArrow.size, 12)}" class="w3-col s3">
+    <label for="routing_startArrow_kind" class="w3-col s3">${t('Start arrow')}</label>
+    ${selectOptions('routing.startArrow.kind', startArrow.kind || '', arrowShapes, '', 's3')}
+    <label for="routing_startArrow_size" class="w3-col s3">${t('Size')}</label>
+    <input type="number" id="routing_startArrow_size" name="routing.startArrow.size" value="${finiteOr(startArrow.size, 12)}" class="w3-col s3 edit-value">
   </div>
   <div class="w3-row">
-    <label for="lEndArrow_kind" class="w3-col s3">${translate('End arrow')}</label>
-    ${selectOptions('lEndArrow_kind', endArrow.kind || '', arrowShapes, '', 's3').replace('name="lEndArrow_kind"', 'name="routing.endArrow.kind" data-path="routing.endArrow.kind"')}
-    <label for="lEndArrow_size" class="w3-col s3">${translate('Size')}</label>
-    <input type="number" id="lEndArrow_size" name="routing.endArrow.size" data-path="routing.endArrow.size" value="${finiteOr(endArrow.size, 12)}" class="w3-col s3">
+    <label for="routing_endArrow_kind" class="w3-col s3">${t('End arrow')}</label>
+    ${selectOptions('routing.endArrow.kind', endArrow.kind || '', arrowShapes, '', 's3')}
+    <label for="routing_endArrow_size" class="w3-col s3">${t('Size')}</label>
+    <input type="number" id="routing_endArrow_size" name="routing.endArrow.size" value="${finiteOr(endArrow.size, 12)}" class="w3-col s3 edit-value">
   </div>
   <div class="w3-row">
-    <label for="lSize" class="w3-col s3">${translate('Size')}</label>  
-    <input type="number" id="lSize" name="style.line.width" data-path="style.line.width" value="${lineWidthValue}" class="w3-col s3">
-    <input type="color" id="lColor" name="style.line.color" data-path="style.line.color" value="${escapeHtml(lineColorValue)}" class="w3-col s3 pointer">
-    <div id="linkColor" name="linkColor" class="w3-col s3 pointer"></div>
+    <label for="style_line_width" class="w3-col s3">${t('Size')}</label>  
+    <input type="number" id="style_line_width" name="style.line.width" value="${lineWidthValue}" class="w3-col s3 edit-value">
+    <input type="color" id="style_line_color" name="style.line.color" value="${escapeHtml(lineColorValue)}" class="w3-col s3 pointer edit-value">
+    <div id="style_line_color_palette" name="style_line_color_palette" class="w3-col s3 pointer"></div>
   </div>
   <div class="w3-row">
-    <label for="lFont_size" class="w3-col s3">${translate('Text')}</label>  
-    ${selectOptions('lFont_size', fontSizeValue, fontSizes, 'Select font size', 's3').replace('name="lFont_size"', 'name="style.font.size" data-path="style.font.size"')}
-    <input type="color" id="lFont_color" name="style.font.color" data-path="style.font.color" value="${escapeHtml(fontColorValue)}" class="w3-col s3 pointer">
-    <div id="linkFont_color" name="linkFont_color" class="w3-col s3 pointer"></div>
+    <label for="style_font_size" class="w3-col s3">${t('Text')}</label>  
+    ${selectOptions('style.font.size', fontSizeValue, fontSizes, 'Select font size', 's3')}
+    <input type="color" id="style_font_color" name="style.font.color" value="${escapeHtml(fontColorValue)}" class="w3-col s3 pointer edit-value">
+    <div id="style_font_color_palette" name="style_font_color_palette" class="w3-col s3 pointer"></div>
   </div>
   <div class="w3-row">
-    <label for="lRelation" class="w3-col s3">${translate('Role')}</label>
+    <label for="relation" class="w3-col s3">${t('Role')}</label>
     <input type="checkbox" id="editRole" class="w3-col s1">
-    <input type="text" id="lRelation" name="relation" data-path="relation" value="${escapeHtml(relation)}" class="w3-col s8">
+    <input type="text" id="relation" name="relation" value="${escapeHtml(relation)}" class="w3-col s8 edit-value">
   </div>
 </form>
 `;
@@ -122,7 +122,7 @@ html += `    ${selectOptions('lStrokedash', lineKindValue, strokeDasharray, tran
     return wuwei.edit.markup.rowcount(str);
   }
 
-  function translate(str) {
+  function t(str) {
     return wuwei.edit.markup.translate(str);
   }
 
