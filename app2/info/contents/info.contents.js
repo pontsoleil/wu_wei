@@ -1,6 +1,6 @@
 /**
  * info.contents.js
- * contents axis and PageMarker info controller
+ * contents axis and contentTarget info controller
  */
 wuwei.info = wuwei.info || {};
 wuwei.info.contents = wuwei.info.contents || {};
@@ -12,12 +12,83 @@ wuwei.info.contents = wuwei.info.contents || {};
   var model = wuwei.model;
   var stateMap = { point: null, group: null };
 
-  function ensurePane() {
+
+
+  function ensureInfoRoot() {
     var infoPane = document.getElementById('info');
+    var editPane = document.getElementById('edit');
+    var hasHeader;
+
+    if (editPane) {
+      editPane.style.display = 'none';
+    }
+    if (!infoPane) {
+      return null;
+    }
+
+    hasHeader = !!(
+      infoPane.querySelector('header') &&
+      infoPane.querySelector('#infoDismiss') &&
+      infoPane.querySelector('#infoWiden')
+    );
+
+    /*
+     * Contents info can also be opened directly from the context-menu [i]
+     * command.  Ensure the shared info header exists so edit / info / widen /
+     * close controls are always available.
+     */
+    if (wuwei.info && wuwei.info.markup && typeof wuwei.info.markup.template === 'function') {
+      if (!hasHeader || !document.getElementById('info-contents')) {
+        infoPane.innerHTML = wuwei.info.markup.template();
+      }
+    }
+    infoPane.style.display = 'block';
+    return infoPane;
+  }
+
+  function hideSiblingPanes() {
+    [
+      'info-generic',
+      'info-group',
+      'info-uploaded',
+      'info-video',
+      'info-asciidoc',
+      'info-timeline'
+    ].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) { el.style.display = 'none'; }
+    });
+  }
+
+  function setInfoDataset(target) {
+    var infoPane = document.getElementById('info');
+    if (!infoPane) { return; }
+    delete infoPane.dataset.page_marker_id;
+    delete infoPane.dataset.edit_node_id;
+    delete infoPane.dataset.group_id;
+
+    if (target && (target.type === 'PageMarker' || target.nodeKind === 'contentTarget') && target.id) {
+      infoPane.dataset.node_id = target.id;
+      infoPane.dataset.page_marker_id = target.id;
+      infoPane.dataset.edit_node_id = target.id;
+      return;
+    }
+    if (target && target.id) {
+      infoPane.dataset.node_id = target.id;
+      infoPane.dataset.group_id = target.id;
+    }
+  }
+
+  function ensurePane() {
+    var infoPane = ensureInfoRoot();
     var pane = document.getElementById('info-contents');
-    if (pane) { return pane; }
+    if (pane) {
+      hideSiblingPanes();
+      return pane;
+    }
     if (!infoPane || !wuwei.info.contents.markup) { return null; }
     infoPane.insertAdjacentHTML('beforeend', wuwei.info.contents.markup.paneTemplate());
+    hideSiblingPanes();
     return document.getElementById('info-contents');
   }
 
@@ -31,8 +102,8 @@ wuwei.info.contents = wuwei.info.contents || {};
   }
 
   function getSpec(target) {
-    return contents && typeof contents.getPageTargetSpec === 'function'
-      ? contents.getPageTargetSpec(target)
+    return contents && typeof contents.getContentTargetSpec === 'function'
+      ? contents.getContentTargetSpec(target)
       : null;
   }
 
@@ -52,6 +123,7 @@ wuwei.info.contents = wuwei.info.contents || {};
 
     if (!pane || !spec || !spec.group) { return false; }
     group = spec.group;
+    setInfoDataset(group);
     stateMap.group = group;
     stateMap.point = null;
 
@@ -70,6 +142,7 @@ wuwei.info.contents = wuwei.info.contents || {};
     var pane = ensurePane();
 
     if (!pane || !spec || !spec.point) { return false; }
+    setInfoDataset(spec.point);
     stateMap.group = spec.group;
     stateMap.point = spec.point;
 
@@ -84,7 +157,7 @@ wuwei.info.contents = wuwei.info.contents || {};
   }
 
   function open(target, option) {
-    var point = option && (option.displayedPageMarker || option.contentsPoint);
+    var point = option && (option.displayedContentTarget || option.contentTarget || option.contentTargetPoint || option.displayedPageMarker || option.contentsPoint);
     var spec;
 
     if (point && openMarker(point)) {
@@ -99,27 +172,13 @@ wuwei.info.contents = wuwei.info.contents || {};
     return openAxis(spec.group);
   }
 
-  function openPageMarkerInInfo(point) {
-    var infoPane = document.getElementById('info');
-    var editPane = document.getElementById('edit');
-
-    if (editPane) { editPane.style.display = 'none'; }
-    if (wuwei.info && wuwei.info.markup && infoPane) {
-      infoPane.innerHTML = wuwei.info.markup.template();
-      infoPane.style.display = 'block';
-    }
+  function openContentTargetInInfo(point) {
+    ensureInfoRoot();
     return openMarker(point);
   }
 
   function openContentsAxisInInfo(group) {
-    var infoPane = document.getElementById('info');
-    var editPane = document.getElementById('edit');
-
-    if (editPane) { editPane.style.display = 'none'; }
-    if (wuwei.info && wuwei.info.markup && infoPane) {
-      infoPane.innerHTML = wuwei.info.markup.template();
-      infoPane.style.display = 'block';
-    }
+    ensureInfoRoot();
     return openAxis(group);
   }
 
@@ -133,8 +192,10 @@ wuwei.info.contents = wuwei.info.contents || {};
   ns.close = close;
   ns.canOpen = canOpen;
   ns.getCurrentMarker = getCurrentMarker;
-  ns.openPageMarkerInInfo = openPageMarkerInInfo;
+  ns.openContentTargetInInfo = openContentTargetInInfo;
+  ns.openPageMarkerInInfo = openContentTargetInInfo; // backward compatibility
   ns.openContentsAxisInInfo = openContentsAxisInInfo;
-  wuwei.info.openPageMarkerInInfo = openPageMarkerInInfo;
+  wuwei.info.openContentTargetInInfo = openContentTargetInInfo;
+  wuwei.info.openPageMarkerInInfo = openContentTargetInInfo; // backward compatibility
   wuwei.info.openContentsAxisInInfo = openContentsAxisInInfo;
 })(wuwei.info.contents);
