@@ -154,8 +154,8 @@ wuwei.edit.uploaded.markup = ( function () {
     var html = `
 <form id="editform" class="uploaded form-group content" onsubmit="return false;">
   <div class="w3-row">
-    <textarea id="rName" name="label" data-path="label" class="w3-col s12" rows="${rowcount(node.label || '')}" 
-        placeholder="${translate('Label')}">${node.label || ''}</textarea>
+    <textarea id="label" name="label" class="w3-col s12 edit-value" rows="${rowcount(node.label || '')}" 
+        placeholder="${t('Label')}">${node.label || ''}</textarea>
   </div>
   ${node && node.font
     ? `<div class="nFont_text-anchor w3-row">
@@ -166,36 +166,36 @@ wuwei.edit.uploaded.markup = ( function () {
     : ''
   }
   <div class="w3-row">
-    <textarea id="rValue_comment" name="description.body" data-path="description.body" class="w3-col s12" rows="${rowcount(value || '')}"
-          placeholder="${translate('Comment')}\nAsciiDoc\n**text** Bold Text\n*text* Italic Text\n+text+ Underline Text\n~~text~~ Strikethrough Text\n^text^ Superscript\n~text~ Subscript\n* text <ul>\n. text <ol>\n= text <h1>\n====== text <h6>\n----\nsource code\n----">${value}</textarea>
+    <textarea id="description_body" name="description.body" class="w3-col s12 edit-value" rows="${rowcount(value || '')}"
+          placeholder="${t('Comment')}\nAsciiDoc\n**text** Bold Text\n*text* Italic Text\n+text+ Underline Text\n~~text~~ Strikethrough Text\n^text^ Superscript\n~text~ Subscript\n* text <ul>\n. text <ol>\n= text <h1>\n====== text <h6>\n----\nsource code\n----">${value}</textarea>
   </div>
   <div class="w3-row">
     <label for="pdfPage" class="w3-col s4">&#12506;&#12540;&#12472;&#30058;&#21495;:</label>
     <input type="text" id="pdfPage" name="pdfPage" class="w3-col s8" value="${page ? page : ''}">
   </div>
   <div class="w3-row">
-  <label for="rUri" class="w3-col s2">URL:</label>
-  <input type="text" id="rUri" name="resource.uri" data-path="resource.uri" class="w3-col s10" readonly aria-readonly="true"
+  <label for="resource_uri" class="w3-col s2">URL:</label>
+  <input type="text" id="resource_uri" name="resource.uri" class="w3-col s10 edit-value" readonly aria-readonly="true"
       value="${resourceUri || ''}">
   </div>
   <div class="w3-row">
-    <label for="resource_kind" data-path="resource.kind" class="w3-col s6">${translate('Media type')}</label>
-    <input type="text" id="resource_kind" name="resource.kind" data-path="resource.kind" class="w3-col s6" readonly aria-readonly="true"
+    <label for="resource_kind" class="w3-col s6">${t('Media type')}</label>
+    <input type="text" id="resource_kind" name="resource.kind" class="w3-col s6 edit-value" readonly aria-readonly="true"
       value="${getMediaKindValue(node) || 'auto'}">
   </div>
   <div class="w3-row">
-  <label for="thumbnailUri" class="w3-col s4">${translate('THUMBNAIL')}</label>
-  <input type="text" id="thumbnailUri" name="thumbnailUri" data-path="thumbnailUri" class="w3-col s8" readonly aria-readonly="true"
+  <label for="thumbnailUri" class="w3-col s4">${t('THUMBNAIL')}</label>
+  <input type="text" id="thumbnailUri" name="thumbnailUri" class="w3-col s8 edit-value" readonly aria-readonly="true"
       value="${thumbnailUri || ''}">
   </div>
   <div class="w3-row">
-    <label for="resourceRightsAttribution" class="w3-col s4">${translate('Credit')}</label>
-    <input type="text" id="resourceRightsAttribution" name="resource.rights.attribution" data-path="resource.rights.attribution" class="w3-col s8"
+    <label for="resource_rights_attribution" class="w3-col s4">${t('Credit')}</label>
+    <input type="text" id="resource_rights_attribution" name="resource.rights.attribution" class="w3-col s8 edit-value"
       value="${(node.resource && node.resource.rights && node.resource.rights.attribution) || node.resource && node.resource.attribution || ''}">
   </div>
   <div class="w3-row">
-    <label for="resourceRightsLicense" class="w3-col s4">${translate('License')}</label>
-    <input type="text" id="resourceRightsLicense" name="resource.rights.license" data-path="resource.rights.license" class="w3-col s8"
+    <label for="resource_rights_license" class="w3-col s4">${t('License')}</label>
+    <input type="text" id="resource_rights_license" name="resource.rights.license" class="w3-col s8 edit-value"
       value="${(node.resource && node.resource.rights && node.resource.rights.license) || node.resource && node.resource.license || ''}">
   </div>
   ${isVideo
@@ -206,12 +206,12 @@ wuwei.edit.uploaded.markup = ( function () {
       </div>
 
       <div class="w3-row video-controls">
-        <label class="w3-col s12">${translate('clip range')}</label>
+        <label class="w3-col s12">${t('clip range')}</label>
         <div class="w3-col s12 time-inputs">
           <input id="vMediaStart" type="text" placeholder="start 00:01:23.5">
           <input id="vMediaEnd" type="text" placeholder="end (optional) 00:02:10">
-          <input type="hidden" id="rMedia_start" name="timeRange.start" data-path="timeRange.start" value="${mediaStart}">
-          <input type="hidden" id="rMedia_end" name="timeRange.end" data-path="timeRange.end" value="${mediaEnd}">
+          <input type="hidden" id="timeRange_start" name="timeRange.start" value="${mediaStart}">
+          <input type="hidden" id="timeRange_end" name="timeRange.end" value="${mediaEnd}">
         </div>
         <div class="w3-col s12 buttons">
           <button type="button" id="editVideoJumpStart">jump start</button>
@@ -230,69 +230,69 @@ wuwei.edit.uploaded.markup = ( function () {
   }
 <!--
   <div class="w3-row">
-    <label for="rPurpose" class="w3-col s4">${translate('Purpose')}</label>
+    <label for="rPurpose" class="w3-col s4">${t('Purpose')}</label>
     ${selectOptions('rPurpose', node.purposee, motivations, 'Select motivaton')}
   </div> 
 -->
   ${node ?
   `<div class="w3-row">
-    <label for="nShape" class="w3-col s4">${translate('Shape')}</label>
-    ${selectOptions('nShape', node.shape, shapes, 'Select shape').replace('name="nShape"', 'name="shape" data-path="shape"')}
+    <label for="shape" class="w3-col s4">${t('Shape')}</label>
+    ${selectOptions('shape', node.shape, shapes, 'Select shape')}
   </div>
   <div class="w3-row" id="radius"
       style="display:${'CIRCLE' === shape ? 'block' : 'none'}">
-    <label for="nSize_radius" class="w3-col s4">${translate('Radius')}</label>  
-    <input type="number" id="nSize_radius" name="nSize_radius"  value="${node.size && node.size.radius}" class="w3-col s8">
+    <label for="size_radius" class="w3-col s4">${t('Radius')}</label>  
+    <input type="number" id="size_radius" name="size.radius"  value="${node.size && node.size.radius}" class="w3-col s8 edit-value">
   </div>
   <div class="w3-row" id="width-height"
       style="display:${'CIRCLE' === shape ? 'none' : 'block'}">
-    <label for="nSize_width" class="w3-col s2">${translate('Width')}</label>  
-    <input type="number" id="nSize_width" name="size.width" data-path="size.width" value="${node.size && node.size.width}" class="w3-col s4">
-    <label for="nSize_height" class="w3-col s2">${translate('Height')}</label>  
-    <input type="number" id="nSize_height" name="size.height" data-path="size.height" value="${node.size && node.size.height}" class="w3-col s4">
+    <label for="size_width" class="w3-col s2">${t('Width')}</label>  
+    <input type="number" id="size_width" name="size.width" value="${node.size && node.size.width}" class="w3-col s4 edit-value">
+    <label for="size_height" class="w3-col s2">${t('Height')}</label>  
+    <input type="number" id="size_height" name="size.height" value="${node.size && node.size.height}" class="w3-col s4 edit-value">
   </div>
   ${'Topic' === node.type && node.text
     ? `<div class="w3-row" id="text_position">
-        <label for="nText_position" class="w3-col s4">${translate('Text position')}</label>
-        ${selectOptions('nText_position', node.text.position, positions, 'Select text position')}
+        <label for="text_position" class="w3-col s4">${t('Text position')}</label>
+        ${selectOptions('text.position', node.text.position, positions, 'Select text position')}
       </div>
       <div class="w3-row" id="text_width-height">
-        <label for="nText_width" class="w3-col s2">${translate('Width')}</label>  
-        <input type="number" id="nText_width" name="nText_width" value="${node.text.width}" class="w3-col s4">
-        <label for="nText_height" class="w3-col s2">${translate('Height')}</label>  
-        <input type="number" id="nText_height" name="nText_height" value="${node.text.height}" class="w3-col s4">
+        <label for="text_width" class="w3-col s2">${t('Width')}</label>  
+        <input type="number" id="text_width" name="text.width" value="${node.text.width}" class="w3-col s4 edit-value">
+        <label for="text_height" class="w3-col s2">${t('Height')}</label>  
+        <input type="number" id="text_height" name="text.height" value="${node.text.height}" class="w3-col s4 edit-value">
       </div>`
     : ''
   }
   <div class="w3-row">
-    <label for="nColor" class="w3-col s4">${translate('Background')}</label>  
-    <input type="color" id="nColor" name="style.fill" data-path="style.fill" value="${style.fill || node.color}" class="w3-col s4 pointer">
-    <div id="nodeColor" name="nodeColor" class="w3-col s4 pointer"></div>
+    <label for="style_fill" class="w3-col s4">${t('Background')}</label>  
+    <input type="color" id="style_fill" name="style.fill" value="${style.fill || node.color}" class="w3-col s4 pointer edit-value">
+    <div id="style_fill_palette" name="style_fill_palette" class="w3-col s4 pointer"></div>
   </div>
   <div class="w3-row">
-    <label for="nFont_color" class="w3-col s3">${translate('Text')}</label>  
-    <input type="color" id="nFont_color" name="style.font.color" data-path="style.font.color" value="${font && font.color}" class="w3-col s3 pointer">
-    <div id="nodeFont_color" name="nodeFont_color" class="w3-col s3 pointer"></div>
-    ${selectOptions('nFont_size', fontSizeValue, fontSizes, 'Select font size', 's3').replace('name="nFont_size"', 'name="style.font.size" data-path="style.font.size"')}
+    <label for="style_font_color" class="w3-col s3">${t('Text')}</label>  
+    <input type="color" id="style_font_color" name="style.font.color" value="${font && font.color}" class="w3-col s3 pointer edit-value">
+    <div id="style_font_color_palette" name="style_font_color_palette" class="w3-col s3 pointer"></div>
+    ${selectOptions('style.font.size', fontSizeValue, fontSizes, 'Select font size', 's3')}
   </div>
   <div class="w3-row">
-    <label for="nGroup" class="w3-col s4">${translate('Group')}</label>  
-    <input type="text" id="nGroup" name="nGroup" value="${node.group || ''}" class="w3-col s8">
+    <label for="group" class="w3-col s4">${t('Group')}</label>  
+    <input type="text" id="group" name="group" value="${node.group || ''}" class="w3-col s8 edit-value">
   </div>`
   : ``
 }
 <!--
   <div class="w3-row">
-    <label for="rType" class="w3-col s4">${translate('Type')}</label>
+    <label for="rType" class="w3-col s4">${t('Type')}</label>
     ${selectOptions('rType', node.type, types, 'Select node type')}
   </div>
   <div class="w3-row">
-    <label for="rFormat" class="w3-col s4">${translate('Format')}</label>
-    <input type="text" id="rFormat" name="rFormat" value="${(node.resource && node.resource.mimeType) || ''}" class="w3-col s8">
+    <label for="rFormat" class="w3-col s4">${t('Format')}</label>
+    <input type="text" id="rFormat" name="rFormat" value="${(node.resource && node.resource.mimeType) || ''}" class="w3-col s8 edit-value">
   </div> -->
 <!--  <div class="w3-row">
-    <label for="rLanguage" class="w3-col s4">${translate('Language')}</label>
-    <input type="text" id="rLanguage" name="rLanguage" value="${node.language || ''}" class="w3-col s8">
+    <label for="rLanguage" class="w3-col s4">${t('Language')}</label>
+    <input type="text" id="rLanguage" name="rLanguage" value="${node.language || ''}" class="w3-col s8 edit-value">
   </div> -->
 
 </form>
@@ -308,7 +308,7 @@ wuwei.edit.uploaded.markup = ( function () {
     return wuwei.edit.markup.rowcount(str);
   }
 
-  function translate(str) {
+  function t(str) {
     return wuwei.edit.markup.translate(str);
   }
 
