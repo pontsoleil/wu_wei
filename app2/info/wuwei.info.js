@@ -20,6 +20,8 @@ wuwei.info = wuwei.info || {};
     util = wuwei.util,
     stateMap = {
       node: null,
+      editTarget: null,
+      displayedPageMarker: null,
       option: null,
       _window: new Map()
     };
@@ -61,6 +63,27 @@ wuwei.info = wuwei.info || {};
     return false;
   }
 
+  function isContentsTarget(target) {
+    return !!(
+      target &&
+      wuwei.info.contents &&
+      typeof wuwei.info.contents.canOpen === 'function' &&
+      wuwei.info.contents.canOpen(target)
+    );
+  }
+
+  function openContentsInfo(target, option, replace) {
+    if (!target ||
+      !wuwei.info.contents ||
+      typeof wuwei.info.contents.open !== 'function') {
+      return false;
+    }
+    if (replace) {
+      showInfoPane('info-contents');
+    }
+    return !!wuwei.info.contents.open(target, option || {});
+  }
+
   function isHostedYouTubeUrl(url) {
     var s = String(url || '').toLowerCase();
     return /^https?:\/\/(www\.)?(youtube\.com|m\.youtube\.com|youtu\.be)\b/.test(s);
@@ -99,7 +122,8 @@ wuwei.info = wuwei.info || {};
       'info-uploaded',
       'info-video',
       'info-asciidoc',
-      'info-timeline'
+      'info-timeline',
+      'info-contents'
     ];
     ids.forEach(function (id) {
       var el = document.getElementById(id);
@@ -135,10 +159,48 @@ wuwei.info = wuwei.info || {};
     return resolveTarget(node);
   }
 
+  function isPageMarkerTarget(target) {
+    return !!(
+      target &&
+      (
+        target.type === 'PageMarker' ||
+        target.nodeKind === 'PageMarker' ||
+        target.kind === 'PageMarker' ||
+        target.topicKind === 'contents-page'
+      )
+    );
+  }
+
+  function resolveDisplayedPageMarker(option) {
+    var point;
+
+    if (!option || 'object' !== typeof option) {
+      return null;
+    }
+
+    point = option.displayedPageMarker || option.contentsPoint || null;
+    point = resolveTarget(point) || point;
+
+    if (!point || !isPageMarkerTarget(point)) {
+      return null;
+    }
+
+    return point;
+  }
+
+  function findEditableTargetById(id) {
+    if (!id || !model) {
+      return null;
+    }
+
+    return (typeof model.findNodeById === 'function' ? model.findNodeById(id) : null) ||
+      (typeof model.findLinkById === 'function' ? model.findLinkById(id) : null);
+  }
+
   function isGroupTarget(target) {
     return !!(target &&
-      'Group' === target.type &&
-      target.groupRef &&
+      (('Group' === target.type && target.groupRef) ||
+        ('representative' === target.groupRole && target.groupRef)) &&
       wuwei.info.group &&
       typeof wuwei.info.group.canOpen === 'function' &&
       wuwei.info.group.canOpen(target));
@@ -173,6 +235,7 @@ wuwei.info = wuwei.info || {};
     hidePane('info-video');
     hidePane('info-asciidoc');
     hidePane('info-timeline');
+    hidePane('info-contents');
   }
 
   function hasAsciiDocValue(node) {
@@ -310,6 +373,8 @@ wuwei.info = wuwei.info || {};
     resolvedNode = getNodeById(node);
     if (!resolvedNode) {
       stateMap.node = null;
+      stateMap.editTarget = null;
+      stateMap.displayedPageMarker = null;
       stateMap.option = null;
       return;
     }
@@ -317,9 +382,33 @@ wuwei.info = wuwei.info || {};
     infoPane.dataset.node_id = resolvedNode.id || '';
     stateMap.node = resolvedNode;
     stateMap.option = option || resolvedNode.option || null;
+    stateMap.displayedPageMarker = resolveDisplayedPageMarker(stateMap.option);
+    stateMap.editTarget = stateMap.displayedPageMarker ||
+      ((stateMap.option && stateMap.option.editTarget)
+        ? resolveTarget(stateMap.option.editTarget) || stateMap.option.editTarget
+        : resolvedNode);
+
+    if (stateMap.displayedPageMarker && stateMap.displayedPageMarker.id) {
+      infoPane.dataset.page_marker_id = stateMap.displayedPageMarker.id;
+    }
+    else {
+      delete infoPane.dataset.page_marker_id;
+    }
+
+    if (stateMap.editTarget && stateMap.editTarget.id) {
+      infoPane.dataset.edit_node_id = stateMap.editTarget.id;
+    }
+    else {
+      delete infoPane.dataset.edit_node_id;
+    }
 
     if (isTimelinePointNode(resolvedNode) || isTimelineAxisLink(resolvedNode)) {
       openTimelineInfo(resolvedNode);
+      return;
+    }
+
+    if (isContentsTarget(resolvedNode)) {
+      openContentsInfo(resolvedNode, stateMap.option, true);
       return;
     }
 
@@ -386,6 +475,10 @@ wuwei.info = wuwei.info || {};
     if (!hasMeaningfulPaneContent('info-generic')) {
       hidePane('info-generic');
     }
+
+    if (stateMap.displayedPageMarker) {
+      openContentsInfo(stateMap.displayedPageMarker, stateMap.option, false);
+    }
   }
 
   function close() {
@@ -397,6 +490,9 @@ wuwei.info = wuwei.info || {};
     }
     if (wuwei.info.timeline && 'function' === typeof wuwei.info.timeline.close) {
       wuwei.info.timeline.close();
+    }
+    if (wuwei.info.contents && 'function' === typeof wuwei.info.contents.close) {
+      wuwei.info.contents.close();
     }
     if (wuwei.info.video && 'function' === typeof wuwei.info.video.close) {
       wuwei.info.video.close();
@@ -420,9 +516,13 @@ wuwei.info = wuwei.info || {};
       infoPane.innerHTML = '';
       infoPane.style.display = 'none';
       delete infoPane.dataset.node_id;
+      delete infoPane.dataset.edit_node_id;
+      delete infoPane.dataset.page_marker_id;
     }
 
     stateMap.node = null;
+    stateMap.editTarget = null;
+    stateMap.displayedPageMarker = null;
     stateMap.option = null;
 
     if (window.wuwei && wuwei.menu && 'function' === typeof wuwei.menu.closeContextMenu) {
@@ -435,22 +535,24 @@ wuwei.info = wuwei.info || {};
   }
 
   function editOpen() {
-    var editingNode = resolveTarget(stateMap.node);
+    var editingNode = resolveTarget(stateMap.displayedPageMarker) ||
+      resolveTarget(stateMap.editTarget) ||
+      resolveTarget(stateMap.node);
     var editPane = document.getElementById('edit');
     var infoPane = document.getElementById('info');
     var editingNodeId;
 
-    if (!editingNode && editPane) {
-      editingNodeId = editPane.dataset.node_id;
-      if (editingNodeId) {
-        editingNode = model.findNodeById(editingNodeId);
-      }
-    }
     if (!editingNode && infoPane) {
-      editingNodeId = infoPane.dataset.node_id;
-      if (editingNodeId) {
-        editingNode = model.findNodeById(editingNodeId);
-      }
+      editingNodeId = infoPane.dataset.page_marker_id ||
+        infoPane.dataset.edit_node_id ||
+        infoPane.dataset.node_id;
+      editingNode = findEditableTargetById(editingNodeId);
+    }
+    if (!editingNode && editPane) {
+      editingNodeId = editPane.dataset.page_marker_id ||
+        editPane.dataset.edit_node_id ||
+        editPane.dataset.node_id;
+      editingNode = findEditableTargetById(editingNodeId);
     }
 
     close();
@@ -664,6 +766,10 @@ wuwei.info = wuwei.info || {};
       wuwei.info.timeline.initModule();
     }
 
+    if (wuwei.info.contents && typeof wuwei.info.contents.initModule === 'function') {
+      wuwei.info.contents.initModule();
+    }
+
     document.addEventListener('click', function (ev) {
       var dismissBtn = ev.target && ev.target.closest && ev.target.closest('#infoDismiss');
       if (dismissBtn) {
@@ -694,6 +800,9 @@ wuwei.info = wuwei.info || {};
   ns.open = open;
   ns.close = close;
   ns.editOpen = editOpen;
+  ns.getDisplayedPageMarker = function () {
+    return stateMap.displayedPageMarker;
+  };
   ns.widen = widen;
   ns.openWindow = openWindow;
   ns.closeWindow = closeWindow;
