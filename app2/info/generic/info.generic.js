@@ -47,7 +47,7 @@ wuwei.info.generic = wuwei.info.generic || {};
     node = param && param.node ? param.node : null;
     label = node ? (node.label || '') : '';
 
-    labelEl = document.getElementById('rName');
+    labelEl = pane.querySelector('#label');
     if (labelEl) {
       setLabelWithBreaks(labelEl, label);
     }
