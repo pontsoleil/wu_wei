@@ -14,28 +14,28 @@ wuwei.edit.link = wuwei.edit.link || {};
 (function (ns) {
 
   function initColorPalettePicker(param) {
-    $('#linkColor').colorPalettePicker({
-      lines: 4,
+    $('#style_line_color_palette').colorPalettePicker({
+      lines: 6,
       bootstrap: 4,
-      dropdownTitle: '標準色',
+      dropdownTitle: wuwei.nls.translate('Standard colours'),
       buttonClass: 'btn btn-light btn-sm dropdown-toggle',
       buttonPreviewName: 'linkColorPaletteSelected',
       onSelected: function (color) {
-        var input = document.getElementById('lColor');
+        var input = document.getElementById('style_line_color');
         if (input) {
           input.value = color;
           input.dispatchEvent(new Event('change', { bubbles: true }));
         }
       }
     });
-    $('#linkFont_color').colorPalettePicker({
-      lines: 4,
+    $('#style_font_color_palette').colorPalettePicker({
+      lines: 6,
       bootstrap: 4,
-      dropdownTitle: '標準色',
+      dropdownTitle: wuwei.nls.translate('Standard colours'),
       buttonClass: 'btn btn-light btn-sm dropdown-toggle',
       buttonPreviewName: 'textColorPaletteSelected',
       onSelected: function (color) {
-        var input = document.getElementById('lFont_color');
+        var input = document.getElementById('style_font_color');
         if (input) {
           input.value = color;
           input.dispatchEvent(new Event('change', { bubbles: true }));
@@ -60,7 +60,7 @@ wuwei.edit.link = wuwei.edit.link || {};
         rgx=/^([TRBL])([-+]?)(\d+)$/,
         rgxT=/^C(\d+)R(\d+)$/,
         position, col, row;
-        document.getElementById('lSource_position').addEventListener('change', (event) => {
+        document.getElementById('source_position').addEventListener('change', (event) => {
           event.stopPropagation();
           link = param.link;
           source = link.source;
@@ -101,7 +101,7 @@ wuwei.edit.link = wuwei.edit.link || {};
           wuwei.edit.update(evt);
         });
       
-        document.getElementById('lTarget_position').addEventListener('change', (event) => {
+        document.getElementById('target_position').addEventListener('change', (event) => {
           event.stopPropagation();
           link = param.link;
           target = link.target;
