@@ -31,8 +31,8 @@ wuwei.info.uploaded.markup = ( function () {
     } else {
       width = null; height = null;
     }
-    if (option && option.pdfjsUri) {
-      uri = String(option.pdfjsUri || '');
+    if (option && (option.contentViewerUri || option.pdfjsUri)) {
+      uri = String(option.contentViewerUri || option.pdfjsUri || '');
     }
     else {
       uri = resolveFrameUri(node, uri);
