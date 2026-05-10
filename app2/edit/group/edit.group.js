@@ -24,18 +24,25 @@ wuwei.edit.group = wuwei.edit.group || {};
 
   function defaultSpineForType(type) {
     var style = (wuwei.common && wuwei.common.defaultStyle && wuwei.common.defaultStyle.group) || {};
-    var simple = style.simple || {};
+    var typed = style[type] || {};
     var spine = {};
 
-    spine.kind = ('simple' === type) ? (simple.kind || style.kind || 'DASHED') : (style.kind || 'SOLID');
-    spine.color = style.color || '#888888';
-    spine.width = ('simple' === type) ? toNumber(simple.width, 2) : toNumber(style.width, 6);
-    spine.padding = toNumber(style.padding, 'simple' === type ? 16 : 12);
-    spine.paddingTop = spine.padding;
-    spine.paddingRight = spine.padding;
-    spine.paddingBottom = spine.padding;
-    spine.paddingLeft = spine.padding;
-    spine.visible = true;
+    if (wuwei.model && typeof wuwei.model.groupStyleDefaults === 'function') {
+      return wuwei.model.groupStyleDefaults(type || 'simple');
+    }
+
+    /* Keep group defaults centralised in wuwei.common.defaultStyle.group. */
+    spine.kind = typed.kind || style.kind;
+    spine.color = typed.color || style.color;
+    spine.width = toNumber(typed.width, style.width);
+    spine.padding = toNumber(typed.padding, style.padding);
+    spine.paddingTop = toNumber(typed.paddingTop, spine.padding);
+    spine.paddingRight = toNumber(typed.paddingRight, spine.padding);
+    spine.paddingBottom = toNumber(typed.paddingBottom, spine.padding);
+    spine.paddingLeft = toNumber(typed.paddingLeft, spine.padding);
+    spine.visible = (typeof typed.visible === 'boolean')
+      ? typed.visible
+      : ((typeof style.visible === 'boolean') ? style.visible : true);
     return spine;
   }
 
@@ -179,23 +186,30 @@ wuwei.edit.group = wuwei.edit.group || {};
       applySpineToFields(group.spine);
     }
     else {
-      group.spine.kind = spineKindEl ? (spineKindEl.value || 'SOLID') : (group.spine.kind || 'SOLID');
-      group.spine.width = toNumber(spineWidthEl && spineWidthEl.value, 'simple' === group.type ? 2 : 6);
-      group.spine.color = (spineColorEl && spineColorEl.value) || group.spine.color || '#888888';
-      group.spine.padding = toNumber(spinePaddingEl && spinePaddingEl.value, 'simple' === group.type ? 16 : 12);
+      defaultSpine = defaultSpineForType(group.type || 'simple');
+      group.spine.kind = spineKindEl ? (spineKindEl.value || defaultSpine.kind) : (group.spine.kind || defaultSpine.kind);
+      group.spine.width = toNumber(spineWidthEl && spineWidthEl.value, defaultSpine.width);
+      group.spine.color = (spineColorEl && spineColorEl.value) || group.spine.color || defaultSpine.color;
+      group.spine.padding = toNumber(spinePaddingEl && spinePaddingEl.value, defaultSpine.padding);
       basePadding = group.spine.padding;
-      group.spine.paddingTop = toNumber(spinePaddingTopEl && spinePaddingTopEl.value, basePadding);
-      group.spine.paddingRight = toNumber(spinePaddingRightEl && spinePaddingRightEl.value, basePadding);
-      group.spine.paddingBottom = toNumber(spinePaddingBottomEl && spinePaddingBottomEl.value, basePadding);
-      group.spine.paddingLeft = toNumber(spinePaddingLeftEl && spinePaddingLeftEl.value, basePadding);
-      group.spine.visible = spineVisibleEl ? !!spineVisibleEl.checked : true;
+      group.spine.paddingTop = toNumber(spinePaddingTopEl && spinePaddingTopEl.value, toNumber(defaultSpine.paddingTop, basePadding));
+      group.spine.paddingRight = toNumber(spinePaddingRightEl && spinePaddingRightEl.value, toNumber(defaultSpine.paddingRight, basePadding));
+      group.spine.paddingBottom = toNumber(spinePaddingBottomEl && spinePaddingBottomEl.value, toNumber(defaultSpine.paddingBottom, basePadding));
+      group.spine.paddingLeft = toNumber(spinePaddingLeftEl && spinePaddingLeftEl.value, toNumber(defaultSpine.paddingLeft, basePadding));
+      group.spine.visible = spineVisibleEl ? !!spineVisibleEl.checked : defaultSpine.visible;
     }
 
-    if (('vertical' === previousType && 'horizontal' === group.type) ||
-      ('horizontal' === previousType && 'vertical' === group.type)) {
-      if (wuwei.model && typeof wuwei.model.reflowGroupMembers === 'function') {
-        wuwei.model.reflowGroupMembers(group, group.type);
-      }
+    /*
+     * When the group type is changed, reflow the member nodes for the new
+     * group type.  This is required not only for vertical <-> horizontal, but
+     * also for simple -> horizontal / vertical.  Otherwise, the data model is
+     * changed to a horizontal group, but the nodes keep their previous y
+     * positions until another operation reflows them.
+     */
+    if (typeChanged &&
+      ('simple' === group.type || 'horizontal' === group.type || 'vertical' === group.type) &&
+      wuwei.model && typeof wuwei.model.reflowGroupMembers === 'function') {
+      wuwei.model.reflowGroupMembers(group, group.type, previousType);
     }
     else if (wuwei.model && typeof wuwei.model.setGraphFromCurrentPage === 'function') {
       wuwei.model.setGraphFromCurrentPage();
