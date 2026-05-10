@@ -13,9 +13,10 @@ wuwei.info.generic = wuwei.info.generic || {};
 wuwei.info.generic.markup = (function () {
   const template = function (param) {
     let
-      node = param.node;
+      node = param.node,
+      option = param.option || {};
     const util = wuwei.util;
-    let uri = resolveInfoUri(node);
+    let uri = option && option.pdfjsUri ? String(option.pdfjsUri || '') : resolveInfoUri(node);
     let label = node.label || '';
     let value = '';
     let rights = getResourceRights(node);
@@ -55,11 +56,11 @@ wuwei.info.generic.markup = (function () {
           onerror="wuwei.info.iframeError()"
           style="display:block; width:100%; min-height:768px; border:none; overflow:auto; box-sizing:border-box;"></iframe>
         <div class="iframe-fallback" style="display:none;">
-          ${translate('This site refused to be displayed in an iframe.')}
+          ${t('This site refused to be displayed in an iframe.')}
           <br><a href="${wuwei.util.encodeHtml(uri)}" target="_blank" rel="noopener noreferrer">${wuwei.util.encodeHtml(uri)}</a>
         </div>
         <div class="link" onclick="window.open('${uri}', 'wuwei', 'width=600,height=400')">
-          ${translate('Click to open window')}<i class="fas fa-external-link-alt"></i>
+          ${t('Click to open window')}<i class="fas fa-external-link-alt"></i>
         </div>`
       : (thumbnailUri
         ? `<div class="frame">
@@ -82,11 +83,11 @@ wuwei.info.generic.markup = (function () {
         : ``
       }
       ${credit
-        ? `<p class="credit"><strong>${translate('Credit')}:</strong> ${wuwei.util.encodeHtml(credit)}</p>`
+        ? `<p class="credit"><strong>${t('Credit')}:</strong> ${wuwei.util.encodeHtml(credit)}</p>`
         : ``
       }
       ${license
-        ? `<p class="license"><strong>${translate('License')}:</strong> ${wuwei.util.encodeHtml(license)}</p>`
+        ? `<p class="license"><strong>${t('License')}:</strong> ${wuwei.util.encodeHtml(license)}</p>`
         : ``
       }
     </div>
@@ -97,7 +98,7 @@ wuwei.info.generic.markup = (function () {
     return html;
   };
 
-  function translate(str) {
+  function t(str) {
     return wuwei.nls.translate(str);
   }
 
