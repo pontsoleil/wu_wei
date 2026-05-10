@@ -2,12 +2,11 @@
  * wuwei.info.template.js
  * wuwei info template
  *
- * WuWei is a free to use open source knowledge modeling tool.
- * More information on WuWei can be found on WuWei homepage.
- * https://wuwei.space/blog/
+ * WuWei is a free, open-source knowledge modelling tool.
  *
- * WuWei is licensed under the MIT License
- * Copyright (c) 2013-2019, Nobuyuki SAMBUICHI
+ * Licensed under the MIT License.
+ * Copyright (c) 2013-2019,2026 SAMBUICHI, Nobuyuki
+ * (Sambuichi Professional Engineers Office)
  **/
 wuwei.info = wuwei.info || {};
 wuwei.info.markup = ( function () {
@@ -44,6 +43,7 @@ wuwei.info.markup = ( function () {
 <div id="info-video"></div>
 <div id="info-asciidoc"></div>
 <div id="info-timeline"></div>
+<div id="info-contents"></div>
 <!--/.Card content-->
 <!--/.Card-->
 `;
@@ -54,7 +54,7 @@ wuwei.info.markup = ( function () {
     return wuwei.edit.markup.rowcount(text);
   }
 
-  function translate(str) {
+  function t(str) {
     return wuwei.nls.translate(str);
   }
 
