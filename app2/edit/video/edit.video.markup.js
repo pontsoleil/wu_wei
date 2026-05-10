@@ -16,8 +16,12 @@ wuwei.edit.video.markup = (function () {
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
-  function rowcount(str) { return wuwei.edit.markup.rowcount(str || ''); }
-  function translate(str) { return (wuwei.nls && wuwei.nls.translate) ? wuwei.nls.translate(str) : str; }
+  function rowcount(str) {
+    return wuwei.edit.markup.rowcount(str || '');
+  }
+  function t(str) {
+    return wuwei.nls.translate(str)
+  }
   function selectOptions(name, value, options, placeholder, size) {
     return wuwei.edit.markup.selectOptions(name, value, options, placeholder, size);
   }
@@ -62,14 +66,14 @@ wuwei.edit.video.markup = (function () {
     var html = [];
     html.push('<div class="edit">',
       '<div>',
-        '<textarea id="rName" name="label" data-path="label" class="w3-col s12" rows="' + rowcount(title) + '" placeholder="' + translate('Label') + '">' + escapeHtml(title) + '</textarea>',
+        '<textarea id="label" name="label" class="w3-col s12 edit-value" rows="' + rowcount(title) + '" placeholder="' + t('Label') + '">' + escapeHtml(title) + '</textarea>',
       '</div>',
       '<div class="w3-row">',
-        '<textarea id="rValue_comment" name="description.body" data-path="description.body" class="w3-col s12" rows="' + rowcount(value) + '" placeholder="' + translate('Comment') + '">' + escapeHtml(value) + '</textarea>',
+        '<textarea id="description_body" name="description.body" class="w3-col s12 edit-value" rows="' + rowcount(value) + '" placeholder="' + t('Comment') + '">' + escapeHtml(value) + '</textarea>',
       '</div>' +
       '<div class="w3-row">',
-        '<label for="rMedia_kind" class="w3-col s4">' + translate('Media type') + '</label>',
-        selectOptions('rMedia_kind',
+        '<label for="resource_kind" class="w3-col s4">' + t('Media type') + '</label>',
+        selectOptions('resource.kind',
           getMediaKindValue(resource),
           [
             { value: '', label: 'auto' },
@@ -83,13 +87,13 @@ wuwei.edit.video.markup = (function () {
           's8'),
       '</div>' +
       '<div class="w3-row">',
-        '<label for="rUri" class="w3-col s2">URL:</label>',
-        '<input type="text" id="rUri" name="resource.canonicalUri" data-path="resource.canonicalUri" class="w3-col s10" value="' + escapeHtml(resourceUri) + '">',
+        '<label for="resource_canonicalUri" class="w3-col s2">URL:</label>',
+        '<input type="text" id="resource_canonicalUri" name="resource.canonicalUri" class="w3-col s10 edit-value" value="' + escapeHtml(resourceUri) + '">',
       '</div>' +
       '<div class="frame video ' + (hosted ? 'hosted' : 'html5') + '">' + previewHtml + '</div>' +
       '<div class="controls video">' +
-        '<input id="editVideoStart" name="timeRange.start" data-path="timeRange.start" type="hidden" value="' + escapeHtml(startStr) + '">',
-        '<input id="editVideoEnd" name="timeRange.end" data-path="timeRange.end" type="hidden" value="' + escapeHtml(endStr) + '">',
+        '<input id="timeRange_start" name="timeRange.start" type="hidden" value="' + escapeHtml(startStr) + '">',
+        '<input id="timeRange_end" name="timeRange.end" type="hidden" value="' + escapeHtml(endStr) + '">',
         '<div class="video-duration" id="editVideoDuration">' + escapeHtml(durationStr || '00:00:00') + '</div>',
       '</div>' +
       '<div class="buttons" style="margin-top:8px;">',
@@ -97,25 +101,25 @@ wuwei.edit.video.markup = (function () {
       '</div>')
     if (node) {
       html.push('<div class="w3-row">',
-        '<label for="nShape" class="w3-col s4">' + translate('Shape') + '</label>',
-      selectOptions('nShape', node.shape, shapes, translate('Select shape')).replace('name="nShape"', 'name="shape" data-path="shape"'),
+        '<label for="shape" class="w3-col s4">' + t('Shape') + '</label>',
+      selectOptions('shape', node.shape, shapes, t('Select shape')),
       '</div>',
       '<div class="w3-row" id="width-height">',
-        '<label for="nSize_width" class="w3-col s2">' + translate('Width') + '</label>',
-        '<input type="number" id="nSize_width" name="size.width" data-path="size.width" value="' + (node.size && node.size.width || '') + '" class="w3-col s4">',
-        '<label for="nSize_height" class="w3-col s2">' + translate('Height') + '</label>',
-        '<input type="number" id="nSize_height" name="size.height" data-path="size.height" value="' + (node.size && node.size.height || '') + '" class="w3-col s4">',
+        '<label for="size_width" class="w3-col s2">' + t('Width') + '</label>',
+        '<input type="number" id="size_width" name="size.width" value="' + (node.size && node.size.width || '') + '" class="w3-col s4 edit-value">',
+        '<label for="size_height" class="w3-col s2">' + t('Height') + '</label>',
+        '<input type="number" id="size_height" name="size.height" value="' + (node.size && node.size.height || '') + '" class="w3-col s4 edit-value">',
       '</div>',
       '<div class="w3-row">',
-        '<label for="nColor" class="w3-col s4">' + translate('Background') + '</label>',
-        '<input type="color" id="nColor" name="style.fill" data-path="style.fill" value="' + escapeHtml(style.fill || node.color) + '" class="w3-col s4 pointer">',
-        '<div id="nodeColor" name="nodeColor" class="w3-col s4 pointer"></div>',
+        '<label for="style_fill" class="w3-col s4">' + t('Background') + '</label>',
+        '<input type="color" id="style_fill" name="style.fill" value="' + escapeHtml(style.fill || node.color) + '" class="w3-col s4 pointer edit-value">',
+        '<div id="style_fill_palette" name="style_fill_palette" class="w3-col s4 pointer"></div>',
       '</div>',
       '<div class="w3-row">',
-        '<label for="nFont_color" class="w3-col s3">' + translate('Text') + '</label>',
-        '<input type="color" id="nFont_color" name="style.font.color" data-path="style.font.color" value="' + escapeHtml(font && font.color || '') + '" class="w3-col s3 pointer">',
-        '<div id="nodeFont_color" name="nodeFont_color" class="w3-col s3 pointer"></div>',
-        selectOptions('nFont_size', fontSizeValue, fontSizes, translate('Select font size'), 's3').replace('name="nFont_size"', 'name="style.font.size" data-path="style.font.size"') ,
+        '<label for="style_font_color" class="w3-col s3">' + t('Text') + '</label>',
+        '<input type="color" id="style_font_color" name="style.font.color" value="' + escapeHtml(font && font.color || '') + '" class="w3-col s3 pointer edit-value">',
+        '<div id="style_font_color_palette" name="style_font_color_palette" class="w3-col s3 pointer"></div>',
+        selectOptions('style.font.size', fontSizeValue, fontSizes, t('Select font size'), 's3') ,
       '</div>');
     }
     html.push('</div>');
