@@ -581,6 +581,20 @@ wuwei.note = (function () {
     if (typeof src.groupRef === 'string' && src.groupRef) {
       out.groupRef = src.groupRef;
     }
+    if (src.representativeOf && 'object' === typeof src.representativeOf) {
+      out.representativeOf = {
+        kind: src.representativeOf.kind || 'group',
+        id: src.representativeOf.id || src.groupRef || ''
+      };
+    }
+    if (typeof src.groupRole === 'string' && src.groupRole) {
+      out.groupRole = src.groupRole;
+      if ('representative' === out.groupRole) {
+        out.style = out.style || {};
+        out.style.line = out.style.line || {};
+        out.style.line.kind = 'DASHED';
+      }
+    }
     if (typeof src.axisRole === 'string' && src.axisRole) {
       out.axisRole = src.axisRole;
     }
@@ -626,6 +640,31 @@ wuwei.note = (function () {
     return model.LinkFactory(out);
   }
 
+  function noteNumberOrDefault(value, fallback) {
+    var n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+  }
+
+  function noteGroupStyleDefaults(type) {
+    var style = (common && common.defaultStyle && common.defaultStyle.group) || {};
+    var typed = style[type] || {};
+    var padding = noteNumberOrDefault(typed.padding, style.padding);
+
+    return {
+      kind: typed.kind || style.kind,
+      color: typed.color || style.color,
+      width: noteNumberOrDefault(typed.width, style.width),
+      padding: padding,
+      paddingTop: noteNumberOrDefault(typed.paddingTop, padding),
+      paddingRight: noteNumberOrDefault(typed.paddingRight, padding),
+      paddingBottom: noteNumberOrDefault(typed.paddingBottom, padding),
+      paddingLeft: noteNumberOrDefault(typed.paddingLeft, padding),
+      visible: (typeof typed.visible === 'boolean')
+        ? typed.visible
+        : ((typeof style.visible === 'boolean') ? style.visible : true)
+    };
+  }
+
   function normalizeGroup(group) {
     var src = group || {};
     var spine = src.spine || {};
@@ -659,10 +698,11 @@ wuwei.note = (function () {
       type = 'contents';
     }
 
-    var baseSpinePadding = Number.isFinite(Number(spine.padding)) ? Number(spine.padding) : (type === 'simple' ? 16 : 12);
+    var defaultSpine = noteGroupStyleDefaults(type);
+    var baseSpinePadding = Number.isFinite(Number(spine.padding)) ? Number(spine.padding) : defaultSpine.padding;
 
     function spinePaddingSide(key) {
-      return Number.isFinite(Number(spine[key])) ? Number(spine[key]) : baseSpinePadding;
+      return Number.isFinite(Number(spine[key])) ? Number(spine[key]) : Number(defaultSpine[key] || baseSpinePadding);
     }
 
     if (type === 'contents' && !members.length && entries.length) {
@@ -688,14 +728,15 @@ wuwei.note = (function () {
       moveTogether: (false !== src.moveTogether),
       orientation: src.orientation || 'auto',
       spine: {
-        kind: spine.kind || (type === 'simple' ? 'DASHED' : 'SOLID'),
-        color: spine.color || '#888888',
-        width: Number(spine.width || (type === 'simple' ? 2 : 6)),
+        kind: spine.kind || defaultSpine.kind,
+        color: spine.color || defaultSpine.color,
+        width: noteNumberOrDefault(spine.width, defaultSpine.width),
         padding: baseSpinePadding,
         paddingTop: spinePaddingSide('paddingTop'),
         paddingRight: spinePaddingSide('paddingRight'),
         paddingBottom: spinePaddingSide('paddingBottom'),
-        paddingLeft: spinePaddingSide('paddingLeft')
+        paddingLeft: spinePaddingSide('paddingLeft'),
+        visible: (typeof spine.visible === 'boolean') ? spine.visible : defaultSpine.visible
       },
       timeline: (type === 'timeline') ? {
         unit: timeline.unit || axis.unit || 'second',
@@ -732,6 +773,7 @@ wuwei.note = (function () {
       groupType: src.groupType || '',
       mediaRef: src.mediaRef || '',
       documentRef: src.documentRef || '',
+      representativeNodeId: src.representativeNodeId || '',
       pageCount: Number.isFinite(pageCount) ? pageCount : undefined,
       timeStart: Number.isFinite(Number(src.timeStart)) ? Number(src.timeStart) : undefined,
       timeEnd: Number.isFinite(Number(src.timeEnd)) ? Number(src.timeEnd) : undefined,
