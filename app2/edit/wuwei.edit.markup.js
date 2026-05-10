@@ -59,23 +59,20 @@ wuwei.edit.markup = (function () {
   };
 
 
+  function pathToFieldId(path) {
+    if (!path) { return ''; }
+    return String(path).replace(/\./g, '_');
+  }
+
+
   function selectOptions(name, value, options, placeholder, size, multiple, cb) {
     options = options || [];
     size = size || 's8';
-    var modelPathMap = {
-      nFont_size: 'style.font.size',
-      lFont_size: 'style.font.size',
-      nShape: 'shape',
-      lShape: 'shape',
-      lStrokedash: 'style.line.kind',
-      lStartArrow_kind: 'routing.startArrow.kind',
-      lEndArrow_kind: 'routing.endArrow.kind',
-      rMedia_kind: 'resource.kind'
-    };
-    var modelPath = modelPathMap[name] || '';
-    var fieldName = modelPath || name;
 
+    var modelPath = String(name || '');
+    var fieldId = pathToFieldId(modelPath);
     var values;
+
     if (multiple) {
       if (Array.isArray(value)) {
         values = value;
@@ -94,9 +91,8 @@ wuwei.edit.markup = (function () {
     var html = [];
 
     html.push(
-      '<select id="' + name + '" name="' + fieldName + '"',
-      modelPath ? ' data-path="' + modelPath + '"' : '',
-      ' class="w3-col ' + size + '"',
+      '<select id="' + fieldId + '" name="' + modelPath + '"',
+      ' class="w3-col ' + size + ' edit-value"',
       multiple ? ' multiple="multiple"' : '',
       cb ? ' onchange="' + cb + '()"' : '',
       '>'
@@ -134,6 +130,7 @@ wuwei.edit.markup = (function () {
     html.push('</select>');
     return html.join('');
   }
+
 
 
   function rowcount(text) {
