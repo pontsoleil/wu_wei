@@ -9,6 +9,10 @@
  * (Sambuichi Professional Engineers Office)
  **/
 wuwei.nls.JA = {
+  'Standard colours': '標準色',
+  'Folded corner': '折り返し角',
+  'Apply to all group members': 'グループに一括適用',
+
   'Publish': '公開',
   'Align': '整列',
   'Define / Ungroup': 'グループ定義/解除',
@@ -299,6 +303,7 @@ wuwei.nls.JA = {
   'Curve/Line': 'やわらかい/真直ぐな関連線',
   'Cut': 'カット',
   'Dashed': '破線',
+  'Long dashed': '長破線',
   'Date Picker': '日付指定',
   'defined by': '作',
   'Delete': '削除',
@@ -522,5 +527,9 @@ wuwei.nls.JA = {
   'Your PRIVATE Notebooks': '非公開ノート一覧',
   'Zoom': 'ズーム',
   'Create a personal content collection and annotate it.': 'コンテンツコレクションを作成し注釈を付けます。',
-  'Visual notes will help you organize your thoughts.': '無為ノートは、考えを整理する助けとなります。'
+  'Visual notes will help you organize your thoughts.': '無為ノートは、考えを整理する助けとなります。',
+  'Add table of contents': '目次を追加',
+  'Table of contents was added.': '目次を追加しました。',
+  'Contents module is not available.': 'Contentsモジュールを利用できません。',
+  'Failed to add table of contents.': '目次の追加に失敗しました。',
 };
