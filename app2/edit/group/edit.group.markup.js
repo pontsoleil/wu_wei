@@ -17,9 +17,7 @@ wuwei.edit.group.markup = (function () {
   }
 
   function t(text) {
-    return (wuwei.nls && typeof wuwei.nls.translate === 'function')
-      ? wuwei.nls.translate(text)
-      : text;
+    return wuwei.nls.translate(text);
   }
 
   function selected(value, expected) {
@@ -42,15 +40,28 @@ wuwei.edit.group.markup = (function () {
   function lineKindOptions(value) {
     var kind = value || 'SOLID';
     return [
-      ['SOLID', 'Solid'],
-      ['DASHED', 'Dashed'],
-      ['DOTTED', 'Dotted'],
-      ['LONG_DASHED', 'Long dashed']
+      ['SOLID', t('Solid')],
+      ['DASHED', t('Dashed')],
+      ['DOTTED', t('Dotted')],
+      ['LONG_DASHED', t('Long dashed')]
     ].map(function (option) {
       return '<option value="' + option[0] + '"' + selected(kind, option[0]) + '>' +
         t(option[1]) +
         '</option>';
     }).join('');
+  }
+
+  function groupTypeOptions(group) {
+    var type = (group && group.type) || 'simple';
+    var fixed = [];
+    if (['simple', 'horizontal', 'vertical'].indexOf(type) < 0) {
+      fixed.push('<option value="' + esc(type) + '" selected disabled>' + t(type) + '</option>');
+    }
+    return fixed.concat([
+      '<option value="simple"' + selected(type, 'simple') + '>' + t('Simple group') + '</option>',
+      '<option value="horizontal"' + selected(type, 'horizontal') + '>' + t('Horizontal group') + '</option>',
+      '<option value="vertical"' + selected(type, 'vertical') + '>' + t('Vertical group') + '</option>'
+    ]).join('');
   }
 
   function template(group) {
@@ -75,9 +86,7 @@ wuwei.edit.group.markup = (function () {
   <div class="w3-row">
     <label for="type" class="w3-col s4">${t('Shape')}</label>
     <select id="type" name="type" class="w3-col s8 edit-value">
-      <option value="simple"${selected(group && group.type, 'simple')}>${t('Simple group')}</option>
-      <option value="horizontal"${selected(group && group.type, 'horizontal')}>${t('Horizontal group')}</option>
-      <option value="vertical"${selected(group && group.type, 'vertical')}>${t('Vertical group')}</option>
+      ${groupTypeOptions(group)}
     </select>
   </div>
   <div class="w3-row">
