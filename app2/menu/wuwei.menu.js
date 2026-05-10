@@ -804,7 +804,6 @@ wuwei.menu = wuwei.menu || {};
         const node = ctx && ctx.node;
         const link = ctx && ctx.link;
         const groupOverlay = ctx && ctx.groupOverlay;
-        const contextAnchor = ctx && ctx.anchor;
         const position = ctx && ctx.position;
         let d3node = null;
         let d3link = null;
@@ -935,9 +934,10 @@ wuwei.menu = wuwei.menu || {};
         }
 
         const startCircle = document.getElementById('Start');
+        const groupIdFromRepresentative = (node && isRepresentativeTopic(node) && node.groupRef) ? node.groupRef : null;
         const groupIdFromNode = (node && node.groupType === 'simple' && node.groupRef) ? node.groupRef : null;
         const groupIdFromLink = (link && link.groupRef && (link.groupType === 'horizontal' || link.groupType === 'vertical' || link.groupType === 'timelineAxis')) ? link.groupRef : null;
-        const selectableGroupId = groupIdFromNode || groupIdFromLink || null;
+        const selectableGroupId = groupIdFromRepresentative || groupIdFromNode || groupIdFromLink || null;
         const canShowSelect = graph.mode !== 'view' && (
           (!state.Selecting && node) ||
           (state.Selecting && (node || link || selectableGroupId))
@@ -988,23 +988,20 @@ wuwei.menu = wuwei.menu || {};
                 if (!Array.isArray(state.selectedGroupIds)) {
                   state.selectedGroupIds = [];
                 }
-                if (!state.selectedGroupPoints || typeof state.selectedGroupPoints !== 'object') {
-                  state.selectedGroupPoints = {};
-                }
                 if (state.selectedGroupIds.indexOf(selectableGroupId) >= 0) {
                   state.selectedGroupIds = state.selectedGroupIds.filter(function (gid) {
                     return gid !== selectableGroupId;
                   });
-                  delete state.selectedGroupPoints[selectableGroupId];
                 }
                 else {
                   state.selectedGroupIds.push(selectableGroupId);
-                  if (contextAnchor && Number.isFinite(Number(contextAnchor.x)) && Number.isFinite(Number(contextAnchor.y))) {
-                    state.selectedGroupPoints[selectableGroupId] = {
-                      x: Number(contextAnchor.x),
-                      y: Number(contextAnchor.y)
-                    };
+                  if (!state.selectedGroupMarks || 'object' !== typeof state.selectedGroupMarks) {
+                    state.selectedGroupMarks = {};
                   }
+                  state.selectedGroupMarks[selectableGroupId] = {
+                    x: Number((d3event && d3event.x) || (node && node.x) || 0),
+                    y: Number((d3event && d3event.y) || (node && node.y) || 0)
+                  };
                 }
                 restartCurrentDraw();
               }
@@ -1804,7 +1801,7 @@ wuwei.menu = wuwei.menu || {};
 
   function clearSelectionState() {
     state.selectedGroupIds = [];
-    state.selectedGroupPoints = {};
+    state.selectedGroupMarks = {};
     d3.selectAll('g.node.selected circle.selected').remove();
     d3.selectAll('g.node.selected')
       .each(function () {
@@ -1825,6 +1822,15 @@ wuwei.menu = wuwei.menu || {};
         return;
       }
       node = model.findNodeById(nodeId);
+      if (node && isRepresentativeTopic(node) && node.groupRef) {
+        if (!Array.isArray(state.selectedGroupIds)) {
+          state.selectedGroupIds = [];
+        }
+        if (state.selectedGroupIds.indexOf(node.groupRef) < 0) {
+          state.selectedGroupIds.push(node.groupRef);
+        }
+        return;
+      }
       if (node && !seen[node.id]) {
         seen[node.id] = true;
         nodes.push(node);
@@ -1837,6 +1843,15 @@ wuwei.menu = wuwei.menu || {};
 
     if (Array.isArray(fallbackNodes)) {
       fallbackNodes.forEach(function (n) {
+        if (n && n.id && isRepresentativeTopic(n) && n.groupRef) {
+          if (!Array.isArray(state.selectedGroupIds)) {
+            state.selectedGroupIds = [];
+          }
+          if (state.selectedGroupIds.indexOf(n.groupRef) < 0) {
+            state.selectedGroupIds.push(n.groupRef);
+          }
+          return;
+        }
         if (n && n.id && !seen[n.id]) {
           seen[n.id] = true;
           nodes.push(n);
@@ -1851,37 +1866,77 @@ wuwei.menu = wuwei.menu || {};
     var selectedGroupIds = Array.isArray(state.selectedGroupIds) ? state.selectedGroupIds.slice() : [];
     return selectedGroupIds.filter(function (gid, index, arr) {
       var group = model.findGroupById(gid);
-      return arr.indexOf(gid) === index && !!group && ['simple', 'horizontal', 'vertical', 'timeline'].includes(group.type);
+      return arr.indexOf(gid) === index && !!group && ['simple', 'horizontal', 'vertical', 'timeline', 'contents'].includes(group.type);
     });
   }
 
-  function getDefaultGroupSpine(type) {
-    var style = (common && common.defaultStyle && common.defaultStyle.group) || {};
-    var typed = style[type] || {};
-    var padding;
+  function getRepresentativeNodeForGroup(group) {
+    var reps;
+    if (!group) {
+      return null;
+    }
+    reps = (model && typeof model.getGroupRepresentativeNodes === 'function')
+      ? model.getGroupRepresentativeNodes(group)
+      : [];
+    return (reps && reps.length) ? reps[0] : null;
+  }
 
-    function num(value, fallback) {
-      var n = Number(value);
-      return Number.isFinite(n) ? n : fallback;
+  function descriptionBodyOf(node) {
+    var description = node && node.description;
+    if (description && 'object' === typeof description) {
+      return String(description.body || '');
+    }
+    return String(description || '');
+  }
+
+  function buildRepresentativeMeta(selectedGroups) {
+    var reps = [];
+    var labels, bodies, firstFormat;
+
+    (selectedGroups || []).forEach(function (group) {
+      var rep = getRepresentativeNodeForGroup(group);
+      if (rep) {
+        reps.push(rep);
+      }
+    });
+
+    if (!reps.length) {
+      return null;
     }
 
-    if (model && typeof model.groupStyleDefaults === 'function') {
-      return model.groupStyleDefaults(type || 'simple');
-    }
+    labels = reps.map(function (rep) {
+      return String(rep.label || '').trim();
+    }).filter(Boolean);
 
-    padding = num(typed.padding, style.padding);
+    bodies = reps.map(function (rep) {
+      return descriptionBodyOf(rep).trim();
+    }).filter(Boolean);
+
+    firstFormat = (reps[0].description && reps[0].description.format) || 'asciidoc';
+
     return {
-      visible: (typeof typed.visible === 'boolean')
-        ? typed.visible
-        : ((typeof style.visible === 'boolean') ? style.visible : true),
-      kind: typed.kind || style.kind,
-      color: typed.color || style.color,
-      width: num(typed.width, style.width),
-      padding: padding,
-      paddingTop: num(typed.paddingTop, padding),
-      paddingRight: num(typed.paddingRight, padding),
-      paddingBottom: num(typed.paddingBottom, padding),
-      paddingLeft: num(typed.paddingLeft, padding)
+      name: labels.join('\n'),
+      description: {
+        format: firstFormat,
+        body: bodies.join('\n')
+      }
+    };
+  }
+
+  function groupSpineDefaults(type, visible) {
+    var defaults = (model && typeof model.groupStyleDefaults === 'function')
+      ? model.groupStyleDefaults(type)
+      : {};
+    return {
+      kind: defaults.kind,
+      visible: visible,
+      color: defaults.color,
+      width: defaults.width,
+      padding: defaults.padding,
+      paddingTop: defaults.paddingTop,
+      paddingRight: defaults.paddingRight,
+      paddingBottom: defaults.paddingBottom,
+      paddingLeft: defaults.paddingLeft
     };
   }
 
@@ -1908,8 +1963,10 @@ wuwei.menu = wuwei.menu || {};
     var isHorizontal = ('topicGroupHorizontal' === kind);
     var isVertical = ('topicGroupVertical' === kind);
     var selectedGroupIds;
-    var selectedGroups, preserveGroup, preserveMetaGroup, nameBase, memberMap, existingItemByNodeId, members, avg, group, selectedNodeIds;
-    var nextGroupType, defaultSpine;
+    var requestedGroupIds = [];
+    var selectedRepresentativeIds = [];
+    var selectedGroups, preserveGroup, preserveMetaGroup, representativeMeta, nameBase, memberMap, existingItemByNodeId, members, avg, group, selectedNodeIds;
+    var newType, preserveSpine;
 
     if (!page) {
       return null;
@@ -1925,21 +1982,36 @@ wuwei.menu = wuwei.menu || {};
     if (requestedNodeIds.length > 0) {
       requestedNodeIds.forEach(function (nodeId) {
         var resolved = model.findNodeById(nodeId);
+        if (resolved && isRepresentativeTopic(resolved) && resolved.groupRef) {
+          if (requestedGroupIds.indexOf(resolved.groupRef) < 0) {
+            requestedGroupIds.push(resolved.groupRef);
+          }
+          return;
+        }
         if (resolved && !resolved.pseudo && !nodes.some(function (n) { return n && n.id === resolved.id; })) {
           nodes.push(resolved);
         }
       });
     }
 
-    // 実 node が選択されている時は、その node 群を最優先して新 group を作る。
-    // 以前に選択した group overlay の state.selectedGroupIds が残っていても、
-    // node ベースの新規 group 定義を邪魔しないようにここでは無視する。
-    selectedGroupIds = (nodes.length > 0) ? [] : getEffectiveSelectedGroupIds(page);
+    selectedGroupIds = getEffectiveSelectedGroupIds(page);
+    requestedGroupIds.forEach(function (gid) {
+      if (selectedGroupIds.indexOf(gid) < 0 && model.findGroupById(gid)) {
+        selectedGroupIds.push(gid);
+      }
+    });
     selectedGroups = selectedGroupIds
       .map(function (gid) { return model.findGroupById(gid); })
       .filter(Boolean);
     preserveMetaGroup = (selectedGroups.length > 0) ? selectedGroups[0] : null;
     preserveGroup = (1 === selectedGroups.length) ? selectedGroups[0] : null;
+    representativeMeta = buildRepresentativeMeta(selectedGroups);
+    selectedGroups.forEach(function (selectedGroup) {
+      var rep = getRepresentativeNodeForGroup(selectedGroup);
+      if (rep && rep.id && selectedRepresentativeIds.indexOf(rep.id) < 0) {
+        selectedRepresentativeIds.push(rep.id);
+      }
+    });
     // 単一 group の再定義時のみ id を引き継ぐ。
     // 複数 group をまとめる場合は、新しい group として作り直す。
     memberMap = {};
@@ -1989,6 +2061,12 @@ wuwei.menu = wuwei.menu || {};
       return !g || selectedGroupIds.indexOf(g.id) < 0;
     });
 
+    if (selectedRepresentativeIds.length > 0 && Array.isArray(page.nodes)) {
+      page.nodes = page.nodes.filter(function (n) {
+        return !n || selectedRepresentativeIds.indexOf(n.id) < 0;
+      });
+    }
+
     // 項目が選択されている場合は、元 group からその項目だけを解除する
     if (selectedNodeIds.length > 0) {
       page.groups.forEach(function (g) {
@@ -2003,38 +2081,33 @@ wuwei.menu = wuwei.menu || {};
       });
     }
 
-    if (isHorizontal) {
-      avg = members.reduce(function (sum, n) { return sum + n.y; }, 0) / members.length;
-      members.forEach(function (n) { n.y = avg; });
-      members.sort(function (a, b) { return a.x - b.x; });
-    }
-    else if (isVertical) {
-      avg = members.reduce(function (sum, n) { return sum + n.x; }, 0) / members.length;
-      members.forEach(function (n) { n.x = avg; });
-      members.sort(function (a, b) { return a.y - b.y; });
-    }
+    /*
+     * Do not pre-align member coordinates here.  The model-layer
+     * reflowGroupMembers() applies the canonical group-layout rules:
+     *   vertical   : centre x, keep y
+     *   horizontal : keep x, centre y
+     *   simple     : keep x/y
+     * and it also handles h<->v conversions without collapsing members.
+     */
 
+    newType = isHorizontal ? 'horizontal' : (isVertical ? 'vertical' : 'simple');
+    preserveSpine = !!(preserveMetaGroup && preserveMetaGroup.spine && preserveMetaGroup.type === newType);
     nameBase = (isHorizontal || isVertical) ? 'Topic Group' : 'Simple Group';
-    nextGroupType = isHorizontal ? 'horizontal' : (isVertical ? 'vertical' : 'simple');
-    defaultSpine = getDefaultGroupSpine(nextGroupType);
     group = model.createGroup({
       id: preserveGroup ? preserveGroup.id : undefined,
-      name: (preserveMetaGroup && preserveMetaGroup.name && 1 === selectedGroups.length) ? preserveMetaGroup.name : (nameBase + ' ' + (page.groups.length + 1)),
-      type: nextGroupType,
+      name: (representativeMeta && representativeMeta.name)
+        ? representativeMeta.name
+        : ((preserveMetaGroup && preserveMetaGroup.name && 1 === selectedGroups.length) ? preserveMetaGroup.name : (nameBase + ' ' + (page.groups.length + 1))),
+      description: (representativeMeta && representativeMeta.description)
+        ? representativeMeta.description
+        : (preserveMetaGroup && preserveMetaGroup.description ? util.clone(preserveMetaGroup.description) : undefined),
+      type: newType,
       enabled: preserveMetaGroup ? (false !== preserveMetaGroup.enabled) : true,
       moveTogether: preserveMetaGroup ? (false !== preserveMetaGroup.moveTogether) : true,
       orientation: isHorizontal ? 'horizontal' : (isVertical ? 'vertical' : 'auto'),
-      spine: {
-        visible: defaultSpine.visible,
-        kind: defaultSpine.kind,
-        color: defaultSpine.color,
-        width: defaultSpine.width,
-        padding: defaultSpine.padding,
-        paddingTop: defaultSpine.paddingTop,
-        paddingRight: defaultSpine.paddingRight,
-        paddingBottom: defaultSpine.paddingBottom,
-        paddingLeft: defaultSpine.paddingLeft
-      },
+      spine: preserveSpine
+        ? util.clone(preserveMetaGroup.spine)
+        : groupSpineDefaults(newType, (isHorizontal || isVertical)),
       axis: undefined,
       members: members.map(function (n, index) {
         var existing = existingItemByNodeId[n.id] || {};
@@ -2050,6 +2123,11 @@ wuwei.menu = wuwei.menu || {};
 
     page.groups.push(group);
     model.setGraphFromCurrentPage();
+    if (model && typeof model.placeGroupRepresentative === 'function') {
+      model.placeGroupRepresentative(group, { preserveAxisAnchor: false });
+      model.reflowGroupMembers(group, newType, preserveMetaGroup ? preserveMetaGroup.type : '');
+      model.setGraphFromCurrentPage();
+    }
     clearSelectionState();
     closeContextMenu();
     draw.reRender();
@@ -2143,6 +2221,23 @@ wuwei.menu = wuwei.menu || {};
         link = node;
         wuwei.edit.open(link, { editor: false, citation: false, cc: false });
       }
+      closeContextMenu();
+      return;
+    }
+    else if ('editRepresentativeStyle' === method) {
+      node = resolveContextTargetRecord(state.hoveredNode);
+      if (!node || !isRepresentativeTopic(node)) {
+        closeContextMenu();
+        return;
+      }
+
+      wuwei.edit.open(node, {
+        forceNode: true,
+        representativeStyle: true,
+        editor: false,
+        citation: false,
+        cc: false
+      });
       closeContextMenu();
       return;
     }
@@ -3314,6 +3409,7 @@ wuwei.menu = wuwei.menu || {};
       ],
       'EditNode': [
         'edit',
+        'editRepresentativeStyle',
         'createTimelineAxis',
         'editTimelineAxisProps',
         'addTimelineSegmentFromPlayer',
@@ -3346,6 +3442,7 @@ wuwei.menu = wuwei.menu || {};
       ],
       'EditGroup': [
         'edit',
+        'editRepresentativeStyle',
         'copy',
         'erase'
       ],
@@ -3491,6 +3588,10 @@ wuwei.menu = wuwei.menu || {};
       return null;
     }
     return wuwei.contents.getPageTargetSpec(target);
+  }
+
+  function isRepresentativeTopic(node) {
+    return !!(node && model && typeof model.isRepresentativeTopic === 'function' && model.isRepresentativeTopic(node));
   }
 
   function isContextGroup(allNodes) {
@@ -3700,6 +3801,17 @@ wuwei.menu = wuwei.menu || {};
       },
       null,
       'fas fa-download fa-lg fa-fw'
+    ],
+
+    'editRepresentativeStyle': ['Edit Style',
+      function (allNodes) {
+        var node = getContextTarget(allNodes);
+        return !!(node && isRepresentativeTopic(node) &&
+          graph.mode !== 'view' && !state.viewOnly && !state.published &&
+          !state.Selecting && !state.Connecting);
+      },
+      null,
+      'fas fa-palette fa-lg fa-fw'
     ],
 
     'edit': ['Edit',
