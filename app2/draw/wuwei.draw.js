@@ -392,13 +392,36 @@ wuwei.draw = wuwei.draw || {};
     });
   }
 
+  function getStoredGroupSelectionPoint(groupId) {
+    var marks = state.selectedGroupMarks || {};
+    var stored = groupId ? marks[groupId] : null;
+    var x = stored ? Number(stored.x) : NaN;
+    var y = stored ? Number(stored.y) : NaN;
+
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      return { x: x, y: y };
+    }
+    return null;
+  }
+
   function getGroupSelectionPoint(groupId) {
     var group = model.findGroupById(groupId);
-    var representative, box, spine;
+    var representative, box, spine, stored;
 
     if (!group) {
       return null;
     }
+
+    /*
+     * When a group is selected from its axis or outline, keep the mark at
+     * the clicked point.  Otherwise the mark may jump to the representative
+     * topic, which makes it look as if the group selection mark disappeared.
+     */
+    stored = getStoredGroupSelectionPoint(groupId);
+    if (stored) {
+      return stored;
+    }
+
     representative = group.representativeNodeId ? model.findNodeById(group.representativeNodeId) : null;
     if (representative && Number.isFinite(Number(representative.x)) && Number.isFinite(Number(representative.y))) {
       return { x: Number(representative.x), y: Number(representative.y), node: representative };
@@ -599,10 +622,26 @@ wuwei.draw = wuwei.draw || {};
         }, MENU_TIMEOUT);
       })
       .on('click', function (d) {
+        var p;
+
         if (!state.Selecting || 'view' === graph.mode) {
           return;
         }
         d3.event.stopPropagation();
+
+        if (d && d.pseudo && d.type === 'Group' && d.groupRef) {
+          if (!state.selectedGroupMarks || 'object' !== typeof state.selectedGroupMarks) {
+            state.selectedGroupMarks = {};
+          }
+          p = d3.mouse(d3.select('g#' + state.canvasId).node());
+          state.selectedGroupMarks[d.groupRef] = { x: p[0], y: p[1] };
+          toggleSelectedGroup(d.groupRef);
+          if (menu && typeof menu.closeContextMenu === 'function') {
+            menu.closeContextMenu();
+          }
+          return;
+        }
+
         toggleSelectedNode(d);
         if (menu && typeof menu.closeContextMenu === 'function') {
           menu.closeContextMenu();

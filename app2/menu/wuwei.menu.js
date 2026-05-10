@@ -861,6 +861,7 @@ wuwei.menu = wuwei.menu || {};
         const node = ctx && ctx.node;
         const link = ctx && ctx.link;
         const groupOverlay = ctx && ctx.groupOverlay;
+        const anchor = ctx && ctx.anchor;
 
         const sel = d3.select('#MenuSEL');
         const menu = d3.select('#ContextMenu');
@@ -936,7 +937,12 @@ wuwei.menu = wuwei.menu || {};
         const startCircle = document.getElementById('Start');
         const groupIdFromRepresentative = (node && isRepresentativeTopic(node) && node.groupRef) ? node.groupRef : null;
         const groupIdFromNode = (node && node.groupType === 'simple' && node.groupRef) ? node.groupRef : null;
-        const groupIdFromLink = (link && link.groupRef && (link.groupType === 'horizontal' || link.groupType === 'vertical' || link.groupType === 'timelineAxis')) ? link.groupRef : null;
+        const groupIdFromLink = (link && link.groupRef && (
+          link.groupType === 'horizontal' ||
+          link.groupType === 'vertical' ||
+          link.groupType === 'timelineAxis' ||
+          link.groupType === 'contentsAxis'
+        )) ? link.groupRef : null;
         const selectableGroupId = groupIdFromRepresentative || groupIdFromNode || groupIdFromLink || null;
         const canShowSelect = graph.mode !== 'view' && (
           (!state.Selecting && node) ||
@@ -999,8 +1005,8 @@ wuwei.menu = wuwei.menu || {};
                     state.selectedGroupMarks = {};
                   }
                   state.selectedGroupMarks[selectableGroupId] = {
-                    x: Number((d3event && d3event.x) || (node && node.x) || 0),
-                    y: Number((d3event && d3event.y) || (node && node.y) || 0)
+                    x: Number((anchor && anchor.x) || (node && node.x) || (link && link.x) || (d3event && d3event.x) || 0),
+                    y: Number((anchor && anchor.y) || (node && node.y) || (link && link.y) || (d3event && d3event.y) || 0)
                   };
                 }
                 restartCurrentDraw();
@@ -2323,7 +2329,7 @@ wuwei.menu = wuwei.menu || {};
       node = resolveContextTargetRecord(state.hoveredNode);
       if (!node) { return; }
 
-      if (isContextGroup([node]) && model && typeof model.eraseGroup === 'function') {
+      if (isWholeGroupEraseTarget(node) && model && typeof model.eraseGroup === 'function') {
         wuwei.log.savePrevious();
         if (model.eraseGroup(node)) {
           wuwei.log.storeLog({ operation: 'erase' });
@@ -2367,6 +2373,16 @@ wuwei.menu = wuwei.menu || {};
           closeContextMenu();
           return;
         }
+      }
+
+      if (model && typeof model.erase === 'function') {
+        wuwei.log.savePrevious();
+        if (model.erase([node])) {
+          wuwei.log.storeLog({ operation: 'erase' });
+          draw.reRender();
+        }
+        closeContextMenu();
+        return;
       }
     }
     else if ('addTimelineSegmentFromPlayer' === method) {
@@ -3029,6 +3045,9 @@ wuwei.menu = wuwei.menu || {};
       if (keepSelecting) {
         common.state.Selecting = true;
         document.getElementById('wuwei').classList.add('flock-operation');
+        if (draw && typeof draw.renderSelectionMarks === 'function') {
+          draw.renderSelectionMarks();
+        }
       }
       else {
         common.state.Selecting = false;
@@ -3046,6 +3065,7 @@ wuwei.menu = wuwei.menu || {};
           }
         }
         state.selectedGroupIds = [];
+        state.selectedGroupMarks = {};
       }
     }
     else {
@@ -3622,6 +3642,46 @@ wuwei.menu = wuwei.menu || {};
       return false;
     }
     return !!('Group' === target.type && target.groupRef);
+  }
+
+  function isRepresentativeGroupEraseTarget(target) {
+    return !!(
+      target &&
+      model &&
+      typeof model.isRepresentativeTopic === 'function' &&
+      model.isRepresentativeTopic(target) &&
+      target.groupRef
+    );
+  }
+
+  function isGroupAxisOrOutlineEraseTarget(target) {
+    if (!target || !target.groupRef) {
+      return false;
+    }
+
+    if ('Group' === target.type) {
+      return true;
+    }
+
+    return !!(
+      util.isLink(target) &&
+      (
+        target.pseudo ||
+        target.groupType === 'timelineAxis' ||
+        target.groupType === 'contentsAxis' ||
+        target.groupType === 'horizontal' ||
+        target.groupType === 'vertical' ||
+        target.linkType === 'timeline-axis' ||
+        target.linkType === 'contents-axis'
+      )
+    );
+  }
+
+  function isWholeGroupEraseTarget(target) {
+    return !!(
+      isRepresentativeGroupEraseTarget(target) ||
+      isGroupAxisOrOutlineEraseTarget(target)
+    );
   }
 
   function isContextLink(allNodes) {
@@ -4757,6 +4817,7 @@ wuwei.menu = wuwei.menu || {};
         d3.select(node).classed('selected', false);
       });
       common.state.selectedGroupIds = [];
+      common.state.selectedGroupMarks = {};
       draw.reRender();
     });
     registerClick('.pulldown.flock .operators .operator.AlignTop', () => {

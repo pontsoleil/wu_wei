@@ -1689,6 +1689,105 @@ wuwei.model = (function () {
     return out;
   }
 
+  function cleanupGroupRepresentativeNodes(page) {
+    var groupById = {};
+    var nodeById = {};
+    var keepByGroup = {};
+    var removeById = {};
+
+    page = page || getCurrentPage();
+    if (!page || !Array.isArray(page.nodes)) {
+      return [];
+    }
+    if (!Array.isArray(page.groups)) {
+      page.groups = [];
+    }
+
+    page.groups.forEach(function (group) {
+      if (group && group.id) {
+        groupById[group.id] = group;
+      }
+    });
+
+    page.nodes.forEach(function (node) {
+      if (node && node.id) {
+        nodeById[node.id] = node;
+      }
+    });
+
+    page.groups.forEach(function (group) {
+      var node = group && group.representativeNodeId ? nodeById[group.representativeNodeId] : null;
+      if (node && isRepresentativeTopic(node) && node.groupRef === group.id) {
+        keepByGroup[group.id] = node;
+      }
+      else if (group) {
+        group.representativeNodeId = '';
+      }
+    });
+
+    page.nodes.forEach(function (node) {
+      var groupId, group, keep;
+      if (!isRepresentativeTopic(node)) {
+        return;
+      }
+      groupId = node.groupRef || (node.representativeOf && node.representativeOf.id) || '';
+      group = groupById[groupId];
+      if (!group) {
+        removeById[node.id] = true;
+        return;
+      }
+      keep = keepByGroup[groupId];
+      if (!keep) {
+        keepByGroup[groupId] = node;
+        group.representativeNodeId = node.id;
+        node.groupRef = group.id;
+        node.representativeOf = { kind: 'group', id: group.id };
+        return;
+      }
+      if (keep.id !== node.id) {
+        removeById[node.id] = true;
+      }
+    });
+
+    if (!Object.keys(removeById).length) {
+      return [];
+    }
+
+    if (Array.isArray(page.links)) {
+      page.links = page.links.filter(function (link) {
+        var fromRemoved = link && removeById[link.from];
+        var toRemoved = link && removeById[link.to];
+        var fromKeep, toKeep;
+
+        if (!link) {
+          return false;
+        }
+
+        if (fromRemoved) {
+          fromKeep = nodeById[link.from] && keepByGroup[nodeById[link.from].groupRef];
+          if (fromKeep && fromKeep.id !== link.to) {
+            link.from = fromKeep.id;
+            fromRemoved = false;
+          }
+        }
+        if (toRemoved) {
+          toKeep = nodeById[link.to] && keepByGroup[nodeById[link.to].groupRef];
+          if (toKeep && toKeep.id !== link.from) {
+            link.to = toKeep.id;
+            toRemoved = false;
+          }
+        }
+        return !(fromRemoved || toRemoved || link.from === link.to);
+      });
+    }
+
+    page.nodes = page.nodes.filter(function (node) {
+      return !(node && removeById[node.id]);
+    });
+
+    return Object.keys(removeById);
+  }
+
   function syncGroupRepresentative(groupOrTarget, direction) {
     var group = findGroupByTarget(groupOrTarget) || groupOrTarget;
     var node;
@@ -1705,6 +1804,10 @@ wuwei.model = (function () {
     }
     else {
       node = group.representativeNodeId ? findNodeById(group.representativeNodeId) : null;
+      if (!node) {
+        var representatives = getGroupRepresentativeNodes(group);
+        node = representatives.length ? representatives[0] : null;
+      }
       if (!node) {
         node = createGroupRepresentativeTopic(group, {
           label: group.name || 'Group',
@@ -9074,6 +9177,9 @@ wuwei.model = (function () {
     if (page) {
       ensureRegularGroupRepresentatives(page);
     }
+    if (page) {
+      cleanupGroupRepresentativeNodes(page);
+    }
     const pseudo = buildGroupPseudoGroups(page);
     if (current && page) {
       current.page = page;
@@ -9624,6 +9730,7 @@ wuwei.model = (function () {
     ensureGroupRepresentativeTopic: ensureGroupRepresentativeTopic,
     placeGroupRepresentative: placeGroupRepresentative,
     getGroupRepresentativeNodes: getGroupRepresentativeNodes,
+    cleanupGroupRepresentativeNodes: cleanupGroupRepresentativeNodes,
     isRepresentativeTopic: isRepresentativeTopic,
     ensureRegularGroupRepresentatives: ensureRegularGroupRepresentatives,
     groupStyleDefaults: groupStyleDefaults,

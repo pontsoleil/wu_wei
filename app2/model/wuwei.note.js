@@ -1921,11 +1921,106 @@ wuwei.note = (function () {
     return activePage;
   }
 
+  function isPageCopyRepresentativeNode(node) {
+    return !!(node && node.groupRole === 'representative' && node.groupRef);
+  }
+
+  function remapObjectReference(obj, key, indexer) {
+    if (obj && obj[key] && indexer && indexer[obj[key]]) {
+      obj[key] = indexer[obj[key]];
+    }
+  }
+
+  function remapNodeForPageCopy(node, groupIndexer, nodeIndexer) {
+    if (!node) { return; }
+
+    remapObjectReference(node, 'groupRef', groupIndexer);
+    remapObjectReference(node, 'contentsRef', groupIndexer);
+    remapObjectReference(node, 'timelineRef', groupIndexer);
+    remapObjectReference(node, 'documentRef', nodeIndexer);
+    remapObjectReference(node, 'mediaRef', nodeIndexer);
+    remapObjectReference(node, 'contentRef', nodeIndexer);
+
+    if (node.representativeOf && node.representativeOf.id && groupIndexer[node.representativeOf.id]) {
+      node.representativeOf.id = groupIndexer[node.representativeOf.id];
+    }
+  }
+
+  function remapLinkForPageCopy(link, groupIndexer) {
+    if (!link) { return; }
+    remapObjectReference(link, 'groupRef', groupIndexer);
+    remapObjectReference(link, 'contentsRef', groupIndexer);
+    remapObjectReference(link, 'timelineRef', groupIndexer);
+  }
+
+  function remapGroupForPageCopy(group, groupIndexer, nodeIndexer) {
+    var oldId;
+    var oldRepresentativeId;
+
+    if (!group) { return; }
+
+    oldId = group.id;
+    oldRepresentativeId = group.representativeNodeId || '';
+
+    if (oldId && groupIndexer[oldId]) {
+      group.id = groupIndexer[oldId];
+    }
+
+    if (Array.isArray(group.members)) {
+      group.members = group.members.map(function (it) {
+        var next = util.clone(it);
+        if (typeof next === 'string') {
+          return nodeIndexer[next] || next;
+        }
+        next.nodeId = nodeIndexer[next.nodeId] || next.nodeId;
+        return next;
+      }).filter(function (it) {
+        return !!(typeof it === 'string' ? it : it && it.nodeId);
+      });
+    }
+
+    if (Array.isArray(group.item)) {
+      group.item = group.item.map(function (it) {
+        var next = util.clone(it);
+        if (typeof next === 'string') {
+          return nodeIndexer[next] || next;
+        }
+        next.nodeId = nodeIndexer[next.nodeId] || next.nodeId;
+        return next;
+      }).filter(function (it) {
+        return !!(typeof it === 'string' ? it : it && it.nodeId);
+      });
+    }
+
+    if (Array.isArray(group.entries)) {
+      group.entries = group.entries.map(function (entry) {
+        var next = util.clone(entry);
+        next.nodeId = nodeIndexer[next.nodeId] || next.nodeId;
+        return next;
+      }).filter(function (entry) {
+        return !!(entry && entry.nodeId);
+      });
+    }
+
+    group.representativeNodeId = nodeIndexer[oldRepresentativeId] || '';
+
+    remapObjectReference(group, 'mediaRef', nodeIndexer);
+    remapObjectReference(group, 'documentRef', nodeIndexer);
+    if (group.timeline) {
+      remapObjectReference(group.timeline, 'mediaRef', nodeIndexer);
+    }
+    if (group.contents) {
+      remapObjectReference(group.contents, 'documentRef', nodeIndexer);
+    }
+  }
+
   function copyPage(sourcePP) {
     current = common.current;
     const pages = pagesAsArray(current);
     const nodeIndexer = {};
     const linkIndexer = {};
+    const groupIndexer = {};
+    const primaryRepresentativeIds = {};
     let _id, id, sourcePage, copiedPage;
 
     snapshotCurrentPageThumbnail();
@@ -1934,7 +2029,40 @@ wuwei.note = (function () {
     }
 
     sourcePage = (sourcePP != null) ? findPageByRef(current, sourcePP) : (current.page || wuwei.model.getCurrentPage());
+    if (!sourcePage) {
+      return current.page || null;
+    }
+
     copiedPage = PageFactory(Object.assign(util.clone(sourcePage), { id: util.createUuid(), pp: pages.length + 1 }));
+
+    /*
+     * Group definitions are page-local.  A copied page must not share group
+     * IDs with the source page; otherwise representative topics from earlier
+     * copies look like valid members of the new groups.  Keep at most one
+     * representative topic per copied group (the one referenced by the group)
+     * and let normal group normalisation recreate a missing representative.
+     */
+    (copiedPage.groups || []).forEach(function (group) {
+      if (!group || !group.id) { return; }
+      groupIndexer[group.id] = util.createUuid();
+      if (group.representativeNodeId) {
+        primaryRepresentativeIds[group.representativeNodeId] = true;
+      }
+    });
+
+    copiedPage.nodes = (copiedPage.nodes || []).filter(function (node) {
+      return !isPageCopyRepresentativeNode(node) || !!primaryRepresentativeIds[node.id];
+    });
+
+    copiedPage.links = (copiedPage.links || []).filter(function (link) {
+      var srcId = (link.from && typeof link.from === 'object') ? link.from.id
+        : (link.from || ((link.source && typeof link.source === 'object') ? link.source.id : link.source));
+      var tgtId = (link.to && typeof link.to === 'object') ? link.to.id
+        : (link.to || ((link.target && typeof link.target === 'object') ? link.target.id : link.target));
+      return copiedPage.nodes.some(function (node) { return node && node.id === srcId; }) &&
+        copiedPage.nodes.some(function (node) { return node && node.id === tgtId; });
+    });
+
     pages.push(copiedPage);
     refreshPageNumbers(pages);
 
@@ -1948,10 +2076,13 @@ wuwei.note = (function () {
       id = util.createUuid();
       linkIndexer[link.id] = id;
     }
+
     for (let node of copiedPage.nodes) {
       _id = node.id;
+      remapNodeForPageCopy(node, groupIndexer, nodeIndexer);
       node.id = nodeIndexer[_id];
     }
+
     for (let link of copiedPage.links) {
       _id = link.id;
       const srcId = (link.from && typeof link.from === 'object') ? link.from.id
@@ -1961,24 +2092,13 @@ wuwei.note = (function () {
       link.id = linkIndexer[_id];
       link.from = nodeIndexer[srcId] || srcId;
       link.to = nodeIndexer[tgtId] || tgtId;
+      remapLinkForPageCopy(link, groupIndexer);
       delete link.source;
       delete link.target;
     }
+
     for (let group of (copiedPage.groups || [])) {
-      if (Array.isArray(group.members)) {
-        group.members = group.members.map(function (it) {
-          const next = util.clone(it);
-          next.nodeId = nodeIndexer[it.nodeId] || it.nodeId;
-          return next;
-        });
-      }
-      if (Array.isArray(group.item)) {
-        group.item = group.item.map(function (it) {
-          const next = util.clone(it);
-          next.nodeId = nodeIndexer[it.nodeId] || it.nodeId;
-          return next;
-        });
-      }
+      remapGroupForPageCopy(group, groupIndexer, nodeIndexer);
     }
 
     applyPageState(current.page);
