@@ -21,7 +21,7 @@ wuwei.info = wuwei.info || {};
     stateMap = {
       node: null,
       editTarget: null,
-      displayedPageMarker: null,
+      displayedContentTarget: null,
       option: null,
       _window: new Map()
     };
@@ -159,29 +159,31 @@ wuwei.info = wuwei.info || {};
     return resolveTarget(node);
   }
 
-  function isPageMarkerTarget(target) {
+  function isContentTargetMarker(target) {
     return !!(
       target &&
       (
         target.type === 'PageMarker' ||
+        target.nodeKind === 'contentTarget' ||
         target.nodeKind === 'PageMarker' ||
+        target.kind === 'contentTarget' ||
         target.kind === 'PageMarker' ||
         target.topicKind === 'contents-page'
       )
     );
   }
 
-  function resolveDisplayedPageMarker(option) {
+  function resolveDisplayedContentTarget(option) {
     var point;
 
     if (!option || 'object' !== typeof option) {
       return null;
     }
 
-    point = option.displayedPageMarker || option.contentsPoint || null;
+    point = option.displayedContentTarget || option.contentTarget || option.contentTargetPoint || option.displayedPageMarker || option.contentsPoint || null;
     point = resolveTarget(point) || point;
 
-    if (!point || !isPageMarkerTarget(point)) {
+    if (!point || !isContentTargetMarker(point)) {
       return null;
     }
 
@@ -194,7 +196,8 @@ wuwei.info = wuwei.info || {};
     }
 
     return (typeof model.findNodeById === 'function' ? model.findNodeById(id) : null) ||
-      (typeof model.findLinkById === 'function' ? model.findLinkById(id) : null);
+      (typeof model.findLinkById === 'function' ? model.findLinkById(id) : null) ||
+      (typeof model.findGroupById === 'function' ? model.findGroupById(id) : null);
   }
 
   function isGroupTarget(target) {
@@ -359,7 +362,16 @@ wuwei.info = wuwei.info || {};
     var resolvedNode;
     var hasAdoc;
 
-    document.getElementById('edit').style.display = 'none';
+    if (wuwei.edit && typeof wuwei.edit.close === 'function') {
+      var editPane = document.getElementById('edit');
+      if (editPane && editPane.style.display !== 'none') {
+        wuwei.edit.close();
+      }
+    }
+    else {
+      var fallbackEditPane = document.getElementById('edit');
+      if (fallbackEditPane) { fallbackEditPane.style.display = 'none'; }
+    }
 
     if (!infoPane) {
       return;
@@ -374,7 +386,7 @@ wuwei.info = wuwei.info || {};
     if (!resolvedNode) {
       stateMap.node = null;
       stateMap.editTarget = null;
-      stateMap.displayedPageMarker = null;
+      stateMap.displayedContentTarget = null;
       stateMap.option = null;
       return;
     }
@@ -382,17 +394,17 @@ wuwei.info = wuwei.info || {};
     infoPane.dataset.node_id = resolvedNode.id || '';
     stateMap.node = resolvedNode;
     stateMap.option = option || resolvedNode.option || null;
-    stateMap.displayedPageMarker = resolveDisplayedPageMarker(stateMap.option);
-    stateMap.editTarget = stateMap.displayedPageMarker ||
+    stateMap.displayedContentTarget = resolveDisplayedContentTarget(stateMap.option);
+    stateMap.editTarget = stateMap.displayedContentTarget ||
       ((stateMap.option && stateMap.option.editTarget)
         ? resolveTarget(stateMap.option.editTarget) || stateMap.option.editTarget
         : resolvedNode);
 
-    if (stateMap.displayedPageMarker && stateMap.displayedPageMarker.id) {
-      infoPane.dataset.page_marker_id = stateMap.displayedPageMarker.id;
+    if (stateMap.displayedContentTarget && stateMap.displayedContentTarget.id) {
+      infoPane.dataset.content_target_id = stateMap.displayedContentTarget.id;
     }
     else {
-      delete infoPane.dataset.page_marker_id;
+      delete infoPane.dataset.content_target_id;
     }
 
     if (stateMap.editTarget && stateMap.editTarget.id) {
@@ -476,8 +488,15 @@ wuwei.info = wuwei.info || {};
       hidePane('info-generic');
     }
 
-    if (stateMap.displayedPageMarker) {
-      openContentsInfo(stateMap.displayedPageMarker, stateMap.option, false);
+    /*
+     * contentTarget information opened through menu.contents.openContentTargetInInfo() is
+     * primarily a content preview request. Do not open the contents marker
+     * pane afterwards, because it can hide the generic iframe/viewer and the
+     * selected content target is no longer visible.
+     */
+    if (stateMap.displayedContentTarget &&
+      !(stateMap.option && (stateMap.option.contentTargetView || stateMap.option.contentsPage))) {
+      openContentsInfo(stateMap.displayedContentTarget, stateMap.option, false);
     }
   }
 
@@ -517,12 +536,12 @@ wuwei.info = wuwei.info || {};
       infoPane.style.display = 'none';
       delete infoPane.dataset.node_id;
       delete infoPane.dataset.edit_node_id;
-      delete infoPane.dataset.page_marker_id;
+      delete infoPane.dataset.content_target_id;
     }
 
     stateMap.node = null;
     stateMap.editTarget = null;
-    stateMap.displayedPageMarker = null;
+    stateMap.displayedContentTarget = null;
     stateMap.option = null;
 
     if (window.wuwei && wuwei.menu && 'function' === typeof wuwei.menu.closeContextMenu) {
@@ -535,7 +554,7 @@ wuwei.info = wuwei.info || {};
   }
 
   function editOpen() {
-    var editingNode = resolveTarget(stateMap.displayedPageMarker) ||
+    var editingNode = resolveTarget(stateMap.displayedContentTarget) ||
       resolveTarget(stateMap.editTarget) ||
       resolveTarget(stateMap.node);
     var editPane = document.getElementById('edit');
@@ -543,15 +562,17 @@ wuwei.info = wuwei.info || {};
     var editingNodeId;
 
     if (!editingNode && infoPane) {
-      editingNodeId = infoPane.dataset.page_marker_id ||
+      editingNodeId = infoPane.dataset.content_target_id ||
         infoPane.dataset.edit_node_id ||
-        infoPane.dataset.node_id;
+        infoPane.dataset.node_id ||
+        infoPane.dataset.group_id;
       editingNode = findEditableTargetById(editingNodeId);
     }
     if (!editingNode && editPane) {
-      editingNodeId = editPane.dataset.page_marker_id ||
+      editingNodeId = editPane.dataset.content_target_id ||
         editPane.dataset.edit_node_id ||
-        editPane.dataset.node_id;
+        editPane.dataset.node_id ||
+        editPane.dataset.group_id;
       editingNode = findEditableTargetById(editingNodeId);
     }
 
@@ -800,9 +821,10 @@ wuwei.info = wuwei.info || {};
   ns.open = open;
   ns.close = close;
   ns.editOpen = editOpen;
-  ns.getDisplayedPageMarker = function () {
-    return stateMap.displayedPageMarker;
+  ns.getDisplayedContentTarget = function () {
+    return stateMap.displayedContentTarget;
   };
+  ns.getDisplayedPageMarker = ns.getDisplayedContentTarget; // backward compatibility
   ns.widen = widen;
   ns.openWindow = openWindow;
   ns.closeWindow = closeWindow;
