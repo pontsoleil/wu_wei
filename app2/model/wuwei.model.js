@@ -529,6 +529,20 @@ wuwei.model = (function () {
 
     link.shape = 'NORMAL';
 
+    /*
+     * A normal line should choose its connection points dynamically from the
+     * two node boundaries.  Release fixed start/end anchors that may have
+     * been set while the link was horizontal/vertical or manually adjusted.
+     */
+    if (link.routing && typeof link.routing === 'object') {
+      delete link.routing.startPosition;
+      delete link.routing.endPosition;
+    }
+    delete link.startPosition;
+    delete link.endPosition;
+    delete link.sourcePosition;
+    delete link.targetPosition;
+
     if (link.audit && typeof link.audit === 'object') {
       link.audit.lastModifiedBy =
         (state.currentUser && state.currentUser.user_id) || common.TEMP_OWNER_ID;
@@ -1295,9 +1309,9 @@ wuwei.model = (function () {
     util.drawMiniature();
   }
 
-  // Timeline endpoint drag updates only axis geometry.
+  // Timeline member drag updates the editable axis position.
   // Media time range (axis.start / axis.end) is preserved.
-  // Axis display length is stored in group.length.
+  // Axis display length is recalculated from axis member positions.
   function updateTimelineAxisGeometryByEndpointDrag(group, pageNode, x, y) {
     if (wuwei.timeline && typeof wuwei.timeline.updateTimelineAxisGeometryByEndpointDrag === 'function') {
       return wuwei.timeline.updateTimelineAxisGeometryByEndpointDrag(group, pageNode, x, y);
@@ -1320,11 +1334,40 @@ wuwei.model = (function () {
     return false;
   }
 
+  function handleContentsPageMarkerDrag(d, eventX, eventY) {
+    if (wuwei.contents && typeof wuwei.contents.handlePageMarkerDrag === 'function') {
+      return wuwei.contents.handlePageMarkerDrag(d, eventX, eventY);
+    }
+    return false;
+  }
+
+  function getAxisLineAnchorForRepresentative(group, fallbackNode) {
+    var anchor = (group && group.axis && group.axis.anchor) || group.origin || fallbackNode || { x: 0, y: 0 };
+    return {
+      x: Number.isFinite(Number(anchor.x)) ? Number(anchor.x) : Number(fallbackNode && fallbackNode.x || 0),
+      y: Number.isFinite(Number(anchor.y)) ? Number(anchor.y) : Number(fallbackNode && fallbackNode.y || 0)
+    };
+  }
+
+  function refreshAxisBoundsForGroup(group) {
+    if (!group) {
+      return false;
+    }
+    if ('timeline' === group.type && wuwei.timeline && typeof wuwei.timeline.updateAxisBoundsFromPositions === 'function') {
+      return wuwei.timeline.updateAxisBoundsFromPositions(group);
+    }
+    if ('contents' === group.type && wuwei.contents && typeof wuwei.contents.updateAxisBoundsFromPositions === 'function') {
+      return wuwei.contents.updateAxisBoundsFromPositions(group);
+    }
+    return false;
+  }
+
   function handleRepresentativeTopicDrag(d, eventX, eventY) {
     var pageNode = d && d.id ? findNodeById(d.id) : null;
     var group;
     var orientation;
     var anchor;
+    var axisPos;
 
     if (!isRepresentativeTopic(pageNode)) {
       return false;
@@ -1338,28 +1381,35 @@ wuwei.model = (function () {
     }
 
     orientation = ('vertical' === group.type || 'vertical' === group.orientation) ? 'vertical' : 'horizontal';
-    anchor = (group.axis && group.axis.anchor) || group.origin || { x: pageNode.x, y: pageNode.y };
+    anchor = getAxisLineAnchorForRepresentative(group, pageNode);
     if ('vertical' === orientation) {
-      pageNode.x = Number(anchor.x || pageNode.x || 0);
-      pageNode.y = finiteOr(eventY, pageNode.y);
+      axisPos = finiteOr(eventY, pageNode.y);
+      pageNode.x = anchor.x;
+      pageNode.y = axisPos;
     }
     else {
-      pageNode.x = finiteOr(eventX, pageNode.x);
-      pageNode.y = Number(anchor.y || pageNode.y || 0);
+      axisPos = finiteOr(eventX, pageNode.x);
+      pageNode.x = axisPos;
+      pageNode.y = anchor.y;
     }
+    pageNode.axisPos = axisPos;
     pageNode.fx = pageNode.x;
     pageNode.fy = pageNode.y;
     pageNode.vx = 0;
     pageNode.vy = 0;
     pageNode.changed = true;
-    if (!group.axis || 'object' !== typeof group.axis) {
-      group.axis = {};
-    }
-    group.axis.anchor = { x: pageNode.x, y: pageNode.y };
-    group.origin = { x: pageNode.x, y: pageNode.y };
+
+    /*
+     * Representative topics are labels/operation handles on the axis.  They do
+     * not re-position member nodes.  For timeline/contents, only the visible
+     * axis extent may change when the representative moves outside the member
+     * range.
+     */
+    refreshAxisBoundsForGroup(group);
 
     d.x = pageNode.x;
     d.y = pageNode.y;
+    d.axisPos = pageNode.axisPos;
     d.fx = pageNode.x;
     d.fy = pageNode.y;
     d.vx = 0;
@@ -1384,7 +1434,7 @@ wuwei.model = (function () {
     eventX = safeEventCoord(d3.event && d3.event.x, d.x);
     eventY = safeEventCoord(d3.event && d3.event.y, d.y);
 
-    if (page && (handleTimelineSegmentDrag(d, eventX, eventY) || handleRepresentativeTopicDrag(d, eventX, eventY))) {
+    if (page && (handleTimelineSegmentDrag(d, eventX, eventY) || handleContentsPageMarkerDrag(d, eventX, eventY) || handleRepresentativeTopicDrag(d, eventX, eventY))) {
       moved = findNodeById(d.id);
       if (moved) {
         d.x = moved.x;
@@ -1469,7 +1519,7 @@ wuwei.model = (function () {
     eventX = safeEventCoord(d3.event && d3.event.x, d.x);
     eventY = safeEventCoord(d3.event && d3.event.y, d.y);
 
-    if (page && (handleTimelineSegmentDrag(d, eventX, eventY) || handleRepresentativeTopicDrag(d, eventX, eventY))) {
+    if (page && (handleTimelineSegmentDrag(d, eventX, eventY) || handleContentsPageMarkerDrag(d, eventX, eventY) || handleRepresentativeTopicDrag(d, eventX, eventY))) {
       pageNode = findNodeById(d.id);
       if (pageNode) {
         d.x = pageNode.x;
@@ -1582,7 +1632,13 @@ wuwei.model = (function () {
       representativeOf: {
         kind: 'group',
         id: group.id
-      }
+      },
+      topicKind: (option && option.topicKind) || 'group-representative',
+      representativeType: (option && option.representativeType) ||
+        group.type ||
+        group.orientation ||
+        'group',
+      axisPos: Number.isFinite(Number(option && option.axisPos)) ? Number(option.axisPos) : undefined
     });
 
     if (node) {
@@ -1671,6 +1727,47 @@ wuwei.model = (function () {
     node.style = node.style || {};
     node.style.line = node.style.line || {};
     node.style.line.kind = 'DASHED';
+    node.changed = true;
+    group.representativeNodeId = node.id;
+    return node;
+  }
+
+  function ensureGroupRepresentativeTopic(groupOrTarget, option) {
+    var group = findGroupByTarget(groupOrTarget) || groupOrTarget;
+    var node;
+
+    option = option || {};
+    if (!group) {
+      return null;
+    }
+
+    node = syncGroupRepresentative(group);
+    if (!node) {
+      return null;
+    }
+
+    if (option.label) {
+      node.label = option.label;
+    }
+    if (option.description) {
+      node.description = cloneDescription(option.description);
+    }
+
+    node.topicKind = option.topicKind || node.topicKind ||
+      (group.type === 'timeline'
+        ? 'timeline-representative'
+        : (group.type === 'contents'
+          ? 'contents-representative'
+          : 'group-representative'));
+    node.representativeType = option.representativeType ||
+      node.representativeType ||
+      group.type ||
+      group.orientation ||
+      'group';
+    node.groupRef = group.id;
+    node.groupRole = 'representative';
+    node.representativeOf = { kind: 'group', id: group.id };
+    node.visible = (false !== group.visible && false !== group.enabled);
     node.changed = true;
     group.representativeNodeId = node.id;
     return node;
@@ -2668,10 +2765,97 @@ wuwei.model = (function () {
     return new Link(param);
   };
 
+  function isContentConnectionNode(node) {
+    return !!(node && node.type === 'Content');
+  }
+
+  function isTimelineOrContentsGroup(group) {
+    return !!(group && (group.type === 'timeline' || group.type === 'contents'));
+  }
+
+  function isTimelineOrContentsAxisTarget(target) {
+    if (!target) {
+      return false;
+    }
+
+    return !!(target.pseudo && (
+      target.groupType === 'timelineAxis' ||
+      target.groupType === 'contentsAxis' ||
+      target.linkType === 'timeline-axis' ||
+      target.linkType === 'contents-axis'
+    ));
+  }
+
+  function findAxisGroupForConnectionTarget(target) {
+    var group;
+
+    if (!isTimelineOrContentsAxisTarget(target)) {
+      return null;
+    }
+
+    group = target.groupRef ? findGroupById(target.groupRef) : null;
+    if (isTimelineOrContentsGroup(group)) {
+      return group;
+    }
+
+    return null;
+  }
+
+  function resolveGroupRepresentativeForConnection(target) {
+    var group = findAxisGroupForConnectionTarget(target);
+    var representative;
+
+    if (!isTimelineOrContentsGroup(group)) {
+      return target;
+    }
+
+    representative = group.representativeNodeId ? findNodeById(group.representativeNodeId) : null;
+    if (!representative && typeof ensureGroupRepresentativeTopic === 'function') {
+      representative = ensureGroupRepresentativeTopic(group, {
+        topicKind: group.type === 'timeline' ? 'timeline-representative' : 'contents-representative',
+        label: group.name || (group.type === 'timeline' ? 'Timeline' : 'Contents')
+      });
+    }
+    return representative || target;
+  }
+
+  function resolveAxisGroupConnectionEndpoints(sourceNode, targetNode) {
+    var source = sourceNode;
+    var target = targetNode;
+
+    /*
+     * Only a line drawn from Content to the Timeline/Contents axis pseudo link
+     * means a relationship to the whole group.  In that case, connect the
+     * visible line to the representative topic.  Lines drawn directly to
+     * ContentTarget/PageMarker, Segment, or the representative topic itself
+     * remain direct node-to-node relationships.
+     */
+    if (isContentConnectionNode(source) && isTimelineOrContentsAxisTarget(target)) {
+      target = resolveGroupRepresentativeForConnection(target);
+    }
+    if (isContentConnectionNode(target) && isTimelineOrContentsAxisTarget(source)) {
+      source = resolveGroupRepresentativeForConnection(source);
+    }
+
+    return {
+      source: source,
+      target: target
+    };
+  }
+
   connect = function (source_node, target_node, rtype) {
-    var linkId, link, midX, midY;
+    var linkId, link, midX, midY, endpoints;
 
     if (!source_node || !target_node) {
+      return null;
+    }
+
+    endpoints = resolveAxisGroupConnectionEndpoints(source_node, target_node);
+    source_node = endpoints.source || source_node;
+    target_node = endpoints.target || target_node;
+
+    if (!source_node || !target_node || source_node.id === target_node.id) {
+      state.Connecting = false;
       return null;
     }
 
@@ -3938,7 +4122,8 @@ wuwei.model = (function () {
       }
       snapshot.members[nodeId] = {
         x: finiteOr(node.x, 0),
-        y: finiteOr(node.y, 0)
+        y: finiteOr(node.y, 0),
+        axisPos: Number.isFinite(Number(node.axisPos)) ? Number(node.axisPos) : null
       };
     });
 
@@ -3948,7 +4133,8 @@ wuwei.model = (function () {
       }
       snapshot.members[node.id] = {
         x: finiteOr(node.x, 0),
-        y: finiteOr(node.y, 0)
+        y: finiteOr(node.y, 0),
+        axisPos: Number.isFinite(Number(node.axisPos)) ? Number(node.axisPos) : null
       };
     });
 
@@ -3970,7 +4156,18 @@ wuwei.model = (function () {
   }
 
 
+  function isAxisLayoutGroup(group) {
+    return !!(group && ('timeline' === group.type || 'contents' === group.type));
+  }
+
+  function getAxisDragDelta(group, dx, dy) {
+    return (group && group.orientation === 'vertical') ? dy : dx;
+  }
+
   function applyGroupTranslate(group, origin, dx, dy) {
+    var axisGroup = isAxisLayoutGroup(group);
+    var axisDelta = axisGroup ? getAxisDragDelta(group, dx, dy) : 0;
+
     Object.keys((origin && origin.members) || {}).forEach(function (nodeId) {
       var node = findNodeById(nodeId);
       var base = origin.members[nodeId];
@@ -3980,6 +4177,24 @@ wuwei.model = (function () {
 
       node.x = finiteOr(base.x, 0) + dx;
       node.y = finiteOr(base.y, 0) + dy;
+
+      /*
+       * Timeline / Contents members are laid out from axisPos during the next
+       * graph rebuild.  If only x/y are translated, normalizeAxisGroup() restores
+       * the old axisPos-derived coordinate.  Therefore the axis scalar must move
+       * by the same delta as the dragged axis.
+       */
+      if (axisGroup) {
+        if (Number.isFinite(Number(base.axisPos))) {
+          node.axisPos = Number(base.axisPos) + axisDelta;
+        }
+        else {
+          node.axisPos = ((group && group.orientation === 'vertical')
+            ? finiteOr(base.y, node.y)
+            : finiteOr(base.x, node.x)) + axisDelta;
+        }
+      }
+
       node.fx = null;
       node.fy = null;
       node.vx = 0;
@@ -4063,7 +4278,7 @@ wuwei.model = (function () {
 
 
   function groupDragEnded(group) {
-    var isAxisGroup = !!(group && group.type === 'timeline');
+    var isAxisGroup = isAxisLayoutGroup(group);
 
     state.groupDragGroupId = null;
     state.groupDragAnchor = null;
@@ -4354,8 +4569,8 @@ wuwei.model = (function () {
             wuwei.contents.isContentsPageNode(d) &&
             !state.Selecting) {
             d3.event.stopPropagation();
-            if (wuwei.menu && wuwei.menu.contents && typeof wuwei.menu.contents.openPageInInfo === 'function') {
-              wuwei.menu.contents.openPageInInfo(d);
+            if (wuwei.menu && wuwei.menu.contents && typeof wuwei.menu.contents.openContentTargetInInfo === 'function') {
+              wuwei.menu.contents.openContentTargetInInfo(d);
             }
             return;
           }
@@ -4373,8 +4588,8 @@ wuwei.model = (function () {
             wuwei.contents &&
             typeof wuwei.contents.isContentsPageNode === 'function' &&
             wuwei.contents.isContentsPageNode(d)) {
-            if (wuwei.menu && wuwei.menu.contents && typeof wuwei.menu.contents.openPageInInfo === 'function') {
-              wuwei.menu.contents.openPageInInfo(d);
+            if (wuwei.menu && wuwei.menu.contents && typeof wuwei.menu.contents.openContentTargetInInfo === 'function') {
+              wuwei.menu.contents.openContentTargetInInfo(d);
             }
             return;
           }
@@ -4988,7 +5203,7 @@ wuwei.model = (function () {
      */
     applyGroupTranslate(group, state.groupDragOrigin, dx, dy);
 
-    isAxisGroup = !!(group && group.type === 'timeline');
+    isAxisGroup = isAxisLayoutGroup(group);
 
     if (isAxisGroup) {
       setGraphFromCurrentPage();
@@ -5019,7 +5234,7 @@ wuwei.model = (function () {
     state.dragging = false;
     state.hoverLockUntil = Date.now() + 150;
 
-    var isAxisGroup = !!(group && group.type === 'timeline');
+    var isAxisGroup = isAxisLayoutGroup(group);
     if (isAxisGroup) {
       setGraphFromCurrentPage();
     }
@@ -6464,6 +6679,14 @@ wuwei.model = (function () {
       INC = 4;
 
     var routing = (link.routing && typeof link.routing === 'object') ? link.routing : (link.routing = {});
+    if (link.shape === 'NORMAL') {
+      delete routing.startPosition;
+      delete routing.endPosition;
+      delete link.startPosition;
+      delete link.endPosition;
+      delete link.sourcePosition;
+      delete link.targetPosition;
+    }
     var startPosition = routing.startPosition || '';
     var endPosition = routing.endPosition || '';
 
@@ -9398,6 +9621,7 @@ wuwei.model = (function () {
     createGroup: createGroup,
     createGroupRepresentativeTopic: createGroupRepresentativeTopic,
     syncGroupRepresentative: syncGroupRepresentative,
+    ensureGroupRepresentativeTopic: ensureGroupRepresentativeTopic,
     placeGroupRepresentative: placeGroupRepresentative,
     getGroupRepresentativeNodes: getGroupRepresentativeNodes,
     isRepresentativeTopic: isRepresentativeTopic,
