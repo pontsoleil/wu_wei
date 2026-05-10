@@ -7,7 +7,11 @@
  * - End   = mediaEnd
  * - Duration = mediaEnd - mediaStart
  * 
-
+ * WuWei is a free, open-source knowledge modelling tool.
+ *
+ * Licensed under the MIT License.
+ * Copyright (c) 2013-2020,2023,2026 SAMBUICHI, Nobuyuki
+ * (Sambuichi Professional Engineers Office)
  */
 wuwei.info = wuwei.info || {};
 wuwei.info.timeline = wuwei.info.timeline || {};
@@ -42,12 +46,12 @@ wuwei.info.timeline.markup = (function () {
           '<div id="infoTimelinePreviewHost" class="timeline-preview-host"></div>' +
         '</div>' +
         '<div class="timeline-grid">' +
-            block(wuwei.nls.translate('Axis'), group.orientation || '', 'axis') +
-            block(wuwei.nls.translate('End'), (param && param.endText) || '', 'end') +
-            block(wuwei.nls.translate('Length'), group.length || '', 'length') +
-            block(wuwei.nls.translate('Media'), (param && param.mediaName) || '', 'media') +
-            block(wuwei.nls.translate('Segments'), (param && param.segmentCount) || 0, 'segments') +
-            block(wuwei.nls.translate('Default'), (param && param.defaultPlayDuration) || 0, 'default') +
+            block(t('Axis'), group.orientation || '', 'axis') +
+            block(t('End'), (param && param.endText) || '', 'end') +
+            block(t('Length'), group.length || '', 'length') +
+            block(t('Media'), (param && param.mediaName) || '', 'media') +
+            block(t('Segments'), (param && param.segmentCount) || 0, 'segments') +
+            block(t('Default'), (param && param.defaultPlayDuration) || 0, 'default') +
         '</div>' +
       '</section>';
   }
@@ -65,11 +69,11 @@ wuwei.info.timeline.markup = (function () {
           '<div id="infoTimelinePreviewHost" class="timeline-preview-host"></div>' +
         '</div>' +
         '<div class="timeline-grid">' +
-            block(wuwei.nls.translate('Start time'), (param && param.startText) || '', 'start') +
-            block(wuwei.nls.translate('End time'), (param && param.endText) || '', 'end') +
-            block(wuwei.nls.translate('Play duration'), (param && param.durationText) || '', 'duration') +
+            block(t('Start time'), (param && param.startText) || '', 'start') +
+            block(t('End time'), (param && param.endText) || '', 'end') +
+            block(t('Play duration'), (param && param.durationText) || '', 'duration') +
         '</div>' +
-        (memo ? '<div class="timeline-memo-wrap"><div class="timeline-label">' + esc(wuwei.nls.translate('Memo')) + '</div><pre class="timeline-memo">' + esc(memo) + '</pre></div>' : '') +
+        (memo ? '<div class="timeline-memo-wrap"><div class="timeline-label">' + esc(t('Memo')) + '</div><pre class="timeline-memo">' + esc(memo) + '</pre></div>' : '') +
       '</section>';
   }
 
@@ -77,6 +81,9 @@ wuwei.info.timeline.markup = (function () {
     return '<div id="info-timeline" class="timeline-pane" style="display:none"></div>';
   }
 
+  function t(text) {
+    return wuwei.nls.translate(text);
+  }
   return {
     paneTemplate: paneTemplate,
     axisTemplate: axisTemplate,
