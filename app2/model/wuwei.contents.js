@@ -2,7 +2,10 @@
  * wuwei.contents.js
  * document contents axis helpers
  *
- * Step 1: PDF page axis.
+ * A contents axis manages contentTarget markers.
+ * The target content can be PDF, Office preview, HTML, image, or another
+ * previewable content resource.  PDF page numbers are only one possible
+ * form of contentTarget metadata.
  */
 wuwei.contents = wuwei.contents || {};
 
@@ -62,7 +65,7 @@ wuwei.contents = wuwei.contents || {};
       (link.groupType === 'contentsAxis' || link.linkType === 'contents-axis'));
   }
 
-  function isPdfResourceNode(node) {
+  function isContentTargetResourceNode(node) {
     var resource = (node && node.resource && typeof node.resource === 'object') ? node.resource : {};
     var media = (resource.media && typeof resource.media === 'object') ? resource.media : {};
     var contents = (resource.contents && typeof resource.contents === 'object') ? resource.contents : {};
@@ -82,14 +85,17 @@ wuwei.contents = wuwei.contents || {};
       resource.uri ||
       ''
     ).toLowerCase();
-    var hasPageAxis = String(contents.type || '').toLowerCase() === 'pdf' &&
-      Number(contents.pageCount || media.pageCount || resource.pageCount || node && node.pageCount || 0) > 0;
-    return !!(node && node.type === 'Content' &&
-      (mime.indexOf('application/pdf') === 0 ||
-        /\.pdf(?:[?#].*)?$/.test(uri) ||
-        /\.pdf(?:[?#].*)?$/.test(fileName) ||
-        /\.pdf(?:[?#].*)?$/.test(previewName) ||
-        hasPageAxis));
+    var contentType = String(contents.type || resource.kind || resource.type || '').toLowerCase();
+    var pageCount = Number(contents.pageCount || media.pageCount || resource.pageCount || node && node.pageCount || 0);
+    var fileText = [uri, fileName, previewName].join(' ');
+    var isPdf = mime.indexOf('application/pdf') === 0 || /\.pdf(?:[?#].*)?$/i.test(fileText);
+    var isOffice = /(msword|officedocument|ms-excel|ms-powerpoint|vnd\.ms-|vnd\.openxmlformats)/i.test(mime) ||
+      /\.(docx?|xlsx?|pptx?|odt|ods|odp)(?:[?#].*)?$/i.test(fileText);
+    var isHtml = mime.indexOf('text/html') === 0 || /\.(html?|xhtml)(?:[?#].*)?$/i.test(fileText) || contentType === 'html' || contentType === 'web';
+    var isPreviewable = isPdf || isOffice || isHtml || contentType === 'document' || contentType === 'contents' || contentType === 'content';
+    var hasContentTargets = Number.isFinite(pageCount) && pageCount > 0;
+
+    return !!(node && node.type === 'Content' && (isPreviewable || hasContentTargets));
   }
 
   function getDocumentPageCount(node) {
@@ -104,6 +110,26 @@ wuwei.contents = wuwei.contents || {};
       0
     );
     return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+  }
+
+  function hasKnownDocumentPages(node) {
+    return getDocumentPageCount(node) > 0;
+  }
+
+  function getContentsAxisPageCount(group) {
+    var pageCount = Number(group && (group.documentPageCount || group.pageCount || group.axis && group.axis.end) || 0);
+    pageCount = Number.isFinite(pageCount) && pageCount > 0 ? Math.floor(pageCount) : 0;
+    return Math.max(1, pageCount);
+  }
+
+  function makeContentTargetLabel(group, pageNumber, option) {
+    if (option && option.label) {
+      return option.label;
+    }
+    if (group && false === group.hasPageCount) {
+      return 'content';
+    }
+    return 'p.' + pageNumber;
   }
 
   function defaultAxisOrigin(documentNode) {
@@ -161,19 +187,43 @@ wuwei.contents = wuwei.contents || {};
     };
   }
 
+  function getContentsRepresentativeNode(group) {
+    var representative;
+    if (!group) { return null; }
+    representative = group.representativeNodeId ? model.findNodeById(group.representativeNodeId) : null;
+    if (!representative && model && typeof model.ensureGroupRepresentativeTopic === 'function') {
+      representative = model.ensureGroupRepresentativeTopic(group, {
+        topicKind: 'contents-representative',
+        label: group.name || 'Contents'
+      });
+    }
+    return representative || null;
+  }
+
   function ensureDocumentEntryLink(group) {
     var page = getCurrentPage();
-    var documentNode, entryNode, exists;
-    if (!page || !group || !Array.isArray(group.members) || !group.members.length) { return null; }
+    var documentNode, representative, exists, link;
+    if (!page || !group) { return null; }
     documentNode = findDocumentNodeForGroup(group, null);
-    entryNode = model.findNodeById(memberId(group.members[0]));
-    if (!documentNode || !entryNode) { return null; }
-    exists = (page.links || []).some(function (link) {
-      return link && link.from === documentNode.id && link.to === entryNode.id &&
-        (link.linkRole === 'contents-entry' || link.contentsRef === group.id || link.relation === 'contents');
+    representative = getContentsRepresentativeNode(group);
+    if (!documentNode || !representative) { return null; }
+
+    page.links = (page.links || []).filter(function (item) {
+      if (!item || item.from !== documentNode.id || item.contentsRef !== group.id) {
+        return true;
+      }
+      if (item.linkRole !== 'contents-entry' && item.relation !== 'contents') {
+        return true;
+      }
+      return item.to === representative.id;
+    });
+
+    exists = (page.links || []).some(function (item) {
+      return item && item.from === documentNode.id && item.to === representative.id &&
+        (item.linkRole === 'contents-entry' || item.contentsRef === group.id || item.relation === 'contents');
     });
     if (exists) { return null; }
-    var link = makeDocumentEntryLink(group, documentNode, entryNode);
+    link = makeDocumentEntryLink(group, documentNode, representative);
     page.links.push(link);
     return link;
   }
@@ -183,12 +233,14 @@ wuwei.contents = wuwei.contents || {};
     return {
       id: option.id || makeUuid(),
       type: 'PageMarker',
+      nodeKind: 'contentTarget',
+      targetKind: 'contentTarget',
       topicKind: 'contents-page',
       contentsRef: group.id,
       documentRef: group.documentRef,
       pageNumber: pageNumber,
       axisRole: option.axisRole || 'entry',
-      label: option.label || ('p.' + pageNumber),
+      label: makeContentTargetLabel(group, pageNumber, option),
       description: { format: 'plain/text', body: option.comment || option.description || '' },
       shape: 'CIRCLE',
       size: { radius: 18 },
@@ -203,6 +255,7 @@ wuwei.contents = wuwei.contents || {};
       changed: true,
       x: Number.isFinite(Number(option.x)) ? Number(option.x) : 0,
       y: Number.isFinite(Number(option.y)) ? Number(option.y) : 0,
+      axisPos: Number.isFinite(Number(option.axisPos)) ? Number(option.axisPos) : undefined,
       fx: null,
       fy: null,
       audit: makeAudit()
@@ -211,13 +264,15 @@ wuwei.contents = wuwei.contents || {};
 
   function ensurePageNodeDefaults(group, node, index) {
     node.id = node.id || makeUuid();
-    node.type = 'PageMarker';
+    node.type = 'PageMarker'; // kept for renderer/backward compatibility
+    node.nodeKind = node.nodeKind || 'contentTarget';
+    node.targetKind = node.targetKind || 'contentTarget';
     node.topicKind = 'contents-page';
     node.contentsRef = group.id;
     node.documentRef = group.documentRef;
     node.pageNumber = Math.max(1, Math.floor(Number(node.pageNumber || index + 1)));
     node.axisRole = node.axisRole || 'entry';
-    node.label = node.label || ('p.' + node.pageNumber);
+    node.label = node.label || makeContentTargetLabel(group, node.pageNumber, null);
     node.shape = 'CIRCLE';
     node.size = { radius: Number((node.size && node.size.radius) || 18) };
     node.color = node.color || '#ffffff';
@@ -245,44 +300,203 @@ wuwei.contents = wuwei.contents || {};
     return value;
   }
 
+  function axisOrientation(group) {
+    return (group && group.orientation === 'vertical') ? 'vertical' : 'horizontal';
+  }
+
+  function axisAnchor(group) {
+    var axis = (group && group.axis) || {};
+    return {
+      x: (axis.anchor && Number.isFinite(Number(axis.anchor.x))) ? Number(axis.anchor.x) : ((group && group.origin && Number.isFinite(Number(group.origin.x))) ? Number(group.origin.x) : 0),
+      y: (axis.anchor && Number.isFinite(Number(axis.anchor.y))) ? Number(axis.anchor.y) : ((group && group.origin && Number.isFinite(Number(group.origin.y))) ? Number(group.origin.y) : 0)
+    };
+  }
+
+  function axisScalar(group, x, y) {
+    return axisOrientation(group) === 'vertical' ? Number(y || 0) : Number(x || 0);
+  }
+
+  function getAxisPos(group, node) {
+    var value = Number(node && node.axisPos);
+    if (Number.isFinite(value)) {
+      return value;
+    }
+    return axisOrientation(group) === 'vertical' ? Number(node && node.y || 0) : Number(node && node.x || 0);
+  }
+
+  function setNodeOnAxis(group, node, axisPos) {
+    var anchor = axisAnchor(group);
+    axisPos = Number(axisPos);
+    if (!Number.isFinite(axisPos)) {
+      axisPos = axisOrientation(group) === 'vertical' ? anchor.y : anchor.x;
+    }
+    node.axisPos = axisPos;
+    if (axisOrientation(group) === 'vertical') {
+      node.x = anchor.x;
+      node.y = axisPos;
+    }
+    else {
+      node.x = axisPos;
+      node.y = anchor.y;
+    }
+    node.fx = node.x;
+    node.fy = node.y;
+    node.vx = 0;
+    node.vy = 0;
+    node.changed = true;
+  }
+
+  function pageRatio(group, node, pageCount) {
+    var range = Math.max(pageCount - 1, 1);
+    var pageNumber = clampPageNumber(group, node && node.pageNumber);
+    return Math.max(0, Math.min(1, (pageNumber - 1) / range));
+  }
+
+  function orderedPageMembers(group) {
+    var members = getMemberNodes(group).sort(function (a, b) {
+      var pa = Number(a.pageNumber || 0);
+      var pb = Number(b.pageNumber || 0);
+      if (pa !== pb) {
+        return pa - pb;
+      }
+      return String(a.id).localeCompare(String(b.id));
+    });
+    setMemberIds(group, members.map(function (node) { return node.id; }));
+    return members;
+  }
+
+  function assignMissingAxisPositions(group, members, pageCount) {
+    var anchor = axisAnchor(group);
+    var anchorPos = axisOrientation(group) === 'vertical' ? anchor.y : anchor.x;
+    var length = Math.max(60, Number(group.length || AXIS_LENGTH));
+    var gap = Math.max(40, Number(group.axisGap || 80));
+    var anyPositioned = members.some(function (node) {
+      return Number.isFinite(Number(node.axisPos));
+    });
+
+    if (!anyPositioned) {
+      members.forEach(function (node) {
+        node.axisPos = anchorPos + (length * pageRatio(group, node, pageCount));
+      });
+      return;
+    }
+
+    members.forEach(function (node, index) {
+      var prev, next, i;
+      if (Number.isFinite(Number(node.axisPos))) {
+        node.axisPos = Number(node.axisPos);
+        return;
+      }
+      for (i = index - 1; i >= 0; i -= 1) {
+        if (Number.isFinite(Number(members[i].axisPos))) {
+          prev = members[i];
+          break;
+        }
+      }
+      for (i = index + 1; i < members.length; i += 1) {
+        if (Number.isFinite(Number(members[i].axisPos))) {
+          next = members[i];
+          break;
+        }
+      }
+      if (prev && next) {
+        node.axisPos = (Number(prev.axisPos) + Number(next.axisPos)) / 2;
+      }
+      else if (prev) {
+        node.axisPos = Number(prev.axisPos) + gap;
+      }
+      else if (next) {
+        node.axisPos = Number(next.axisPos) - gap;
+      }
+      else {
+        node.axisPos = anchorPos + (length * pageRatio(group, node, pageCount));
+      }
+    });
+  }
+
+  function updateAxisBoundsFromPositions(group) {
+    var members, representatives, nodes, orientation, anchor, positions, minPos, maxPos, minLength;
+    if (!group) {
+      return false;
+    }
+    group.axis = group.axis || {};
+    anchor = axisAnchor(group);
+    members = getMemberNodes(group);
+    representatives = (model && typeof model.getGroupRepresentativeNodes === 'function')
+      ? model.getGroupRepresentativeNodes(group)
+      : [];
+    nodes = members.concat(representatives || []);
+    orientation = axisOrientation(group);
+    positions = nodes.map(function (node) {
+      if (!node) {
+        return null;
+      }
+      if (Number.isFinite(Number(node.axisPos))) {
+        return Number(node.axisPos);
+      }
+      return orientation === 'vertical' ? Number(node.y) : Number(node.x);
+    }).filter(function (value) {
+      return Number.isFinite(value);
+    });
+
+    if (!positions.length) {
+      group.axis.anchor = anchor;
+      group.origin = { x: anchor.x, y: anchor.y };
+      group.length = Math.max(60, Number(group.length || AXIS_LENGTH));
+      return false;
+    }
+
+    minPos = Math.min.apply(null, positions);
+    maxPos = Math.max.apply(null, positions);
+    minLength = Math.max(60, Number(group.minAxisLength || 60));
+
+    if (orientation === 'vertical') {
+      group.axis.anchor = { x: anchor.x, y: minPos };
+      group.origin = { x: anchor.x, y: minPos };
+    }
+    else {
+      group.axis.anchor = { x: minPos, y: anchor.y };
+      group.origin = { x: minPos, y: anchor.y };
+    }
+    group.length = Math.max(minLength, maxPos - minPos);
+    return true;
+  }
+
   function layoutAxisGroup(group) {
-    var axis, pageCount, length, orientation, anchor, members, range;
+    var axis, pageCount, length, anchor, members;
     if (!group) { return null; }
 
     axis = group.axis || {};
-    pageCount = Math.max(1, Math.floor(Number(group.pageCount || axis.end || 1)));
+    pageCount = getContentsAxisPageCount(group);
     getMemberNodes(group).forEach(function (node) {
       pageCount = Math.max(pageCount, clampPageNumber(group, node && node.pageNumber));
     });
     length = Math.max(60, Number(group.length || AXIS_LENGTH));
-    orientation = (group.orientation === 'vertical') ? 'vertical' : 'horizontal';
-    anchor = {
-      x: (axis.anchor && Number.isFinite(Number(axis.anchor.x))) ? Number(axis.anchor.x) : ((group.origin && Number.isFinite(Number(group.origin.x))) ? Number(group.origin.x) : 0),
-      y: (axis.anchor && Number.isFinite(Number(axis.anchor.y))) ? Number(axis.anchor.y) : ((group.origin && Number.isFinite(Number(group.origin.y))) ? Number(group.origin.y) : 0)
-    };
+    anchor = axisAnchor(group);
 
     group.axis = group.axis || {};
     group.axis.anchor = anchor;
     group.origin = { x: anchor.x, y: anchor.y };
     group.axis.start = 1;
     group.axis.end = pageCount;
-    group.axis.unit = 'page';
+    group.axis.unit = (false === group.hasPageCount) ? 'contentTarget' : 'page';
     group.pageCount = pageCount;
+    if (false === group.hasPageCount) {
+      group.documentPageCount = 0;
+    }
     group.length = length;
-    range = Math.max(pageCount - 1, 1);
 
-    members = getMemberNodes(group).sort(function (a, b) {
-      return Number(a.pageNumber || 0) - Number(b.pageNumber || 0);
-    });
+    members = orderedPageMembers(group);
     members.forEach(function (node, index) {
       var pageNumber = clampPageNumber(group, node.pageNumber || index + 1);
-      var ratio = (pageNumber - 1) / range;
-      node.pageNumber = pageNumber;
-      node.x = (orientation === 'vertical') ? anchor.x : (anchor.x + (length * ratio));
-      node.y = (orientation === 'vertical') ? (anchor.y + (length * ratio)) : anchor.y;
-      node.fx = node.x;
-      node.fy = node.y;
       ensurePageNodeDefaults(group, node, index);
+      node.pageNumber = pageNumber;
+    });
+
+    assignMissingAxisPositions(group, members, pageCount);
+    updateAxisBoundsFromPositions(group);
+    members.forEach(function (node) {
+      setNodeOnAxis(group, node, getAxisPos(group, node));
     });
 
     return group;
@@ -299,12 +513,12 @@ wuwei.contents = wuwei.contents || {};
     ].filter(Boolean);
     for (var i = 0; i < ids.length; i += 1) {
       found = model.findNodeById(ids[i]);
-      if (isPdfResourceNode(found)) {
+      if (isContentTargetResourceNode(found)) {
         return found;
       }
     }
     nodes = (page.nodes || []).filter(function (node) {
-      return isPdfResourceNode(node);
+      return isContentTargetResourceNode(node);
     });
     if (nodes.length === 1) {
       return nodes[0];
@@ -329,7 +543,7 @@ wuwei.contents = wuwei.contents || {};
     group.axisPseudoLinkId = group.axisPseudoLinkId || makeUuid();
     group.axis = group.axis || {};
     group.axis.mode = group.axis.mode || 'document';
-    group.axis.unit = 'page';
+    group.axis.unit = (false === group.hasPageCount) ? 'contentTarget' : 'page';
     group.axis.anchor = group.axis.anchor || {};
     if (!Number.isFinite(Number(group.axis.anchor.x))) {
       group.axis.anchor.x = Number.isFinite(Number(group.origin && group.origin.x)) ? Number(group.origin.x) : 0;
@@ -393,6 +607,64 @@ wuwei.contents = wuwei.contents || {};
     wuwei.draw.reRender();
   }
 
+  function getDragBounds(group, pageNode) {
+    var members = orderedPageMembers(group);
+    var index = members.findIndex(function (node) { return node && node.id === pageNode.id; });
+    var gap = Math.max(4, Number(group.minAxisGap || 8));
+    var prev = index > 0 ? members[index - 1] : null;
+    var next = (index >= 0 && index < members.length - 1) ? members[index + 1] : null;
+    return {
+      min: prev ? (getAxisPos(group, prev) + gap) : -Infinity,
+      max: next ? (getAxisPos(group, next) - gap) : Infinity
+    };
+  }
+
+  function clampAxisPosition(value, bounds) {
+    value = Number(value || 0);
+    if (bounds && Number.isFinite(bounds.min)) {
+      value = Math.max(bounds.min, value);
+    }
+    if (bounds && Number.isFinite(bounds.max)) {
+      value = Math.min(bounds.max, value);
+    }
+    return value;
+  }
+
+  function updatePageMarkerAxisPosition(group, pageNode, x, y) {
+    var pos;
+    if (!group || !isContentsGroup(group) || !pageNode || pageNode.type !== 'PageMarker') {
+      return false;
+    }
+    normalizeAxisGroup(group);
+    pageNode = model.findNodeById(pageNode.id) || pageNode;
+    pos = clampAxisPosition(axisScalar(group, x, y), getDragBounds(group, pageNode));
+    setNodeOnAxis(group, pageNode, pos);
+    updateAxisBoundsFromPositions(group);
+    return true;
+  }
+
+  function handlePageMarkerDrag(nodeOrId, eventX, eventY) {
+    var pageNode = (typeof nodeOrId === 'string') ? model.findNodeById(nodeOrId) : (nodeOrId && nodeOrId.id ? (model.findNodeById(nodeOrId.id) || nodeOrId) : null);
+    var group;
+    if (!pageNode || pageNode.type !== 'PageMarker') {
+      return false;
+    }
+    group = model.findGroupById(pageNode.contentsRef || pageNode.groupRef);
+    if (!group || !isContentsGroup(group)) {
+      return false;
+    }
+    if (!updatePageMarkerAxisPosition(group, pageNode, Number(eventX || 0), Number(eventY || 0))) {
+      return false;
+    }
+    if (model && typeof model.pruneGroups === 'function') {
+      model.pruneGroups();
+    }
+    if (model && typeof model.setGraphFromCurrentPage === 'function') {
+      model.setGraphFromCurrentPage();
+    }
+    return true;
+  }
+
   function buildContentsAxisPseudoLink(group) {
     if (!group || false === group.enabled || !isContentsGroup(group)) {
       return null;
@@ -414,7 +686,7 @@ wuwei.contents = wuwei.contents || {};
   }
 
   function createAxisGroup(axis, documentCandidate, option) {
-    var page, documentNode, pageCount, origin, group, nodes;
+    var page, documentNode, pageCount, origin, group, nodes, axisStartPos;
     option = option || {};
     if (model && typeof model.syncPageFromGraph === 'function') {
       model.syncPageFromGraph();
@@ -425,19 +697,13 @@ wuwei.contents = wuwei.contents || {};
     documentNode = documentCandidate && documentCandidate.id
       ? (model.findNodeById(documentCandidate.id) || documentCandidate)
       : null;
-    if (!isPdfResourceNode(documentNode)) {
+    if (!isContentTargetResourceNode(documentNode)) {
       if (!option.silent) {
-        window.alert('PDFまたはOffice文書を 1 件選択してから contents を作成してください。');
+        window.alert('contents 対象のコンテンツを 1 件選択してから contents を作成してください。');
       }
       return null;
     }
     pageCount = getDocumentPageCount(documentNode);
-    if (!pageCount) {
-      if (!option.silent) {
-        window.alert('文書のページ数が未取得のため contents を作成できません。アップロードし直すか resource の pageCount を設定してください。');
-      }
-      return null;
-    }
 
     origin = defaultAxisOrigin(documentNode);
     group = model.createGroup({
@@ -447,26 +713,53 @@ wuwei.contents = wuwei.contents || {};
       groupType: 'axis',
       orientation: axis === 'vertical' ? 'vertical' : 'horizontal',
       documentRef: documentNode.id,
-      pageCount: pageCount,
+      pageCount: Math.max(1, pageCount || 1),
+      documentPageCount: pageCount || 0,
+      hasPageCount: pageCount > 0,
       spine: { visible: true, color: '#4c6b8a', width: 4, padding: 12 },
-      axis: { mode: 'document', unit: 'page', start: 1, end: pageCount, anchor: { x: origin.x, y: origin.y } },
+      axis: {
+        mode: 'document',
+        unit: pageCount > 0 ? 'page' : 'contentTarget',
+        start: 1,
+        end: Math.max(1, pageCount || 1),
+        anchor: { x: origin.x, y: origin.y }
+      },
       origin: origin,
       length: AXIS_LENGTH,
       members: []
     });
     group.documentRef = documentNode.id;
     group.mediaRef = documentNode.id;
-    group.pageCount = pageCount;
+    group.pageCount = Math.max(1, pageCount || 1);
+    group.documentPageCount = pageCount || 0;
+    group.hasPageCount = pageCount > 0;
     page.groups.push(group);
-    nodes = [createPageNode(group, 1, { axisRole: 'entry' })];
+    axisStartPos = group.orientation === 'vertical' ? origin.y : origin.x;
+    if (pageCount > 1) {
+      nodes = [
+        createPageNode(group, 1, { axisRole: 'entry', axisPos: axisStartPos }),
+        createPageNode(group, pageCount, { axisRole: 'entry', axisPos: axisStartPos + AXIS_LENGTH })
+      ];
+    }
+    else {
+      nodes = [createPageNode(group, 1, {
+        axisRole: 'entry',
+        label: pageCount > 0 ? 'p.1' : 'content',
+        axisPos: axisStartPos + (AXIS_LENGTH / 2)
+      })];
+    }
     nodes.forEach(function (node) {
       page.nodes.push(node);
     });
     setMemberIds(group, nodes.map(function (node) { return node.id; }));
-    page.links.push(makeDocumentEntryLink(group, documentNode, nodes[0]));
     normalizeAxisGroup(group);
     rebuildGraphAndRefresh();
     return group;
+  }
+
+  function addTableOfContents(documentCandidate, option) {
+    option = option || {};
+    return createAxisGroup(option.axis || 'horizontal', documentCandidate, option);
   }
 
   function updateAxisGroup(group, props) {
@@ -494,7 +787,7 @@ wuwei.contents = wuwei.contents || {};
   }
 
   function addEntry(groupOrTarget, pageNumber, entryOption) {
-    var spec = getPageTargetSpec(groupOrTarget);
+    var spec = getContentTargetSpec(groupOrTarget);
     var page = getCurrentPage();
     var group = spec && spec.group;
     var used, next, node;
@@ -514,7 +807,7 @@ wuwei.contents = wuwei.contents || {};
   }
 
   function createEntryDraft(groupOrTarget) {
-    var spec = getPageTargetSpec(groupOrTarget);
+    var spec = getContentTargetSpec(groupOrTarget);
     var group = spec && spec.group;
     var used, next, node;
     if (!group) { return null; }
@@ -558,7 +851,7 @@ wuwei.contents = wuwei.contents || {};
   }
 
   function deleteTarget(target) {
-    var spec = getPageTargetSpec(target);
+    var spec = getContentTargetSpec(target);
     var page = getCurrentPage();
     var group = spec && spec.group;
     var point = spec && spec.point;
@@ -587,7 +880,7 @@ wuwei.contents = wuwei.contents || {};
     return true;
   }
 
-  function getPageTargetSpec(target) {
+  function getContentTargetSpec(target) {
     var point, group, documentNode;
     if (!target) { return null; }
     if (isContentsPageNode(target)) {
@@ -617,18 +910,29 @@ wuwei.contents = wuwei.contents || {};
     };
   }
 
+  function isPdfLikeUri(uri) {
+    var text = String(uri || '').split('?path=').pop() || String(uri || '');
+    return /\.pdf(?:[?#].*)?$/i.test(text);
+  }
+
   function appendPageFragment(uri, pageNumber) {
     var page = Math.max(1, Math.floor(Number(pageNumber || 1)));
-    var base = toDirectUploadPdfUri(String(uri || '').replace(/#.*$/, ''));
+    var base = toDirectUploadContentUri(String(uri || '').replace(/#.*$/, ''));
     if (!base) { return ''; }
     return base + '#page=' + encodeURIComponent(page);
   }
 
-  function buildDirectPdfViewerUrl(uri, pageNumber) {
-    var page = Math.max(1, Math.floor(Number(pageNumber || 1)));
-    var pdfUri = toDirectUploadPdfUri(String(uri || '').replace(/#.*$/, ''));
-    if (!pdfUri) { return ''; }
-    return appendPageFragment(pdfUri, page);
+  function buildContentTargetViewerUrl(uri, pageNumber, contentTarget) {
+    var base = String(uri || '').trim();
+    var anchor = contentTarget && (contentTarget.anchor || contentTarget.fragment || contentTarget.contentAnchor);
+    if (!base) { return ''; }
+    if (isPdfLikeUri(base)) {
+      return appendPageFragment(base, pageNumber);
+    }
+    if (anchor) {
+      return base.replace(/#.*$/, '') + '#' + encodeURIComponent(String(anchor).replace(/^#/, ''));
+    }
+    return base;
   }
 
   function encodeStoragePath(path) {
@@ -650,7 +954,7 @@ wuwei.contents = wuwei.contents || {};
     return '/wu_wei2/';
   }
 
-  function toDirectUploadPdfUri(uri) {
+  function toDirectUploadContentUri(uri) {
     var parsed, area, path, uid;
     if (!uri || typeof window === 'undefined' || !window.location) { return uri; }
     try {
@@ -680,16 +984,19 @@ wuwei.contents = wuwei.contents || {};
     if (!uri && util && typeof util.getResourceOriginalUri === 'function') {
       uri = util.getResourceOriginalUri(documentNode) || '';
     }
-    return buildDirectPdfViewerUrl(uri, pageNumber);
+    return buildContentTargetViewerUrl(uri, pageNumber, arguments.length > 2 ? arguments[2] : null);
   }
 
   ns.getCurrentPage = getCurrentPage;
   ns.isContentsGroup = isContentsGroup;
   ns.isContentsPageNode = isContentsPageNode;
   ns.isContentsAxisLink = isContentsAxisLink;
-  ns.isPdfResourceNode = isPdfResourceNode;
+  ns.isContentTargetResourceNode = isContentTargetResourceNode;
+  ns.isPdfResourceNode = isContentTargetResourceNode; // backward compatibility
   ns.getDocumentPageCount = getDocumentPageCount;
+  ns.hasKnownDocumentPages = hasKnownDocumentPages;
   ns.createAxisGroup = createAxisGroup;
+  ns.addTableOfContents = addTableOfContents;
   ns.updateAxisGroup = updateAxisGroup;
   ns.addEntry = addEntry;
   ns.createEntryDraft = createEntryDraft;
@@ -699,7 +1006,12 @@ wuwei.contents = wuwei.contents || {};
   ns.normalizeAxisGroup = normalizeAxisGroup;
   ns.normalizeAllAxisGroups = normalizeAllAxisGroups;
   ns.buildContentsAxisPseudoLink = buildContentsAxisPseudoLink;
-  ns.getPageTargetSpec = getPageTargetSpec;
-  ns.getDocumentViewerUrl = getDocumentViewerUrl;
+  ns.updateAxisBoundsFromPositions = updateAxisBoundsFromPositions;
+  ns.updatePageMarkerAxisPosition = updatePageMarkerAxisPosition;
+  ns.handlePageMarkerDrag = handlePageMarkerDrag;
+  ns.getContentTargetSpec = getContentTargetSpec;
+  ns.getPageTargetSpec = getContentTargetSpec; // backward compatibility
+  ns.getContentTargetViewerUrl = getDocumentViewerUrl;
+  ns.getDocumentViewerUrl = getDocumentViewerUrl; // backward compatibility
 })(wuwei.contents);
 // wuwei.contents.js
