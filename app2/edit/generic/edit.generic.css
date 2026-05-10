@@ -53,3 +53,7 @@ textarea#descriptionBodyField {
   color: #efefef;
   background: #808080;
 }
+
+.list-inline {
+  width: 168px;
+}
