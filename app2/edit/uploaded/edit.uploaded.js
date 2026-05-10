@@ -14,28 +14,28 @@ wuwei.edit.uploaded = wuwei.edit.uploaded || {};
 (function (ns) {
 
   function initColorPalettePicker(param) {
-    $('#nodeColor').colorPalettePicker({
-      lines: 4,
+    $('#style_fill_palette').colorPalettePicker({
+      lines: 6,
       bootstrap: 4,
-      dropdownTitle: '標準色',
+      dropdownTitle: wuwei.nls.translate('Standard colours'),
       buttonClass: 'btn btn-light btn-sm dropdown-toggle',
       buttonPreviewName: 'nodeColorPaletteSelected',
       onSelected: function (color) {
-        var input = document.getElementById('nColor');
+        var input = document.getElementById('style_fill');
         if (input) {
           input.value = color;
           input.dispatchEvent(new Event('change', { bubbles: true }));
         }
       }
     });
-    $('#nodeFont_color').colorPalettePicker({
-      lines: 4,
+    $('#style_font_color_palette').colorPalettePicker({
+      lines: 6,
       bootstrap: 4,
-      dropdownTitle: '標準色',
+      dropdownTitle: wuwei.nls.translate('Standard colours'),
       buttonClass: 'btn btn-light btn-sm dropdown-toggle',
       buttonPreviewName: 'textColorPaletteSelected',
       onSelected: function (color) {
-        var input = document.getElementById('nFont_color');
+        var input = document.getElementById('style_font_color');
         if (input) {
           input.value = color;
           input.dispatchEvent(new Event('change', { bubbles: true }));
