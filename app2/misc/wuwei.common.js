@@ -315,6 +315,7 @@ wuwei.common = (function () {
     groupDragOrigin: null,
     groupDragAxisOrigin: null,
     selectedGroupIds: [],
+    selectedGroupMarks: {},
     modal: false,
     previousEdit: {
       node: null,
@@ -644,7 +645,7 @@ wuwei.common = (function () {
       dist: 40,
       simple: {
         kind: "DASHED",
-        width: 4
+        width: 2
       },
       timeline: {
         width: 4
