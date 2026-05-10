@@ -15,9 +15,9 @@ wuwei.edit.generic = wuwei.edit.generic || {};
 
   function initColorPalettePicker(param) {
     $('#style_fill_palette').colorPalettePicker({
-      lines: 4,
+      lines: 6,
       bootstrap: 4,
-      dropdownTitle: '標準色',
+      dropdownTitle: wuwei.nls.translate('Standard colours'),
       buttonClass: 'btn btn-light btn-sm dropdown-toggle',
       buttonPreviewName: 'styleFillPaletteSelected',
       onSelected: function (fill) {
@@ -32,14 +32,14 @@ wuwei.edit.generic = wuwei.edit.generic || {};
       }
     });
 
-    $('#style_font_color').colorPalettePicker({
-      lines: 4,
+    $('#style_font_color_palette').colorPalettePicker({
+      lines: 6,
       bootstrap: 4,
-      dropdownTitle: '標準色',
+      dropdownTitle: wuwei.nls.translate('Standard colours'),
       buttonClass: 'btn btn-light btn-sm dropdown-toggle',
       buttonPreviewName: 'styleFontColorPaletteSelected',
       onSelected: function (font_color) {
-        var input = document.getElementById('nFont_color');
+        var input = document.getElementById('style_font_color');
         if (input) {
           input.value = font_color;
           input.dispatchEvent(new Event('change', { bubbles: true }));
