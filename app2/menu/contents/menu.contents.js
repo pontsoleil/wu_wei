@@ -32,15 +32,12 @@ wuwei.menu.contents = wuwei.menu.contents || {};
     wuwei.info.open(spec.documentNode, {
       page: spec.pageNumber,
       contentTargetView: true,
-      contentsPage: true, // backward compatibility
       contentTarget: spec.point || target,
       contentTargetPoint: spec.point || target,
-      contentsPoint: spec.point || target, // backward compatibility
       displayedContentTarget: spec.point || target,
-      displayedPageMarker: spec.point || target, // backward compatibility
       editTarget: spec.point || target,
       contentViewerUri: contents.getContentTargetViewerUrl(spec.documentNode, spec.pageNumber, spec.point),
-      pdfjsUri: contents.getContentTargetViewerUrl(spec.documentNode, spec.pageNumber, spec.point) // backward compatibility with generic viewer
+      pdfjsUri: contents.getContentTargetViewerUrl(spec.documentNode, spec.pageNumber, spec.point)
     });
     return true;
   }
@@ -85,10 +82,8 @@ wuwei.menu.contents = wuwei.menu.contents || {};
 
   ns.initModule = initModule;
   ns.getContentTargetSpec = getContentTargetSpec;
-  ns.getPageTargetSpec = getContentTargetSpec; // backward compatibility
   ns.getContentTargetOpenUrl = getContentTargetOpenUrl;
-  ns.getPageOpenUrl = getContentTargetOpenUrl; // backward compatibility
   ns.openContentTargetInInfo = openContentTargetInInfo;
-  ns.openPageInInfo = openContentTargetInInfo; // backward compatibility
   ns.addTableOfContents = addTableOfContents;
 })(wuwei.menu.contents);
+// menu.contents.js last modified 2026-05-11

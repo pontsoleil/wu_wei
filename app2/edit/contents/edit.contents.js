@@ -1,6 +1,6 @@
 /**
  * edit.contents.js
- * Contents axis and PageMarker editor
+ * Contents axis and contentTarget editor
  */
 wuwei.edit = wuwei.edit || {};
 wuwei.edit.contents = wuwei.edit.contents || {};
@@ -65,10 +65,10 @@ wuwei.edit.contents = wuwei.edit.contents || {};
   }
 
   function getAxisSpec(target) {
-    if (!target || !wuwei.contents || typeof wuwei.contents.getPageTargetSpec !== 'function') {
+    if (!target || !wuwei.contents || typeof wuwei.contents.getContentTargetSpec !== 'function') {
       return null;
     }
-    return wuwei.contents.getPageTargetSpec(target);
+    return wuwei.contents.getContentTargetSpec(target);
   }
 
   function isContentsAxisTarget(target) {
@@ -76,7 +76,7 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     return !!(spec && spec.group && !spec.point);
   }
 
-  function isPageMarkerTarget(target) {
+  function isContentTargetTarget(target) {
     var spec = getAxisSpec(target);
     return !!(spec && spec.group && spec.point);
   }
@@ -86,7 +86,7 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     return spec && spec.group && !spec.point ? spec.group : null;
   }
 
-  function normalizePageMarkerTarget(target) {
+  function normalizeContentTargetTarget(target) {
     var spec = getAxisSpec(target);
     return spec && spec.group && spec.point ? spec.point : null;
   }
@@ -171,8 +171,8 @@ wuwei.edit.contents = wuwei.edit.contents || {};
       if (currentMode === 'axis' && currentGroup) {
         save();
       }
-      else if (currentMode === 'page-marker' && currentPoint) {
-        savePageMarker();
+      else if (currentMode === 'content-target' && currentPoint) {
+        saveContentTarget();
       }
     });
   }
@@ -223,7 +223,7 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     return String(anchorHref || '').replace(/^#/, '');
   }
 
-  function isHtmlPageMarker(point) {
+  function isHtmlContentTarget(point) {
     var documentNode;
 
     if (!point) {
@@ -259,7 +259,7 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     }
   }
 
-  function alignForPageMarker(point, font) {
+  function alignForContentTarget(point, font) {
     font = font || {};
     return normalizeTextAlign(font.align || point.labelAlign || font['text-anchor']);
   }
@@ -277,12 +277,12 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     $('edit-contents-page-marker').style.display = 'none';
   }
 
-  function configurePageMarker(point) {
+  function configureContentTarget(point) {
     var style = point.style || {};
     var line = style.line || {};
     var font = style.font || point.font || {};
 
-    var htmlMarker = isHtmlPageMarker(point);
+    var htmlMarker = isHtmlContentTarget(point);
     var anchorHref = normalizeAnchorHref(point.anchorHref || '');
 
     $('editContentsPageMarkerId').value = point.id || '';
@@ -304,7 +304,7 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     $('style_font_color').value = toHexColor(font.color || '#303030', '#303030');
     $('style_font_size').value = font.size || '12pt';
     if ($('style_font_align')) {
-      $('style_font_align').value = alignForPageMarker(point, font);
+      $('style_font_align').value = alignForContentTarget(point, font);
     }
     if ($('labelOffset')) {
       $('labelOffset').value = Number.isFinite(Number(point.labelOffset)) ? Number(point.labelOffset) : 6;
@@ -331,19 +331,19 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     return true;
   }
 
-  function openPageMarker(param) {
+  function openContentTarget(param) {
     var target = param && param.node ? param.node : param;
-    var point = normalizePageMarkerTarget(target) || target;
+    var point = normalizeContentTargetTarget(target) || target;
     if (!point || point.topicKind !== 'contents-page' || !ensureShell()) {
       return false;
     }
     currentPoint = point;
-    currentGroup = model.findGroupById(point.contentsRef) || null;
-    currentMode = 'page-marker';
+    currentGroup = model.findGroupById(point.groupRef) || null;
+    currentMode = 'content-target';
     if (common && common.state) {
-      common.state.contentsEdit = { groupId: point.contentsRef || '', pointId: point.id };
+      common.state.contentsEdit = { groupId: point.groupRef || '', pointId: point.id };
     }
-    configurePageMarker(point);
+    configureContentTarget(point);
     return $('edit-contents-page-marker');
   }
 
@@ -368,8 +368,8 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     if (!group) {
       return false;
     }
-    if (wuwei.menu && wuwei.menu.contents && typeof wuwei.menu.contents.openPageInInfo === 'function') {
-      opened = wuwei.menu.contents.openPageInInfo(group);
+    if (wuwei.menu && wuwei.menu.contents && typeof wuwei.menu.contents.openContentTargetInInfo === 'function') {
+      opened = wuwei.menu.contents.openContentTargetInInfo(group);
     }
     return !!opened;
   }
@@ -387,10 +387,10 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     return true;
   }
 
-  function savePageMarker() {
+  function saveContentTarget() {
     var pageNumberEl = $('pageNumber');
     var anchorHrefEl = $('anchorHref');
-    var htmlMarker = isHtmlPageMarker(currentPoint);
+    var htmlMarker = isHtmlContentTarget(currentPoint);
     var anchorHref;
 
     if (!currentPoint) {
@@ -419,7 +419,7 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     if (htmlMarker) {
       anchorHref = normalizeAnchorHref(anchorHrefEl.value || '');
       if (!anchorHref) {
-        window.alert('HTML PageMarker には # で始まる anchorHref を指定してください。');
+        window.alert('HTML contentTargetには # で始まる anchorHref を指定してください。');
         return false;
       }
       currentPoint.anchorHref = anchorHref;
@@ -452,11 +452,11 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     currentPoint.labelAlign = align;
     currentPoint.labelOffset = labelOffset;
     currentPoint.changed = true;
-    applyPageMarkerStyleToGroup(currentPoint);
+    applyContentTargetStyleToGroup(currentPoint);
     return true;
   }
 
-  function applyPageMarkerStyleToGroup(sourcePoint) {
+  function applyContentTargetStyleToGroup(sourcePoint) {
     var group = currentGroup;
     var members;
     var seen = {};
@@ -464,20 +464,12 @@ wuwei.edit.contents = wuwei.edit.contents || {};
       return;
     }
     members = (group.members || []).map(function (member) {
-      var id = typeof member === 'string' ? member : (member && (member.nodeId || member.id));
-      return id && model && typeof model.findNodeById === 'function'
-        ? model.findNodeById(id)
+      return member && member.nodeId && model && typeof model.findNodeById === 'function'
+        ? model.findNodeById(member.nodeId)
         : null;
     }).filter(function (node) {
-      return node && node.topicKind === 'contents-page';
+      return node && node.type === 'PageMarker' && node.groupRef === group.id;
     });
-    if (common && common.current && common.current.page && Array.isArray(common.current.page.nodes)) {
-      common.current.page.nodes.forEach(function (node) {
-        if (node && node.topicKind === 'contents-page' && node.contentsRef === group.id) {
-          members.push(node);
-        }
-      });
-    }
     members.forEach(function (node) {
       if (!node || seen[node.id] || node.id === sourcePoint.id) {
         return;
@@ -498,7 +490,7 @@ wuwei.edit.contents = wuwei.edit.contents || {};
   }
 
   function commit() {
-    var saved = currentMode === 'page-marker' ? savePageMarker() : save();
+    var saved = currentMode === 'content-target' ? saveContentTarget() : save();
     if (saved && common && common.state) {
       common.state.contentsEdit = null;
     }
@@ -529,10 +521,10 @@ wuwei.edit.contents = wuwei.edit.contents || {};
   }
 
   ns.canOpen = isContentsAxisTarget;
-  ns.canOpenPageMarker = isPageMarkerTarget;
+  ns.canOpenContentTarget = isContentTargetTarget;
   ns.open = open;
   ns.openAxisProperties = openAxisProperties;
-  ns.openPageMarker = openPageMarker;
+  ns.openContentTarget = openContentTarget;
   ns.getCurrentGroup = getCurrentGroup;
   ns.openInfo = openInfo;
   ns.save = save;
@@ -540,3 +532,4 @@ wuwei.edit.contents = wuwei.edit.contents || {};
   ns.close = close;
   ns.isOpen = isOpen;
 })(wuwei.edit.contents);
+// edit.contents.js last modified 2026-05-11

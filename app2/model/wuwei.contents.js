@@ -57,7 +57,7 @@ wuwei.contents = wuwei.contents || {};
   }
 
   function isContentsPageNode(node) {
-    return !!(node && node.topicKind === 'contents-page' && node.contentsRef);
+    return !!(node && node.type === 'PageMarker' && node.groupRef);
   }
 
   function isContentsAxisLink(link) {
@@ -142,18 +142,36 @@ wuwei.contents = wuwei.contents || {};
     return { x: x + 90, y: y + 90 };
   }
 
+  function makeGroupMember(nodeId, index, role) {
+    return {
+      nodeId: nodeId,
+      order: index + 1,
+      role: role || 'member'
+    };
+  }
+
   function setMemberIds(group, ids) {
-    group.members = (ids || []).filter(Boolean).slice();
+    group.members = (ids || []).filter(Boolean).map(function (id, index) {
+      return makeGroupMember(id, index, 'member');
+    });
+  }
+
+  function appendMember(group, nodeId, role) {
+    if (!group || !nodeId) { return; }
+    if (!Array.isArray(group.members)) { group.members = []; }
+    if (getMemberNodes(group).some(function (node) { return node && node.id === nodeId; })) {
+      return;
+    }
+    group.members.push(makeGroupMember(nodeId, group.members.length, role || 'member'));
   }
 
   function getMemberNodes(group) {
-    var page = getCurrentPage();
     var ids = [];
-    if (!page || !group || !Array.isArray(group.members)) {
+    if (!group || !Array.isArray(group.members)) {
       return [];
     }
     ids = group.members.map(function (member) {
-      return (member && member.nodeId) ? member.nodeId : member;
+      return member && member.nodeId;
     }).filter(Boolean);
     return ids.map(function (id) {
       return model.findNodeById(id);
@@ -161,7 +179,7 @@ wuwei.contents = wuwei.contents || {};
   }
 
   function memberId(member) {
-    return (member && member.nodeId) ? member.nodeId : member;
+    return member && member.nodeId;
   }
 
   function makeDocumentEntryLink(group, documentNode, entryNode) {
@@ -181,7 +199,7 @@ wuwei.contents = wuwei.contents || {};
       },
       color: '#c0c0c0',
       size: 2,
-      contentsRef: group.id,
+      groupRef: group.id,
       linkRole: 'contents-entry',
       audit: makeAudit()
     };
@@ -209,7 +227,7 @@ wuwei.contents = wuwei.contents || {};
     if (!documentNode || !representative) { return null; }
 
     page.links = (page.links || []).filter(function (item) {
-      if (!item || item.from !== documentNode.id || item.contentsRef !== group.id) {
+      if (!item || item.from !== documentNode.id || item.groupRef !== group.id) {
         return true;
       }
       if (item.linkRole !== 'contents-entry' && item.relation !== 'contents') {
@@ -220,7 +238,7 @@ wuwei.contents = wuwei.contents || {};
 
     exists = (page.links || []).some(function (item) {
       return item && item.from === documentNode.id && item.to === representative.id &&
-        (item.linkRole === 'contents-entry' || item.contentsRef === group.id || item.relation === 'contents');
+        (item.linkRole === 'contents-entry' || item.groupRef === group.id || item.relation === 'contents');
     });
     if (exists) { return null; }
     link = makeDocumentEntryLink(group, documentNode, representative);
@@ -236,7 +254,7 @@ wuwei.contents = wuwei.contents || {};
       nodeKind: 'contentTarget',
       targetKind: 'contentTarget',
       topicKind: 'contents-page',
-      contentsRef: group.id,
+      groupRef: group.id,
       documentRef: group.documentRef,
       pageNumber: pageNumber,
       axisRole: option.axisRole || 'entry',
@@ -268,7 +286,7 @@ wuwei.contents = wuwei.contents || {};
     node.nodeKind = node.nodeKind || 'contentTarget';
     node.targetKind = node.targetKind || 'contentTarget';
     node.topicKind = 'contents-page';
-    node.contentsRef = group.id;
+    node.groupRef = group.id;
     node.documentRef = group.documentRef;
     node.pageNumber = Math.max(1, Math.floor(Number(node.pageNumber || index + 1)));
     node.axisRole = node.axisRole || 'entry';
@@ -649,7 +667,7 @@ wuwei.contents = wuwei.contents || {};
     if (!pageNode || pageNode.type !== 'PageMarker') {
       return false;
     }
-    group = model.findGroupById(pageNode.contentsRef || pageNode.groupRef);
+    group = model.findGroupById(pageNode.groupRef);
     if (!group || !isContentsGroup(group)) {
       return false;
     }
@@ -800,7 +818,7 @@ wuwei.contents = wuwei.contents || {};
     pageNumber = clampPageNumber(group, pageNumber || next);
     node = createPageNode(group, pageNumber, { axisRole: 'entry', comment: entryOption.comment || '' });
     page.nodes.push(node);
-    group.members.push(node.id);
+    appendMember(group, node.id, 'member');
     normalizeAxisGroup(group);
     rebuildGraphAndRefresh();
     return node;
@@ -825,7 +843,7 @@ wuwei.contents = wuwei.contents || {};
 
   function commitEntryDraft(node) {
     var page = getCurrentPage();
-    var group = node && model.findGroupById(node.contentsRef);
+    var group = node && model.findGroupById(node.groupRef);
     if (!page || !group || !isContentsGroup(group)) { return false; }
     ensurePageCollections(page);
     group.members = Array.isArray(group.members) ? group.members : [];
@@ -834,14 +852,14 @@ wuwei.contents = wuwei.contents || {};
     ensurePageNodeDefaults(group, node, group.members.length);
     node.pageNumber = clampPageNumber(group, node.pageNumber);
     page.nodes.push(node);
-    group.members.push(node.id);
+    appendMember(group, node.id, 'member');
     normalizeAxisGroup(group);
     rebuildGraphAndRefresh();
     return true;
   }
 
   function updateEntryFromNode(node) {
-    var group = node && model.findGroupById(node.contentsRef);
+    var group = node && model.findGroupById(node.groupRef);
     if (!group || !isContentsGroup(group)) { return false; }
     ensurePageNodeDefaults(group, node, 0);
     node.pageNumber = clampPageNumber(group, node.pageNumber);
@@ -858,10 +876,10 @@ wuwei.contents = wuwei.contents || {};
     if (!page || !group) { return false; }
     if (!point && (isContentsAxisLink(target) || isContentsGroup(target))) {
       page.links = (page.links || []).filter(function (link) {
-        return !(link && (link.groupRef === group.id || link.contentsRef === group.id));
+        return !(link && (link.groupRef === group.id || link.groupRef === group.id));
       });
       page.nodes = (page.nodes || []).filter(function (node) {
-        return !(node && node.contentsRef === group.id);
+        return !(node && node.groupRef === group.id);
       });
       page.groups = (page.groups || []).filter(function (item) { return item && item.id !== group.id; });
       rebuildGraphAndRefresh();
@@ -870,7 +888,7 @@ wuwei.contents = wuwei.contents || {};
     if (!point) { return false; }
     group.members = (group.members || []).filter(function (item) { return memberId(item) !== point.id; });
     page.links = (page.links || []).filter(function (link) {
-      return !(link && (link.from === point.id || link.to === point.id || link.contentsRef === group.id && link.to === point.id));
+      return !(link && (link.from === point.id || link.to === point.id || link.groupRef === group.id && link.to === point.id));
     });
     page.nodes = (page.nodes || []).filter(function (node) { return !(node && node.id === point.id); });
     if (!group.members.length) {
@@ -885,7 +903,7 @@ wuwei.contents = wuwei.contents || {};
     if (!target) { return null; }
     if (isContentsPageNode(target)) {
       point = model.findNodeById(target.id) || target;
-      group = model.findGroupById(point.contentsRef);
+      group = model.findGroupById(point.groupRef);
     }
     else if (isContentsAxisLink(target)) {
       group = model.findGroupById(target.groupRef);
@@ -992,7 +1010,6 @@ wuwei.contents = wuwei.contents || {};
   ns.isContentsPageNode = isContentsPageNode;
   ns.isContentsAxisLink = isContentsAxisLink;
   ns.isContentTargetResourceNode = isContentTargetResourceNode;
-  ns.isPdfResourceNode = isContentTargetResourceNode; // backward compatibility
   ns.getDocumentPageCount = getDocumentPageCount;
   ns.hasKnownDocumentPages = hasKnownDocumentPages;
   ns.createAxisGroup = createAxisGroup;
@@ -1010,8 +1027,8 @@ wuwei.contents = wuwei.contents || {};
   ns.updatePageMarkerAxisPosition = updatePageMarkerAxisPosition;
   ns.handlePageMarkerDrag = handlePageMarkerDrag;
   ns.getContentTargetSpec = getContentTargetSpec;
-  ns.getPageTargetSpec = getContentTargetSpec; // backward compatibility
   ns.getContentTargetViewerUrl = getDocumentViewerUrl;
-  ns.getDocumentViewerUrl = getDocumentViewerUrl; // backward compatibility
+  ns.getDocumentViewerUrl = getDocumentViewerUrl;
 })(wuwei.contents);
 // wuwei.contents.js
+// wuwei.contents.js last modified 2026-05-11

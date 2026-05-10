@@ -1876,4 +1876,4 @@ wuwei.edit = wuwei.edit || {};
   ns.applyMediaDetectionToNode = applyMediaDetectionToNode;
   ns.initModule = initModule;
 })(wuwei.edit);
-// wuwei.edit.js 2026-04-16
+// wuwei.edit.js last modified 2026-05-11

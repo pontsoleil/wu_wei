@@ -565,21 +565,22 @@ wuwei.note = (function () {
       });
     }
 
+    if (typeof src.groupRef === 'string' && src.groupRef) {
+      out.groupRef = src.groupRef;
+    }
+
     if (src.type === 'PageMarker' || src.topicKind === 'contents-page') {
       out.type = 'PageMarker';
-      if (typeof src.contentsRef === 'string' && src.contentsRef) {
-        out.contentsRef = src.contentsRef;
-      }
+      out.nodeKind = 'contentTarget';
+      out.targetKind = 'contentTarget';
+      out.topicKind = 'contents-page';
+      out.groupRef = out.groupRef || (typeof src.contentsRef === 'string' ? src.contentsRef : '');
       if (typeof src.documentRef === 'string' && src.documentRef) {
         out.documentRef = src.documentRef;
       }
       if (Number.isFinite(Number(src.pageNumber))) {
         out.pageNumber = Number(src.pageNumber);
       }
-    }
-
-    if (typeof src.groupRef === 'string' && src.groupRef) {
-      out.groupRef = src.groupRef;
     }
     if (src.representativeOf && 'object' === typeof src.representativeOf) {
       out.representativeOf = {
@@ -827,31 +828,89 @@ wuwei.note = (function () {
     return pages;
   }
 
-  function pagesAsArray(note) {
-    var src = note || common.current || {};
-    if (Array.isArray(src.pages)) {
-      refreshPageNumbers(src.pages);
-      return src.pages;
+  function resolveLegacyCurrentPage(pages, currentPageRef, legacyPage) {
+    var ref = currentPageRef;
+    var page = null;
+
+    pages = Array.isArray(pages) ? pages : [];
+
+    if (typeof ref === 'string' && ref) {
+      page = pages.find(function (item) { return item && item.id === ref; }) || null;
     }
-    src.pages = normalizePagesCollection(src.pages, {});
+
+    /*
+     * Legacy conversion is intentionally centralised here.  Older note files
+     * sometimes stored currentPage as pp.  Convert that legacy reference to the
+     * canonical page.id during note normalisation, so operational modules do
+     * not need pp/index fallback code.
+     */
+    if (!page && Number.isFinite(Number(ref))) {
+      page = pages.find(function (item) {
+        return item && Number(item.pp) === Number(ref);
+      }) || pages[Number(ref) - 1] || null;
+    }
+
+    if (!page && legacyPage && legacyPage.id) {
+      page = pages.find(function (item) { return item && item.id === legacyPage.id; }) || null;
+    }
+
+    if (!page && legacyPage && Number.isFinite(Number(legacyPage.pp))) {
+      page = pages.find(function (item) {
+        return item && Number(item.pp) === Number(legacyPage.pp);
+      }) || null;
+    }
+
+    return page || pages[0] || null;
+  }
+
+  function canonicalizeCurrentPage(note) {
+    var pages = Array.isArray(note && note.pages) ? note.pages : [];
+    var page = resolveLegacyCurrentPage(pages, note && note.currentPage, note && note.page);
+
+    if (note && page) {
+      note.currentPage = page.id;
+      note.page = page;
+    }
+
+    return page;
+  }
+
+  function ensurePagesArray(note, resourceById) {
+    var src = note || common.current || {};
+
+    if (!Array.isArray(src.pages)) {
+      /*
+       * Legacy note files used pages as an object keyed by page number:
+       *   { "1": page1, "2": page2 }
+       * Convert that shape here and keep the rest of the application on the
+       * canonical array shape:
+       *   [ { pp: 1 }, { pp: 2 } ]
+       */
+      src.pages = normalizePagesCollection(src.pages, resourceById || {});
+    }
+
     if (!src.pages.length) {
       src.pages.push(createPage(1));
     }
+
     refreshPageNumbers(src.pages);
+    canonicalizeCurrentPage(src);
     return src.pages;
+  }
+
+  function pagesAsArray(note) {
+    return ensurePagesArray(note || common.current || {}, {});
   }
 
   function findPageByRef(note, pageRef) {
     var pages = pagesAsArray(note);
     var ref = (typeof pageRef === 'undefined' || pageRef === null) ? (note && note.currentPage) : pageRef;
-    var page = null;
-    if (typeof ref === 'string' && ref.charAt(0) === '_') {
-      page = pages.find(function (item) { return item && item.id === ref; }) || null;
+
+    if (typeof ref !== 'string' || !ref) {
+      return null;
     }
-    if (!page && Number.isFinite(Number(ref))) {
-      page = pages[Number(ref) - 1] || pages.find(function (item) { return Number(item && item.pp) === Number(ref); }) || null;
-    }
-    return page || pages[0] || null;
+
+    return pages.find(function (item) { return item && item.id === ref; }) || null;
   }
 
   function setCurrentPageByPage(page) {
@@ -900,7 +959,7 @@ wuwei.note = (function () {
     if (!pages.length) {
       pages = [createPage(1)];
     }
-    currentPage = findPageByRef({ pages: pages, currentPage: src.currentPage }, src.currentPage) || pages[0];
+    currentPage = resolveLegacyCurrentPage(pages, src.currentPage, src.page) || pages[0];
     return NoteFactory({
       note_id: src.note_id || util.createUuid(),
       note_name: decodeMaybe(src.note_name || ''),
@@ -1258,8 +1317,8 @@ wuwei.note = (function () {
         this.pages.push(createPage(1));
       }
       refreshPageNumbers(this.pages);
-      this.currentPage = (findPageByRef(this, param.currentPage) || this.pages[0]).id;
-      this.page = findPageByRef(this, this.currentPage);
+      this.page = resolveLegacyCurrentPage(this.pages, param.currentPage, param.page) || this.pages[0];
+      this.currentPage = this.page.id;
       this.resources = cloneArray(param.resources).map(normalizeResourceDefinition);
       this.thumbnail = (typeof param.thumbnail === 'undefined') ? '' : param.thumbnail;
       const portable = (param.bundle && typeof param.bundle === 'object')
@@ -1285,7 +1344,7 @@ wuwei.note = (function () {
     }
     refreshPageNumbers(pages);
     param.pages = pages;
-    param.currentPage = (findPageByRef({ pages: pages, currentPage: param.currentPage }, param.currentPage) || pages[0]).id;
+    param.currentPage = (resolveLegacyCurrentPage(pages, param.currentPage, param.page) || pages[0]).id;
     return new Note(param);
   }
 
@@ -1518,7 +1577,7 @@ wuwei.note = (function () {
       note_name: current.note_name,
       description: current.description,
       thumbnail: currentPageThumbnail || '',
-      currentPage: (findPageByRef(current, current.currentPage) || current.page || {}).id || current.currentPage,
+      currentPage: (current.page && current.page.id) || current.currentPage,
       resources: [],
       pages: [],
       audit: normalizeAudit(current.audit, state.currentUser)
@@ -1577,7 +1636,7 @@ wuwei.note = (function () {
       note_name: current.note_name || '',
       description: current.description || '',
       thumbnail: currentPageThumbnail || '',
-      currentPage: (findPageByRef(current, current.currentPage) || current.page || {}).id || current.currentPage,
+      currentPage: (current.page && current.page.id) || current.currentPage,
       resources: cloneArray(current.resources).map(normalizeResourceDefinition),
       pages: [],
       audit: normalizeAudit(current.audit, state.currentUser)
@@ -1616,7 +1675,7 @@ wuwei.note = (function () {
       current.note_id = util.createUuid();
     }
     const noteJson = exportNoteText();
-    const currentPage = findPageByRef(current, current.currentPage);
+    const currentPage = findPageByRef(current, current.currentPage) || current.page;
     const thumbnail = (currentPage && currentPage.thumbnail) || snapshotCurrentPageThumbnail() || '';
     const data = {
       user_id: state.currentUser.user_id,
@@ -1935,8 +1994,6 @@ wuwei.note = (function () {
     if (!node) { return; }
 
     remapObjectReference(node, 'groupRef', groupIndexer);
-    remapObjectReference(node, 'contentsRef', groupIndexer);
-    remapObjectReference(node, 'timelineRef', groupIndexer);
     remapObjectReference(node, 'documentRef', nodeIndexer);
     remapObjectReference(node, 'mediaRef', nodeIndexer);
     remapObjectReference(node, 'contentRef', nodeIndexer);
@@ -1949,8 +2006,6 @@ wuwei.note = (function () {
   function remapLinkForPageCopy(link, groupIndexer) {
     if (!link) { return; }
     remapObjectReference(link, 'groupRef', groupIndexer);
-    remapObjectReference(link, 'contentsRef', groupIndexer);
-    remapObjectReference(link, 'timelineRef', groupIndexer);
   }
 
   function remapGroupForPageCopy(group, groupIndexer, nodeIndexer) {
@@ -2014,7 +2069,7 @@ wuwei.note = (function () {
     }
   }
 
-  function copyPage(sourcePP) {
+  function copyPage(sourcePageId) {
     current = common.current;
     const pages = pagesAsArray(current);
     const nodeIndexer = {};
@@ -2028,7 +2083,7 @@ wuwei.note = (function () {
       wuwei.model.syncPageFromGraph();
     }
 
-    sourcePage = (sourcePP != null) ? findPageByRef(current, sourcePP) : (current.page || wuwei.model.getCurrentPage());
+    sourcePage = (sourcePageId != null) ? findPageByRef(current, sourcePageId) : (current.page || wuwei.model.getCurrentPage());
     if (!sourcePage) {
       return current.page || null;
     }
@@ -2151,10 +2206,10 @@ wuwei.note = (function () {
     return addPage(pp);
   }
 
-  function removePage(pp) {
+  function removePage(pageId) {
     current = common.current;
     const pages = pagesAsArray(current);
-    const targetPage = findPageByRef(current, pp);
+    const targetPage = findPageByRef(current, pageId);
     const targetIndex = pages.indexOf(targetPage);
     const deletingCurrent =
       !!targetPage && (current.currentPage === targetPage.id || current.page === targetPage);
@@ -2192,9 +2247,9 @@ wuwei.note = (function () {
    * 
    * @param {*} page 
    */
-  function openPage(pp) {
+  function openPage(pageId) {
     current = common.current;
-    const page = findPageByRef(current, pp);
+    const page = findPageByRef(current, pageId);
     if (!page) {
       return null;
     }
@@ -2251,6 +2306,7 @@ wuwei.note = (function () {
     Page: Page,
     PageFactory: PageFactory,
     createPage: createPage,
+    ensurePagesArray: ensurePagesArray,
     setGraphFromCurrentPage: setGraphFromCurrentPage,
     bindGraphToCurrentPage: bindGraphToCurrentPage,
     namePage: namePage,
@@ -2267,4 +2323,4 @@ wuwei.note = (function () {
     initModule: initModule
   };
 })();
-// wuwei.note.js revised 2026-04-16
+// wuwei.note.js last modified 2026-05-11

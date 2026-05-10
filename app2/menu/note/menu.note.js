@@ -497,7 +497,7 @@ wuwei.menu.note = wuwei.menu.note || {};
             id: node.id,
             type: node.type,
             topicKind: node.topicKind,
-            contentsRef: node.contentsRef,
+            groupRef: node.groupRef,
             documentRef: node.documentRef,
             pageNumber: node.pageNumber,
             label: node.label
@@ -684,7 +684,7 @@ wuwei.menu.note = wuwei.menu.note || {};
     const descEl = document.querySelector('#note_name .description');
     if (nameEl) { nameEl.textContent = current.note_name || ''; }
     if (descEl) { descEl.textContent = current.description || ''; }
-    if (current.pages && Object.keys(current.pages).length > 1) {
+    if (Array.isArray(current.pages) && current.pages.length > 1) {
       wuwei.menu.refreshPagenation();
     }
     if ('simulation' === wuwei.common.graph.mode) {
@@ -867,7 +867,7 @@ wuwei.menu.note = wuwei.menu.note || {};
         }
 
         setTimeout(() => {
-          if (current.pages && Object.keys(current.pages).length > 1) {
+          if (Array.isArray(current.pages) && current.pages.length > 1) {
             wuwei.menu.refreshPagenation();
           }
 
@@ -949,4 +949,4 @@ wuwei.menu.note = wuwei.menu.note || {};
   ns.openFile = openFile;
   ns.remove = remove;
 })(wuwei.menu.note);
-// menu.note.js revised 2026-04-16
+// menu.note.js last modified 2026-05-11

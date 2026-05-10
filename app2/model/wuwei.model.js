@@ -851,13 +851,6 @@ wuwei.model = (function () {
     var timeline = (param.timeline && 'object' === typeof param.timeline) ? param.timeline : {};
     var members = Array.isArray(param.members)
       ? param.members.map(function (member, index) {
-        if ('string' === typeof member) {
-          return {
-            nodeId: member,
-            order: index + 1,
-            role: 'member'
-          };
-        }
         return {
           nodeId: member && member.nodeId,
           order: Number((member && member.order) || (index + 1)),
@@ -1730,7 +1723,7 @@ wuwei.model = (function () {
       if (!isRepresentativeTopic(node)) {
         return;
       }
-      groupId = node.groupRef || (node.representativeOf && node.representativeOf.id) || '';
+      groupId = node.groupRef || '';
       group = groupById[groupId];
       if (!group) {
         removeById[node.id] = true;
@@ -7952,7 +7945,7 @@ wuwei.model = (function () {
     if (target.groupRef) {
       return findGroupById(target.groupRef);
     }
-    if (target.id) {
+    if (target.type && ['simple', 'horizontal', 'vertical', 'timeline', 'contents'].indexOf(target.type) >= 0) {
       return findGroupById(target.id);
     }
     return null;
@@ -8308,12 +8301,6 @@ wuwei.model = (function () {
       clonedLink.to = toCopied || link.to;
       if (clonedLink.groupRef === group.id) {
         clonedLink.groupRef = copiedGroup.id;
-      }
-      if (clonedLink.contentsRef === group.id) {
-        clonedLink.contentsRef = copiedGroup.id;
-      }
-      if (clonedLink.timelineRef === group.id) {
-        clonedLink.timelineRef = copiedGroup.id;
       }
       clonedLink.changed = true;
       page.links.push(LinkFactory(clonedLink));
@@ -8973,34 +8960,26 @@ wuwei.model = (function () {
   }
 
   function normalizePagesForCurrent(current) {
-    if (Array.isArray(current.pages)) {
-      current.pages.forEach(function (page, index) {
-        if (!page.id && wuwei.util && typeof wuwei.util.createUuid === 'function') {
-          page.id = wuwei.util.createUuid();
-        }
-        page.pp = index + 1;
-      });
-      return current.pages;
+    if (!current) {
+      return [];
     }
-    var pages = [];
-    if (current.pages && typeof current.pages === 'object') {
-      Object.keys(current.pages).sort(function (a, b) {
-        var na = Number(a);
-        var nb = Number(b);
-        if (Number.isFinite(na) && Number.isFinite(nb)) { return na - nb; }
-        return String(a).localeCompare(String(b));
-      }).forEach(function (key, index) {
-        var page = current.pages[key];
-        if (!page) { return; }
-        if (!page.id && wuwei.util && typeof wuwei.util.createUuid === 'function') {
-          page.id = wuwei.util.createUuid();
-        }
-        page.pp = index + 1;
-        pages.push(page);
-      });
+
+    if (wuwei.note && typeof wuwei.note.ensurePagesArray === 'function') {
+      return wuwei.note.ensurePagesArray(current);
     }
-    current.pages = pages;
-    return pages;
+
+    if (!Array.isArray(current.pages)) {
+      current.pages = [];
+    }
+
+    current.pages.forEach(function (page, index) {
+      if (!page) { return; }
+      if (!page.id && wuwei.util && typeof wuwei.util.createUuid === 'function') {
+        page.id = wuwei.util.createUuid();
+      }
+      page.pp = index + 1;
+    });
+    return current.pages;
   }
 
   function createEmptyPage(pp) {
@@ -9022,15 +9001,20 @@ wuwei.model = (function () {
     const pages = normalizePagesForCurrent(current);
     var ref = (typeof pageRef === 'undefined' || pageRef === null) ? current.currentPage : pageRef;
     var page = null;
+
     if (!pages.length) {
       pages.push(createEmptyPage(1));
+      normalizePagesForCurrent(current);
     }
-    if (typeof ref === 'string' && ref.charAt(0) === '_') {
+
+    if (typeof ref === 'string' && ref) {
       page = pages.find(function (item) { return item && item.id === ref; }) || null;
     }
-    if (!page && Number.isFinite(Number(ref))) {
-      page = pages[Number(ref) - 1] || pages.find(function (item) { return Number(item && item.pp) === Number(ref); }) || null;
+
+    if (!page && current.page && current.page.id) {
+      page = pages.find(function (item) { return item && item.id === current.page.id; }) || null;
     }
+
     page = page || pages[0];
     if (!Array.isArray(page.groups)) {
       page.groups = [];
@@ -9257,19 +9241,19 @@ wuwei.model = (function () {
   }
 
   function getGroupNodeIds(group) {
-    var ids = [];
-    if (!group) {
-      return ids;
+    var seen = {};
+    if (!group || !Array.isArray(group.members)) {
+      return [];
     }
-    if (Array.isArray(group.members)) {
-      group.members.forEach(function (member) {
-        var nodeId = (member && member.nodeId) ? member.nodeId : member;
-        if (nodeId && ids.indexOf(nodeId) < 0) {
-          ids.push(nodeId);
-        }
-      });
-    }
-    return ids;
+    return group.members.map(function (member) {
+      return member && member.nodeId;
+    }).filter(function (nodeId) {
+      if (!nodeId || seen[nodeId]) {
+        return false;
+      }
+      seen[nodeId] = true;
+      return true;
+    });
   }
 
   function findGroupById(groupId) {
@@ -9329,10 +9313,13 @@ wuwei.model = (function () {
       if ('timeline' === g.type) {
         return Array.isArray(g.members) && g.members.length >= 2;
       }
+      if ('contents' === g.type) {
+        return Array.isArray(g.members) && g.members.length >= 1;
+      }
       if ('horizontal' === g.type || 'vertical' === g.type) {
         return Array.isArray(g.members) && g.members.length >= 2;
       }
-      return true;
+      return false;
     });
   }
 
@@ -9344,8 +9331,7 @@ wuwei.model = (function () {
     page.groups.forEach(function (g) {
       if (g && Array.isArray(g.members)) {
         g.members = g.members.filter(function (member) {
-          var id = (member && member.nodeId) ? member.nodeId : member;
-          return id !== nodeId;
+          return member && member.nodeId !== nodeId;
         });
       }
     });
@@ -9761,4 +9747,4 @@ wuwei.model = (function () {
     initModule: initModule
   };
 })();
-// wuwei.model.js last modified 2026-04-18
+// wuwei.model.js last modified 2026-05-11

@@ -2029,7 +2029,7 @@ wuwei.menu = wuwei.menu || {};
       }
       var groupMembers = model.getGroupMembers ? model.getGroupMembers(g) : ((g && g.members) || []);
       groupMembers.forEach(function (member) {
-        var nodeId = (typeof member === 'string') ? member : (member && member.nodeId);
+        var nodeId = member && member.nodeId;
         if (nodeId && !existingItemByNodeId[nodeId]) {
           existingItemByNodeId[nodeId] = util.clone(member);
         }
@@ -2770,14 +2770,14 @@ wuwei.menu = wuwei.menu || {};
               }
               groupMembers = model.getGroupMembers ? model.getGroupMembers(g) : (g.members || []);
               g.members = groupMembers.filter(function (member) {
-                var nodeId = (typeof member === 'string') ? member : (member && member.nodeId);
+                var nodeId = member && member.nodeId;
                 return nodeId && selectedIds.indexOf(nodeId) < 0;
               });
             });
           }
-          page.groups = page.groups.filter(function (g) {
-            return g && Array.isArray(g.members) && g.members.length >= 2;
-          });
+          if (model && typeof model.pruneGroups === 'function') {
+            model.pruneGroups();
+          }
         }
         model.setGraphFromCurrentPage();
         clearSelectionState();
@@ -4966,4 +4966,4 @@ wuwei.menu = wuwei.menu || {};
   /** init */
   ns.initModule = initModule;
 })(wuwei.menu);
-// wuwei.menu.js last updated 2026-04-16
+// wuwei.menu.js last modified 2026-05-11

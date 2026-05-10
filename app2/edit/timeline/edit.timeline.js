@@ -263,12 +263,11 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
       return;
     }
     members = (group.members || []).map(function (member) {
-      var id = typeof member === 'string' ? member : member && member.id;
-      return id && model && typeof model.findNodeById === 'function'
-        ? model.findNodeById(id)
+      return member && member.nodeId && model && typeof model.findNodeById === 'function'
+        ? model.findNodeById(member.nodeId)
         : null;
     }).filter(function (node) {
-      return node && node.type === 'Segment';
+      return node && node.type === 'Segment' && node.groupRef === group.id;
     });
     members.forEach(function (node) {
       if (node.id === sourcePoint.id) {
@@ -1389,4 +1388,4 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
   ns.openSegmentProperties = openSegmentProperties;
   ns.openSegmentFromPlayer = openSegmentFromPlayer;
 })(wuwei.edit.timeline);
-// wuwei.edit.timeline.js last modified 2026-04-16
+// edit.timeline.js last modified 2026-05-11

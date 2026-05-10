@@ -265,17 +265,35 @@ wuwei.timeline = wuwei.timeline || {};
     return !!(link && link.type === 'Link' && (link.groupType === 'timelineAxis' || link.linkType === 'timeline-axis'));
   }
 
+  function makeGroupMember(nodeId, index, role) {
+    return {
+      nodeId: nodeId,
+      order: index + 1,
+      role: role || 'member'
+    };
+  }
+
   function getMemberIds(group) {
     if (!group || !Array.isArray(group.members)) {
       return [];
     }
     return group.members.map(function (member) {
-      return (member && member.nodeId) ? member.nodeId : member;
+      return member && member.nodeId;
     }).filter(Boolean);
   }
 
   function setMemberIds(group, ids) {
-    group.members = (ids || []).filter(Boolean).slice();
+    group.members = (ids || []).filter(Boolean).map(function (id, index) {
+      return makeGroupMember(id, index, 'member');
+    });
+  }
+
+  function appendMember(group, nodeId, role) {
+    if (!group || !nodeId) { return; }
+    if (!Array.isArray(group.members)) { group.members = []; }
+    if (getMemberIds(group).indexOf(nodeId) < 0) {
+      group.members.push(makeGroupMember(nodeId, group.members.length, role || 'member'));
+    }
   }
 
   function getMediaNodeForGroup(group) {
@@ -721,7 +739,7 @@ wuwei.timeline = wuwei.timeline || {};
     group.segments.forEach(function (segment) {
       var node = createSegmentNode(group, segment);
       page.nodes.push(node);
-      group.members.push(node.id);
+      appendMember(group, node.id, 'member');
     });
     delete group.segments;
   }
@@ -1042,7 +1060,7 @@ wuwei.timeline = wuwei.timeline || {};
         label: formatTime(0)
       });
       page.nodes.push(startNode);
-      group.members.push(startNode.id);
+      appendMember(group, startNode.id, 'member');
     }
     if (!endNode) {
       endNode = createSegmentNode(group, {
@@ -1053,7 +1071,7 @@ wuwei.timeline = wuwei.timeline || {};
         label: formatTime(group.timeEnd)
       });
       page.nodes.push(endNode);
-      group.members.push(endNode.id);
+      appendMember(group, endNode.id, 'member');
     }
 
     startNode.mediaStart = 0;
@@ -1194,7 +1212,6 @@ wuwei.timeline = wuwei.timeline || {};
       sourceId === videoNode.id &&
       (
         link.groupRef === group.id ||
-        link.timelineRef === group.id ||
         link.linkType === 'timeline-source' ||
         link.relation === 'timeline'
       )
@@ -1392,7 +1409,7 @@ wuwei.timeline = wuwei.timeline || {};
     });
 
     page.nodes.push(segmentNode);
-    group.members.push(segmentNode.id);
+    appendMember(group, segmentNode.id, 'member');
     normalizeAxisGroup(group);
     rebuildGraphAndRefresh();
     markNodeSelected(segmentNode);
@@ -1887,4 +1904,4 @@ wuwei.timeline = wuwei.timeline || {};
   ns.getTimelineTargetSpec = getTimelineTargetSpec;
   ns.confirmSavedRender = confirmSavedRender;
 })(wuwei.timeline);
-// wuwei.timeline.js last modified 2026-04-18
+// wuwei.timeline.js last modified 2026-05-11
