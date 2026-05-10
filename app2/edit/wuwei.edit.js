@@ -1277,7 +1277,27 @@ wuwei.edit = wuwei.edit || {};
       }
     }
 
-    document.getElementById('info').style.display = 'none';
+    /*
+     * Opening another edit target must terminate the currently active pane
+     * session.  Otherwise specialised editors keep stale state and close/info
+     * buttons can operate on the previous target.
+     */
+    var currentEditPane = document.getElementById('edit');
+    if (currentEditPane && currentEditPane.style.display !== 'none' && common.state.Editing) {
+      close();
+    }
+
+    if (wuwei.info && typeof wuwei.info.close === 'function') {
+      var currentInfoPane = document.getElementById('info');
+      if (currentInfoPane && currentInfoPane.style.display !== 'none') {
+        wuwei.info.close();
+      }
+    }
+    else {
+      var fallbackInfoPane = document.getElementById('info');
+      if (fallbackInfoPane) { fallbackInfoPane.style.display = 'none'; }
+    }
+
     /** open */
     var editPane = document.getElementById('edit');
     editPane.innerHTML = wuwei.edit.markup.template();
@@ -1708,9 +1728,9 @@ wuwei.edit = wuwei.edit || {};
       }
     }
     if (targetNode && targetNode.topicKind === 'contents-page' &&
-      wuwei.menu && wuwei.menu.contents && typeof wuwei.menu.contents.openPageInInfo === 'function') {
+      wuwei.menu && wuwei.menu.contents && typeof wuwei.menu.contents.openContentTargetInInfo === 'function') {
       close();
-      wuwei.menu.contents.openPageInInfo(targetNode);
+      wuwei.menu.contents.openContentTargetInInfo(targetNode);
       return;
     }
     close();
