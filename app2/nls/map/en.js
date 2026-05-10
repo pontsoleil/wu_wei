@@ -521,5 +521,9 @@ wuwei.nls.EN = {
   'Your PRIVATE Notebooks': 'Your PRIVATE Notebooks',
   'Zoom': 'Zoom',
   'Create a personal content collection and annotate it.': 'Create a personal content collection and annotate it.',
-  'Visual notes will help you organize your thoughts.': 'Visual notes will help you organize your thoughts.'
+  'Visual notes will help you organize your thoughts.': 'Visual notes will help you organize your thoughts.',
+  'Add table of contents': 'Add table of contents',
+  'Table of contents was added.': 'Table of contents was added.',
+  'Contents module is not available.': 'Contents module is not available.',
+  'Failed to add table of contents.': 'Failed to add table of contents.',
 };
