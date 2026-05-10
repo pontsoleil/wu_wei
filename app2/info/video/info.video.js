@@ -303,16 +303,21 @@ wuwei.info.video = wuwei.info.video || {};
     return 0;
   };
 
+  getInfoVideoField = function (id) {
+    var pane = document.getElementById('info-video');
+    return (pane && pane.querySelector('#' + id)) || document.getElementById(id);
+  };
+
   getPlayerEl = function () {
-    return document.getElementById('infoVideoPlayer');
+    return getInfoVideoField('infoVideoPlayer');
   };
 
   getStartInputEl = function () {
-    return document.getElementById('infoVideoStart');
+    return getInfoVideoField('timeRange_start');
   };
 
   getEndInputEl = function () {
-    return document.getElementById('infoVideoEnd');
+    return getInfoVideoField('timeRange_end');
   };
 
   jumpToStart = function () {
