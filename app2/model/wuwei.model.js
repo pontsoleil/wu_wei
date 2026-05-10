@@ -655,70 +655,38 @@ wuwei.model = (function () {
     return holder[key];
   }
 
+  // simple は page.groups を正本とし、表示時だけ pseudo node を生成する。
   function numberOrDefault(value, fallback) {
     var n = Number(value);
     return Number.isFinite(n) ? n : fallback;
   }
 
   function groupStyleDefaults(type) {
-    var groupStyle = (common && common.defaultStyle && common.defaultStyle.group) || {};
-    var typeStyle = (groupStyle && groupStyle[type]) || {};
-    var padding = numberOrDefault(typeStyle.padding, groupStyle.padding);
+    var style = (common && common.defaultStyle && common.defaultStyle.group) || {};
+    var typed = style[type] || {};
+    var padding = numberOrDefault(typed.padding, style.padding);
 
     return {
-      /*
-       * Do not duplicate literal fallbacks here. The group default source of
-       * truth is common.defaultStyle.group, with type-specific overrides such
-       * as common.defaultStyle.group.simple.
-       */
-      kind: typeStyle.kind || groupStyle.kind,
-      color: typeStyle.color || groupStyle.color,
-      width: numberOrDefault(typeStyle.width, groupStyle.width),
+      kind: typed.kind || style.kind,
+      color: typed.color || style.color,
+      width: numberOrDefault(typed.width, style.width),
       padding: padding,
-      paddingTop: numberOrDefault(typeStyle.paddingTop, padding),
-      paddingRight: numberOrDefault(typeStyle.paddingRight, padding),
-      paddingBottom: numberOrDefault(typeStyle.paddingBottom, padding),
-      paddingLeft: numberOrDefault(typeStyle.paddingLeft, padding),
-      visible: (typeof typeStyle.visible === 'boolean')
-        ? typeStyle.visible
-        : ((typeof groupStyle.visible === 'boolean') ? groupStyle.visible : true)
+      paddingTop: numberOrDefault(typed.paddingTop, padding),
+      paddingRight: numberOrDefault(typed.paddingRight, padding),
+      paddingBottom: numberOrDefault(typed.paddingBottom, padding),
+      paddingLeft: numberOrDefault(typed.paddingLeft, padding),
+      visible: (typeof typed.visible === 'boolean')
+        ? typed.visible
+        : ((typeof style.visible === 'boolean') ? style.visible : true)
     };
   }
 
-  function applyGroupDefaultStyle(group, type) {
-    var nextType = type || (group && group.type) || 'simple';
-    var defaults;
-
-    if (!group) {
-      return null;
-    }
-
-    defaults = groupStyleDefaults(nextType);
-    group.spine = group.spine && typeof group.spine === 'object' ? group.spine : {};
-    group.spine.kind = defaults.kind;
-    group.spine.color = defaults.color;
-    group.spine.width = defaults.width;
-    group.spine.padding = defaults.padding;
-    group.spine.paddingTop = defaults.paddingTop;
-    group.spine.paddingRight = defaults.paddingRight;
-    group.spine.paddingBottom = defaults.paddingBottom;
-    group.spine.paddingLeft = defaults.paddingLeft;
-    group.spine.visible = defaults.visible;
-    return group.spine;
-  }
-
-  // simple は page.groups を正本とし、表示時だけ pseudo node を生成する。
   function buildSimpleGroupPseudoNode(group) {
-    var defaults;
-    var spine;
-
+    var defaults = groupStyleDefaults('simple');
+    var spine = (group && group.spine && 'object' === typeof group.spine) ? group.spine : {};
     if (!group || false === group.visible || 'simple' !== group.type) {
       return null;
     }
-
-    defaults = groupStyleDefaults('simple');
-    spine = (group.spine && 'object' === typeof group.spine) ? group.spine : {};
-
     return {
       id: makeStablePseudoId(group, 'pseudoNodeId'),
       type: 'Group',
@@ -747,19 +715,14 @@ wuwei.model = (function () {
 
   // vertical / horizontal group は spine 表示用の pseudo link を持つ。
   function buildTopicGroupPseudoLink(group) {
-    var defaults;
-    var spine;
-
+    var defaults = groupStyleDefaults(group && group.type);
+    var spine = (group && group.spine && 'object' === typeof group.spine) ? group.spine : {};
     if (!group || false === group.visible) {
       return null;
     }
     if (!('vertical' === group.type || 'horizontal' === group.type)) {
       return null;
     }
-
-    defaults = groupStyleDefaults(group.type);
-    spine = (group.spine && 'object' === typeof group.spine) ? group.spine : {};
-
     return {
       id: makeStablePseudoId(group, 'pseudoLinkId'),
       type: 'Group',
@@ -785,6 +748,8 @@ wuwei.model = (function () {
 
   // timeline axis は group 定義から pseudo link を作る。
   function buildTimelineAxisPseudoLink(group) {
+    var defaults = groupStyleDefaults('timeline');
+    var spine = (group && group.spine && 'object' === typeof group.spine) ? group.spine : {};
     if (!group || false === group.visible || 'timeline' !== group.type) {
       return null;
     }
@@ -797,8 +762,16 @@ wuwei.model = (function () {
       groupType: 'timelineAxis',
       groupRef: group.id,
       visible: true,
-      color: (group.spine && group.spine.color) || common.defaultStyle.group.color,
-      size: (group.spine && group.spine.width) || common.defaultStyle.group.timeline.width,
+      color: spine.color || defaults.color,
+      size: numberOrDefault(spine.width, defaults.width),
+      style: {
+        line: {
+          kind: spine.kind || defaults.kind,
+          color: spine.color || defaults.color,
+          width: numberOrDefault(spine.width, defaults.width)
+        },
+        font: defaultLink.style.font
+      },
       font: defaultLink.style.font,
       audit: makeAudit()
     };
@@ -884,8 +857,8 @@ wuwei.model = (function () {
     var defaultSpine = groupStyleDefaults(groupType);
     var baseSpinePadding = Number.isFinite(Number(spine.padding)) ? Number(spine.padding) : defaultSpine.padding;
 
-    function spinePaddingSide(key, defaultKey) {
-      return Number.isFinite(Number(spine[key])) ? Number(spine[key]) : Number(defaultSpine[defaultKey || key] || baseSpinePadding);
+    function spinePaddingSide(key) {
+      return Number.isFinite(Number(spine[key])) ? Number(spine[key]) : Number(defaultSpine[key] || baseSpinePadding);
     }
 
     return {
@@ -922,6 +895,7 @@ wuwei.model = (function () {
       origin: param.origin ? util.clone(param.origin) : undefined,
       mediaRef: param.mediaRef || (timeline && timeline.mediaRef) || '',
       documentRef: param.documentRef || '',
+      representativeNodeId: param.representativeNodeId || '',
       pageCount: Number.isFinite(Number(param.pageCount)) ? Number(param.pageCount) : undefined,
       defaultPlayDuration: Number.isFinite(Number(param.defaultPlayDuration))
         ? Number(param.defaultPlayDuration)
@@ -944,10 +918,7 @@ wuwei.model = (function () {
       self[key] = param[key];
     });
 
-    if (!self.id) {
-      self.id = util.createUuid();
-    }
-
+    self.id = param.id || util.createUuid();
     self.type = self.type || 'Topic';
     self.label = ('string' === typeof self.label) ? self.label : '';
 
@@ -1349,6 +1320,54 @@ wuwei.model = (function () {
     return false;
   }
 
+  function handleRepresentativeTopicDrag(d, eventX, eventY) {
+    var pageNode = d && d.id ? findNodeById(d.id) : null;
+    var group;
+    var orientation;
+    var anchor;
+
+    if (!isRepresentativeTopic(pageNode)) {
+      return false;
+    }
+    if (Array.isArray(state.dragMoveIds) && state.dragMoveIds.length > 1) {
+      return false;
+    }
+    group = findGroupById(pageNode.groupRef);
+    if (!group || 'simple' === group.type) {
+      return false;
+    }
+
+    orientation = ('vertical' === group.type || 'vertical' === group.orientation) ? 'vertical' : 'horizontal';
+    anchor = (group.axis && group.axis.anchor) || group.origin || { x: pageNode.x, y: pageNode.y };
+    if ('vertical' === orientation) {
+      pageNode.x = Number(anchor.x || pageNode.x || 0);
+      pageNode.y = finiteOr(eventY, pageNode.y);
+    }
+    else {
+      pageNode.x = finiteOr(eventX, pageNode.x);
+      pageNode.y = Number(anchor.y || pageNode.y || 0);
+    }
+    pageNode.fx = pageNode.x;
+    pageNode.fy = pageNode.y;
+    pageNode.vx = 0;
+    pageNode.vy = 0;
+    pageNode.changed = true;
+    if (!group.axis || 'object' !== typeof group.axis) {
+      group.axis = {};
+    }
+    group.axis.anchor = { x: pageNode.x, y: pageNode.y };
+    group.origin = { x: pageNode.x, y: pageNode.y };
+
+    d.x = pageNode.x;
+    d.y = pageNode.y;
+    d.fx = pageNode.x;
+    d.fy = pageNode.y;
+    d.vx = 0;
+    d.vy = 0;
+    d.changed = true;
+    return true;
+  }
+
   Node.prototype.dragged = function (d) {
     var eventX, eventY, deltaX, deltaY, page, moved, ownerId;
 
@@ -1365,7 +1384,7 @@ wuwei.model = (function () {
     eventX = safeEventCoord(d3.event && d3.event.x, d.x);
     eventY = safeEventCoord(d3.event && d3.event.y, d.y);
 
-    if (page && handleTimelineSegmentDrag(d, eventX, eventY)) {
+    if (page && (handleTimelineSegmentDrag(d, eventX, eventY) || handleRepresentativeTopicDrag(d, eventX, eventY))) {
       moved = findNodeById(d.id);
       if (moved) {
         d.x = moved.x;
@@ -1450,7 +1469,7 @@ wuwei.model = (function () {
     eventX = safeEventCoord(d3.event && d3.event.x, d.x);
     eventY = safeEventCoord(d3.event && d3.event.y, d.y);
 
-    if (page && handleTimelineSegmentDrag(d, eventX, eventY)) {
+    if (page && (handleTimelineSegmentDrag(d, eventX, eventY) || handleRepresentativeTopicDrag(d, eventX, eventY))) {
       pageNode = findNodeById(d.id);
       if (pageNode) {
         d.x = pageNode.x;
@@ -1513,7 +1532,7 @@ wuwei.model = (function () {
   };
 
   NodeFactory = function (param) {
-    if (!param || !param.id) {
+    if (!param) {
       return null;
     }
     return new Node(param);
@@ -1532,6 +1551,231 @@ wuwei.model = (function () {
     util.appendById(graph.nodes, node);
     return node;
   };
+
+  function createGroupRepresentativeTopic(group, option) {
+    var page = getCurrentPage();
+    var topicStyle = util.clone((common && common.defaultStyle && common.defaultStyle.topic) || {});
+    var description = group && group.description && typeof group.description === 'object'
+      ? util.clone(group.description)
+      : { format: 'asciidoc', body: '' };
+    var anchor = (option && option.anchor) || (group && group.origin) ||
+      (group && group.axis && group.axis.anchor) || { x: 0, y: 0 };
+    var node;
+
+    if (!group || !page) {
+      return null;
+    }
+    topicStyle.line = (topicStyle.line && typeof topicStyle.line === 'object') ? topicStyle.line : {};
+    topicStyle.line.kind = 'DASHED';
+
+    node = createNode({
+      id: option && option.id,
+      type: 'Topic',
+      label: (option && option.label) || group.name || 'Group',
+      description: (option && option.description) || description,
+      shape: 'RECTANGLE',
+      x: Number.isFinite(Number(option && option.x)) ? Number(option.x) : Number(anchor.x || 0),
+      y: Number.isFinite(Number(option && option.y)) ? Number(option.y) : Number(anchor.y || 0),
+      style: topicStyle,
+      groupRef: group.id,
+      groupRole: 'representative',
+      representativeOf: {
+        kind: 'group',
+        id: group.id
+      }
+    });
+
+    if (node) {
+      group.representativeNodeId = node.id;
+    }
+    return node;
+  }
+
+  function cloneDescription(description) {
+    if (description && 'object' === typeof description) {
+      return util.clone(description);
+    }
+    return { format: 'asciidoc', body: '' };
+  }
+
+  function isRepresentativeTopic(node) {
+    return !!(node && 'representative' === node.groupRole && node.groupRef);
+  }
+
+  function getGroupRepresentativeNodes(groupOrId) {
+    var group = ('string' === typeof groupOrId) ? findGroupById(groupOrId) : groupOrId;
+    var page = getCurrentPage();
+    var out = [];
+    var seen = {};
+
+    function add(node) {
+      if (!node || !node.id || seen[node.id]) {
+        return;
+      }
+      seen[node.id] = true;
+      out.push(node);
+    }
+
+    if (!group || !page) {
+      return out;
+    }
+
+    if (group.representativeNodeId) {
+      add(findNodeById(group.representativeNodeId));
+    }
+
+    ((page && page.nodes) || []).forEach(function (node) {
+      if (node && node.groupRef === group.id && isRepresentativeTopic(node)) {
+        add(node);
+      }
+    });
+
+    return out;
+  }
+
+  function syncGroupRepresentative(groupOrTarget, direction) {
+    var group = findGroupByTarget(groupOrTarget) || groupOrTarget;
+    var node;
+
+    if (!group) {
+      return null;
+    }
+
+    if ('node' === direction && groupOrTarget && groupOrTarget.id) {
+      node = groupOrTarget;
+      group.name = node.label || group.name || 'Group';
+      group.description = cloneDescription(node.description);
+      group.representativeNodeId = node.id;
+    }
+    else {
+      node = group.representativeNodeId ? findNodeById(group.representativeNodeId) : null;
+      if (!node) {
+        node = createGroupRepresentativeTopic(group, {
+          label: group.name || 'Group',
+          description: cloneDescription(group.description)
+        });
+      }
+      if (node) {
+        node.label = group.name || node.label || 'Group';
+        node.description = cloneDescription(group.description);
+      }
+    }
+
+    if (!node) {
+      return null;
+    }
+
+    node.groupRef = group.id;
+    node.groupRole = 'representative';
+    node.representativeOf = { kind: 'group', id: group.id };
+    node.style = node.style || {};
+    node.style.line = node.style.line || {};
+    node.style.line.kind = 'DASHED';
+    node.changed = true;
+    group.representativeNodeId = node.id;
+    return node;
+  }
+
+  function placeGroupRepresentative(groupOrTarget, option) {
+    var group = findGroupByTarget(groupOrTarget) || groupOrTarget;
+    var representative = syncGroupRepresentative(group);
+    var members = group ? findGroupNodes(group.id) : [];
+    var groupStyle = (common && common.defaultStyle && common.defaultStyle.group) || {};
+    var spacing = Number(groupStyle.dist || 40);
+    var type = group && (group.type || group.orientation || '');
+    var xs, ys, minX, minY, centerX, centerY;
+
+    option = option || {};
+    if (!group || !representative) {
+      return null;
+    }
+    if (!Number.isFinite(spacing) || spacing <= 0) {
+      spacing = 40;
+    }
+
+    if ('simple' === type || !members.length) {
+      xs = members.map(function (node) { return Number(node.x || 0); });
+      ys = members.map(function (node) { return Number(node.y || 0); });
+      centerX = xs.length ? median(xs) : Number(representative.x || 0);
+      centerY = ys.length ? median(ys) : Number(representative.y || 0);
+      representative.x = centerX;
+      representative.y = centerY;
+    }
+    else if ('vertical' === type || 'vertical' === group.orientation) {
+      xs = members.map(function (node) { return Number(node.x || 0); });
+      ys = members.map(function (node) { return Number(node.y || 0); });
+      centerX = xs.length ? median(xs) : Number(representative.x || 0);
+      centerY = ys.length ? median(ys) : Number(representative.y || 0);
+      representative.x = centerX;
+      representative.y = centerY;
+    }
+    else {
+      xs = members.map(function (node) { return Number(node.x || 0); });
+      ys = members.map(function (node) { return Number(node.y || 0); });
+      centerX = xs.length ? median(xs) : Number(representative.x || 0);
+      centerY = ys.length ? median(ys) : Number(representative.y || 0);
+      representative.x = centerX;
+      representative.y = centerY;
+    }
+
+    representative.fx = null;
+    representative.fy = null;
+    representative.changed = true;
+    if (!option.preserveAxisAnchor && group.axis && 'object' === typeof group.axis) {
+      group.axis.anchor = { x: representative.x, y: representative.y };
+    }
+    if (!option.preserveAxisAnchor) {
+      group.origin = { x: representative.x, y: representative.y };
+    }
+    if (option.refresh && typeof setGraphFromCurrentPage === 'function') {
+      setGraphFromCurrentPage();
+    }
+    return representative;
+  }
+
+  function isRegularGroupRepresentativeTarget(group) {
+    return !!(group && false !== group.visible && (
+      'simple' === group.type ||
+      'vertical' === group.type ||
+      'horizontal' === group.type
+    ));
+  }
+
+  function ensureRegularGroupRepresentatives(page) {
+    var touched = false;
+
+    if (!page || !Array.isArray(page.groups)) {
+      return false;
+    }
+
+    page.groups.forEach(function (group) {
+      var existing;
+      var representative;
+
+      if (!isRegularGroupRepresentativeTarget(group)) {
+        return;
+      }
+
+      existing = group.representativeNodeId ? findNodeById(group.representativeNodeId) : null;
+      representative = syncGroupRepresentative(group, 'group');
+
+      if (!representative) {
+        return;
+      }
+
+      representative.visible = (false !== representative.visible);
+      representative.topicKind = representative.topicKind || 'group-representative';
+      representative.representativeType = group.type || group.orientation || 'group';
+      representative.changed = true;
+      touched = true;
+
+      if (!existing) {
+        placeGroupRepresentative(group, { preserveAxisAnchor: false });
+      }
+    });
+
+    return touched;
+  }
 
   removeNode = function (param) {
     var
@@ -2418,7 +2662,7 @@ wuwei.model = (function () {
   };
 
   LinkFactory = function (param) {
-    if (!param || !param.id) {
+    if (!param) {
       return null;
     }
     return new Link(param);
@@ -3574,6 +3818,92 @@ wuwei.model = (function () {
       node.groupRef);
   }
 
+  function isSelectedGroupId(groupId) {
+    return !!(
+      groupId &&
+      Array.isArray(state.selectedGroupIds) &&
+      state.selectedGroupIds.indexOf(groupId) >= 0
+    );
+  }
+
+  function selectedGroupStroke() {
+    return (common.Color && (common.Color.outerSelected || common.Color.outerHovered)) || '#ff9800';
+  }
+
+  function getStoredGroupSelectionPoint(groupId, fallbackPoint) {
+    var marks = state.selectedGroupMarks || {};
+    var stored = groupId ? marks[groupId] : null;
+    var x = stored ? Number(stored.x) : NaN;
+    var y = stored ? Number(stored.y) : NaN;
+
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      return { x: x, y: y };
+    }
+
+    if (fallbackPoint) {
+      x = Number(fallbackPoint.x);
+      y = Number(fallbackPoint.y);
+      if (Number.isFinite(x) && Number.isFinite(y)) {
+        return { x: x, y: y };
+      }
+    }
+
+    return null;
+  }
+
+  function ensureGroupSelectionLayer(canvas) {
+    var layer;
+
+    if (!canvas || !canvas.node || !canvas.node()) {
+      return null;
+    }
+
+    layer = canvas.select('g.group-selection-marks');
+    if (layer.empty()) {
+      layer = canvas.append('g')
+        .attr('class', 'group-selection-marks');
+    }
+
+    layer.raise();
+    return layer;
+  }
+
+  function appendGroupSelectionCircle(canvas, groupId, fallbackPoint) {
+    var layer;
+    var p;
+
+    if (!groupId) {
+      return;
+    }
+
+    layer = ensureGroupSelectionLayer(canvas);
+    if (!layer) {
+      return;
+    }
+
+    layer.selectAll('circle.group-selected-mark[data-group-id="' + groupId + '"]').remove();
+
+    if (!isSelectedGroupId(groupId)) {
+      return;
+    }
+
+    p = getStoredGroupSelectionPoint(groupId, fallbackPoint);
+    if (!p) {
+      return;
+    }
+
+    layer.append('circle')
+      .attr('class', 'selected group-selected-mark')
+      .attr('data-group-id', groupId)
+      .attr('cx', p.x)
+      .attr('cy', p.y)
+      .attr('r', 14)
+      .attr('fill', 'none')
+      .attr('stroke', selectedGroupStroke())
+      .attr('stroke-width', 2)
+      .attr('pointer-events', 'none');
+  }
+
   function isTopicGroupPseudoLink(link) {
     return !!(link &&
       true === link.pseudo &&
@@ -3607,6 +3937,16 @@ wuwei.model = (function () {
         return;
       }
       snapshot.members[nodeId] = {
+        x: finiteOr(node.x, 0),
+        y: finiteOr(node.y, 0)
+      };
+    });
+
+    getGroupRepresentativeNodes(group).forEach(function (node) {
+      if (!node || !node.id || snapshot.members[node.id]) {
+        return;
+      }
+      snapshot.members[node.id] = {
         x: finiteOr(node.x, 0),
         y: finiteOr(node.y, 0)
       };
@@ -4365,6 +4705,23 @@ wuwei.model = (function () {
 
     // Render plain text labels for ordinary Topic nodes and real timeline Segment nodes.
     // Segment is stored as a real node in page.nodes, so it should show its label like Topic.
+    if ('PageMarker' === type) {
+      let markerAlign = (node.style && node.style.font && node.style.font.align) ||
+        node.labelAlign ||
+        (node.font && node.font.align) ||
+        text_anchor;
+      markerAlign = ('start' === markerAlign) ? 'left' : (('end' === markerAlign) ? 'right' : markerAlign);
+      if ('left' === markerAlign) {
+        text_anchor = 'start';
+      }
+      else if ('right' === markerAlign) {
+        text_anchor = 'end';
+      }
+      else {
+        text_anchor = 'middle';
+      }
+    }
+
     if (('Topic' === type || 'Segment' === type || 'PageMarker' === type) && 'THUMBNAIL' !== shape && label) {
       gText = d3node.append('text')
         .attr('class', 'node-label')
@@ -4374,7 +4731,17 @@ wuwei.model = (function () {
         .attr('text-anchor', text_anchor)
         .attr('alignment-baseline', alignment_baseline)
         .text(label);
-      if ('CIRCLE' === shape) {
+      if ('PageMarker' === type && 'CIRCLE' === shape && ('start' === text_anchor || 'end' === text_anchor)) {
+        var markerGap = Number.isFinite(Number(node.labelOffset)) ? Number(node.labelOffset) : 6;
+        item = {
+          text: gText,
+          width: Math.max(1, radius * 6),
+          height: 2 * radius,
+          offsetx: ('start' === text_anchor) ? (radius + markerGap) : (-radius - markerGap),
+          offsety: -radius
+        };
+      }
+      else if ('CIRCLE' === shape) {
         item = {
           text: gText,
           width: width,
@@ -4400,7 +4767,10 @@ wuwei.model = (function () {
         line_count = tspans.length,
         start = -20 * line_count / 2;
       for (var i = 0; i < line_count; i++) {
-        if ('start' === text_anchor) {
+        if ('PageMarker' === type && 'CIRCLE' === shape && ('start' === text_anchor || 'end' === text_anchor)) {
+          // PageMarker side labels use item.offsetx so the configured gap is measured from the circle edge.
+        }
+        else if ('start' === text_anchor) {
           tspans[i].setAttribute('x', (padding.x - (width / 2)) + 'px');
         }
         else if ('end' === text_anchor) {
@@ -4786,6 +5156,8 @@ wuwei.model = (function () {
       .attr('stroke', box.stroke || '#666666')
       .attr('stroke-width', box.strokeWidth || 2)
       .attr('stroke-dasharray', box.dasharray || null);
+
+    appendGroupSelectionCircle(canvas, group.id, getBoxCenter());
 
     g.append('rect')
       .attr('class', 'group-box-hit')
@@ -6587,6 +6959,8 @@ wuwei.model = (function () {
       .attr('id', link.id)
       .datum(link);
 
+    appendGroupSelectionCircle(canvas, group.id, getAxisMidPoint());
+
     gHit.append('line')
       .attr('class', 'group-axis-hit')
       .attr('x1', spine.x1)
@@ -6807,6 +7181,8 @@ wuwei.model = (function () {
       .attr('class', 'link timeline-group-link timeline-group-link-hit')
       .attr('id', link.id)
       .datum(link);
+
+    appendGroupSelectionCircle(canvas, group.id, getAxisMidPoint());
 
     hitLine = gHit.append('line')
       .attr('class', 'timeline-axis-hit')
@@ -7275,6 +7651,8 @@ wuwei.model = (function () {
   function eraseGroup(target) {
     var group = findGroupByTarget(target);
     var memberIds;
+    var representativeId;
+    var representativeOnly;
     var removedNodes = [];
     var removedLinks = [];
     var seenLinks = {};
@@ -7284,7 +7662,16 @@ wuwei.model = (function () {
     }
 
     memberIds = getGroupNodeIds(group);
+    representativeId = group.representativeNodeId || '';
+    representativeOnly = !!(target && target.id && representativeId && target.id === representativeId);
+    if (representativeId && memberIds.indexOf(representativeId) < 0) {
+      memberIds.push(representativeId);
+    }
     removeGroupDefinition(group.id);
+
+    if (representativeOnly) {
+      memberIds = representativeId ? [representativeId] : [];
+    }
 
     memberIds.forEach(function (nodeId) {
       var node = findNodeById(nodeId);
@@ -7335,52 +7722,171 @@ wuwei.model = (function () {
     return (sorted[middle - 1] + sorted[middle]) / 2;
   }
 
-  function reflowGroupMembers(groupOrTarget, nextType) {
-    var group = findGroupByTarget(groupOrTarget) || groupOrTarget;
-    var members;
-    var groupStyle = (common && common.defaultStyle && common.defaultStyle.group) || {};
-    var centerX, centerY, start, spacing = Number(groupStyle.dist || 40);
+  function groupNodeCenter(nodes, fallback) {
+    var finiteNodes = (nodes || []).filter(function (node) {
+      return node && Number.isFinite(Number(node.x)) && Number.isFinite(Number(node.y));
+    });
+    var xs, ys, minX, maxX, minY, maxY;
 
-    if (!group || !('horizontal' === nextType || 'vertical' === nextType)) {
-      return false;
+    fallback = fallback || { x: 0, y: 0 };
+    if (!finiteNodes.length) {
+      return {
+        x: Number.isFinite(Number(fallback.x)) ? Number(fallback.x) : 0,
+        y: Number.isFinite(Number(fallback.y)) ? Number(fallback.y) : 0
+      };
     }
 
-    members = findGroupNodes(group.id);
-    if (members.length === 0) {
-      return false;
+    xs = finiteNodes.map(function (node) { return Number(node.x); });
+    ys = finiteNodes.map(function (node) { return Number(node.y); });
+    minX = Math.min.apply(null, xs);
+    maxX = Math.max.apply(null, xs);
+    minY = Math.min.apply(null, ys);
+    maxY = Math.max.apply(null, ys);
+
+    return {
+      x: (minX + maxX) / 2,
+      y: (minY + maxY) / 2
+    };
+  }
+
+  function spreadCoordinate(center, index, count, step) {
+    if (!Number.isFinite(Number(step)) || Number(step) <= 0) {
+      step = 50;
+    }
+    if (!Number.isFinite(Number(center))) {
+      center = 0;
+    }
+    return Number(center) + (index - ((count - 1) / 2)) * Number(step);
+  }
+
+  function sortMembersForAxisConversion(members, previousType, nextType) {
+    var out = (members || []).slice();
+
+    if ('vertical' === previousType && 'horizontal' === nextType) {
+      out.sort(function (a, b) {
+        return Number(a.y || 0) - Number(b.y || 0);
+      });
+      return out;
     }
 
-    centerX = median(members.map(function (node) { return node.x; }));
-    centerY = median(members.map(function (node) { return node.y; }));
+    if ('horizontal' === previousType && 'vertical' === nextType) {
+      out.sort(function (a, b) {
+        return Number(a.x || 0) - Number(b.x || 0);
+      });
+      return out;
+    }
 
     if ('horizontal' === nextType) {
-      members.sort(function (a, b) { return Number(a.x || 0) - Number(b.x || 0); });
-      start = centerX - (spacing * (members.length - 1) / 2);
-      members.forEach(function (node, index) {
-        node.x = start + spacing * index;
-        node.y = centerY;
-        node.fx = null;
-        node.fy = null;
-        node.changed = true;
+      out.sort(function (a, b) {
+        return Number(a.x || 0) - Number(b.x || 0);
       });
-    }
-    else {
-      members.sort(function (a, b) { return Number(a.y || 0) - Number(b.y || 0); });
-      start = centerY - (spacing * (members.length - 1) / 2);
-      members.forEach(function (node, index) {
-        node.x = centerX;
-        node.y = start + spacing * index;
-        node.fx = null;
-        node.fy = null;
-        node.changed = true;
-      });
+      return out;
     }
 
-    group.origin = { x: centerX, y: centerY };
+    if ('vertical' === nextType) {
+      out.sort(function (a, b) {
+        return Number(a.y || 0) - Number(b.y || 0);
+      });
+      return out;
+    }
+
+    return out;
+  }
+
+  function reflowGroupMembers(groupOrTarget, nextType, previousType) {
+    var group = findGroupByTarget(groupOrTarget) || groupOrTarget;
+    var members;
+    var representative;
+    var center;
+    var sorted;
+    var spreadStep = 50;
+
+    if (!group || !('horizontal' === nextType || 'vertical' === nextType || 'simple' === nextType)) {
+      return false;
+    }
+
+    previousType = previousType || group.previousType || '';
+    members = findGroupNodes(group.id).filter(function (node) {
+      return node && !node.pseudo && Number.isFinite(Number(node.x)) && Number.isFinite(Number(node.y));
+    });
+    representative = syncGroupRepresentative(group);
+    if (members.length === 0 && !representative) {
+      return false;
+    }
+
+    center = groupNodeCenter(members, representative || group.origin || (group.axis && group.axis.anchor));
+
+    if ('simple' === nextType) {
+      /*
+       * A simple group is a free outer box.  Defining or changing to simple
+       * must not move member nodes.  Only the representative topic is kept at
+       * the visual centre of the member-node extent.
+       */
+      if (representative) {
+        representative.x = center.x;
+        representative.y = center.y;
+        representative.fx = null;
+        representative.fy = null;
+        representative.changed = true;
+      }
+    }
+    else if ('horizontal' === nextType) {
+      sorted = sortMembersForAxisConversion(members, previousType, nextType);
+      sorted.forEach(function (node, index) {
+        /*
+         * Normal h-group definition keeps each member x and aligns all members
+         * to the centre y.  When converting from a v-group, all member x values
+         * are already identical, so spread them left/right by 50 px intervals
+         * to avoid collapsing them into one point.
+         */
+        if ('vertical' === previousType) {
+          node.x = spreadCoordinate(center.x, index, sorted.length, spreadStep);
+        }
+        node.y = center.y;
+        node.fx = null;
+        node.fy = null;
+        node.changed = true;
+      });
+      if (representative) {
+        representative.x = center.x;
+        representative.y = center.y;
+        representative.fx = null;
+        representative.fy = null;
+        representative.changed = true;
+      }
+    }
+    else if ('vertical' === nextType) {
+      sorted = sortMembersForAxisConversion(members, previousType, nextType);
+      sorted.forEach(function (node, index) {
+        /*
+         * Normal v-group definition keeps each member y and aligns all members
+         * to the centre x.  When converting from an h-group, all member y values
+         * are already identical, so spread them up/down by 50 px intervals to
+         * avoid collapsing them into one point.
+         */
+        node.x = center.x;
+        if ('horizontal' === previousType) {
+          node.y = spreadCoordinate(center.y, index, sorted.length, spreadStep);
+        }
+        node.fx = null;
+        node.fy = null;
+        node.changed = true;
+      });
+      if (representative) {
+        representative.x = center.x;
+        representative.y = center.y;
+        representative.fx = null;
+        representative.fy = null;
+        representative.changed = true;
+      }
+    }
+
+    group.origin = { x: center.x, y: center.y };
     if (!group.axis || 'object' !== typeof group.axis) {
       group.axis = {};
     }
-    group.axis.anchor = { x: centerX, y: centerY };
+    group.axis.anchor = { x: center.x, y: center.y };
+    delete group.previousType;
     setGraphFromCurrentPage();
     return true;
   }
@@ -7390,6 +7896,9 @@ wuwei.model = (function () {
     var page = getCurrentPage();
     var members, diff, idMap = {};
     var copiedNodes = [];
+    var copiedLinks = [];
+    var representative;
+    var copiedRepresentative;
     var copiedGroup;
 
     if (!group || !page || !Array.isArray(page.groups)) {
@@ -7413,10 +7922,27 @@ wuwei.model = (function () {
       addNode({ node: cloned });
     });
 
+    representative = group.representativeNodeId ? findNodeById(group.representativeNodeId) : null;
+    if (representative) {
+      copiedRepresentative = util.clone(representative);
+      copiedRepresentative.id = util.createUuid();
+      copiedRepresentative.x = Number(representative.x || 0) + diff.x;
+      copiedRepresentative.y = Number(representative.y || 0) + diff.y;
+      idMap[representative.id] = copiedRepresentative.id;
+      copiedNodes.push(NodeFactory(copiedRepresentative));
+      addNode({ node: copiedRepresentative });
+    }
+
     copiedGroup = util.clone(group);
     copiedGroup.id = util.createUuid();
     delete copiedGroup.pseudoNodeId;
     delete copiedGroup.pseudoLinkId;
+    copiedGroup.representativeNodeId = copiedRepresentative ? copiedRepresentative.id : '';
+    if (copiedRepresentative) {
+      copiedRepresentative.groupRef = copiedGroup.id;
+      copiedRepresentative.groupRole = 'representative';
+      copiedRepresentative.representativeOf = { kind: 'group', id: copiedGroup.id };
+    }
     copiedGroup.members = (group.members || []).map(function (member) {
       var sourceId = (member && member.nodeId) ? member.nodeId : member;
       var copiedMember;
@@ -7436,12 +7962,45 @@ wuwei.model = (function () {
       copiedGroup.axis.anchor.y = Number(copiedGroup.axis.anchor.y || 0) + diff.y;
     }
     page.groups.push(copiedGroup);
+
+    (page.links || []).forEach(function (link) {
+      var fromCopied = link && idMap[link.from];
+      var toCopied = link && idMap[link.to];
+      var touchesRepresentative = representative &&
+        (link.from === representative.id || link.to === representative.id);
+      var clonedLink;
+
+      if (!link || (!fromCopied && !toCopied)) {
+        return;
+      }
+      if (!(fromCopied && toCopied) && !touchesRepresentative) {
+        return;
+      }
+      clonedLink = util.clone(link);
+      clonedLink.id = util.createUuid();
+      clonedLink.from = fromCopied || link.from;
+      clonedLink.to = toCopied || link.to;
+      if (clonedLink.groupRef === group.id) {
+        clonedLink.groupRef = copiedGroup.id;
+      }
+      if (clonedLink.contentsRef === group.id) {
+        clonedLink.contentsRef = copiedGroup.id;
+      }
+      if (clonedLink.timelineRef === group.id) {
+        clonedLink.timelineRef = copiedGroup.id;
+      }
+      clonedLink.changed = true;
+      page.links.push(LinkFactory(clonedLink));
+      copiedLinks.push(clonedLink);
+    });
+
     setGraphFromCurrentPage();
 
     return {
       command: 'copyGroup',
       param: {
         node: copiedNodes,
+        link: copiedLinks,
         group: [copiedGroup]
       }
     };
@@ -8289,6 +8848,9 @@ wuwei.model = (function () {
     if (page) {
       wuwei.contents.normalizeAllAxisGroups(page);
     }
+    if (page) {
+      ensureRegularGroupRepresentatives(page);
+    }
     const pseudo = buildGroupPseudoGroups(page);
     if (current && page) {
       current.page = page;
@@ -8510,8 +9072,8 @@ wuwei.model = (function () {
     if ('auto' !== orientation) {
       return orientation;
     }
-    const nodes = findGroupNodes(groupId).filter(function (n) {
-      return n && isFinite(n.x) && isFinite(n.y);
+    const nodes = (findGroupNodes(groupId).concat(getGroupRepresentativeNodes(group))).filter(function (n, index, arr) {
+      return n && arr.findIndex(function (m) { return m && m.id === n.id; }) === index && isFinite(n.x) && isFinite(n.y);
     });
     if (nodes.length < 2) {
       return null;
@@ -8622,16 +9184,44 @@ wuwei.model = (function () {
     };
   }
 
+  function uniqueFiniteNodes(nodes) {
+    var seen = {};
+
+    return (nodes || []).filter(function (node) {
+      if (!node || !node.id || seen[node.id]) {
+        return false;
+      }
+      if (!Number.isFinite(Number(node.x)) || !Number.isFinite(Number(node.y))) {
+        return false;
+      }
+      seen[node.id] = true;
+      return true;
+    });
+  }
+
+  function getGroupBorderNodes(group) {
+    if (!group || !group.id) {
+      return [];
+    }
+
+    /*
+     * The representative topic is outside group.members, but visually it is part
+     * of the group.  The simple-group outer box and the h/v axis extent must
+     * therefore be calculated from both member nodes and representative topics.
+     * This keeps the group outline/axis following the representative when it is
+     * moved independently.
+     */
+    return uniqueFiniteNodes(findGroupNodes(group.id).concat(getGroupRepresentativeNodes(group)));
+  }
+
   function resolveGroupBox(groupId) {
     var page = getCurrentPage();
     const group = findGroupById(groupId);
     if (!group || 'simple' !== group.type || !group.visible) {
       return null;
     }
-    const nodes = findGroupNodes(groupId).filter(function (n) {
-      return n && isFinite(n.x) && isFinite(n.y);
-    });
-    if (nodes.length < 2) {
+    const nodes = getGroupBorderNodes(group);
+    if (nodes.length < 1) {
       return null;
     }
     const border = getBorderByNodes(nodes);
@@ -8642,10 +9232,10 @@ wuwei.model = (function () {
     const defaults = groupStyleDefaults('simple');
     const strokeWidth = numberOrDefault(spine.width, defaults.width);
     const padding = Number.isFinite(Number(spine.padding)) ? Number(spine.padding) : defaults.padding;
-    const paddingTop = Number.isFinite(Number(spine.paddingTop)) ? Number(spine.paddingTop) : numberOrDefault(defaults.paddingTop, padding);
-    const paddingRight = Number.isFinite(Number(spine.paddingRight)) ? Number(spine.paddingRight) : numberOrDefault(defaults.paddingRight, padding);
-    const paddingBottom = Number.isFinite(Number(spine.paddingBottom)) ? Number(spine.paddingBottom) : numberOrDefault(defaults.paddingBottom, padding);
-    const paddingLeft = Number.isFinite(Number(spine.paddingLeft)) ? Number(spine.paddingLeft) : numberOrDefault(defaults.paddingLeft, padding);
+    const paddingTop = Number.isFinite(Number(spine.paddingTop)) ? Number(spine.paddingTop) : defaults.paddingTop;
+    const paddingRight = Number.isFinite(Number(spine.paddingRight)) ? Number(spine.paddingRight) : defaults.paddingRight;
+    const paddingBottom = Number.isFinite(Number(spine.paddingBottom)) ? Number(spine.paddingBottom) : defaults.paddingBottom;
+    const paddingLeft = Number.isFinite(Number(spine.paddingLeft)) ? Number(spine.paddingLeft) : defaults.paddingLeft;
     return {
       group: group.id,
       x: border.left - paddingLeft,
@@ -8669,10 +9259,8 @@ wuwei.model = (function () {
     if (false === spine.visible) {
       return null;
     }
-    const nodes = findGroupNodes(groupId).filter(function (n) {
-      return n && isFinite(n.x) && isFinite(n.y);
-    });
-    if (nodes.length < 2) {
+    const nodes = getGroupBorderNodes(group);
+    if (nodes.length < 1) {
       return null;
     }
     const xs = nodes.map(function (n) { return n.x; });
@@ -8808,8 +9396,13 @@ wuwei.model = (function () {
     setVisible: setVisible,
     /** group */
     createGroup: createGroup,
+    createGroupRepresentativeTopic: createGroupRepresentativeTopic,
+    syncGroupRepresentative: syncGroupRepresentative,
+    placeGroupRepresentative: placeGroupRepresentative,
+    getGroupRepresentativeNodes: getGroupRepresentativeNodes,
+    isRepresentativeTopic: isRepresentativeTopic,
+    ensureRegularGroupRepresentatives: ensureRegularGroupRepresentatives,
     groupStyleDefaults: groupStyleDefaults,
-    applyGroupDefaultStyle: applyGroupDefaultStyle,
     groupDragStarted: groupDragStarted,
     groupDragged: groupDragged,
     groupDragEnded: groupDragEnded,
