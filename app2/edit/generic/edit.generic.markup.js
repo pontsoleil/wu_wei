@@ -195,8 +195,8 @@ wuwei.edit.generic.markup = ( function () {
       if (!option.flock) {
         html.push(
           '<div class="w3-row">',
-          '  <textarea id="rName" name="label" data-path="label" class="w3-col s12" rows="' + rowcount(label) + '" ',
-          '      placeholder="' + translate('Label') + '">' + label + '</textarea>',
+          '  <textarea id="label" name="label" class="w3-col s12 edit-value" rows="' + rowcount(label) + '" ',
+          '      placeholder="' + t('Label') + '">' + label + '</textarea>',
           '</div>',
           '<div class="nFont_text-anchor w3-row">',
           '  <i class="nFont_text-anchor start fas fa-align-left ' + (('left' === fontAlign) ? 'checked' : '') + '"></i>',
@@ -210,7 +210,7 @@ wuwei.edit.generic.markup = ( function () {
     if (!option.flock) {
       html.push(
         '<div class="w3-row">',
-        '  <textarea id="rValue" name="description.body" data-path="description.body" class="w3-col s12" rows="' + rowcount(value || '') + '">' + (value || '') + '</textarea>',
+        '  <textarea id="description_body" name="description.body" class="w3-col s12 edit-value" rows="' + rowcount(value || '') + '">' + (value || '') + '</textarea>',
         '</div>',
         '<hr>'
       );
@@ -219,14 +219,14 @@ wuwei.edit.generic.markup = ( function () {
     if ('Content' === node.type && !option.flock) {
       html.push(
         '<div class="w3-row">',
-        '  <label for="rUri" class="w3-col s2">URL:</label>',
-        '  <input type="text" id="rUri" name="resource.uri" data-path="resource.uri" class="w3-col s10"',
+        '  <label for="resource_uri" class="w3-col s2">URL:</label>',
+        '  <input type="text" id="resource_uri" name="resource.uri" class="w3-col s10 edit-value"',
         storagePathAttrs + ' value="' + getEditableResourceUri(node) + '">',
         '</div>',
 
         '<div class="w3-row">',
-        '  <label for="resource_kind" data-path="resource.kind" class="w3-col s6">' + translate('Media type') + '</label>',
-        selectOptions('resource_kind',
+        '  <label for="resource_kind" class="w3-col s6">' + t('Media type') + '</label>',
+        selectOptions('resource.kind',
           getMediaKindValue(node),
           [
             { value: '', label: 'auto' },
@@ -237,24 +237,24 @@ wuwei.edit.generic.markup = ( function () {
             { value: 'audio', label: 'audio' }
           ],
           null,
-          's6').replace('name="resource_kind"', 'name="resource.kind" '),
+          's6'),
         '</div>',
 
         '<div class="w3-row">',
-        '  <label for="thumbnailUri" class="w3-col s5">' + translate('THUMBNAIL') + '</label>',
-        '  <input type="text" id="thumbnailUri" name="thumbnailUri" data-path="thumbnailUri" class="w3-col s7"',
+        '  <label for="thumbnailUri" class="w3-col s5">' + t('THUMBNAIL') + '</label>',
+        '  <input type="text" id="thumbnailUri" name="thumbnailUri" class="w3-col s7 edit-value"',
         storagePathAttrs + ' value="' + getEditableThumbnailUri(node) + '">',
         '</div>',
 
         '<div class="w3-row">',
-        '  <label for="resourceRightsAttribution" class="w3-col s5">' + translate('Credit') + '</label>',
-        '  <input type="text" id="resourceRightsAttribution" name="resource.rights.attribution" data-path="resource.rights.attribution" class="w3-col s7"',
+        '  <label for="resource_rights_attribution" class="w3-col s5">' + t('Credit') + '</label>',
+        '  <input type="text" id="resource_rights_attribution" name="resource.rights.attribution" class="w3-col s7 edit-value"',
         ' value="' + ((node.resource && node.resource.rights && node.resource.rights.attribution) || (node.resource && node.resource.attribution) || '') + '">',
         '</div>',
 
         '<div class="w3-row">',
-        '  <label for="resourceRightsLicense" class="w3-col s5">' + translate('License') + '</label>',
-        '  <input type="text" id="resourceRightsLicense" name="resource.rights.license" data-path="resource.rights.license" class="w3-col s7"',
+        '  <label for="resource_rights_license" class="w3-col s5">' + t('License') + '</label>',
+        '  <input type="text" id="resource_rights_license" name="resource.rights.license" class="w3-col s7 edit-value"',
         ' value="' + ((node.resource && node.resource.rights && node.resource.rights.license) || (node.resource && node.resource.license) || '') + '">',
         '</div>'
       );
@@ -262,28 +262,28 @@ wuwei.edit.generic.markup = ( function () {
 
     html.push(
       '<div class="w3-row" style="display:' + ('MEMO' === shape ? 'none' : 'block') + '">',
-      '  <label for="shape" class="w3-col s5">' + translate('Shape') + '</label>',
-      selectOptions('shape', shape, shapes, '' + translate('Shape'),'s7').replace('name="shape"', 'name="shape" data-path="shape"'),
+      '  <label for="shape" class="w3-col s5">' + t('Shape') + '</label>',
+      selectOptions('shape', shape, shapes, '' + t('Shape'),'s7'),
       '</div>',
 
       '<div class="w3-row" id="radius" style="display:' + ('CIRCLE' === shape ? 'block' : 'none') + '">',
-      '  <label for="size_radius" class="w3-col s4">' + translate('Radius') + '</label>',
-      '  <input type="number" id="size_radius" name="size.radius" data-path="size.radius" value="' + (node.size && node.size.radius) + '" class="w3-col s8">',
+      '  <label for="size_radius" class="w3-col s4">' + t('Radius') + '</label>',
+      '  <input type="number" id="size_radius" name="size.radius" value="' + (node.size && node.size.radius) + '" class="w3-col s8 edit-value">',
       '</div>',
 
       '<div class="w3-row" id="width-height" style="display:' + ('CIRCLE' === shape ? 'none' : 'block') + '">',
-      '  <label for="size_width" class="w3-col s2">' + translate('Width') + '</label>',
-      '  <input type="number" id="size_width" name="size.width" data-path="size.width" value="' + (node.size && node.size.width) + '" class="w3-col s4">',
-      '  <label for="size_height" class="w3-col s2">' + translate('Height') + '</label>',
-      '  <input type="number" id="size_height" name="size.height" data-path="size.height" value="' + (node.size && node.size.height) + '" class="w3-col s4">',
+      '  <label for="size_width" class="w3-col s2">' + t('Width') + '</label>',
+      '  <input type="number" id="size_width" name="size.width" value="' + (node.size && node.size.width) + '" class="w3-col s4 edit-value">',
+      '  <label for="size_height" class="w3-col s2">' + t('Height') + '</label>',
+      '  <input type="number" id="size_height" name="size.height" value="' + (node.size && node.size.height) + '" class="w3-col s4 edit-value">',
       '</div>'
     );
 
     if ('Memo' === node.type) {
       html.push(
         '<div class="w3-row">',
-        '  <label for="style_memo_corner" class="w3-col s5">折り返し角</label>',
-        selectOptions('style_memo_corner',
+        '  <label for="style_memo_corner" class="w3-col s5">' + t('Folded corner') + '</label>',
+        selectOptions('style.memo.corner',
           memoCorner,
           [
             { value: 'bottom-right', label: 'BOTTOM_RIGHT' },
@@ -292,7 +292,7 @@ wuwei.edit.generic.markup = ( function () {
             { value: 'top-right', label: 'TOP_RIGHT' }
           ],
           null,
-          's7').replace('name="style_memo_corner"', 'name="style.memo.corner" data-path="style.memo.corner"'),
+          's7'),
         '</div>'
       );
     }
@@ -300,37 +300,37 @@ wuwei.edit.generic.markup = ( function () {
     if ('Topic' === node.type && node.text) {
       html.push(
         '<div class="w3-row" id="text_position">',
-        '  <label for="text_position" class="w3-col s4">' + translate('Text position') + '</label>',
-        selectOptions('text_position', node.text.position, positions, 'Select text position').replace('name="text_position"', 'name="text.position" data-path="text.position"'),
+        '  <label for="text_position" class="w3-col s4">' + t('Text position') + '</label>',
+        selectOptions('text.position', node.text.position, positions, 'Select text position'),
         '</div>',
         '<div class="w3-row" id="text_width-height">',
-        '  <label for="text_width" class="w3-col s2">' + translate('Width') + '</label>',
-        '  <input type="number" id="text_width" name="text.width" data-path="text.width" value="' + node.text.width + '" class="w3-col s4">',
-        '  <label for="text_height" class="w3-col s2">' + translate('Height') + '</label>',
-        '  <input type="number" id="text_height" name="text.height" data-path="text.height" value="' + node.text.height + '" class="w3-col s4">',
+        '  <label for="text_width" class="w3-col s2">' + t('Width') + '</label>',
+        '  <input type="number" id="text_width" name="text.width" value="' + node.text.width + '" class="w3-col s4 edit-value">',
+        '  <label for="text_height" class="w3-col s2">' + t('Height') + '</label>',
+        '  <input type="number" id="text_height" name="text.height" value="' + node.text.height + '" class="w3-col s4 edit-value">',
         '</div>'
       );
     }
 
     html.push(
       '<div class="w3-row">',
-      '  <label for="style_fill" class="w3-col s4">' + translate('Background') + '</label>',
-      '  <input type="color" id="style_fill" name="style.fill" data-path="style.fill" value="' + (style.fill) + '" class="w3-col s4 pointer">',
+      '  <label for="style_fill" class="w3-col s4">' + t('Background') + '</label>',
+      '  <input type="color" id="style_fill" name="style.fill" value="' + (style.fill) + '" class="w3-col s4 pointer edit-value">',
       '  <div id="style_fill_palette" name="style_fill_palette" class="w3-col s4 pointer"></div>',
       '</div>',
 
       '<div class="w3-row">',
-      '  <label for="nFont_color" class="w3-col s3">' + translate('Text') + '</label>',
-      '  <input type="color" id="nFont_color" name="style.font.color" data-path="style.font.color" value="' + (font && font.color) + '" class="w3-col s3 pointer">',
-      '  <div id="style_font_color" name="style_font_color" class="w3-col s3 pointer"></div>',
-      selectOptions('nFont_size', fontSizeValue, fontSizes, 'Select font size', 's3').replace('name="nFont_size"', 'name="style.font.size" data-path="style.font.size"'),
+      '  <label for="style_font_color" class="w3-col s3">' + t('Text') + '</label>',
+      '  <input type="color" id="style_font_color" name="style.font.color" value="' + (font && font.color) + '" class="w3-col s3 pointer edit-value">',
+      '  <div id="style_font_color_palette" name="style_font_color_palette" class="w3-col s3 pointer"></div>',
+      selectOptions('style.font.size', fontSizeValue, fontSizes, 'Select font size', 's3'),
       '</div>'
     );
 
     if ('Topic' === node.type && !option.flock) {
       html.push(
         '<div class="w3-row">',
-        '  <label for="applyToGroup" class="w3-col s10">グループに一括適用</label>',
+        '  <label for="applyToGroup" class="w3-col s10">' + t('Apply to all group members') + '</label>',
         '  <input type="checkbox" id="applyToGroup" name="applyToGroup" class="w3-col s2" ' + ((option && option.applyToGroup) ? 'checked' : '') + '>',
         '</div>'
       );
@@ -349,7 +349,7 @@ wuwei.edit.generic.markup = ( function () {
     return wuwei.edit.markup.rowcount(str);
   }
 
-  function translate(str) {
+  function t(str) {
     return wuwei.edit.markup.translate(str);
   }
 
