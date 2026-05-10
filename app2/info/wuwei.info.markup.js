@@ -60,7 +60,7 @@ wuwei.info.markup = ( function () {
 
   return {
     rowcount: rowcount,
-    translate: translate,
+    translate: t,
     template: template
   };
 })();
