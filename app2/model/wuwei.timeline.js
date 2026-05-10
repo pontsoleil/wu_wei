@@ -156,6 +156,22 @@ wuwei.timeline = wuwei.timeline || {};
     state.selectedGroupIds = group ? [group.id] : [];
   }
 
+  function clearSelectionState() {
+    clearDomNodeSelection();
+    state.selectedNodeIds = [];
+    state.selectedGroupIds = [];
+    state.selectedGroupMarks = {};
+    if (draw && typeof draw.renderSelectionMarks === 'function') {
+      draw.renderSelectionMarks();
+    }
+  }
+
+  function hasEditableSegments(group) {
+    return getTimelineMemberNodes(group).some(function (node) {
+      return node && node.axisRole !== 'start' && node.axisRole !== 'end';
+    });
+  }
+
   function getSelectedItems() {
     var selectedNodes = [];
     var selectedGroups = [];
@@ -834,6 +850,12 @@ wuwei.timeline = wuwei.timeline || {};
       group.axis.anchor.y = Number.isFinite(Number(group.origin && group.origin.y)) ? Number(group.origin.y) : 0;
     }
     group.origin = group.origin || { x: Number(group.axis.anchor.x || 0), y: Number(group.axis.anchor.y || 0) };
+    if (model && typeof model.ensureGroupRepresentativeTopic === 'function') {
+      model.ensureGroupRepresentativeTopic(group, {
+        topicKind: 'timeline-representative',
+        label: group.name || 'Timeline'
+      });
+    }
 
     migrateLegacySegments(group);
     if (!Array.isArray(group.members)) {
@@ -1079,7 +1101,7 @@ wuwei.timeline = wuwei.timeline || {};
 
     normalizeAxisGroup(group);
     rebuildGraphAndRefresh();
-    markGroupSelected(group);
+    clearSelectionState();
 
     resolveMediaDuration(videoNode).then(function (resolved) {
       if (Number.isFinite(Number(resolved)) && Number(resolved) > 0) {
@@ -1302,7 +1324,12 @@ wuwei.timeline = wuwei.timeline || {};
     setMemberIds(record.group, getMemberIds(record.group).filter(function (id) { return id !== record.segment.id; }));
     normalizeAxisGroup(record.group);
     rebuildGraphAndRefresh();
-    markGroupSelected(record.group);
+    if (hasEditableSegments(record.group)) {
+      markGroupSelected(record.group);
+    }
+    else {
+      clearSelectionState();
+    }
     return true;
   }
 
