@@ -46,12 +46,83 @@ wuwei.info.timeline = wuwei.info.timeline || {};
     return h < 1 ? (pad2(m) + ':' + pad2(s)) : (pad2(h) + ':' + pad2(m) + ':' + pad2(s));
   }
 
-  function ensurePane() {
+
+
+  function ensureInfoRoot() {
     var infoPane = document.getElementById('info');
+    var editPane = document.getElementById('edit');
+    var hasHeader;
+
+    if (editPane) {
+      editPane.style.display = 'none';
+    }
+    if (!infoPane) {
+      return null;
+    }
+
+    hasHeader = !!(
+      infoPane.querySelector('header') &&
+      infoPane.querySelector('#infoDismiss') &&
+      infoPane.querySelector('#infoWiden')
+    );
+
+    /*
+     * Timeline info may be opened directly from the context-menu [i] command,
+     * without going through wuwei.info.open().  In that route the common info
+     * header can be missing, so rebuild the full info template unless both the
+     * shared header controls and the timeline pane placeholder already exist.
+     */
+    if (wuwei.info && wuwei.info.markup && typeof wuwei.info.markup.template === 'function') {
+      if (!hasHeader || !document.getElementById('info-timeline')) {
+        infoPane.innerHTML = wuwei.info.markup.template();
+      }
+    }
+    infoPane.style.display = 'block';
+    return infoPane;
+  }
+
+  function hideSiblingPanes() {
+    [
+      'info-generic',
+      'info-group',
+      'info-uploaded',
+      'info-video',
+      'info-asciidoc',
+      'info-contents'
+    ].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) { el.style.display = 'none'; }
+    });
+  }
+
+  function setInfoDataset(target) {
+    var infoPane = document.getElementById('info');
+    if (!infoPane) { return; }
+    delete infoPane.dataset.page_marker_id;
+    delete infoPane.dataset.edit_node_id;
+    delete infoPane.dataset.group_id;
+
+    if (target && target.type === 'Segment' && target.id) {
+      infoPane.dataset.node_id = target.id;
+      infoPane.dataset.edit_node_id = target.id;
+      return;
+    }
+    if (target && target.id) {
+      infoPane.dataset.node_id = target.id;
+      infoPane.dataset.group_id = target.id;
+    }
+  }
+
+  function ensurePane() {
+    var infoPane = ensureInfoRoot();
     var pane = document.getElementById('info-timeline');
-    if (pane) { return pane; }
+    if (pane) {
+      hideSiblingPanes();
+      return pane;
+    }
     if (!infoPane) { return null; }
     infoPane.insertAdjacentHTML('beforeend', wuwei.info.timeline.markup.paneTemplate());
+    hideSiblingPanes();
     return document.getElementById('info-timeline');
   }
 
@@ -103,6 +174,7 @@ wuwei.info.timeline = wuwei.info.timeline || {};
     var startAt;
     var endAt;
     if (!pane || !group) { return; }
+    setInfoDataset(group);
     stateMap.group = group;
     stateMap.point = null;
     mediaNode = getMediaNodeForGroup(group);
@@ -158,18 +230,13 @@ wuwei.info.timeline = wuwei.info.timeline || {};
     var pane;
     var segmentView;
     var previewHost;
-    var infoPane = document.getElementById('info');
-    var editPane = document.getElementById('edit');
     if (!record) { return; }
-    if (editPane) { editPane.style.display = 'none'; }
-    if (wuwei.info.markup && infoPane) {
-      infoPane.innerHTML = wuwei.info.markup.template();
-      infoPane.style.display = 'block';
-    }
+    ensureInfoRoot();
     mediaNode = getMediaNodeForGroup(record.group);
     timing = getSegmentTiming(record.segment, record.group);
     pane = ensurePane();
     if (!pane) { return; }
+    setInfoDataset(record.segment);
     stateMap.group = record.group;
     stateMap.point = record.segment;
     segmentView = Object.assign({}, record.segment, {
@@ -204,13 +271,7 @@ wuwei.info.timeline = wuwei.info.timeline || {};
   function openTimelinePointInInfo(node) { openPoint(node); }
 
   function openTimelineAxisInInfo(group) {
-    var infoPane = document.getElementById('info');
-    var editPane = document.getElementById('edit');
-    if (editPane) { editPane.style.display = 'none'; }
-    if (wuwei.info && wuwei.info.markup && infoPane) {
-      infoPane.innerHTML = wuwei.info.markup.template();
-      infoPane.style.display = 'block';
-    }
+    ensureInfoRoot();
     openAxis(group);
   }
 
