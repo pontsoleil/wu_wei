@@ -1,6 +1,6 @@
 /**
  * menu.contents.js
- * UI-facing commands for document contents axes.
+ * UI-facing commands for document contents axes and contentTarget markers.
  */
 wuwei.menu = wuwei.menu || {};
 wuwei.menu.contents = wuwei.menu.contents || {};
@@ -10,32 +10,37 @@ wuwei.menu.contents = wuwei.menu.contents || {};
 
   var contents = wuwei.contents;
 
-  function getPageTargetSpec(target) {
-    return contents && typeof contents.getPageTargetSpec === 'function'
-      ? contents.getPageTargetSpec(target)
+  function getContentTargetSpec(target) {
+    return contents && typeof contents.getContentTargetSpec === 'function'
+      ? contents.getContentTargetSpec(target)
       : null;
   }
 
-  function getPageOpenUrl(target) {
-    var spec = getPageTargetSpec(target);
-    if (!spec || !spec.documentNode || !contents || typeof contents.getDocumentViewerUrl !== 'function') {
+  function getContentTargetOpenUrl(target) {
+    var spec = getContentTargetSpec(target);
+    if (!spec || !spec.documentNode || !contents || typeof contents.getContentTargetViewerUrl !== 'function') {
       return '';
     }
-    return contents.getDocumentViewerUrl(spec.documentNode, spec.pageNumber, spec.point);
+    return contents.getContentTargetViewerUrl(spec.documentNode, spec.pageNumber, spec.point);
   }
 
-  function openPageInInfo(target) {
-    var spec = getPageTargetSpec(target);
+  function openContentTargetInInfo(target) {
+    var spec = getContentTargetSpec(target);
     if (!spec || !spec.documentNode || !wuwei.info || typeof wuwei.info.open !== 'function') {
       return false;
     }
     wuwei.info.open(spec.documentNode, {
       page: spec.pageNumber,
-      contentsPage: true,
-      contentsPoint: spec.point || target,
-      displayedPageMarker: spec.point || target,
+      contentTargetView: true,
+      contentsPage: true, // backward compatibility
+      contentTarget: spec.point || target,
+      contentTargetPoint: spec.point || target,
+      contentsPoint: spec.point || target, // backward compatibility
+      displayedContentTarget: spec.point || target,
+      displayedPageMarker: spec.point || target, // backward compatibility
       editTarget: spec.point || target,
-      pdfjsUri: contents.getDocumentViewerUrl(spec.documentNode, spec.pageNumber, spec.point)
+      contentViewerUri: contents.getContentTargetViewerUrl(spec.documentNode, spec.pageNumber, spec.point),
+      pdfjsUri: contents.getContentTargetViewerUrl(spec.documentNode, spec.pageNumber, spec.point) // backward compatibility with generic viewer
     });
     return true;
   }
@@ -79,8 +84,11 @@ wuwei.menu.contents = wuwei.menu.contents || {};
   }
 
   ns.initModule = initModule;
-  ns.getPageTargetSpec = getPageTargetSpec;
-  ns.getPageOpenUrl = getPageOpenUrl;
-  ns.openPageInInfo = openPageInInfo;
+  ns.getContentTargetSpec = getContentTargetSpec;
+  ns.getPageTargetSpec = getContentTargetSpec; // backward compatibility
+  ns.getContentTargetOpenUrl = getContentTargetOpenUrl;
+  ns.getPageOpenUrl = getContentTargetOpenUrl; // backward compatibility
+  ns.openContentTargetInInfo = openContentTargetInInfo;
+  ns.openPageInInfo = openContentTargetInInfo; // backward compatibility
   ns.addTableOfContents = addTableOfContents;
 })(wuwei.menu.contents);
