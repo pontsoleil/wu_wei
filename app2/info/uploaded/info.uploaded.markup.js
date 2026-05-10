@@ -60,7 +60,7 @@ wuwei.info.uploaded.markup = ( function () {
   ${label
     ? `<div class="w3-row">
         <textarea id="label" name="label" class="w3-col s12" rows="${rowcount(label)}"
-            placeholder="${translate('Label')}" disabled>${label}</textarea>
+            placeholder="${t('Label')}" disabled>${label}</textarea>
       </div>`
     : ''
   }
@@ -71,27 +71,27 @@ wuwei.info.uploaded.markup = ( function () {
   }
   ${uri
     ? `<span class="player w3-row" onclick="wuwei.info.openWindow('${jsUri}', 'wuwei', 'width=600, height=400')">
-        ${translate('Click to open window')}<i class="fas fa-external-link-alt"></i>
+        ${t('Click to open window')}<i class="fas fa-external-link-alt"></i>
       </span>`
     : ``
   }
   ${node.value && 'string' === typeof node.value && node.value.length > 0
     ? `<div class="w3-row">
         <textarea id="description_body" name="description.body" class="w3-col s12" rows="${rowcount(node.value)}"
-            placeholder="${translate('Comment')}" disabled>${toText(node.value)}</textarea>
+            placeholder="${t('Comment')}" disabled>${toText(node.value)}</textarea>
       </div>`
     : ''
   }
   ${credit
     ? `<div class="w3-row">
-        <label class="w3-col s4">${translate('Credit')}</label>
+        <label class="w3-col s4">${t('Credit')}</label>
         <input type="text" class="w3-col s8" value="${escapeAttr(credit)}" disabled>
       </div>`
     : ''
   }
   ${license
     ? `<div class="w3-row">
-        <label class="w3-col s4">${translate('License')}</label>
+        <label class="w3-col s4">${t('License')}</label>
         <input type="text" class="w3-col s8" value="${escapeAttr(license)}" disabled>
       </div>`
     : ''
@@ -111,7 +111,7 @@ wuwei.info.uploaded.markup = ( function () {
     return wuwei.info.markup.rowcount(str);
   }
 
-  function translate(str) {
+  function t(str) {
     return wuwei.info.markup.translate(str);
   }
 
