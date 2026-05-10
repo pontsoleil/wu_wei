@@ -141,7 +141,7 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     jQuery('#' + paletteId).colorPalettePicker({
       lines: 4,
       bootstrap: 4,
-      dropdownTitle: '標準色',
+      dropdownTitle: wuwei.nls.translate('Standard colours'),
       buttonClass: 'btn btn-light btn-sm dropdown-toggle',
       onSelected: function (color) {
         var input = $(inputId);
