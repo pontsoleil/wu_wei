@@ -8,10 +8,11 @@
  * - timeline layout and playback spec
  * - create / update / delete / normalize / relayout
  *
- * Time meaning:
+ * Time meaning and layout:
  * - axis start is always 0
- * - segment position on axis is mediaStart
- * - segment clip end is mediaEnd
+ * - mediaStart/mediaEnd are semantic playback values
+ * - axisPos is the editable position on the visual axis
+ * - drag updates axisPos, not mediaStart/mediaEnd
  * - playDuration = mediaEnd - mediaStart
  */
 wuwei.timeline = wuwei.timeline || {};
@@ -725,8 +726,164 @@ wuwei.timeline = wuwei.timeline || {};
     delete group.segments;
   }
 
+  function axisOrientation(group) {
+    return (group && group.orientation === 'vertical') ? 'vertical' : 'horizontal';
+  }
+
+  function axisAnchor(group) {
+    var axis = (group && group.axis) || {};
+    return {
+      x: (axis.anchor && Number.isFinite(Number(axis.anchor.x))) ? Number(axis.anchor.x) : ((group && group.origin && Number.isFinite(Number(group.origin.x))) ? Number(group.origin.x) : 0),
+      y: (axis.anchor && Number.isFinite(Number(axis.anchor.y))) ? Number(axis.anchor.y) : ((group && group.origin && Number.isFinite(Number(group.origin.y))) ? Number(group.origin.y) : 0)
+    };
+  }
+
+  function axisScalar(group, x, y) {
+    return axisOrientation(group) === 'vertical' ? Number(y || 0) : Number(x || 0);
+  }
+
+  function getAxisPos(group, node) {
+    var value = Number(node && node.axisPos);
+    if (Number.isFinite(value)) {
+      return value;
+    }
+    return axisOrientation(group) === 'vertical' ? Number(node && node.y || 0) : Number(node && node.x || 0);
+  }
+
+  function setNodeOnAxis(group, node, axisPos) {
+    var anchor = axisAnchor(group);
+    axisPos = Number(axisPos);
+    if (!Number.isFinite(axisPos)) {
+      axisPos = axisOrientation(group) === 'vertical' ? anchor.y : anchor.x;
+    }
+    node.axisPos = axisPos;
+    if (axisOrientation(group) === 'vertical') {
+      node.x = anchor.x;
+      node.y = axisPos;
+    }
+    else {
+      node.x = axisPos;
+      node.y = anchor.y;
+    }
+    node.fx = node.x;
+    node.fy = node.y;
+    node.vx = 0;
+    node.vy = 0;
+    node.changed = true;
+  }
+
+  function timelineRatio(group, node, start, end) {
+    var range = Math.max(end - start, 0.0001);
+    var mediaStart;
+    if (node.axisRole === 'start') {
+      return 0;
+    }
+    if (node.axisRole === 'end') {
+      return 1;
+    }
+    mediaStart = Number.isFinite(Number(node.mediaStart)) ? Number(node.mediaStart) : start;
+    return Math.max(0, Math.min(1, (mediaStart - start) / range));
+  }
+
+  function assignMissingAxisPositions(group, members, start, end) {
+    var anchor = axisAnchor(group);
+    var anchorPos = axisOrientation(group) === 'vertical' ? anchor.y : anchor.x;
+    var length = Math.max(60, Number(group.length || 480));
+    var gap = Math.max(40, Number(group.axisGap || 80));
+    var anyPositioned = members.some(function (node) {
+      return Number.isFinite(Number(node.axisPos));
+    });
+
+    if (!anyPositioned) {
+      members.forEach(function (node) {
+        node.axisPos = anchorPos + (length * timelineRatio(group, node, start, end));
+      });
+      return;
+    }
+
+    members.forEach(function (node, index) {
+      var prev, next, i;
+      if (Number.isFinite(Number(node.axisPos))) {
+        node.axisPos = Number(node.axisPos);
+        return;
+      }
+      for (i = index - 1; i >= 0; i -= 1) {
+        if (Number.isFinite(Number(members[i].axisPos))) {
+          prev = members[i];
+          break;
+        }
+      }
+      for (i = index + 1; i < members.length; i += 1) {
+        if (Number.isFinite(Number(members[i].axisPos))) {
+          next = members[i];
+          break;
+        }
+      }
+      if (prev && next) {
+        node.axisPos = (Number(prev.axisPos) + Number(next.axisPos)) / 2;
+      }
+      else if (prev) {
+        node.axisPos = Number(prev.axisPos) + gap;
+      }
+      else if (next) {
+        node.axisPos = Number(next.axisPos) - gap;
+      }
+      else {
+        node.axisPos = anchorPos + (length * timelineRatio(group, node, start, end));
+      }
+    });
+  }
+
+  function updateAxisBoundsFromPositions(group) {
+    var members, representatives, nodes, orientation, anchor, positions, minPos, maxPos, minLength;
+    if (!group) {
+      return false;
+    }
+    group.axis = group.axis || {};
+    anchor = axisAnchor(group);
+    members = getTimelineMemberNodes(group);
+    representatives = (model && typeof model.getGroupRepresentativeNodes === 'function')
+      ? model.getGroupRepresentativeNodes(group)
+      : [];
+    nodes = members.concat(representatives || []);
+    orientation = axisOrientation(group);
+    positions = nodes.map(function (node) {
+      if (!node) {
+        return null;
+      }
+      if (Number.isFinite(Number(node.axisPos))) {
+        return Number(node.axisPos);
+      }
+      return orientation === 'vertical' ? Number(node.y) : Number(node.x);
+    }).filter(function (value) {
+      return Number.isFinite(value);
+    });
+
+    if (!positions.length) {
+      group.axis.anchor = anchor;
+      group.origin = { x: anchor.x, y: anchor.y };
+      group.length = Math.max(60, Number(group.length || 480));
+      return false;
+    }
+
+    minPos = Math.min.apply(null, positions);
+    maxPos = Math.max.apply(null, positions);
+    minLength = Math.max(60, Number(group.minAxisLength || 60));
+
+    if (orientation === 'vertical') {
+      group.axis.anchor = { x: anchor.x, y: minPos };
+      group.origin = { x: anchor.x, y: minPos };
+    }
+    else {
+      group.axis.anchor = { x: minPos, y: anchor.y };
+      group.origin = { x: minPos, y: anchor.y };
+    }
+    group.length = Math.max(minLength, maxPos - minPos);
+    return true;
+  }
+
   function layoutAxisGroup(group) {
-    var axis, start, end, range, length, orientation, anchor, members;
+    var axis, start, end, length, anchor, members;
     if (!group) {
       return null;
     }
@@ -737,13 +894,8 @@ wuwei.timeline = wuwei.timeline || {};
     start = 0;
     end = Number.isFinite(Number(group.timeEnd)) ? Number(group.timeEnd) : Number(axis.end || 0);
     end = Math.max(start, end);
-    range = Math.max(end - start, 0.0001);
     length = Math.max(60, Number(group.length || 480));
-    orientation = (group.orientation === 'vertical') ? 'vertical' : 'horizontal';
-    anchor = {
-      x: (axis.anchor && Number.isFinite(Number(axis.anchor.x))) ? Number(axis.anchor.x) : ((group.origin && Number.isFinite(Number(group.origin.x))) ? Number(group.origin.x) : 0),
-      y: (axis.anchor && Number.isFinite(Number(axis.anchor.y))) ? Number(axis.anchor.y) : ((group.origin && Number.isFinite(Number(group.origin.y))) ? Number(group.origin.y) : 0)
-    };
+    anchor = axisAnchor(group);
 
     group.axis = group.axis || {};
     group.axis.anchor = anchor;
@@ -757,23 +909,20 @@ wuwei.timeline = wuwei.timeline || {};
     members = sortTimelineMembers(group);
     members.forEach(function (node) {
       var mediaStart;
-      var ratio;
 
+      ensureSegmentNodeDefaults(group, node, node.order || 0);
       if (node.axisRole === 'start') {
-        mediaStart = start;
         node.mediaStart = start;
         node.mediaEnd = Math.max(start, Number(node.mediaEnd || start));
       }
       else if (node.axisRole === 'end') {
-        mediaStart = end;
         node.mediaStart = end;
         node.mediaEnd = end;
         node.playDuration = 0;
       }
       else {
         mediaStart = Number.isFinite(Number(node.mediaStart)) ? Number(node.mediaStart) : start;
-        mediaStart = Math.max(start, Math.min(end, mediaStart));
-        node.mediaStart = mediaStart;
+        node.mediaStart = Math.max(start, Math.min(end, mediaStart));
       }
 
       if (node.axisRole !== 'end' &&
@@ -781,14 +930,12 @@ wuwei.timeline = wuwei.timeline || {};
         node.mediaEnd = node.mediaStart + Math.max(0, Number(node.playDuration || group.defaultPlayDuration || 15));
       }
       node.playDuration = Math.max(0, node.mediaEnd - node.mediaStart);
+    });
 
-      ratio = (node.mediaStart - start) / range;
-      node.x = (orientation === 'vertical') ? anchor.x : (anchor.x + (length * ratio));
-      node.y = (orientation === 'vertical') ? (anchor.y + (length * ratio)) : anchor.y;
-      node.fx = node.x;
-      node.fy = node.y;
-
-      ensureSegmentNodeDefaults(group, node, node.order || 0);
+    assignMissingAxisPositions(group, members, start, end);
+    updateAxisBoundsFromPositions(group);
+    members.forEach(function (node) {
+      setNodeOnAxis(group, node, getAxisPos(group, node));
     });
 
     return group;
@@ -800,6 +947,7 @@ wuwei.timeline = wuwei.timeline || {};
     var startNode;
     var endNode;
     var sourceLink;
+    var mediaNode;
     if (!group) {
       return null;
     }
@@ -855,6 +1003,10 @@ wuwei.timeline = wuwei.timeline || {};
         topicKind: 'timeline-representative',
         label: group.name || 'Timeline'
       });
+    }
+    mediaNode = getMediaNodeForGroup(group);
+    if (mediaNode) {
+      ensureVideoToTimelineRepresentativeLink(page, group, mediaNode);
     }
 
     migrateLegacySegments(group);
@@ -995,36 +1147,123 @@ wuwei.timeline = wuwei.timeline || {};
     return { x: x + 90, y: y + 90 };
   }
 
-  function ensureVideoToTimelineStartLink(page, group, videoNode, startNode) {
+  function getTimelineRepresentativeNode(group) {
+    var representative;
+    if (!group) {
+      return null;
+    }
+    representative = group.representativeNodeId ? model.findNodeById(group.representativeNodeId) : null;
+    if (!representative && model && typeof model.ensureGroupRepresentativeTopic === 'function') {
+      representative = model.ensureGroupRepresentativeTopic(group, {
+        topicKind: 'timeline-representative',
+        label: group.name || 'Timeline'
+      });
+    }
+    return representative || null;
+  }
+
+  function getLinkSourceId(link) {
+    if (!link) { return ''; }
+    if (link.from) { return (link.from && link.from.id) ? link.from.id : link.from; }
+    if (link.source) { return (link.source && link.source.id) ? link.source.id : link.source; }
+    return '';
+  }
+
+  function getLinkTargetId(link) {
+    if (!link) { return ''; }
+    if (link.to) { return (link.to && link.to.id) ? link.to.id : link.to; }
+    if (link.target) { return (link.target && link.target.id) ? link.target.id : link.target; }
+    return '';
+  }
+
+  function setLinkTargetId(link, id) {
+    if (!link || !id) { return; }
+    link.to = id;
+    if (undefined !== link.target) {
+      link.target = id;
+    }
+  }
+
+  function isTimelineSourceLinkForGroup(link, group, videoNode) {
+    var sourceId;
+    if (!link || !group || !videoNode) {
+      return false;
+    }
+    sourceId = getLinkSourceId(link);
+    return !!(
+      sourceId === videoNode.id &&
+      (
+        link.groupRef === group.id ||
+        link.timelineRef === group.id ||
+        link.linkType === 'timeline-source' ||
+        link.relation === 'timeline'
+      )
+    );
+  }
+
+  function ensureVideoToTimelineRepresentativeLink(page, group, videoNode) {
+    var representative;
+    var memberIds;
     var existing;
     var result;
     var link;
 
-    if (!page || !group || !videoNode || !startNode) {
+    if (!page || !group || !videoNode) {
       return null;
     }
 
     ensurePageCollections(page);
+    representative = getTimelineRepresentativeNode(group);
+    if (!representative) {
+      return null;
+    }
 
-    existing = (page.links || []).find(function (item) {
-      var sourceId = (item && item.source && item.source.id) ? item.source.id : item && item.source;
-      var targetId = (item && item.target && item.target.id) ? item.target.id : item && item.target;
-      return !!(
-        item &&
-        sourceId === videoNode.id &&
-        targetId === startNode.id
-      );
+    memberIds = getMemberIds(group);
+
+    /*
+     * The source Content represents the whole timeline.  Therefore the durable
+     * source link must point to the representative topic, not to the first
+     * Segment.  Existing links to start/end/point segments are migrated here.
+     */
+    existing = null;
+    page.links = (page.links || []).filter(function (item) {
+      var targetId;
+      if (!isTimelineSourceLinkForGroup(item, group, videoNode)) {
+        return true;
+      }
+      targetId = getLinkTargetId(item);
+      if (targetId === representative.id) {
+        if (!existing) {
+          existing = item;
+          return true;
+        }
+        return false;
+      }
+      if (memberIds.indexOf(targetId) >= 0) {
+        if (!existing) {
+          setLinkTargetId(item, representative.id);
+          item.visible = true;
+          item.changed = true;
+          item.linkType = 'timeline-source';
+          item.groupRef = group.id;
+          existing = item;
+          return true;
+        }
+        return false;
+      }
+      return true;
     });
 
     if (existing) {
       existing.visible = true;
       existing.changed = true;
-      existing.linkType = existing.linkType || 'timeline-source';
-      existing.groupRef = existing.groupRef || group.id;
+      existing.linkType = 'timeline-source';
+      existing.groupRef = group.id;
+      setLinkTargetId(existing, representative.id);
       return existing;
     }
 
-    result = model.connect(videoNode, startNode);
+    result = model.connect(videoNode, representative);
     link = result && result.param && result.param.link && result.param.link[0];
 
     if (link) {
@@ -1096,8 +1335,8 @@ wuwei.timeline = wuwei.timeline || {};
     page.nodes.push(startNode, endNode);
     setMemberIds(group, [startNode.id, endNode.id]);
 
-    // Video Content → timeline start の Link を作成
-    ensureVideoToTimelineStartLink(page, group, videoNode, startNode);
+    // Video Content → timeline representative の Link を作成
+    ensureVideoToTimelineRepresentativeLink(page, group, videoNode);
 
     normalizeAxisGroup(group);
     rebuildGraphAndRefresh();
@@ -1528,120 +1767,60 @@ wuwei.timeline = wuwei.timeline || {};
     return syncAxisEndToStoredDuration(group);
   }
 
-  function updateTimelineAxisGeometryByEndpointDrag(group, pageNode, x, y) {
-    var axis, orientation, minLength;
-    var startPos, endPos;
-    var nextStartPos, nextEndPos;
-    var nextLength;
-
-    if (!group || !group.axis || !pageNode) {
-      return false;
-    }
-
-    axis = group.axis;
-    orientation = (group.orientation === 'vertical') ? 'vertical' : 'horizontal';
-    minLength = 24;
-
-    axis.anchor = axis.anchor || { x: 0, y: 0 };
-    group.origin = group.origin || {
-      x: Number(axis.anchor.x || 0),
-      y: Number(axis.anchor.y || 0)
+  function getDragBounds(group, pageNode) {
+    var members = sortTimelineMembers(group);
+    var index = members.findIndex(function (node) { return node && node.id === pageNode.id; });
+    var gap = Math.max(4, Number(group.minAxisGap || 8));
+    var prev = index > 0 ? members[index - 1] : null;
+    var next = (index >= 0 && index < members.length - 1) ? members[index + 1] : null;
+    return {
+      min: prev ? (getAxisPos(group, prev) + gap) : -Infinity,
+      max: next ? (getAxisPos(group, next) - gap) : Infinity
     };
-    group.length = Math.max(60, Number(group.length || 480));
+  }
 
-    if (orientation === 'horizontal') {
-      startPos = Number(axis.anchor.x || 0);
-      endPos = startPos + Number(group.length || 0);
-
-      if (pageNode.axisRole === 'start') {
-        nextStartPos = Math.min(Number(x || 0), endPos - minLength);
-        nextLength = endPos - nextStartPos;
-
-        axis.anchor.x = nextStartPos;
-        group.origin.x = nextStartPos;
-        group.length = Math.max(minLength, nextLength);
-        return true;
-      }
-
-      if (pageNode.axisRole === 'end') {
-        nextEndPos = Math.max(Number(x || 0), startPos + minLength);
-        group.length = Math.max(minLength, nextEndPos - startPos);
-        return true;
-      }
-
-      return false;
+  function clampAxisPosition(value, bounds) {
+    value = Number(value || 0);
+    if (bounds && Number.isFinite(bounds.min)) {
+      value = Math.max(bounds.min, value);
     }
-
-    startPos = Number(axis.anchor.y || 0);
-    endPos = startPos + Number(group.length || 0);
-
-    if (pageNode.axisRole === 'start') {
-      nextStartPos = Math.min(Number(y || 0), endPos - minLength);
-      nextLength = endPos - nextStartPos;
-
-      axis.anchor.y = nextStartPos;
-      group.origin.y = nextStartPos;
-      group.length = Math.max(minLength, nextLength);
-      return true;
+    if (bounds && Number.isFinite(bounds.max)) {
+      value = Math.min(bounds.max, value);
     }
+    return value;
+  }
 
-    if (pageNode.axisRole === 'end') {
-      nextEndPos = Math.max(Number(y || 0), startPos + minLength);
-      group.length = Math.max(minLength, nextEndPos - startPos);
-      return true;
-    }
-
-    return false;
+  function updateTimelineAxisGeometryByEndpointDrag(group, pageNode, x, y) {
+    return updateTimelineSegmentAxisPosition(group, pageNode, x, y);
   }
 
   function updateTimelineSegmentTimeFromPosition(group, pageNode, x, y) {
-    var axis, orientation, axisStartTime, axisEndTime, axisLength, ratio, nextStart;
+    return updateTimelineSegmentAxisPosition(group, pageNode, x, y);
+  }
+
+  function updateTimelineSegmentAxisPosition(group, pageNode, x, y) {
+    var pos;
     if (!group || !group.axis || !pageNode) {
       return false;
     }
-    axis = group.axis;
-    orientation = group.orientation || 'horizontal';
-    axisStartTime = 0;
-    axisEndTime = Number(group.timeEnd || axis.end || 0);
-    axisLength = Math.max(1, Number(group.length || 1));
-    axis.anchor = axis.anchor || { x: 0, y: 0 };
-    if (orientation === 'horizontal') {
-      ratio = (x - Number(axis.anchor.x || 0)) / axisLength;
-    }
-    else {
-      ratio = (y - Number(axis.anchor.y || 0)) / axisLength;
-    }
-    ratio = Math.max(0, Math.min(1, ratio));
-    nextStart = axisStartTime + ((axisEndTime - axisStartTime) * ratio);
-    pageNode.mediaStart = nextStart;
-    if (!Number.isFinite(Number(pageNode.mediaEnd)) || Number(pageNode.mediaEnd) < nextStart) {
-      pageNode.mediaEnd = nextStart + Math.max(0, Number(pageNode.playDuration || group.defaultPlayDuration || 15));
-    }
-    pageNode.playDuration = Math.max(0, Number(pageNode.mediaEnd) - nextStart);
-    pageNode.label = pageNode.label || formatTime(nextStart);
-    delete pageNode.name;
+    normalizeAxisGroup(group);
+    pageNode = model.findNodeById(pageNode.id) || pageNode;
+    pos = clampAxisPosition(axisScalar(group, x, y), getDragBounds(group, pageNode));
+    setNodeOnAxis(group, pageNode, pos);
+    updateAxisBoundsFromPositions(group);
     return true;
   }
 
   function handleSegmentDrag(nodeOrId, eventX, eventY) {
     var pageNode = (typeof nodeOrId === 'string') ? model.findNodeById(nodeOrId) : (nodeOrId && nodeOrId.id ? (model.findNodeById(nodeOrId.id) || nodeOrId) : null);
-    var group;
-    var handled;
     if (!pageNode || !isTimelinePoint(pageNode)) {
       return false;
     }
-    group = model.findGroupById(pageNode.groupRef);
+    var group = model.findGroupById(pageNode.groupRef);
     if (!group || !isAxisGroup(group)) {
       return false;
     }
-    normalizeAxisGroup(group);
-    if (pageNode.axisRole === 'start' || pageNode.axisRole === 'end') {
-      handled = updateTimelineAxisGeometryByEndpointDrag(group, pageNode, Number(eventX || 0), Number(eventY || 0));
-    }
-    else {
-      handled = updateTimelineSegmentTimeFromPosition(group, pageNode, Number(eventX || 0), Number(eventY || 0));
-    }
-    if (!handled) {
+    if (!updateTimelineSegmentAxisPosition(group, pageNode, Number(eventX || 0), Number(eventY || 0))) {
       return false;
     }
     if (model && typeof model.pruneGroups === 'function') {
@@ -1659,6 +1838,8 @@ wuwei.timeline = wuwei.timeline || {};
   ns.syncAxisEndToMediaDuration = syncAxisEndToMediaDuration;
   ns.updateTimelineAxisGeometryByEndpointDrag = updateTimelineAxisGeometryByEndpointDrag;
   ns.updateTimelineSegmentTimeFromPosition = updateTimelineSegmentTimeFromPosition;
+  ns.updateTimelineSegmentAxisPosition = updateTimelineSegmentAxisPosition;
+  ns.updateAxisBoundsFromPositions = updateAxisBoundsFromPositions;
   ns.handleSegmentDrag = handleSegmentDrag;
 
   ns.toAbsUrl = toAbsUrl;
