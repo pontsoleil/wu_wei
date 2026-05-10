@@ -78,13 +78,13 @@ wuwei.info.video.markup = (function () {
         ? '<iframe id="infoVideoFrame" src="' + escapeAttr(embedUrl) + '" ' +
         'frameborder="0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>'
         : '<div class="video-preview-error">' +
-        escapeHtml(translate('Preview is unavailable in the info pane.')) +
+        escapeHtml(t('Preview is unavailable in the info pane.')) +
         '</div>';
     }
     else {
       previewHtml =
         '<div class="video-preview-error">' +
-        escapeHtml(translate('Unsupported video source.')) +
+        escapeHtml(t('Unsupported video source.')) +
         '</div>';
     }
 
@@ -94,7 +94,7 @@ wuwei.info.video.markup = (function () {
     html.push(
       '<div class="info">',
       '<div>',
-      '<h5 id="rName" name="label" data-path="label" rows="' + rowcount(title) + '">' + escapeHtml(title) + '</h5>',
+      '<h5 id="label" name="label" rows="' + rowcount(title) + '">' + escapeHtml(title) + '</h5>',
       '</div>'
     );
     html.push(
@@ -104,8 +104,8 @@ wuwei.info.video.markup = (function () {
     );
     html.push(
       '<div class="controls">',
-      '<input id="infoVideoStart" name="timeRange.start" data-path="timeRange.start" type="hidden" value="' + escapeAttr(startStr) + '">',
-      '<input id="infoVideoEnd" name="timeRange.end" data-path="timeRange.end" type="hidden" value="' + escapeAttr(endStr) + '">',
+      '<input id="timeRange_start" name="timeRange.start" type="hidden" value="' + escapeAttr(startStr) + '">',
+      '<input id="timeRange_end" name="timeRange.end" type="hidden" value="' + escapeAttr(endStr) + '">',
       '<div class="video-duration" id="infoVideoDuration">' + escapeHtml(durationStr) + '</div>',
       '</div>'
     );
@@ -198,9 +198,7 @@ wuwei.info.video.markup = (function () {
   };
 
   translate = function (str) {
-    return (wuwei.nls && typeof wuwei.nls.translate === 'function')
-      ? wuwei.nls.translate(str)
-      : str;
+    return wuwei.nls.translate(str);
   };
 
   return {
