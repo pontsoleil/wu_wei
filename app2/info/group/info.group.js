@@ -12,16 +12,7 @@ wuwei.info.group = wuwei.info.group || {};
     if (!target) {
       return null;
     }
-    if (wuwei.model && typeof wuwei.model.findGroupByTarget === 'function') {
-      return wuwei.model.findGroupByTarget(target);
-    }
-    if (target.groupRef && wuwei.model && typeof wuwei.model.findGroupById === 'function') {
-      return wuwei.model.findGroupById(target.groupRef);
-    }
-    if (target.id && wuwei.model && typeof wuwei.model.findGroupById === 'function') {
-      return wuwei.model.findGroupById(target.id);
-    }
-    return null;
+    return wuwei.model.findGroupByTarget(target);
   }
 
   function canOpen(target) {
