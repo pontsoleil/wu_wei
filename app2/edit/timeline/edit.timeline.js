@@ -55,6 +55,14 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
     return document.getElementById(id);
   }
 
+  function pointField(id) {
+    var root = $('edit-timeline-point');
+    if (root && id) {
+      return root.querySelector('[id="' + String(id).replace(/"/g, '\\"') + '"]');
+    }
+    return $(id);
+  }
+
   function toNumber(value, fallback) {
     var n = Number(value);
     return Number.isFinite(n) ? n : (fallback || 0);
@@ -158,9 +166,9 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
     }
 
     jQuery('#editTimelineAxisStrokeColorPalette').colorPalettePicker({
-      lines: 4,
+      lines: 6,
       bootstrap: 4,
-      dropdownTitle: '標準色',
+      dropdownTitle: wuwei.nls.translate('Standard colours'),
       buttonClass: 'btn btn-light btn-sm dropdown-toggle',
       onSelected: function (color) {
         var input = $('editTimelineAxisStrokeColor');
@@ -172,12 +180,12 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
     });
 
     jQuery('#editTimelinePointColorPalette').colorPalettePicker({
-      lines: 4,
+      lines: 6,
       bootstrap: 4,
-      dropdownTitle: '標準色',
+      dropdownTitle: wuwei.nls.translate('Standard colours'),
       buttonClass: 'btn btn-light btn-sm dropdown-toggle',
       onSelected: function (color) {
-        var input = $('editTimelinePointColor');
+        var input = pointField('style_fill');
         if (input) {
           input.value = color;
           input.dispatchEvent(new Event('change', { bubbles: true }));
@@ -186,12 +194,12 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
     });
 
     jQuery('#editTimelinePointFontColorPalette').colorPalettePicker({
-      lines: 4,
+      lines: 6,
       bootstrap: 4,
-      dropdownTitle: '標準色',
+      dropdownTitle: wuwei.nls.translate('Standard colours'),
       buttonClass: 'btn btn-light btn-sm dropdown-toggle',
       onSelected: function (color) {
-        var input = $('editTimelinePointFontColor');
+        var input = pointField('style_font_color');
         if (input) {
           input.value = color;
           input.dispatchEvent(new Event('change', { bubbles: true }));
@@ -200,12 +208,12 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
     });
 
     jQuery('#editTimelinePointOutlineColorPalette').colorPalettePicker({
-      lines: 4,
+      lines: 6,
       bootstrap: 4,
-      dropdownTitle: '標準色',
+      dropdownTitle: wuwei.nls.translate('Standard colours'),
       buttonClass: 'btn btn-light btn-sm dropdown-toggle',
       onSelected: function (color) {
-        var input = $('editTimelinePointOutlineColor');
+        var input = pointField('style_line_color');
         if (input) {
           input.value = color;
           input.dispatchEvent(new Event('change', { bubbles: true }));
@@ -219,23 +227,23 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
       return;
     }
     point.color = toHexColor(
-      $('editTimelinePointColor') ? $('editTimelinePointColor').value : point.color,
+      pointField('style_fill') ? pointField('style_fill').value : point.color,
       point.color || '#ffffff'
     );
     point.font = point.font || {};
     point.font.color = toHexColor(
-      $('editTimelinePointFontColor') ? $('editTimelinePointFontColor').value : point.font.color,
+      pointField('style_font_color') ? pointField('style_font_color').value : point.font.color,
       point.font.color || '#303030'
     );
     point.style = point.style || {};
     point.style.line = point.style.line || {};
     point.style.line.kind = point.style.line.kind || 'SOLID';
     point.style.line.color = toHexColor(
-      $('editTimelinePointOutlineColor') ? $('editTimelinePointOutlineColor').value : (point.style.line.color || point.outline),
+      pointField('style_line_color') ? pointField('style_line_color').value : (point.style.line.color || point.outline),
       point.style.line.color || point.outline || '#666666'
     );
     point.style.line.width = Math.max(0, Number(
-      $('editTimelinePointOutlineWidth') ? $('editTimelinePointOutlineWidth').value : point.style.line.width
+      pointField('style_line_width') ? pointField('style_line_width').value : point.style.line.width
     ) || 0);
     point.outline = point.style.line.color;
     point.outlineWidth = point.style.line.width;
@@ -411,23 +419,23 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
     setInputValue('editTimelinePointDuration', String(duration));
     $('editTimelinePointName').value = point.label || '';
     $('editTimelinePointValue').value = getDescriptionBody(point);
-    if ($('editTimelinePointColor')) {
-      $('editTimelinePointColor').value = toHexColor(point.color || '#ffffff', '#ffffff');
+    if (pointField('style_fill')) {
+      pointField('style_fill').value = toHexColor(point.color || '#ffffff', '#ffffff');
     }
-    if ($('editTimelinePointFontColor')) {
-      $('editTimelinePointFontColor').value = toHexColor(
+    if (pointField('style_font_color')) {
+      pointField('style_font_color').value = toHexColor(
         point.font && point.font.color ? point.font.color : '#303030',
         '#303030'
       );
     }
-    if ($('editTimelinePointOutlineColor')) {
-      $('editTimelinePointOutlineColor').value = toHexColor(
+    if (pointField('style_line_color')) {
+      pointField('style_line_color').value = toHexColor(
         (point.style && point.style.line && point.style.line.color) || point.outline || '#666666',
         '#666666'
       );
     }
-    if ($('editTimelinePointOutlineWidth')) {
-      $('editTimelinePointOutlineWidth').value = Number(
+    if (pointField('style_line_width')) {
+      pointField('style_line_width').value = Number(
         (point.style && point.style.line && point.style.line.width) || point.outlineWidth || 1
       );
     }
