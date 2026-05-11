@@ -2310,6 +2310,15 @@ wuwei.menu = wuwei.menu || {};
       closeContextMenu();
       return;
     }
+    else if ('deleteGroup' === method) {
+      node = resolveContextTargetRecord(state.hoveredNode);
+      if (deleteGroupTarget(node)) {
+        closeContextMenu();
+        return;
+      }
+      closeContextMenu();
+      return;
+    }
     else if ('copy' === method &&
       isContextGroup([resolveContextTargetRecord(state.hoveredNode)])) {
       node = resolveContextTargetRecord(state.hoveredNode);
@@ -2701,7 +2710,8 @@ wuwei.menu = wuwei.menu || {};
     }
     else if (['alignTop', 'alignHorizontal', 'alignBottom', 'alignLeft', 'alignVertical',
       'alignRight', 'horizontalEqual', 'verticalEqual', 'clipboard', 'paste', 'clone',
-      'defineSimpleGroup', 'defineHorizontalGroup', 'defineVerticalGroup', 'ungroup'].includes(method) ||
+      'defineSimpleGroup', 'defineHorizontalGroup', 'defineVerticalGroup', 'ungroup',
+      'deleteSelectedGroups'].includes(method) ||
       (state.Selecting && ('copy' === method || 'edit' === method))) {
       log.recordCurrent();
       let count, xMin, xMax, xSum, yMin, yMax, ySum,
@@ -2784,6 +2794,11 @@ wuwei.menu = wuwei.menu || {};
         closeContextMenu();
         draw.reRender();
         logData = { command: method, param: { node: allNodes } };
+      }
+      else if ('deleteSelectedGroups' === method) {
+        if (deleteSelectedGroups()) {
+          logData = { command: method, param: { group: (state.deletedGroupIds || []) } };
+        }
       }
       else if (['clipboard', 'copy', 'paste', 'clone'].includes(method)) {
         logData = model[method](allNodes);
@@ -3192,8 +3207,33 @@ wuwei.menu = wuwei.menu || {};
     this.uploadFile = files[0];
   };
 
+  function ensureFlockDeleteOperator() {
+    var operators = document.querySelector('.pulldown.flock .operators');
+    var reference;
+    var el;
+
+    if (!operators || operators.querySelector('.operator.DeleteGroup')) {
+      return;
+    }
+
+    el = document.createElement('div');
+    el.className = 'operator DeleteGroup danger';
+    el.innerHTML = '<i class="far fa-trash-alt fa-lg fa-fw" aria-hidden="true"></i>' +
+      wuwei.nls.translate('Delete');
+
+    reference = operators.querySelector('.operator.Ungroup') ||
+      operators.querySelector('.operator.Copy');
+    if (reference && reference.nextSibling) {
+      operators.insertBefore(el, reference.nextSibling);
+    }
+    else {
+      operators.appendChild(el);
+    }
+  }
+
   /** flock */
   flockClicked = function () {
+    ensureFlockDeleteOperator();
     state.Selecting = true;
     const menu = document.getElementById('flockMenu');
     menuOpen(menu);
@@ -3465,6 +3505,7 @@ wuwei.menu = wuwei.menu || {};
         'addTopic',
         'addMemo',
         'copy',
+        'deleteGroup',
         'erase'
       ],
       'EditLink': [
@@ -3479,13 +3520,14 @@ wuwei.menu = wuwei.menu || {};
         'vertical',
         'horizontal2',
         'vertical2',
+        'deleteGroup',
         'erase'
       ],
       'EditGroup': [
         'edit',
         'editRepresentativeStyle',
         'copy',
-        'erase'
+        'deleteGroup'
       ],
       'InfoNode': [
         'info',
@@ -3682,6 +3724,50 @@ wuwei.menu = wuwei.menu || {};
       isRepresentativeGroupEraseTarget(target) ||
       isGroupAxisOrOutlineEraseTarget(target)
     );
+  }
+
+  function deleteGroupTarget(target) {
+    if (!target || !isWholeGroupEraseTarget(target) || !model || typeof model.eraseGroup !== 'function') {
+      return false;
+    }
+
+    wuwei.log.savePrevious();
+    if (model.eraseGroup(target)) {
+      clearSelectionState();
+      wuwei.log.storeLog({ operation: 'erase' });
+      draw.reRender();
+      return true;
+    }
+    return false;
+  }
+
+  function deleteSelectedGroups() {
+    var page = getCurrentPage();
+    var selectedGroupIds = getEffectiveSelectedGroupIds(page);
+    var deletedIds = [];
+
+    if (!selectedGroupIds.length || !model || typeof model.eraseGroup !== 'function') {
+      state.deletedGroupIds = [];
+      return false;
+    }
+
+    wuwei.log.savePrevious();
+    selectedGroupIds.forEach(function (groupId) {
+      var group = model.findGroupById ? model.findGroupById(groupId) : null;
+      if (group && model.eraseGroup(group)) {
+        deletedIds.push({ id: groupId, type: 'Group' });
+      }
+    });
+
+    state.deletedGroupIds = deletedIds;
+    if (!deletedIds.length) {
+      return false;
+    }
+
+    clearSelectionState();
+    closeContextMenu();
+    draw.reRender();
+    return true;
   }
 
   function isContextLink(allNodes) {
@@ -4261,12 +4347,27 @@ wuwei.menu = wuwei.menu || {};
       'xlink:href="#vertical2"'
     ],
 
+    'deleteGroup': ['Delete',
+      function (allNodes) {
+        var node = getContextTarget(allNodes);
+        if (util.isEmpty(node) || node.copying) {
+          return false;
+        }
+        return isWholeGroupEraseTarget(node);
+      },
+      'danger',
+      'far fa-trash-alt fa-lg fa-fw'
+    ],
+
     'erase': ['Erase',
       function (allNodes) {
         var node = getContextTarget(allNodes);
         if (node.copying ||
           util.isEmpty(node) ||
           (allNodes.length === 1 && util.notEmpty(node) && node.copying)) {
+          return false;
+        }
+        if (isWholeGroupEraseTarget(node)) {
           return false;
         }
         if (isContextTimelineSegment(allNodes) || isContextContentsTarget(allNodes)) {
@@ -4808,6 +4909,7 @@ wuwei.menu = wuwei.menu || {};
     registerClick('.pulldown.new .operators .operator.Upload', () => {
       wuwei.menu.upload.open();
     });
+    ensureFlockDeleteOperator();
     // flockIcon
     registerClick('#flockIcon', flockClicked);
     registerClick('.pulldown.flock .header i.fa-times', closeFlockClicked);
@@ -4855,6 +4957,9 @@ wuwei.menu = wuwei.menu || {};
     });
     registerClick('.pulldown.flock .operators .operator.Ungroup', () => {
       ContextOperate('ungroup');
+    });
+    registerClick('.pulldown.flock .operators .operator.DeleteGroup', () => {
+      ContextOperate('deleteSelectedGroups');
     });
     registerClick('.pulldown.flock .operators .operator.Copy', () => {
       ContextOperate('copy');
