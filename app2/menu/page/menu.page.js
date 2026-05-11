@@ -26,22 +26,69 @@ wuwei.menu.page = wuwei.menu.page || {};
     }
   }
 
-  function buildPageSlots() {
-    const current = wuwei.common.current;
-    const pages = current.pages || {};
-    const keys = Object.keys(pages)
-      .map(Number)
-      .filter(Number.isFinite)
-      .sort((a, b) => a - b);
+  function getPages() {
+    const current = wuwei.common.current || {};
+    let pages;
 
-    const maxpp = keys.length ? keys[keys.length - 1] : 1;
-    const slots = new Array(maxpp).fill(null);
+    if (wuwei.note && typeof wuwei.note.ensurePagesArray === 'function') {
+      pages = wuwei.note.ensurePagesArray(current);
+    }
+    else if (Array.isArray(current.pages)) {
+      pages = current.pages;
+    }
+    else if (current.pages && typeof current.pages === 'object') {
+      pages = Object.keys(current.pages)
+        .sort(function (a, b) {
+          const na = Number(a);
+          const nb = Number(b);
+          if (Number.isFinite(na) && Number.isFinite(nb)) { return na - nb; }
+          return String(a).localeCompare(String(b));
+        })
+        .map(function (key) { return current.pages[key]; })
+        .filter(Boolean);
+      current.pages = pages;
+    }
+    else {
+      pages = [];
+      current.pages = pages;
+    }
 
-    keys.forEach(pp => {
-      slots[pp - 1] = pages[String(pp)];
+    pages.forEach(function (page, index) {
+      if (page) {
+        page.pp = index + 1;
+      }
     });
 
-    return slots;
+    return pages;
+  }
+
+
+  function getPageByRef(pageRef) {
+    const pages = getPages();
+    const ref = String(pageRef || '').trim();
+    const pp = Number(pageRef);
+
+    if (ref) {
+      const byId = pages.find(function (page) {
+        return page && page.id === ref;
+      });
+      if (byId) {
+        return byId;
+      }
+    }
+
+    if (Number.isFinite(pp) && pp > 0) {
+      return pages.find(function (page) {
+        return page && Number(page.pp) === pp;
+      }) || pages[pp - 1] || null;
+    }
+
+    return null;
+  }
+
+
+  function buildPageSlots() {
+    return getPages().slice();
   }
 
 
@@ -77,7 +124,7 @@ wuwei.menu.page = wuwei.menu.page || {};
   function editPage(pp, ev) {
     stopEvent(ev);
     var pageEl = document.getElementById('page-pane');
-    var page = wuwei.common.current.pages[pp];
+    var page = getPageByRef(pp);
     var param = page;
 
     if (!page) {
@@ -96,11 +143,13 @@ wuwei.menu.page = wuwei.menu.page || {};
     stopEvent(ev);
     const pageNo = Number(pp) || 1;
 
-    if (!wuwei.common.current.pages || !wuwei.common.current.pages[String(pageNo)]) {
+    const page = getPageByRef(pageNo);
+
+    if (!page) {
       return;
     }
 
-    wuwei.note.copyPage(pageNo);
+    wuwei.note.copyPage(page.id);
     menu.updateResetview('reset');
 
     if ('simulation' === common.graph.mode && typeof draw.restart === 'function') {
@@ -145,10 +194,14 @@ wuwei.menu.page = wuwei.menu.page || {};
       name = form.name.value,
       description = form.description.value;
     const current = wuwei.common.current;
-    current.pages[pp].name = name;
-    current.pages[pp].description = description;
+    const page = getPageByRef(pp);
+    if (!page) {
+      return;
+    }
+    page.name = name;
+    page.description = description;
     let page_name = document.querySelector('#page_name');
-    if (+pp === current.page.pp) {
+    if (current.page && page.id === current.page.id) {
       page_name.querySelector('.name').innerHTML = name;
       let descriptionEl = page_name.querySelector('.description')
       descriptionEl.innerHTML = description;
@@ -172,7 +225,11 @@ wuwei.menu.page = wuwei.menu.page || {};
 
   function openPage(pp, ev) {
     stopEvent(ev)
-    wuwei.note.openPage(pp);
+    const page = getPageByRef(pp);
+    if (!page) {
+      return;
+    }
+    wuwei.note.openPage(page.id);
     close_list();
   }
 
@@ -180,19 +237,17 @@ wuwei.menu.page = wuwei.menu.page || {};
   function removePage(pp, ev) {
     stopEvent(ev);
 
-    const current = wuwei.common.current;
     const pageNo = Number(pp) || 1;
 
-    if (!current.pages || !current.pages[String(pageNo)]) {
+    const page = getPageByRef(pageNo);
+
+    if (!page) {
       return;
     }
 
-    wuwei.note.removePage(pageNo);
+    wuwei.note.removePage(page.id);
 
-    if (pageArray && pageArray.length >= pageNo) {
-      pageArray[pageNo - 1] = null;
-    }
-
+    pageArray = buildPageSlots();
     rerenderList();
     menu.updateResetview('reset');
     menu.refreshPagenation();
