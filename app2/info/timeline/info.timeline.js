@@ -196,6 +196,10 @@ wuwei.info.timeline = wuwei.info.timeline || {};
   }
 
   function renderPointPreview(host, mediaNode, timing) {
+    function t(str) {
+      return wuwei.nls.translate(str);
+    }
+
     var source, startAt, endAt;
     if (menu.timeline && typeof menu.timeline.cleanupEmbeddedPreview === 'function') {
       menu.timeline.cleanupEmbeddedPreview(pointPreviewState, host);
@@ -220,7 +224,7 @@ wuwei.info.timeline = wuwei.info.timeline || {};
       });
       return;
     }
-    host.innerHTML = '<div class="timeline-preview-note">Open player / Open in new tab を使用してください。</div>';
+    host.innerHTML = '<div class="timeline-preview-note">' + t('Please use Open player / Open in new tab.') + '</div>';
   }
 
   function openPoint(point) {

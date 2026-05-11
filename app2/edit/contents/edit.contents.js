@@ -388,6 +388,10 @@ wuwei.edit.contents = wuwei.edit.contents || {};
   }
 
   function saveContentTarget() {
+    function t(str) {
+      return wuwei.nls.translate(str);
+    }
+
     var pageNumberEl = $('pageNumber');
     var anchorHrefEl = $('anchorHref');
     var htmlMarker = isHtmlContentTarget(currentPoint);
@@ -419,7 +423,7 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     if (htmlMarker) {
       anchorHref = normalizeAnchorHref(anchorHrefEl.value || '');
       if (!anchorHref) {
-        window.alert('HTML contentTargetには # で始まる anchorHref を指定してください。');
+        window.alert(t('HTML contentTarget must specify anchorHref starting with #.'));
         return false;
       }
       currentPoint.anchorHref = anchorHref;

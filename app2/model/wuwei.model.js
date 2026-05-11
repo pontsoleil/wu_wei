@@ -50,7 +50,7 @@ wuwei.model = (function () {
         height: defaultSize.height
       },
       visible: true,
-      label: translate("新規トピック"),
+      label: translate("New Topic"),
       description: {
         format: "asciidoc",
         body: ""

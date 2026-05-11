@@ -60,9 +60,9 @@ colorPalettePicker = (function (options) {
         // button: '<button name="colorpalettebutton" class="{buttonClass}" data-toggle="dropdown">{buttonText}</button>',
         buttonClass: 'btn btn-secondary dropdown-toggle',
         buttonPreviewName: 'colorpaletteselected',
-        buttonText: '色選択',
+        buttonText: 'Select colour',
         // dropdownHeader: '<h5 class="dropdown-header text-center">{dropdownTitle}</h5>',
-        dropdownTitle: '',
+        dropdownTitle: 'Standard colours',
         // menu: '<ul class="list-inline" style="padding-left:4px;padding-right:4px;margin-bottom:0px;">',
         // item: '<li class="list-inline-item"><div name="picker_{name}" style="background-color:{color};width:20px;height:20px;border-radius:5px;border: 1px solid #666;margin: 0px;cursor:pointer" data-toggle="tooltip" title="{name}" data-color="{color}"></div></li>',
         palette: [
@@ -86,8 +86,13 @@ colorPalettePicker = (function (options) {
     }
 
     var initModule = function (element, params) {
+        function t(str) {
+            return wuwei.nls.translate(str);
+        }
 
         var options = Object.assign({}, defaults, params);
+        options.dropdownTitle = t(options.dropdownTitle);
+        options.buttonText = t(options.buttonText);
 
         // button configuration
         var btn = document.createElement('button');

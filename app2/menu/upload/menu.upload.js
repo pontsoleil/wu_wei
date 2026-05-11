@@ -76,9 +76,13 @@ wuwei.menu.upload = wuwei.menu.upload || {};
 
 
   function warnCompressedArchive(file) {
+    function t(str) {
+      return wuwei.nls.translate(str);
+    }
+
     const name = file && file.name ? ' (' + file.name + ')' : '';
-    const message = 'Upload File では zip / tar などの圧縮ファイルは対象外です。' +
-      'ノート ZIP を復元する場合は、ノートのアップロード機能を使用してください。' + name;
+    const message = t('Upload File does not accept compressed files such as zip or tar.') + ' ' +
+      t('To restore a note ZIP, use the note upload function.') + name;
 
     if (menu.snackbar && typeof menu.snackbar.open === 'function') {
       menu.snackbar.open({ type: 'warning', message: message });

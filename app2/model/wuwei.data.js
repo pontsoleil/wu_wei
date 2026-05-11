@@ -161,6 +161,18 @@ wuwei.data = (function () {
 
   // functions
   const connectIo = (namespace) => {
+    function t(str) {
+      return wuwei.nls.translate(str);
+    }
+
+    function formatMessage(key, values) {
+      var message = t(key);
+      Object.keys(values || {}).forEach(function (name) {
+        message = message.replace('{' + name + '}', values[name]);
+      });
+      return message;
+    }
+
     // local function
     const publishSocketStatus = (status) => {
       console.log('-- socket status %s', status);
@@ -183,7 +195,7 @@ wuwei.data = (function () {
       if (user) {
         let user_id = user.user_id,
           chatDiv = document.getElementById('chat'),
-          entryMessage = user.name + "さんが入室しました。";
+          entryMessage = formatMessage('{name} joined the room.', { name: user.name });
         chatDiv.classList.remove('w3-hide');
         chatDiv.classList.add('w3-show');
         wuwei.menu.chat.markup.appendMsg(entryMessage);
@@ -217,7 +229,7 @@ wuwei.data = (function () {
         value = JSON.parse(value);
         let sender = value.sender;
         if (sender && sender.name) {
-          menu.chat.markup.appendMsg(`${sender.name}さん　ノートを読み込みました`);
+          menu.chat.markup.appendMsg(formatMessage('{name} loaded the note.', { name: sender.name }));
         }
         value = value.value;
         model.toLoad(value);
@@ -232,7 +244,7 @@ wuwei.data = (function () {
         value = JSON.parse(value);
         let sender = value.sender;
         if (sender && sender.name) {
-          menu.chat.markup.appendMsg(`${sender.name}が作成`);
+          menu.chat.markup.appendMsg(formatMessage('{name} created', { name: sender.name }));
         }
         value = value.value;
         model.toCreate(value);
@@ -247,7 +259,7 @@ wuwei.data = (function () {
         value = JSON.parse(value);
         let sender = value.sender;
         if (sender && sender.name) {
-          menu.chat.markup.appendMsg(`${sender.name}が変更`);
+          menu.chat.markup.appendMsg(formatMessage('{name} modified', { name: sender.name }));
         }
         value = value.value;
         model.toModify(value);
@@ -262,7 +274,7 @@ wuwei.data = (function () {
         value = JSON.parse(value);
         let sender = value.sender;
         if (sender && sender.name) {
-          menu.chat.markup.appendMsg(`${sender.name}が削除`);
+          menu.chat.markup.appendMsg(formatMessage('{name} deleted', { name: sender.name }));
         }
         value = value.value;
         model.toRemove(value);

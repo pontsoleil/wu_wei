@@ -24,9 +24,13 @@ wuwei.menu.timeline = wuwei.menu.timeline || {};
   function deleteTimePoint(pointOrId) { return timeline.deleteTimePoint(pointOrId); }
 
   function deleteSelectedPoint() {
+    function t(str) {
+      return wuwei.nls.translate(str);
+    }
+
     var point = timeline.getSelectedTimelinePoint();
     if (!point) { return false; }
-    if (!window.confirm('この時刻点を削除しますか？')) { return false; }
+    if (!window.confirm(t('Delete this time point?'))) { return false; }
     return timeline.deleteTimePoint(point);
   }
 

@@ -505,18 +505,22 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
   }
 
   function bindTimelineShellEvents(host) {
+    function t(str) {
+      return wuwei.nls.translate(str);
+    }
+
     if (!host || host.dataset.timelineBound === '1') {
       return;
     }
     host.dataset.timelineBound = '1';
 
     host.addEventListener('click', function (ev) {
-      var t = ev.target;
-      if (!t) {
+      var target = ev.target;
+      if (!target) {
         return;
       }
 
-      if (t.id === 'editTimelineAxisSave') {
+      if (target.id === 'editTimelineAxisSave') {
         if (saveAxis()) {
           wuwei.log.storeLog({ operation: 'edit' });
         }
@@ -524,7 +528,7 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
         return;
       }
 
-      if (t.id === 'editTimelinePointSave') {
+      if (target.id === 'editTimelinePointSave') {
         if (savePoint()) {
           wuwei.log.storeLog({ operation: 'edit' });
         }
@@ -532,7 +536,7 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
         return;
       }
 
-      if (t.id === 'editTimelinePointDelete') {
+      if (target.id === 'editTimelinePointDelete') {
         if (deletePoint()) {
           wuwei.log.storeLog({ operation: 'edit' });
         }
@@ -540,21 +544,21 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
         return;
       }
 
-      if (t.id === 'editTimelineCaptureToStart') {
+      if (target.id === 'editTimelineCaptureToStart') {
         capturePreviewTime('start');
         ev.preventDefault();
         return;
       }
 
-      if (t.id === 'editTimelineCaptureToEnd') {
+      if (target.id === 'editTimelineCaptureToEnd') {
         capturePreviewTime('end');
         ev.preventDefault();
         return;
       }
 
-      if (t.id === 'editTimelineCaptureThumbnail') {
+      if (target.id === 'editTimelineCaptureThumbnail') {
         if (!capturePreviewThumbnailToCurrentPoint()) {
-          window.alert('この preview からはサムネを作成できません。mp4 などの HTML5 動画で試してください。');
+          window.alert(t('This preview cannot create a thumbnail. Please try an HTML5 video such as mp4.'));
         }
         ev.preventDefault();
         return;
@@ -562,25 +566,25 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
     });
 
     host.addEventListener('change', function (ev) {
-      var t = ev.target;
-      if (!t) {
+      var target = ev.target;
+      if (!target) {
         return;
       }
 
-      if (t.id === 'editTimelinePointMediaStartText') {
+      if (target.id === 'editTimelinePointMediaStartText') {
         onPointStartTextChanged();
         return;
       }
-      if (t.id === 'editTimelinePointMediaEndText') {
+      if (target.id === 'editTimelinePointMediaEndText') {
         onPointEndTextChanged();
         return;
       }
-      if (t.id === 'editTimelinePointDurationText') {
+      if (target.id === 'editTimelinePointDurationText') {
         onPointDurationTextChanged();
         return;
       }
-      if (t.id === 'applyToTimelineGroup') {
-        applyToTimelineGroup = !!t.checked;
+      if (target.id === 'applyToTimelineGroup') {
+        applyToTimelineGroup = !!target.checked;
         return;
       }
     });
@@ -855,12 +859,16 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
   }
 
   function renderUnknownPreview(host, mediaNode) {
+    function t(str) {
+      return wuwei.nls.translate(str);
+    }
+
     var resource = (mediaNode && mediaNode.resource) || {};
     var resourceUri = resource.uri || resource.canonicalUri || '';
     host.innerHTML = '<div class="edit-timeline-preview-slot edit-timeline-preview-note">' +
-      'この映像形式は埋め込み preview に未対応です。<br>' +
+      t('This video format is not supported in embedded preview.') + '<br>' +
       (resourceUri
-        ? '<a href="' + String(resourceUri).replace(/"/g, '&quot;') + '" target="_blank" rel="noopener">元の映像を開く</a>'
+        ? '<a href="' + String(resourceUri).replace(/"/g, '&quot;') + '" target="_blank" rel="noopener">' + t('Open source video') + '</a>'
         : '') +
       '</div>';
   }
@@ -1208,16 +1216,20 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
   }
 
   function deletePoint() {
+    function t(str) {
+      return wuwei.nls.translate(str);
+    }
+
     var record = resolveSegment(currentTarget);
 
     if (!record) {
       return false;
     }
     if (record.segment.axisRole === 'start' || record.segment.axisRole === 'end') {
-      window.alert('start / end は削除できません。');
+      window.alert(t('start / end cannot be deleted.'));
       return false;
     }
-    if (!window.confirm('この時刻点を削除しますか？')) {
+    if (!window.confirm(t('Delete this time point?'))) {
       return false;
     }
 

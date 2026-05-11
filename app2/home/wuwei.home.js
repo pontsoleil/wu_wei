@@ -962,6 +962,10 @@ wuwei.home = (function () {
   }
 
   function buildDummyResources(param) {
+    function t(str) {
+      return wuwei.nls.translate(str);
+    }
+
     param = param || {};
     const targetYear = param.year || year || new Date().getFullYear();
     const targetMonth = param.month || month || (new Date().getMonth() + 1);
@@ -1030,7 +1034,7 @@ wuwei.home = (function () {
         id: 'dummy-web-sambuichi',
         day: 3,
         name: 'sambuichi.jp top page',
-        comment: '一般のホームページ例。selected preview は iframe で表示する。',
+        comment: t('sambuichi.jp top page sample. The selected preview is displayed in an iframe.'),
         url: 'https://www.sambuichi.jp/',
         option: 'webpage',
         contenttype: 'text/html',
@@ -1041,7 +1045,7 @@ wuwei.home = (function () {
         id: 'dummy-pdf-meti',
         day: 4,
         name: 'METI report PDF',
-        comment: '外部 PDF 例。selected preview は PDF を iframe で表示する。',
+        comment: t('External PDF sample. The selected preview is displayed as a PDF iframe.'),
         url: 'https://www.meti.go.jp/meti_lib/report/2021FY/000417.pdf',
         option: 'external',
         contenttype: 'application/pdf',
@@ -1052,7 +1056,7 @@ wuwei.home = (function () {
         id: 'dummy-pdf-ipa',
         day: 7,
         name: 'Ouranos ecosystem dataspaces RAM white paper PDF',
-        comment: 'IPA の PDF 例。selected preview は PDF ビューで表示する。',
+        comment: t('IPA PDF sample. The selected preview is displayed in the PDF view.'),
         url: 'https://www.ipa.go.jp/digital/architecture/Individual-link/h5f8pg0000003h0k-att/ouranos-ecosystem-dataspaces-ram-white-paper.pdf',
         option: 'external',
         contenttype: 'application/pdf',
@@ -1063,7 +1067,7 @@ wuwei.home = (function () {
         id: 'dummy-web-ipa-html',
         day: 9,
         name: 'Ouranos ecosystem dataspaces RAM white paper HTML',
-        comment: '一般の HTML ページ例。selected preview は iframe で表示する。',
+        comment: t('General HTML page sample. The selected preview is displayed in an iframe.'),
         url: 'https://www.ipa.go.jp/digital/architecture/reports/ouranos-ecosystem-dataspaces-ram-white-paper.html',
         option: 'webpage',
         contenttype: 'text/html',
@@ -1073,8 +1077,8 @@ wuwei.home = (function () {
       {
         id: 'dummy-video-vimeo',
         day: 12,
-        name: '小栗判官（7段目・照手車引き）',
-        comment: 'Vimeo 動画例。selected preview は Vimeo 埋め込み iframe を使用する。',
+        name: t('Oguri Hangan, act 7, Terute kuruma-hiki'),
+        comment: t('Vimeo video sample. The selected preview uses a Vimeo embedded iframe.'),
         url: 'https://vimeo.com/933802755',
         option: 'external',
         contenttype: 'video/vimeo',
@@ -1086,7 +1090,7 @@ wuwei.home = (function () {
         id: 'dummy-image-generated',
         day: 15,
         name: 'Generated image sample',
-        comment: 'image viewer の確認用。selected preview は img 要素で表示する。',
+        comment: t('Image viewer sample. The selected preview is displayed using an img element.'),
         url: sampleImage,
         option: 'external',
         contenttype: 'image/svg+xml',
@@ -1098,7 +1102,7 @@ wuwei.home = (function () {
         id: 'dummy-thumbnail-generated',
         day: 18,
         name: 'Generated thumbnail sample',
-        comment: 'thumbnail viewer の確認用。selected preview は thumbnail 画像のみ表示する。',
+        comment: t('Thumbnail viewer sample. The selected preview displays only the thumbnail image.'),
         url: sampleThumbnail,
         option: 'external',
         contenttype: 'image/svg+xml',

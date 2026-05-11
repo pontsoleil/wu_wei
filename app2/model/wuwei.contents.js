@@ -867,7 +867,7 @@ wuwei.contents = wuwei.contents || {};
       : null;
     if (!isContentTargetResourceNode(documentNode)) {
       if (!option.silent) {
-        window.alert('contents 対象のコンテンツを 1 件選択してから contents を作成してください。');
+        window.alert(t('Select one contents target content before creating contents.'));
       }
       return null;
     }

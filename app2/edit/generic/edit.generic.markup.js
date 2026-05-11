@@ -350,7 +350,7 @@ wuwei.edit.generic.markup = ( function () {
   }
 
   function t(str) {
-    return wuwei.edit.markup.translate(str);
+    return wuwei.nls.translate(str);
   }
 
   return {

@@ -54,6 +54,10 @@ wuwei.edit.timeline.markup = (function () {
   }
 
   function pointPanelHtml() {
+    function t(str) {
+      return wuwei.nls.translate(str);
+    }
+
     return [
       '<section id="edit-timeline-point" class="edit-panel edit-timeline-panel" style="display:none;">',
         '<h3 class="edit-panel-title">' + t('Timeline segment') + '</h3>',
@@ -123,7 +127,7 @@ wuwei.edit.timeline.markup = (function () {
         '</div>',
 
         '<div class="edit-field">',
-          '<label for="applyToTimelineGroup" class="w3-col s10">グループメンバーへ一括適用</label>',
+          '<label for="applyToTimelineGroup" class="w3-col s10">' + t('Apply to group members') + '</label>',
           '<input type="checkbox" id="applyToTimelineGroup" class="w3-col s2">',
         '</div>',
         

@@ -1172,6 +1172,10 @@ wuwei.menu = wuwei.menu || {};
 
 
   function downloadNode(nodeId) {
+    function t(str) {
+      return wuwei.nls.translate(str);
+    }
+
     if (graph.mode === 'view' || state.viewOnly || state.published) {
       return false;
     }
@@ -1181,7 +1185,7 @@ wuwei.menu = wuwei.menu || {};
 
     const url = getDownloadUrl(node);
     if (!url) {
-      wuwei.menu.snackbar.open({ type: 'warning', message: 'ダウンロードURLがありません' });
+      wuwei.menu.snackbar.open({ type: 'warning', message: t('No download URL.') });
       return;
     }
 

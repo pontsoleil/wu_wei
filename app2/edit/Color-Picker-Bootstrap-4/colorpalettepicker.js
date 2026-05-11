@@ -176,6 +176,10 @@
 
     var methods = {
         init: function (params) {
+            function t(str) {
+                return wuwei.nls.translate(str);
+            }
+
             const defaults = $.fn.colorPalettePicker.defaults;
             if (params.bootstrap == 3) {
                 $(this).addClass('dropdown');
@@ -186,6 +190,8 @@
                 defaults.item = '<li><div name="picker_{name}" style="background-color:{color};width:20px;height:20px;border-radius:5px;border: 1px solid #666;margin: 0px;cursor:pointer" data-toggle="tooltip" title="{name}" data-color="{color}"></div></li>';
             }
             const options = $.extend({}, defaults, params);
+            options.dropdownTitle = t(options.dropdownTitle);
+            options.buttonText = t(options.buttonText);
 
             // button configuration
             const btn = $(options.button
@@ -277,8 +283,8 @@
         palette: colorPencil36,
         lines: 6,
         bootstrap: 4,
-        dropdownTitle: '標準色',
-        buttonText: '色選択',
+        dropdownTitle: 'Standard colours',
+        buttonText: 'Select colour',
         buttonClass: 'btn btn-outline-light dropdown-toggle',
         buttonPreviewName: 'colorpaletteselected',
         button: '<button type="button" name="colorpalettebutton" class="{buttonClass}" data-toggle="dropdown"><!-- span name="{buttonPreviewName}" style="display:inline-block">■ </span -->{buttonText}</button>',

@@ -1433,7 +1433,7 @@ wuwei.timeline = wuwei.timeline || {};
     videoNode = videoNode || getSelectedVideoNode();
     if (!videoNode) {
       if (!option.silent) {
-        window.alert('基準映像を 1 件選択してから timeline を作成してください。');
+        window.alert(t('Select one base video before creating timeline.'));
       }
       return null;
     }

@@ -40,6 +40,10 @@ wuwei.edit.contents.markup = (function () {
   }
 
   function pageMarkerPanelHtml() {
+    function t(str) {
+      return wuwei.nls.translate(str);
+    }
+
     return [
       '<section id="edit-contents-page-marker" class="edit-panel edit-contents-panel" style="display:none;">',
         '<h3 class="edit-panel-title">' + t('Contents PageMarker') + '</h3>',
@@ -52,7 +56,7 @@ wuwei.edit.contents.markup = (function () {
             '<textarea id="description_body" name="description.body" class="w3-col s12 edit-value" rows="3"></textarea>',
           '</div>',
           '<div id="pageNumberRow" class="w3-row">',
-            '<label for="pageNumber" class="w3-col s4">ページ番号:</label>',
+            '<label for="pageNumber" class="w3-col s4">' + t('Page number') + ':</label>',
             '<input type="number" id="pageNumber" name="pageNumber" class="w3-col s8 edit-value" min="1" step="1">',
           '</div>',
           '<div id="anchorHrefRow" class="w3-row" style="display:none;">',
@@ -88,7 +92,7 @@ wuwei.edit.contents.markup = (function () {
             '<input type="number" id="labelOffset" name="labelOffset" class="w3-col s3 edit-value" step="1" min="0">',
           '</div>',
           '<div class="w3-row">',
-            '<label for="applyToContentsGroup" class="w3-col s10">グループメンバーへ一括適用</label>',
+            '<label for="applyToContentsGroup" class="w3-col s10">' + t('Apply to group members') + '</label>',
             '<input type="checkbox" id="applyToContentsGroup" class="w3-col s2">',
           '</div>',
         '</form>',
