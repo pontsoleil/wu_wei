@@ -66,38 +66,37 @@ wuwei.init.registry = (function () {
     }
   };
 
-  waitForElement = function (selector, timeoutMs) {
-    var timeout = Number(timeoutMs || 2000);
-    var started = Date.now();
+  waitForElement = function (selector) {
+    return new Promise(function (resolve) {
+      var started = Date.now();
+      var timer;
+      var found = document.querySelector(selector);
 
-    return new Promise(function (resolve, reject) {
-      function check() {
-        var el = document.querySelector(selector);
-        if (el) {
-          resolve(el);
-          return;
-        }
-        if (Date.now() - started > timeout) {
-          reject(new Error('Required DOM element not found: ' + selector));
-          return;
-        }
-        window.requestAnimationFrame(check);
+      if (found) {
+        resolve(found);
+        return;
       }
-      check();
+
+      timer = window.setInterval(function () {
+        found = document.querySelector(selector);
+        if (found || Date.now() - started > 3000) {
+          window.clearInterval(timer);
+          resolve(found || null);
+        }
+      }, 20);
     });
   };
 
-  beforeModule = function (name) {
-    if (name === 'wuwei.menu') {
-      return waitForElement('#menu');
+  beforeModule = async function (name) {
+    if ('wuwei.menu' === name) {
+      await waitForElement('#menu');
     }
-    if (name === 'wuwei.draw') {
-      return waitForElement('svg#draw');
+    else if ('wuwei.draw' === name) {
+      await waitForElement('svg#draw');
     }
-    if (name === 'wuwei.note') {
-      return waitForElement('g#canvas');
+    else if ('wuwei.note' === name) {
+      await waitForElement('g#canvas');
     }
-    return Promise.resolve();
   };
 
   run = async function (param) {

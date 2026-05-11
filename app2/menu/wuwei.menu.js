@@ -1574,8 +1574,8 @@ wuwei.menu = wuwei.menu || {};
     if (!resource || !util.isLocalHost() || !isUploadedContent([node]) || !isOfficeResource(resource)) {
       return '';
     }
-    if (wuwei.contents && typeof wuwei.contents.getDocumentViewerUrl === 'function') {
-      previewUri = wuwei.contents.getDocumentViewerUrl(node, pageNumber || 1);
+    if (wuwei.contents && typeof wuwei.contents.getContentTargetViewerUrl === 'function') {
+      previewUri = wuwei.contents.getContentTargetViewerUrl(node, pageNumber || 1);
       if (previewUri && /\.pdf(?:#|$|\?)/i.test(previewUri)) {
         return previewUri;
       }
@@ -3658,6 +3658,9 @@ wuwei.menu = wuwei.menu || {};
   function getContextContentsSpec(allNodes) {
     var target = getContextTarget(allNodes);
     if (util.isEmpty(target)) {
+      return null;
+    }
+    if (!wuwei.contents || typeof wuwei.contents.getContentTargetSpec !== 'function') {
       return null;
     }
     return wuwei.contents.getContentTargetSpec(target);
