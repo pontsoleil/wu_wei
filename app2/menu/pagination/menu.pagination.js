@@ -36,7 +36,7 @@ wuwei.menu.pagination = wuwei.menu.pagination || {};
         return false;
       }
 
-      const selectedValue = String(currentDiv.dataset.value || '');
+      const selectedValue = String((currentDiv.dataset && currentDiv.dataset.value) || '');
       if (!selectedValue) {
         return false;
       }
@@ -148,4 +148,4 @@ wuwei.menu.pagination = wuwei.menu.pagination || {};
   ns.prev = prev;
   ns.create = create;
 })(wuwei.menu.pagination);
-// menu.pagination.js last modified 2026-05-11
+// menu.pagination.js revised 2026-05-11

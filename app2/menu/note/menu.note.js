@@ -61,35 +61,20 @@ wuwei.menu.note = wuwei.menu.note || {};
   }
 
   function renderCurrentNoteNow() {
-    if (wuwei.model && typeof wuwei.model.setGraphFromCurrentPage === 'function') {
-      wuwei.model.setGraphFromCurrentPage();
+    if (wuwei.common.graph.mode === 'simulation' &&
+      wuwei.draw && typeof wuwei.draw.restart === 'function') {
+      wuwei.draw.restart();
+      return;
     }
-    if (wuwei.draw) {
-      if ('simulation' === wuwei.common.graph.mode && typeof wuwei.draw.restart === 'function') {
-        wuwei.draw.restart();
-      }
-      else if (typeof wuwei.draw.refresh === 'function') {
-        wuwei.draw.refresh();
-      }
-      else if (typeof wuwei.draw.redraw === 'function') {
-        wuwei.draw.redraw();
-      }
+    if (wuwei.draw && typeof wuwei.draw.refresh === 'function') {
+      wuwei.draw.refresh();
+      return;
+    }
+    if (wuwei.draw && typeof wuwei.draw.reRender === 'function') {
+      wuwei.draw.reRender();
     }
   }
 
-  function refreshPaginationSafely() {
-    try {
-      if (wuwei.menu && typeof wuwei.menu.refreshPagenation === 'function') {
-        wuwei.menu.refreshPagenation();
-      }
-      if (wuwei.menu && typeof wuwei.menu.checkPage === 'function') {
-        wuwei.menu.checkPage();
-      }
-    }
-    catch (e) {
-      console.error('refresh pagination failed:', e);
-    }
-  }
 
   function noteSearchFilters() {
     let startDate = (document.getElementById('note-date-start')?.value || '').trim();
@@ -715,16 +700,20 @@ wuwei.menu.note = wuwei.menu.note || {};
     const descEl = document.querySelector('#note_name .description');
     if (nameEl) { nameEl.textContent = current.note_name || ''; }
     if (descEl) { descEl.textContent = current.description || ''; }
-    if (Array.isArray(current.pages) && current.pages.length > 1) {
-      wuwei.menu.refreshPagenation();
+
+    // Draw the note body first.  Pagination is auxiliary UI and must not be
+    // allowed to block rendering of the imported canvas.
+    renderCurrentNoteNow();
+
+    try {
+      if (Array.isArray(current.pages) && current.pages.length > 1) {
+        wuwei.menu.refreshPagenation();
+      }
+      wuwei.menu.checkPage();
     }
-    if ('simulation' === wuwei.common.graph.mode) {
-      wuwei.draw.restart();
+    catch (e) {
+      console.error('pagination/checkPage failed after import:', e);
     }
-    else {
-      wuwei.draw.refresh();
-    }
-    wuwei.menu.checkPage();
   }
 
   function importZipFile(file) {
@@ -897,12 +886,24 @@ wuwei.menu.note = wuwei.menu.note || {};
           descEl.textContent = current.description || '';
         }
 
+        // Draw immediately after note normalisation.  The pagination refresh is
+        // delayed and guarded so that a pagination error cannot leave the note
+        // canvas blank.
         renderCurrentNoteNow();
 
         setTimeout(() => {
-          refreshPaginationSafely();
-          renderCurrentNoteNow();
-        }, 100);
+          try {
+            if (Array.isArray(current.pages) && current.pages.length > 1) {
+              wuwei.menu.refreshPagenation();
+            }
+
+            renderCurrentNoteNow();
+            wuwei.menu.checkPage();
+          }
+          catch (e) {
+            console.error('pagination/checkPage failed after load:', e);
+          }
+        }, 1000);
       })
       .catch(err => {
         console.error(err);

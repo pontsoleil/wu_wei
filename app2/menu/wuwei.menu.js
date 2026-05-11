@@ -103,7 +103,6 @@ wuwei.menu = wuwei.menu || {};
     pageClicked,
     closePageClicked,
     refreshPagenation,
-    restartCurrentDraw,
     checkPage,
     /** new */
     newClicked,
@@ -1359,17 +1358,9 @@ wuwei.menu = wuwei.menu || {};
           return false;
         }
 
-        const raw = button.dataset && button.dataset.value;
-        const pp = Number(raw);
-
-        if (!Number.isFinite(pp)) {
-          thumbnail.innerHTML = '';
-          thumbnail.style.display = 'none';
-          return false;
-        }
-
+        const pageId = String((button.dataset && button.dataset.value) || '');
         const pages = Array.isArray(current.pages) ? current.pages : [];
-        const page = pages[pp - 1] || pages.find(function (item) { return Number(item && item.pp) === pp; });
+        const page = pages.find(function (item) { return item && item.id === pageId; });
         if (!page) {
           thumbnail.innerHTML = '';
           thumbnail.style.display = 'none';
@@ -1453,12 +1444,12 @@ wuwei.menu = wuwei.menu || {};
     });
   }
 
-  restartCurrentDraw = function () {
+  function restartCurrentDraw() {
     if (model && typeof model.restartCurrentDraw === 'function') {
       model.restartCurrentDraw();
       return;
     }
-    if (draw && typeof draw.restart === 'function' && graph && graph.mode === 'simulation') {
+    if (draw && typeof draw.restart === 'function') {
       draw.restart();
       return;
     }
@@ -1466,15 +1457,23 @@ wuwei.menu = wuwei.menu || {};
       draw.refresh();
       return;
     }
-    if (draw && typeof draw.redraw === 'function') {
-      draw.redraw();
+    if (draw && typeof draw.reRender === 'function') {
+      draw.reRender();
     }
-  };
+  }
 
   refreshPagenation = function () {
-    const current = wuwei.common.current || {};
+    const current = wuwei.common.current;
     const pages = Array.isArray(current.pages) ? current.pages : [];
-    const total = pages.length;
+    const records = pages.map(function (page, index) {
+      page.pp = index + 1;
+      return {
+        name: page.pp,
+        value: page.id
+      };
+    }).filter(function (record) { return !!record.value; });
+
+    const total = records.length;
     const paginationEl = document.getElementById('Pagination');
 
     if (!paginationEl) {
@@ -1495,24 +1494,10 @@ wuwei.menu = wuwei.menu || {};
     let count = 1,
       per_page = 5;
 
-    pages.forEach(function (page, index) {
-      if (page) { page.pp = index + 1; }
-    });
-
-    const activePage = pages.find(function (page) { return page && page.id === current.currentPage; }) || current.page || pages[0];
-    const currentIndex = Math.max(0, pages.findIndex(function (page) {
-      return page && activePage && page.id === activePage.id;
+    const activeIndex = Math.max(0, pages.findIndex(function (page) {
+      return page && page.id === current.currentPage;
     }));
-    const current_page = 1 + Math.floor(currentIndex / per_page);
-
-    const records = pages.map(function (page, index) {
-      return {
-        name: (page && page.pp) || (index + 1),
-        value: page && page.id
-      };
-    }).filter(function (record) {
-      return !!record.value;
-    });
+    const current_page = 1 + Math.floor(activeIndex / per_page);
 
     wuwei.menu.pagination.create(
       'Pagination',
@@ -1521,11 +1506,9 @@ wuwei.menu = wuwei.menu || {};
       per_page,
       total,
       function (pageId) {
-        if (!pageId) {
+        const openedPage = note.openPage(String(pageId));
+        if (!openedPage) {
           return;
-        }
-        if (note && typeof note.openPage === 'function') {
-          note.openPage(String(pageId));
         }
         restartCurrentDraw();
 
