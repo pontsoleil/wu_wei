@@ -60,6 +60,37 @@ wuwei.menu.note = wuwei.menu.note || {};
     }
   }
 
+  function renderCurrentNoteNow() {
+    if (wuwei.model && typeof wuwei.model.setGraphFromCurrentPage === 'function') {
+      wuwei.model.setGraphFromCurrentPage();
+    }
+    if (wuwei.draw) {
+      if ('simulation' === wuwei.common.graph.mode && typeof wuwei.draw.restart === 'function') {
+        wuwei.draw.restart();
+      }
+      else if (typeof wuwei.draw.refresh === 'function') {
+        wuwei.draw.refresh();
+      }
+      else if (typeof wuwei.draw.redraw === 'function') {
+        wuwei.draw.redraw();
+      }
+    }
+  }
+
+  function refreshPaginationSafely() {
+    try {
+      if (wuwei.menu && typeof wuwei.menu.refreshPagenation === 'function') {
+        wuwei.menu.refreshPagenation();
+      }
+      if (wuwei.menu && typeof wuwei.menu.checkPage === 'function') {
+        wuwei.menu.checkPage();
+      }
+    }
+    catch (e) {
+      console.error('refresh pagination failed:', e);
+    }
+  }
+
   function noteSearchFilters() {
     let startDate = (document.getElementById('note-date-start')?.value || '').trim();
     let endDate = (document.getElementById('note-date-end')?.value || '').trim();
@@ -866,20 +897,12 @@ wuwei.menu.note = wuwei.menu.note || {};
           descEl.textContent = current.description || '';
         }
 
+        renderCurrentNoteNow();
+
         setTimeout(() => {
-          if (Array.isArray(current.pages) && current.pages.length > 1) {
-            wuwei.menu.refreshPagenation();
-          }
-
-          if ('simulation' === wuwei.common.graph.mode) {
-            wuwei.draw.restart();
-          }
-          else {
-            wuwei.draw.refresh();
-          }
-
-          wuwei.menu.checkPage();
-        }, 1000);
+          refreshPaginationSafely();
+          renderCurrentNoteNow();
+        }, 100);
       })
       .catch(err => {
         console.error(err);

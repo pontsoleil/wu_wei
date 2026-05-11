@@ -103,6 +103,7 @@ wuwei.menu = wuwei.menu || {};
     pageClicked,
     closePageClicked,
     refreshPagenation,
+    restartCurrentDraw,
     checkPage,
     /** new */
     newClicked,
@@ -1452,15 +1453,28 @@ wuwei.menu = wuwei.menu || {};
     });
   }
 
-  refreshPagenation = function () {
-    const current = wuwei.common.current;
-    const pages = Array.isArray(current.pages) ? current.pages : [];
-    const pageNos = pages.map(function (page, index) {
-      page.pp = index + 1;
-      return page.pp;
-    });
+  restartCurrentDraw = function () {
+    if (model && typeof model.restartCurrentDraw === 'function') {
+      model.restartCurrentDraw();
+      return;
+    }
+    if (draw && typeof draw.restart === 'function' && graph && graph.mode === 'simulation') {
+      draw.restart();
+      return;
+    }
+    if (draw && typeof draw.refresh === 'function') {
+      draw.refresh();
+      return;
+    }
+    if (draw && typeof draw.redraw === 'function') {
+      draw.redraw();
+    }
+  };
 
-    const total = pageNos.length;
+  refreshPagenation = function () {
+    const current = wuwei.common.current || {};
+    const pages = Array.isArray(current.pages) ? current.pages : [];
+    const total = pages.length;
     const paginationEl = document.getElementById('Pagination');
 
     if (!paginationEl) {
@@ -1481,15 +1495,24 @@ wuwei.menu = wuwei.menu || {};
     let count = 1,
       per_page = 5;
 
+    pages.forEach(function (page, index) {
+      if (page) { page.pp = index + 1; }
+    });
+
     const activePage = pages.find(function (page) { return page && page.id === current.currentPage; }) || current.page || pages[0];
-    const currentPP = Number((activePage && activePage.pp) || pageNos[0]);
-    const currentIndex = Math.max(0, pageNos.indexOf(currentPP));
+    const currentIndex = Math.max(0, pages.findIndex(function (page) {
+      return page && activePage && page.id === activePage.id;
+    }));
     const current_page = 1 + Math.floor(currentIndex / per_page);
 
-    const records = pageNos.map(pp => ({
-      name: pp,
-      value: pp
-    }));
+    const records = pages.map(function (page, index) {
+      return {
+        name: (page && page.pp) || (index + 1),
+        value: page && page.id
+      };
+    }).filter(function (record) {
+      return !!record.value;
+    });
 
     wuwei.menu.pagination.create(
       'Pagination',
@@ -1497,8 +1520,13 @@ wuwei.menu = wuwei.menu || {};
       count,
       per_page,
       total,
-      function (pp) {
-        note.openPage(+pp);
+      function (pageId) {
+        if (!pageId) {
+          return;
+        }
+        if (note && typeof note.openPage === 'function') {
+          note.openPage(String(pageId));
+        }
         restartCurrentDraw();
 
         checkPage();
