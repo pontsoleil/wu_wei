@@ -16,6 +16,8 @@ wuwei.init.registry = (function () {
     getModules,
     getRequiredApis,
     assertRequiredApis,
+    waitForElement,
+    beforeModule,
     run,
     listNames;
 
@@ -24,11 +26,11 @@ wuwei.init.registry = (function () {
       { name: 'wuwei.util', target: function () { return wuwei.util; } },
       { name: 'wuwei.model', target: function () { return wuwei.model; } },
       { name: 'wuwei.data', target: function () { return wuwei.data; } },
-      { name: 'wuwei.note', target: function () { return wuwei.note; } },
       { name: 'wuwei.video', target: function () { return wuwei.video; } },
       { name: 'wuwei.log', target: function () { return wuwei.log; } },
       { name: 'wuwei.menu', target: function () { return wuwei.menu; } },
       { name: 'wuwei.draw', target: function () { return wuwei.draw; } },
+      { name: 'wuwei.note', target: function () { return wuwei.note; } },
       { name: 'wuwei.edit', target: function () { return wuwei.edit; } },
       { name: 'wuwei.info', target: function () { return wuwei.info; } },
       { name: 'wuwei.filter', target: function () { return wuwei.filter; } },
@@ -64,6 +66,40 @@ wuwei.init.registry = (function () {
     }
   };
 
+  waitForElement = function (selector, timeoutMs) {
+    var timeout = Number(timeoutMs || 2000);
+    var started = Date.now();
+
+    return new Promise(function (resolve, reject) {
+      function check() {
+        var el = document.querySelector(selector);
+        if (el) {
+          resolve(el);
+          return;
+        }
+        if (Date.now() - started > timeout) {
+          reject(new Error('Required DOM element not found: ' + selector));
+          return;
+        }
+        window.requestAnimationFrame(check);
+      }
+      check();
+    });
+  };
+
+  beforeModule = function (name) {
+    if (name === 'wuwei.menu') {
+      return waitForElement('#menu');
+    }
+    if (name === 'wuwei.draw') {
+      return waitForElement('svg#draw');
+    }
+    if (name === 'wuwei.note') {
+      return waitForElement('g#canvas');
+    }
+    return Promise.resolve();
+  };
+
   run = async function (param) {
     var modules = getModules();
     var i, item, mod;
@@ -75,6 +111,7 @@ wuwei.init.registry = (function () {
       mod = item.target();
 
       if (mod && typeof mod.initModule === 'function') {
+        await beforeModule(item.name);
         console.log('[init] ' + item.name);
         await Promise.resolve(mod.initModule(param || ''));
       }
@@ -100,4 +137,4 @@ wuwei.init.registry = (function () {
     listNames: listNames
   };
 })();
-// wuwei.init.registry.js last updated 2026-04-05
+// wuwei.init.registry.js last modified 2026-05-11

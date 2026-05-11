@@ -36,8 +36,8 @@ wuwei.menu.pagination = wuwei.menu.pagination || {};
         return false;
       }
 
-      const selectedValue = String((currentDiv.dataset && currentDiv.dataset.value) || '');
-      if (!selectedValue) {
+      const selectedValue = currentDiv.dataset.value;
+      if (typeof selectedValue === 'undefined' || selectedValue === null || '' === selectedValue) {
         return false;
       }
 
@@ -54,15 +54,13 @@ wuwei.menu.pagination = wuwei.menu.pagination || {};
       let nextCurrentPage = 1;
 
       if (Array.isArray(custom_records) && custom_records.length > 0) {
-        const idx = custom_records.findIndex(record => String(record.value) === selectedValue);
+        const idx = custom_records.findIndex(record => String(record.value) === String(selectedValue));
         if (idx >= 0) {
           nextCurrentPage = 1 + Math.floor(idx / per_page);
         }
       } else {
         const numericValue = Number(selectedValue);
-        if (Number.isFinite(numericValue)) {
-          nextCurrentPage = 1 + Math.floor((numericValue - 1) / (count * per_page));
-        }
+        nextCurrentPage = Number.isFinite(numericValue) ? 1 + Math.floor((numericValue - 1) / (count * per_page)) : 1;
       }
 
       create(pagination_id, nextCurrentPage, count, per_page, total, cb, custom_records);

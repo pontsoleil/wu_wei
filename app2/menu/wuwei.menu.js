@@ -103,6 +103,7 @@ wuwei.menu = wuwei.menu || {};
     pageClicked,
     closePageClicked,
     refreshPagenation,
+    restartCurrentDraw,
     checkPage,
     /** new */
     newClicked,
@@ -415,6 +416,20 @@ wuwei.menu = wuwei.menu || {};
       draw.refresh();
     }
   }
+
+  restartCurrentDraw = function () {
+    if (draw && graph.mode === 'simulation' && typeof draw.restart === 'function') {
+      draw.restart();
+      return;
+    }
+    if (draw && typeof draw.refresh === 'function') {
+      draw.refresh();
+      return;
+    }
+    if (draw && typeof draw.reRender === 'function') {
+      draw.reRender();
+    }
+  };
 
   closeContextMenu = function () {
     var menuEl = document.getElementById('ContextMenu');
@@ -1444,43 +1459,20 @@ wuwei.menu = wuwei.menu || {};
     });
   }
 
-  function restartCurrentDraw() {
-    if (model && typeof model.restartCurrentDraw === 'function') {
-      model.restartCurrentDraw();
-      return;
-    }
-    if (draw && typeof draw.restart === 'function') {
-      draw.restart();
-      return;
-    }
-    if (draw && typeof draw.refresh === 'function') {
-      draw.refresh();
-      return;
-    }
-    if (draw && typeof draw.reRender === 'function') {
-      draw.reRender();
-    }
-  }
-
   refreshPagenation = function () {
     const current = wuwei.common.current;
     const pages = Array.isArray(current.pages) ? current.pages : [];
-    const records = pages.map(function (page, index) {
-      page.pp = index + 1;
-      return {
-        name: page.pp,
-        value: page.id
-      };
-    }).filter(function (record) { return !!record.value; });
-
-    const total = records.length;
     const paginationEl = document.getElementById('Pagination');
+
+    pages.forEach(function (page, index) {
+      page.pp = index + 1;
+    });
 
     if (!paginationEl) {
       return;
     }
 
-    if (total < 2) {
+    if (pages.length < 2) {
       let pagination = document.querySelector('#Pagination .pagination');
       if (pagination) {
         pagination.innerHTML = '';
@@ -1491,23 +1483,29 @@ wuwei.menu = wuwei.menu || {};
 
     paginationEl.style.left = '1rem';
 
-    let count = 1,
-      per_page = 5;
+    const per_page = 5;
+    const count = 1;
+    const activePage = pages.find(function (page) { return page && page.id === current.currentPage; }) || current.page || pages[0];
+    const currentIndex = Math.max(0, pages.indexOf(activePage));
+    const current_page = 1 + Math.floor(currentIndex / per_page);
 
-    const activeIndex = Math.max(0, pages.findIndex(function (page) {
-      return page && page.id === current.currentPage;
-    }));
-    const current_page = 1 + Math.floor(activeIndex / per_page);
+    const records = pages.map(function (page, index) {
+      page.pp = index + 1;
+      return {
+        name: page.pp,
+        value: page.id
+      };
+    });
 
     wuwei.menu.pagination.create(
       'Pagination',
       current_page,
       count,
       per_page,
-      total,
+      pages.length,
       function (pageId) {
-        const openedPage = note.openPage(String(pageId));
-        if (!openedPage) {
+        const opened = note.openPage(String(pageId || ''));
+        if (!opened) {
           return;
         }
         restartCurrentDraw();
@@ -3218,33 +3216,8 @@ wuwei.menu = wuwei.menu || {};
     this.uploadFile = files[0];
   };
 
-  function ensureFlockDeleteOperator() {
-    var operators = document.querySelector('.pulldown.flock .operators');
-    var reference;
-    var el;
-
-    if (!operators || operators.querySelector('.operator.DeleteGroup')) {
-      return;
-    }
-
-    el = document.createElement('div');
-    el.className = 'operator DeleteGroup danger';
-    el.innerHTML = '<i class="far fa-trash-alt fa-lg fa-fw" aria-hidden="true"></i>' +
-      wuwei.nls.translate('Delete');
-
-    reference = operators.querySelector('.operator.Ungroup') ||
-      operators.querySelector('.operator.Copy');
-    if (reference && reference.nextSibling) {
-      operators.insertBefore(el, reference.nextSibling);
-    }
-    else {
-      operators.appendChild(el);
-    }
-  }
-
   /** flock */
   flockClicked = function () {
-    ensureFlockDeleteOperator();
     state.Selecting = true;
     const menu = document.getElementById('flockMenu');
     menuOpen(menu);
@@ -3329,9 +3302,14 @@ wuwei.menu = wuwei.menu || {};
   /** zoom in/out/reset */
   updateResetview = function (zoom) {
     const current = wuwei.common.current;
-    const scale = util.getPageTransform(current.page).scale;
     const resetIcon = document.querySelector('.resetview.icon');
     const scaleEl = document.querySelector('.resetview.scale');
+    const scale = util.getPageTransform(current && current.page).scale;
+
+    if (!resetIcon || !scaleEl) {
+      return;
+    }
+
     if (scale < 0.99 || 1.01 < scale) {
       scaleEl.innerHTML = util.precisionRound(scale, 2);
       scaleEl.style.display = 'block';
@@ -4920,7 +4898,6 @@ wuwei.menu = wuwei.menu || {};
     registerClick('.pulldown.new .operators .operator.Upload', () => {
       wuwei.menu.upload.open();
     });
-    ensureFlockDeleteOperator();
     // flockIcon
     registerClick('#flockIcon', flockClicked);
     registerClick('.pulldown.flock .header i.fa-times', closeFlockClicked);

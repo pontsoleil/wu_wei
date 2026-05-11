@@ -60,22 +60,6 @@ wuwei.menu.note = wuwei.menu.note || {};
     }
   }
 
-  function renderCurrentNoteNow() {
-    if (wuwei.common.graph.mode === 'simulation' &&
-      wuwei.draw && typeof wuwei.draw.restart === 'function') {
-      wuwei.draw.restart();
-      return;
-    }
-    if (wuwei.draw && typeof wuwei.draw.refresh === 'function') {
-      wuwei.draw.refresh();
-      return;
-    }
-    if (wuwei.draw && typeof wuwei.draw.reRender === 'function') {
-      wuwei.draw.reRender();
-    }
-  }
-
-
   function noteSearchFilters() {
     let startDate = (document.getElementById('note-date-start')?.value || '').trim();
     let endDate = (document.getElementById('note-date-end')?.value || '').trim();
@@ -694,26 +678,32 @@ wuwei.menu.note = wuwei.menu.note || {};
     return false;
   }
 
+  function renderCurrentNoteNow() {
+    if (!wuwei.draw) {
+      return;
+    }
+    if ('simulation' === wuwei.common.graph.mode && typeof wuwei.draw.restart === 'function') {
+      wuwei.draw.restart();
+    }
+    else if (typeof wuwei.draw.refresh === 'function') {
+      wuwei.draw.refresh();
+    }
+  }
+
   function applyImportedNote(noteJson) {
     const current = wuwei.note.updateNote(noteJson);
     const nameEl = document.querySelector('#note_name .name');
     const descEl = document.querySelector('#note_name .description');
     if (nameEl) { nameEl.textContent = current.note_name || ''; }
     if (descEl) { descEl.textContent = current.description || ''; }
-
-    // Draw the note body first.  Pagination is auxiliary UI and must not be
-    // allowed to block rendering of the imported canvas.
     renderCurrentNoteNow();
-
-    try {
+    setTimeout(function () {
       if (Array.isArray(current.pages) && current.pages.length > 1) {
         wuwei.menu.refreshPagenation();
       }
+      renderCurrentNoteNow();
       wuwei.menu.checkPage();
-    }
-    catch (e) {
-      console.error('pagination/checkPage failed after import:', e);
-    }
+    }, 0);
   }
 
   function importZipFile(file) {
@@ -886,24 +876,16 @@ wuwei.menu.note = wuwei.menu.note || {};
           descEl.textContent = current.description || '';
         }
 
-        // Draw immediately after note normalisation.  The pagination refresh is
-        // delayed and guarded so that a pagination error cannot leave the note
-        // canvas blank.
         renderCurrentNoteNow();
 
         setTimeout(() => {
-          try {
-            if (Array.isArray(current.pages) && current.pages.length > 1) {
-              wuwei.menu.refreshPagenation();
-            }
+          if (Array.isArray(current.pages) && current.pages.length > 1) {
+            wuwei.menu.refreshPagenation();
+          }
 
-            renderCurrentNoteNow();
-            wuwei.menu.checkPage();
-          }
-          catch (e) {
-            console.error('pagination/checkPage failed after load:', e);
-          }
-        }, 1000);
+          renderCurrentNoteNow();
+          wuwei.menu.checkPage();
+        }, 0);
       })
       .catch(err => {
         console.error(err);
@@ -974,3 +956,5 @@ wuwei.menu.note = wuwei.menu.note || {};
   ns.remove = remove;
 })(wuwei.menu.note);
 // menu.note.js last modified 2026-05-11
+
+// menu.note.js revised 2026-05-11

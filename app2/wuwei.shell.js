@@ -252,7 +252,11 @@ wuwei.shell = (function () {
               }
 
               var wuweiDiv = document.getElementById('wuwei');
-              wuweiDiv.style.display = 'flex';
+              if (wuweiDiv) {
+                wuweiDiv.style.display = 'flex';
+              }
+
+              refreshCurrentDraw();
 
               setTimeout(function () {
                 var settingEl = document.getElementById('setting');
@@ -277,7 +281,7 @@ wuwei.shell = (function () {
                   document.querySelector('#note_name .description').innerHTML = common.current.description || '';
                 }
 
-                if (Object.keys(wuwei.common.current.pages).length > 1) {
+                if (Array.isArray(wuwei.common.current.pages) && wuwei.common.current.pages.length > 1) {
                   wuwei.menu.refreshPagenation();
                 }
                 refreshCurrentDraw();
@@ -333,3 +337,5 @@ wuwei.shell = (function () {
     initModule: initModule
   };
 })();
+
+// wuwei.shell.js last modified 2026-05-11

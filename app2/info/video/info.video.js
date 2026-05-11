@@ -46,6 +46,7 @@ wuwei.info.video = wuwei.info.video || {};
     parseTimeToSeconds,
     formatSeconds,
     getMediaDuration,
+    getInfoVideoField,
     getPlayerEl,
     getStartInputEl,
     getEndInputEl,
@@ -809,4 +810,4 @@ wuwei.info.video = wuwei.info.video || {};
   ns.saveRange = saveRange;
   ns.initModule = initModule;
 })(wuwei.info.video);
-// info.video.js last modified 2026-04-06
+// info.video.js last modified 2026-05-11

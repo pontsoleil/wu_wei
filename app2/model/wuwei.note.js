@@ -1859,12 +1859,22 @@ wuwei.note = (function () {
   }
 
   function updateCanvasTransform(translate) {
-    const t = translate || { x: 0, y: 0, scale: 1 };
+    const t = normalizeTransform(translate || { x: 0, y: 0, scale: 1 });
+    const selector = '#' + state.canvasId;
+    let canvas;
+
+    graph.transform = t;
+    if (current && current.page) { current.page.transform = t; }
+
     if (typeof d3 !== 'undefined' && d3.select) {
-      d3.select(`#${state.canvasId}`)
-        .attr('transform', `translate(${t.x},${t.y}) scale(${t.scale})`);
-      graph.transform = normalizeTransform(t);
-      if (current && current.page) { current.page.transform = normalizeTransform(t); }
+      canvas = d3.select(selector);
+      if (canvas && canvas.node()) {
+        canvas.attr('transform', 'translate(' + t.x + ',' + t.y + ') scale(' + t.scale + ')');
+      }
+
+      if (state.zoomSvg && state.zoomBehavior && d3.zoomIdentity && typeof state.zoomSvg.call === 'function') {
+        state.zoomSvg.call(state.zoomBehavior.transform, d3.zoomIdentity.translate(t.x, t.y).scale(t.scale));
+      }
     }
   }
 

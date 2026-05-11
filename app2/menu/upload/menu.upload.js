@@ -48,11 +48,57 @@ wuwei.menu.upload = wuwei.menu.upload || {};
   }
 
 
+  function isCompressedArchiveFile(file) {
+    const name = String((file && file.name) || '').toLowerCase();
+    const type = String((file && file.type) || '').toLowerCase();
+
+    return (
+      /\.(zip|tar|tgz|tbz2|txz|gz|gzip|bz2|xz|7z|rar|zst|cab|iso)$/i.test(name) ||
+      /\.tar\.(gz|gzip|bz2|xz|zst)$/i.test(name) ||
+      [
+        'application/zip',
+        'application/x-zip-compressed',
+        'application/x-tar',
+        'application/gzip',
+        'application/x-gzip',
+        'application/x-bzip2',
+        'application/x-xz',
+        'application/x-7z-compressed',
+        'application/vnd.rar',
+        'application/x-rar-compressed',
+        'application/zstd',
+        'application/x-zstd',
+        'application/vnd.ms-cab-compressed',
+        'application/x-iso9660-image'
+      ].indexOf(type) >= 0
+    );
+  }
+
+
+  function warnCompressedArchive(file) {
+    const name = file && file.name ? ' (' + file.name + ')' : '';
+    const message = 'Upload File では zip / tar などの圧縮ファイルは対象外です。' +
+      'ノート ZIP を復元する場合は、ノートのアップロード機能を使用してください。' + name;
+
+    if (menu.snackbar && typeof menu.snackbar.open === 'function') {
+      menu.snackbar.open({ type: 'warning', message: message });
+    } else {
+      alert(message);
+    }
+  }
+
+
   function upload(form) {
     const fileInput = form.querySelector('input[type="file"][name="file"]');
     const f = fileInput && fileInput.files ? fileInput.files[0] : null;
     const requestedLabelEl = form.querySelector('input[name="fullname"]');
     const requestedLabel = requestedLabelEl ? String(requestedLabelEl.value || '').trim() : '';
+
+    if (f && isCompressedArchiveFile(f)) {
+      warnCompressedArchive(f);
+      return;
+    }
+
     let noteIdEl = form.querySelector('input[name="note_id"]');
     if (!noteIdEl) {
       noteIdEl = document.createElement('input');
@@ -154,4 +200,4 @@ wuwei.menu.upload = wuwei.menu.upload || {};
   ns.upload = upload;
   ns.close = close;
 })(wuwei.menu.upload);
-// menu.upload.js revised 2026-04-07
+// menu.upload.js revised 2026-05-11

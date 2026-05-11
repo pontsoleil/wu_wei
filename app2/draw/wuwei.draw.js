@@ -549,6 +549,29 @@ wuwei.draw = wuwei.draw || {};
     }
   }
 
+  function applyCurrentPageTransform() {
+    var page = getCurrentPage();
+    var t = util && typeof util.getPageTransform === 'function'
+      ? util.getPageTransform(page)
+      : (page && page.transform) || { x: 0, y: 0, scale: 1 };
+    var x = Number(t && t.x);
+    var y = Number(t && t.y);
+    var scale = Number(t && t.scale);
+
+    if (!isFinite(x)) { x = 0; }
+    if (!isFinite(y)) { y = 0; }
+    if (!isFinite(scale) || scale <= 0) { scale = 1; }
+
+    canvas = d3.select('g#' + state.canvasId);
+    if (canvas && canvas.node()) {
+      canvas.attr('transform', 'translate(' + x + ',' + y + ') scale(' + scale + ')');
+    }
+    graph.transform = { x: x, y: y, scale: scale };
+    if (common.current && common.current.page) {
+      common.current.page.transform = graph.transform;
+    }
+  }
+
   restart = function () {
     if ('draw' === graph.mode) {
       console.log('--- restart Quit due to draw mode');
@@ -558,6 +581,7 @@ wuwei.draw = wuwei.draw || {};
     console.log('--- restart');
 
     model.setGraphFromCurrentPage();
+    applyCurrentPageTransform();
     clearGraphLayer();
 
     var
@@ -999,6 +1023,7 @@ wuwei.draw = wuwei.draw || {};
     if (model && typeof model.setGraphFromCurrentPage === 'function') {
       model.setGraphFromCurrentPage();
     }
+    applyCurrentPageTransform();
     clearGraphLayer();
 
     /** Node */
@@ -1507,4 +1532,6 @@ wuwei.draw = wuwei.draw || {};
   ns.disableZoom = disableZoom;
   ns.initModule = initModule;
 })(wuwei.draw);
-// wuwei.draw.js revised 2026-04-16
+// wuwei.draw.js revised 2026-05-11
+
+// wuwei.draw.js last modified 2026-05-11

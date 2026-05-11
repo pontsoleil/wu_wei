@@ -315,6 +315,10 @@ wuwei.menu.markup = (function () {
         <i class="far fa-object-ungroup fa-fw"></i>
         <span>${translate('Ungroup')}</span>
       </div>
+      <div class="operator DeleteGroup danger selecting">
+        <i class="far fa-trash-alt fa-fw"></i>
+        <span>${translate('Delete')}</span>
+      </div>
       </div>
       <div class="operator-section">
         <div class="operator-section-title">${translate('Other')}</div>
@@ -426,4 +430,4 @@ wuwei.menu.markup = (function () {
     nFormatter: nFormatter
   };
 }());
-// wuwei.menu.markup.js 2026-04-16
+// wuwei.menu.markup.js last modified 2026-05-11
