@@ -157,19 +157,28 @@ wuwei.menu.page.markup = (function () {
           name = page.name || '',
           description = page.description || '',
           util = wuwei.util;
-        let thumbnail = page.thumbnail || '';
-        if (!thumbnail) {
-          thumbnail = (wuwei.note && typeof wuwei.note.buildPageThumbnail === 'function')
-            ? wuwei.note.buildPageThumbnail(page)
-            : util.buildMiniatureSvgString({
-              width: 200,
-              height: 200,
-              useDataOnly: true,
-              showViewFrame: true,
-              backgroundFill: '#ffffff',
-              nodes: page.nodes,
-              links: page.links
-            });
+        let thumbnail = (typeof page.thumbnail === 'undefined' || page.thumbnail === null)
+          ? ''
+          : String(page.thumbnail);
+
+        // Prefer the thumbnail already stored in wuwei.common.current.pages[].
+        // Only build a fallback when the page has no thumbnail value at all.
+        if (!thumbnail && wuwei.note && typeof wuwei.note.buildPageThumbnail === 'function') {
+          thumbnail = wuwei.note.buildPageThumbnail(page);
+        }
+        else if (!thumbnail && util && typeof util.buildMiniatureSvgString === 'function') {
+          thumbnail = util.buildMiniatureSvgString({
+            width: 200,
+            height: 200,
+            useDataOnly: true,
+            showViewFrame: true,
+            backgroundFill: '#ffffff',
+            page: page,
+            nodes: page.nodes || [],
+            links: page.links || []
+          });
+        }
+        if (thumbnail && !page.thumbnail) {
           page.thumbnail = thumbnail;
         }
 
