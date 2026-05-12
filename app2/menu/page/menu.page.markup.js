@@ -22,6 +22,17 @@ wuwei.menu.page.markup = (function () {
 </div>
 `;
 
+  function escapeHtml(value) {
+    if (wuwei.util && typeof wuwei.util.escapeHtml === 'function') {
+      return wuwei.util.escapeHtml(value);
+    }
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
 
   function name_form(param) {
     var
@@ -58,94 +69,19 @@ wuwei.menu.page.markup = (function () {
     return html;
   }
 
-
-  //   function list_template(pages) {
-  //     function pageGallery(pages) {
-  //       const gallery = pages.map((page, index) => {
-  //         const slotPP = index + 1;
-
-  //         if (!page) {
-  //           return `
-  //         <div class="page blank">
-  //           <div id="page_${slotPP}" class="flip-card blank">
-  //             <div class="flip-card-inner">
-  //               <div class="flip-card-front">
-  //                 <p class="pp">${slotPP}</p>
-  //                 <p class="name"></p>
-  //                 <div class="thumbnail blank"></div>
-  //               </div>
-  //               <div class="flip-card-back">
-  //                 <div class="desc">
-  //                   <p class="pp">${slotPP}</p>
-  //                   <p class="name"></p>
-  //                   <p class="description"></p>
-  //                 </div>
-  //               </div>
-  //             </div>
-  //           </div>
-  //         </div>`;
-  //         }
-
-  //         const
-  //           pp = page.pp,
-  //           name = page.name || '',
-  //           description = page.description || '',
-  //           common = wuwei.common,
-  //           util = wuwei.util,
-  //           thumbnail = util.buildMiniatureSvgString({
-  //             width: 200,
-  //             height: 200,
-  //             nodes: page.nodes,
-  //             links: page.links
-  //           });
-
-  //         return `
-  //         <div class="page" onclick="wuwei.menu.page.openPage('${pp}', event); return false;">
-  //           <div id="page_${pp}" class="flip-card"
-  //               draggable="true">
-  //             <div class="flip-card-inner">
-  //               <div class="flip-card-front">
-  //                 <p class="pp">${pp}</p>
-  //                 <p class="name">${name}</p>
-  //                 <div class="thumbnail">${thumbnail}</div>
-  //               </div>
-  //               <div class="flip-card-back">
-  //                 <div class="desc">
-  //                   <p class="pp">${pp}</p>
-  //                   <p class="name">${name}</p>
-  //                   <p class="description">${description}</p>
-  //                 </div>
-  //                 <i onclick="wuwei.menu.page.editPage('${pp}', event); return false;"
-  //                   class="edit fas fa-signature w3-button w3-transparent w3-large"></i>
-  //                 <i onclick="wuwei.menu.page.removePage('${pp}', event); return false;"
-  //                   class="remove fas fa-trash w3-button w3-transparent w3-large"></i>
-  //               </div>
-  //             </div>
-  //           </div>
-  //         </div>`;
-  //       }).join('');
-  //       return gallery;
-  //     }
-
-  //     return `
-  // <div class="list w3-modal-content w3-animate-zoom w3-card-4">
-  //   <header class="w3-container">
-  //     <h2 class="w3-wide w3-margin-bottom">${translate('List of Pages')}</h2>
-  //     <i onclick="wuwei.menu.page.close_list(); return false;"
-  //         class="dismiss fas fa-times w3-right w3-button w3-transparent w3-large w3-margin-bottom">
-  //     </i>
-  //   </header>
-  //   <div id="gallery" class="${wuwei.common.state.iOS ? 'iOS' : ''}">${pageGallery(pages)}</div>
-  // </div>`;
-  //   }
   function list_template(pages, mode) {
     const listMode = mode || 'list';
+
+
+    function getPageThumbnailHtml(page) {
+      return String((page && page.thumbnail) || '');
+    }
 
     function pageGallery(pages) {
       const gallery = pages.map((page, index) => {
         const slotPP = index + 1;
 
-        // 削除済みスロット: 場所だけ空けて何も描かない
+        // Empty slot.
         if (!page) {
           return `
         <div class="page empty-slot" aria-hidden="true">
@@ -154,49 +90,28 @@ wuwei.menu.page.markup = (function () {
 
         const
           pp = page.pp,
+          pageId = page.id || '',
           name = page.name || '',
-          description = page.description || '',
-          util = wuwei.util;
-        let thumbnail = (typeof page.thumbnail === 'undefined' || page.thumbnail === null)
-          ? ''
-          : String(page.thumbnail);
+          description = page.description || '';
 
-        // Prefer the thumbnail already stored in wuwei.common.current.pages[].
-        // Only build a fallback when the page has no thumbnail value at all.
-        if (!thumbnail && wuwei.note && typeof wuwei.note.buildPageThumbnail === 'function') {
-          thumbnail = wuwei.note.buildPageThumbnail(page);
-        }
-        else if (!thumbnail && util && typeof util.buildMiniatureSvgString === 'function') {
-          thumbnail = util.buildMiniatureSvgString({
-            width: 200,
-            height: 200,
-            useDataOnly: true,
-            showViewFrame: true,
-            backgroundFill: '#ffffff',
-            page: page,
-            nodes: page.nodes || [],
-            links: page.links || []
-          });
-        }
-        if (thumbnail && !page.thumbnail) {
-          page.thumbnail = thumbnail;
-        }
+        const thumbnail = getPageThumbnailHtml(page);
 
         return `
         <div class="page" onclick="wuwei.menu.page.openPage('${pp}', event); return false;">
           <div id="page_${pp}" class="flip-card ${listMode}"
+              data-page-id="${escapeHtml(pageId)}" data-pp="${pp}"
               draggable="true" ondragstart="wuwei.menu.page.drag(event)">
             <div class="flip-card-inner">
               <div class="flip-card-front">
                 <p class="pp">${pp}</p>
-                <p class="name">${name}</p>
+                <p class="name">${escapeHtml(name)}</p>
                 <div class="thumbnail">${thumbnail}</div>
               </div>
               <div class="flip-card-back">
                 <div class="desc">
                   <p class="pp">${pp}</p>
-                  <p class="name">${name}</p>
-                  <p class="description">${description}</p>
+                  <p class="name">${escapeHtml(name)}</p>
+                  <p class="description">${escapeHtml(description)}</p>
                 </div>
                 <i onclick="wuwei.menu.page.editPage('${pp}', event); return false;"
                   class="edit fas fa-signature w3-button w3-transparent w3-large"
@@ -212,6 +127,7 @@ wuwei.menu.page.markup = (function () {
           </div>
         </div>`;
       }).join('');
+
       return gallery;
     }
 
@@ -238,7 +154,6 @@ wuwei.menu.page.markup = (function () {
   <div id="gallery" class="${wuwei.common.state.iOS ? 'iOS' : ''}">${pageGallery(pages)}</div>
 </div>`;
   }
-
 
   function translate(str) {
     return wuwei.nls.translate(str);

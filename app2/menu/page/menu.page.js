@@ -101,6 +101,26 @@ wuwei.menu.page = wuwei.menu.page || {};
   }
 
 
+  function ensurePageThumbnails() {
+    const pages = getPages();
+
+    if (wuwei.model && typeof wuwei.model.syncPageFromGraph === 'function') {
+      wuwei.model.syncPageFromGraph();
+    }
+
+    if (wuwei.note && typeof wuwei.note.updatePageThumbnail === 'function') {
+      wuwei.note.updatePageThumbnail();
+      pages.forEach(function (page) {
+        if (page && !String(page.thumbnail || '').trim()) {
+          wuwei.note.updatePageThumbnail(page);
+        }
+      });
+    }
+
+    return pages;
+  }
+
+
   function open() {
     const pageEl = document.getElementById('page-pane');
     pageEl.innerHTML = wuwei.menu.page.markup.template();
@@ -238,7 +258,6 @@ wuwei.menu.page = wuwei.menu.page || {};
     stopEvent(ev);
 
     const pageNo = Number(pp) || 1;
-
     const page = getPageByRef(pageNo);
 
     if (!page) {
@@ -249,6 +268,7 @@ wuwei.menu.page = wuwei.menu.page || {};
 
     pageArray = buildPageSlots();
     rerenderList();
+
     menu.updateResetview('reset');
     menu.refreshPagenation();
     menu.checkPage();
@@ -268,10 +288,8 @@ wuwei.menu.page = wuwei.menu.page || {};
       galleryHeight = wuwei.common.state.iOS ? window.innerHeight - 100 : window.innerHeight - 200,
       pageHeight = wuwei.common.state.iOS ? 108 : 216;
 
-    if (wuwei.note && typeof wuwei.note.updatePageThumbnail === 'function') {
-      wuwei.note.updatePageThumbnail();
-    }
     listMode = mode || 'list';
+    ensurePageThumbnails();
     pageArray = buildPageSlots();
 
     let rowcount = Math.floor(galleryHeight / pageHeight);

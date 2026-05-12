@@ -125,9 +125,11 @@ wuwei.draw = wuwei.draw || {};
   }
 
   function clearGraphLayer() {
-    d3.select('.Marker2').remove();
-    d3.selectAll('g.node').remove();
-    d3.selectAll('g.link').remove();
+    const canvasSel = d3.select('g#' + state.canvasId);
+
+    canvasSel.select('.Marker2').remove();
+    canvasSel.selectAll('g.node').remove();
+    canvasSel.selectAll('g.link').remove();
     clearSelectionMarkLayer();
   }
 
@@ -138,8 +140,10 @@ wuwei.draw = wuwei.draw || {};
   }
 
   function clearSelectionMarkLayer() {
-    d3.selectAll('g.node.selected circle.selected').remove();
-    d3.selectAll('g.node.selected').classed('selected', false);
+    const canvasSel = d3.select('g#' + state.canvasId);
+
+    canvasSel.selectAll('g.node.selected circle.selected').remove();
+    canvasSel.selectAll('g.node.selected').classed('selected', false);
     clearGroupSelectionMarkLayer();
   }
 
@@ -605,7 +609,7 @@ wuwei.draw = wuwei.draw || {};
     canvasSel = d3.select('g#' + state.canvasId);
     canvas = canvasSel;
 
-    d3.select('.Marker2').remove();
+    canvasSel.select('.Marker2').remove();
 
     // ----------------------------
     // nodes
@@ -1208,8 +1212,8 @@ wuwei.draw = wuwei.draw || {};
 
     graph.nodes = [];
     graph.links = [];
-    d3.selectAll('g.node').remove();
-    d3.selectAll('g.link').remove();
+    d3.select('g#' + state.canvasId).selectAll('g.node').remove();
+    d3.select('g#' + state.canvasId).selectAll('g.link').remove();
 
     setTimeout(function () {
       showNode([aNode]);
