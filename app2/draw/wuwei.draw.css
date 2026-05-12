@@ -1,11 +1,11 @@
 g.axis {
-  stroke: #eaf7f8;
+  stroke: #e8e7ea;
   stroke-width: 1;
   fill: none;
 }
 g.axis text {
   stroke: none;
-  fill: #eaf3f4;
+  fill: #e8e7ea;
 }
 /*#wuwei {
   display: flex;
