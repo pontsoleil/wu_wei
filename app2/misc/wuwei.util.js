@@ -1139,7 +1139,7 @@ wuwei.util = (function () {
 
   zoomin = function () {
     var
-      scale = setScale(1.2);
+      scale = setScale(1.25);
     setPageTransform(current.page, Object.assign({}, getPageTransform(current.page), { scale: scale }));
     return scale;
   };
@@ -1147,7 +1147,7 @@ wuwei.util = (function () {
 
   zoomout = function () {
     var
-      scale = setScale(0.98333);
+      scale = setScale(0.8);
     setPageTransform(current.page, Object.assign({}, getPageTransform(current.page), { scale: scale }));
     return scale;
   };
