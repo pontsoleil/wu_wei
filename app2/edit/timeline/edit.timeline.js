@@ -416,7 +416,10 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
     setInputValue('editTimelinePointMediaStart', String(mediaStart));
     setInputValue('editTimelinePointMediaEnd', String(mediaEnd));
     setInputValue('editTimelinePointDuration', String(duration));
-    $('editTimelinePointName').value = point.label || '';
+    $('editTimelinePointName').value = point.label ||
+      (menu.timeline && typeof menu.timeline.formatTime === 'function'
+        ? menu.timeline.formatTime(point.mediaStart || 0)
+        : '');
     $('editTimelinePointValue').value = getDescriptionBody(point);
     if (pointField('style_fill')) {
       pointField('style_fill').value = toHexColor(point.color || '#ffffff', '#ffffff');

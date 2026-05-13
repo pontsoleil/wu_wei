@@ -58,9 +58,9 @@
 
   <!-- <link type="text/css" rel="stylesheet" href="app2/filter/wuwei.filter.css" /> -->
 
-  <!-- <link type="text/css" rel="stylesheet" href="app2/search/wuwei.search.css" />
+  <link type="text/css" rel="stylesheet" href="app2/search/wuwei.search.css" />
   <link type="text/css" rel="stylesheet" href="app2/search/this_note/search.this_note.css" />
-  <link type="text/css" rel="stylesheet" href="app2/search/note/search.note.css" />
+  <!-- <link type="text/css" rel="stylesheet" href="app2/search/note/search.note.css" />
   <link type="text/css" rel="stylesheet" href="app2/search/uploaded/search.uploaded.css" /> -->
 
   <!-- third-party javascript -->
@@ -208,14 +208,20 @@
   <script type="text/javascript" src="app2/info/contents/info.contents.markup.js"></script>
   <script type="text/javascript" src="app2/info/video/info.video.js"></script>
   <script type="text/javascript" src="app2/info/video/info.video.markup.js"></script>
-  <!-- filter/search modules are not present in this build -->
+
+  <!-- search/filter modules -->
+  <script type="text/javascript" src="app2/search/wuwei.search.js"></script>
+  <script type="text/javascript" src="app2/search/wuwei.search.markup.js"></script>
+  <script type="text/javascript" src="app2/search/this_note/search.this_note.js"></script>
+  <script type="text/javascript" src="app2/search/this_note/search.this_note.markup.js"></script>
+
+  <script type="text/javascript" src="app2/filter/wuwei.filter.js"></script>
 
 </head>
 
 <body>
-
   <span id="noscript"></span>
-
+  
   <div id="home" style="display:none"></div>
 
   <div id="wuwei">
@@ -229,9 +235,10 @@
       </svg>
     </div>
 
-    <svg id="draw" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"></svg>
+    <svg id="draw" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+      <g id="canvas"></g>
+    </svg>
     <div id="menu"></div>
-
   </div>
 
   <!-- The following placeholders prevent null dereference in menu/edit modules -->
@@ -277,4 +284,4 @@
 </body>
 
 </html>
-<!-- Last modified 2026-04-05 -->
+<!-- Last modified 2026-05-11 -->

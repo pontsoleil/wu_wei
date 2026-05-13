@@ -533,8 +533,9 @@ wuwei.nls.JA = {
   'Contents module is not available.': 'Contentsモジュールを利用できません。',
   'Failed to add table of contents.': '目次の追加に失敗しました。',
   'Select colour': '色選択',
-  'HTML contentTarget must specify anchorHref starting with #.': 'HTML contentTargetには # で始まる anchorHref を指定してください。',
+  'HTML PageMarker must specify anchorHref starting with #.': 'HTML PageMarkerには # で始まる anchorHref を指定してください。',
   'Page number': 'ページ番号',
+  'Page sequence number': '順序番号',
   'Apply to group members': 'グループメンバーへ一括適用',
   'This preview cannot create a thumbnail. Please try an HTML5 video such as mp4.': 'この preview からはサムネを作成できません。mp4 などの HTML5 動画で試してください。',
   'This video format is not supported in embedded preview.': 'この映像形式は埋め込み preview に未対応です。',
@@ -559,5 +560,25 @@ wuwei.nls.JA = {
   '{name} loaded the note.': '{name}さん　ノートを読み込みました',
   '{name} created': '{name}が作成',
   '{name} modified': '{name}が変更',
-  '{name} deleted': '{name}が削除'
+  '{name} deleted': '{name}が削除',
+  'Target': '対象',
+
+  'Content kind': 'コンテンツ種別',
+
+  'Link condition': 'リンク条件',
+
+  'Show matching items': '一致するものだけ表示',
+
+  'Hide matching items': '一致するものを非表示',
+
+  'Show all page data': '対象ページの全データを表示',
+
+  'matches': '件',
+
+  'Enter search string': '検索文字列を入力',
+
+  'Office document': 'Office文書',
+  'Physical page 1 corresponds to': '物理1ページ目の表示ページ番号',
+
+
 };

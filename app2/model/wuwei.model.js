@@ -377,6 +377,93 @@ wuwei.model = (function () {
     });
   }
 
+  function getContentsVisibilityMembers(group) {
+    var page = common.current && common.current.page;
+    var sourceNodes = (page && page.nodes) ? page.nodes : graph.nodes;
+    var byId = {};
+    var out = [];
+
+    (sourceNodes || []).forEach(function (node) {
+      if (node && node.id) {
+        byId[node.id] = node;
+      }
+    });
+
+    if (group && Array.isArray(group.members)) {
+      group.members.forEach(function (member) {
+        var node = member && member.nodeId ? byId[member.nodeId] : null;
+        if (node) {
+          util.appendById(out, node);
+        }
+      });
+    }
+
+    (sourceNodes || []).forEach(function (node) {
+      if (node && node.type === 'PageMarker' && node.groupRef === group.id) {
+        util.appendById(out, node);
+      }
+    });
+
+    return out;
+  }
+
+  function getContentsVisibilityAxisLinks(group) {
+    return (graph.links || []).filter(function (link) {
+      return isContentsVisibilityAxisLink(link) && link.groupRef === group.id;
+    });
+  }
+
+  function getGroupVisibilityLinks(group) {
+    if (!group || !group.id) {
+      return [];
+    }
+    return (graph.links || []).filter(function (link) {
+      return !!(link && link.groupRef === group.id);
+    });
+  }
+
+  function appendRepresentativeNodes(group, nodesBucket, shown, hideConnectedLinks, linksBucket) {
+    var changed = false;
+    var representatives = getGroupRepresentativeNodes(group);
+
+    representatives.forEach(function (representative) {
+      var visibles;
+      var i;
+      var linked;
+
+      if (!representative) {
+        return;
+      }
+
+      visibles = [];
+      if (!shown && hideConnectedLinks) {
+        visibles = (findLinksByNode(representative) || {}).visibles || [];
+      }
+
+      if (representative.visible !== shown) {
+        setNodeShown(representative, shown);
+        changed = true;
+      }
+      util.appendById(nodesBucket, representative);
+
+      if (!shown && hideConnectedLinks) {
+        for (i = 0; i < visibles.length; i++) {
+          linked = visibles[i];
+          if (!linked) {
+            continue;
+          }
+          if (linked.visible) {
+            setLinkShown(linked, false);
+            changed = true;
+          }
+          util.appendById(linksBucket, linked);
+        }
+      }
+    });
+
+    return changed;
+  }
+
   function setTimelineFamilyVisible(group, visible, nodesBucket, linksBucket, hideConnectedLinks) {
     var changed = false;
     var members, axisLinks, member, linked, visibles, i, j;
@@ -3013,7 +3100,7 @@ wuwei.model = (function () {
      * Only a line drawn from Content to the Timeline/Contents axis pseudo link
      * means a relationship to the whole group.  In that case, connect the
      * visible line to the representative topic.  Lines drawn directly to
-     * ContentTarget/PageMarker, Segment, or the representative topic itself
+     * PageMarker, Segment, or the representative topic itself
      * remain direct node-to-node relationships.
      */
     if (isContentConnectionNode(source) && isTimelineOrContentsAxisTarget(target)) {
@@ -4289,6 +4376,43 @@ wuwei.model = (function () {
   }
 
 
+  function addGroupDragSnapshotNode(snapshot, node) {
+    if (!snapshot || !node || !node.id || snapshot.members[node.id]) {
+      return;
+    }
+    snapshot.members[node.id] = {
+      x: finiteOr(node.x, 0),
+      y: finiteOr(node.y, 0),
+      axisPos: Number.isFinite(Number(node.axisPos)) ? Number(node.axisPos) : null
+    };
+  }
+
+  function getGroupSourceNodeIds(group) {
+    var ids = [];
+    var seen = {};
+
+    function add(id) {
+      if (!id || seen[id]) {
+        return;
+      }
+      seen[id] = true;
+      ids.push(id);
+    }
+
+    if (!group) {
+      return ids;
+    }
+
+    /*
+     * The source Content of Timeline / Contents is intentionally not treated
+     * as a group operation target.  One Content node can have multiple
+     * Contents groups, so moving or aligning a group must not move the
+     * original Content node.
+     */
+
+    return ids;
+  }
+
   function buildGroupDragOrigin(group) {
     var snapshot = {
       members: {},
@@ -4302,26 +4426,11 @@ wuwei.model = (function () {
 
     (group.members || []).forEach(function (member) {
       var nodeId = (member && member.nodeId) ? member.nodeId : member;
-      var node = findNodeById(nodeId);
-      if (!node) {
-        return;
-      }
-      snapshot.members[nodeId] = {
-        x: finiteOr(node.x, 0),
-        y: finiteOr(node.y, 0),
-        axisPos: Number.isFinite(Number(node.axisPos)) ? Number(node.axisPos) : null
-      };
+      addGroupDragSnapshotNode(snapshot, findNodeById(nodeId));
     });
 
     getGroupRepresentativeNodes(group).forEach(function (node) {
-      if (!node || !node.id || snapshot.members[node.id]) {
-        return;
-      }
-      snapshot.members[node.id] = {
-        x: finiteOr(node.x, 0),
-        y: finiteOr(node.y, 0),
-        axisPos: Number.isFinite(Number(node.axisPos)) ? Number(node.axisPos) : null
-      };
+      addGroupDragSnapshotNode(snapshot, node);
     });
 
     if (group.origin) {
@@ -4400,6 +4509,23 @@ wuwei.model = (function () {
       group.axis.anchor.x = finiteOr(origin.axisAnchor.x, 0) + dx;
       group.axis.anchor.y = finiteOr(origin.axisAnchor.y, 0) + dy;
     }
+  }
+
+  function translateGroupBy(groupOrId, dx, dy) {
+    var group = ('string' === typeof groupOrId) ? findGroupById(groupOrId) : groupOrId;
+    var origin;
+
+    dx = Number(dx || 0);
+    dy = Number(dy || 0);
+
+    if (!group || !Number.isFinite(dx) || !Number.isFinite(dy) || (0 === dx && 0 === dy)) {
+      return false;
+    }
+
+    origin = buildGroupDragOrigin(group);
+    applyGroupTranslate(group, origin, dx, dy);
+    group.changed = true;
+    return true;
   }
 
   /**
@@ -7910,6 +8036,160 @@ wuwei.model = (function () {
     return null;
   }
 
+  function isContentsVisibilityPoint(node) {
+    return !!(node && node.type === 'PageMarker' && node.groupRef);
+  }
+
+  function isContentsVisibilityAxisLink(link) {
+    return !!(
+      link &&
+      link.type === 'Link' &&
+      (
+        link.linkType === 'contents-axis' ||
+        link.groupType === 'contentsAxis'
+      ) &&
+      link.groupRef
+    );
+  }
+
+  function getContentsVisibilityGroup(target) {
+    if (!target) {
+      return null;
+    }
+    if (isContentsVisibilityPoint(target)) {
+      return findGroupById(target.groupRef);
+    }
+    if (isContentsVisibilityAxisLink(target)) {
+      return findGroupById(target.groupRef);
+    }
+    return null;
+  }
+
+  function isGroupRepresentativeVisibilityNode(node) {
+    return !!(node && node.groupRef && node.groupRole === 'representative');
+  }
+
+  function getRepresentativeVisibilityGroup(target) {
+    var fromNode;
+    var toNode;
+
+    if (!target) {
+      return null;
+    }
+
+    if (isGroupRepresentativeVisibilityNode(target)) {
+      return findGroupById(target.groupRef);
+    }
+
+    if (util && typeof util.isLink === 'function' && util.isLink(target)) {
+      fromNode = findNodeById(target.from || target.source);
+      toNode = findNodeById(target.to || target.target);
+      if (isGroupRepresentativeVisibilityNode(fromNode)) {
+        return findGroupById(fromNode.groupRef);
+      }
+      if (isGroupRepresentativeVisibilityNode(toNode)) {
+        return findGroupById(toNode.groupRef);
+      }
+    }
+
+    return null;
+  }
+
+  function getMemberVisibilityGroup(node) {
+    var groups;
+
+    if (!node) {
+      return null;
+    }
+
+    if (isGroupRepresentativeVisibilityNode(node)) {
+      return findGroupById(node.groupRef);
+    }
+
+    if (isTimelineVisibilityPoint(node)) {
+      return findGroupById(node.groupRef);
+    }
+
+    if (isContentsVisibilityPoint(node)) {
+      return findGroupById(node.groupRef);
+    }
+
+    if (util && typeof util.isNode === 'function' && util.isNode(node) && node.id) {
+      groups = findGroupsByNodeId(node.id).filter(function (group) {
+        return isTimelineVisibilityGroup(group) ||
+          isContentsVisibilityGroup(group) ||
+          isRegularVisibilityGroup(group);
+      });
+      return groups[0] || null;
+    }
+
+    return null;
+  }
+
+  function getEndpointVisibilityGroup(link) {
+    var fromNode;
+    var toNode;
+    var group;
+
+    if (!(link && util && typeof util.isLink === 'function' && util.isLink(link))) {
+      return null;
+    }
+
+    fromNode = findNodeById(link.from || link.source);
+    toNode = findNodeById(link.to || link.target);
+
+    group = getMemberVisibilityGroup(fromNode);
+    if (group) {
+      return group;
+    }
+
+    group = getMemberVisibilityGroup(toNode);
+    if (group) {
+      return group;
+    }
+
+    return null;
+  }
+
+  function isContentsVisibilityGroup(group) {
+    return !!(group && group.type === 'contents');
+  }
+
+  function isTimelineVisibilityGroup(group) {
+    return !!(group && group.type === 'timeline');
+  }
+
+  function getVisibilityGroup(target) {
+    var group;
+
+    group = getRepresentativeVisibilityGroup(target);
+    if (group) {
+      return group;
+    }
+
+    group = getEndpointVisibilityGroup(target);
+    if (group) {
+      return group;
+    }
+
+    group = getTimelineVisibilityGroup(target);
+    if (group) {
+      return group;
+    }
+
+    group = getContentsVisibilityGroup(target);
+    if (group) {
+      return group;
+    }
+
+    group = getRegularVisibilityGroup(target);
+    if (group) {
+      return group;
+    }
+
+    return null;
+  }
+
   function getTimelineVisibilityMembers(group) {
     var page = common.current && common.current.page;
     var sourceNodes = (page && page.nodes) ? page.nodes : graph.nodes;
@@ -7977,6 +8257,8 @@ wuwei.model = (function () {
       }
     }
 
+    changed = appendRepresentativeNodes(group, nodesBucket, shown, hideConnectedLinks, linksBucket) || changed;
+
     axisLinks = getTimelineVisibilityAxisLinks(group);
     for (i = 0; i < axisLinks.length; i++) {
       if (!axisLinks[i]) {
@@ -7989,7 +8271,115 @@ wuwei.model = (function () {
       util.appendById(linksBucket, axisLinks[i]);
     }
 
+    getGroupVisibilityLinks(group).forEach(function (groupLink) {
+      if (!groupLink) {
+        return;
+      }
+      if (groupLink.visible !== shown) {
+        setLinkShown(groupLink, shown);
+        changed = true;
+      }
+      util.appendById(linksBucket, groupLink);
+    });
+
     return changed;
+  }
+
+  function setContentsFamilyVisible(group, visible, nodesBucket, linksBucket, hideConnectedLinks) {
+    var changed = false;
+    var members, axisLinks, member, linked, visibles, i, j;
+    var shown = !!visible;
+
+    nodesBucket = nodesBucket || [];
+    linksBucket = linksBucket || [];
+
+    if (!group) {
+      return false;
+    }
+
+    if (group.visible !== shown) {
+      group.visible = shown;
+      changed = true;
+    }
+
+    members = getContentsVisibilityMembers(group);
+    for (i = 0; i < members.length; i++) {
+      member = members[i];
+      if (!member) {
+        continue;
+      }
+
+      visibles = [];
+      if (!shown && hideConnectedLinks) {
+        visibles = (findLinksByNode(member) || {}).visibles || [];
+      }
+
+      if (member.visible !== shown) {
+        setNodeShown(member, shown);
+        changed = true;
+      }
+      util.appendById(nodesBucket, member);
+
+      if (!shown && hideConnectedLinks) {
+        for (j = 0; j < visibles.length; j++) {
+          linked = visibles[j];
+          if (!linked) {
+            continue;
+          }
+          if (isContentsVisibilityAxisLink(linked) && linked.groupRef === group.id) {
+            continue;
+          }
+          if (linked.visible) {
+            setLinkShown(linked, false);
+            changed = true;
+          }
+          util.appendById(linksBucket, linked);
+        }
+      }
+    }
+
+    changed = appendRepresentativeNodes(group, nodesBucket, shown, hideConnectedLinks, linksBucket) || changed;
+
+    axisLinks = getContentsVisibilityAxisLinks(group);
+    for (i = 0; i < axisLinks.length; i++) {
+      if (!axisLinks[i]) {
+        continue;
+      }
+      if (axisLinks[i].visible !== shown) {
+        setLinkShown(axisLinks[i], shown);
+        changed = true;
+      }
+      util.appendById(linksBucket, axisLinks[i]);
+    }
+
+    getGroupVisibilityLinks(group).forEach(function (groupLink) {
+      if (!groupLink) {
+        return;
+      }
+      if (groupLink.visible !== shown) {
+        setLinkShown(groupLink, shown);
+        changed = true;
+      }
+      util.appendById(linksBucket, groupLink);
+    });
+
+    return changed;
+  }
+
+  function setVisibilityGroupFamilyVisible(group, visible, nodesBucket, linksBucket, hideConnectedLinks) {
+    if (!group) {
+      return false;
+    }
+    if (isTimelineVisibilityGroup(group)) {
+      return setTimelineFamilyVisible(group, visible, nodesBucket, linksBucket, hideConnectedLinks);
+    }
+    if (isContentsVisibilityGroup(group)) {
+      return setContentsFamilyVisible(group, visible, nodesBucket, linksBucket, hideConnectedLinks);
+    }
+    if (isRegularVisibilityGroup(group)) {
+      return setRegularGroupFamilyVisible(group, visible, nodesBucket, linksBucket, hideConnectedLinks);
+    }
+    return false;
   }
 
   function isRegularVisibilityGroup(group) {
@@ -8445,6 +8835,9 @@ wuwei.model = (function () {
     }
 
     members = findGroupNodes(group.id);
+    getGroupRepresentativeNodes(group).forEach(function (representative) {
+      util.appendById(members, representative);
+    });
     members.forEach(function (member) {
       if (!member || !member.id) {
         return;
@@ -8525,9 +8918,9 @@ wuwei.model = (function () {
       count_link;
 
     for (node of _nodes) {
-      timelineGroup = getTimelineVisibilityGroup(node);
+      timelineGroup = getVisibilityGroup(node);
       if (timelineGroup) {
-        timelineChanged = setTimelineFamilyVisible(timelineGroup, true, nodes, links, false) || timelineChanged;
+        timelineChanged = setVisibilityGroupFamilyVisible(timelineGroup, true, nodes, links, false) || timelineChanged;
         continue;
       }
 
@@ -8553,15 +8946,9 @@ wuwei.model = (function () {
           continue;
         }
 
-        timelineGroup = getTimelineVisibilityGroup(another);
+        timelineGroup = getVisibilityGroup(another);
         if (timelineGroup) {
-          timelineChanged = setTimelineFamilyVisible(timelineGroup, true, nodes, links, false) || timelineChanged;
-          continue;
-        }
-
-        var regularGroup = getRegularVisibilityGroup(another);
-        if (regularGroup) {
-          setRegularGroupFamilyVisible(regularGroup, true, nodes, links, false);
+          timelineChanged = setVisibilityGroupFamilyVisible(timelineGroup, true, nodes, links, false) || timelineChanged;
           continue;
         }
 
@@ -8600,15 +8987,9 @@ wuwei.model = (function () {
       j, jlen;
 
     for (_node of _nodes) {
-      timelineGroup = getTimelineVisibilityGroup(_node);
+      timelineGroup = getVisibilityGroup(_node);
       if (timelineGroup) {
-        timelineChanged = setTimelineFamilyVisible(timelineGroup, false, nodes, links, true) || timelineChanged;
-        continue;
-      }
-
-      var regularGroup = getRegularVisibilityGroup(_node);
-      if (regularGroup) {
-        setRegularGroupFamilyVisible(regularGroup, false, nodes, links, true);
+        timelineChanged = setVisibilityGroupFamilyVisible(timelineGroup, false, nodes, links, true) || timelineChanged;
         continue;
       }
 
@@ -8660,9 +9041,9 @@ wuwei.model = (function () {
 
     if (!root) { return; }
 
-    rootTimelineGroup = getTimelineVisibilityGroup(root);
+    rootTimelineGroup = getVisibilityGroup(root);
     if (rootTimelineGroup) {
-      timelineChanged = setTimelineFamilyVisible(rootTimelineGroup, false, nodes_data, links_data, true) || timelineChanged;
+      timelineChanged = setVisibilityGroupFamilyVisible(rootTimelineGroup, false, nodes_data, links_data, true) || timelineChanged;
       if (timelineChanged) {
         setGraphFromCurrentPage();
       }
@@ -8690,10 +9071,10 @@ wuwei.model = (function () {
     };
 
     const hideNode = function (n) {
-      var timelineGroup = getTimelineVisibilityGroup(n);
+      var timelineGroup = getVisibilityGroup(n);
 
       if (timelineGroup) {
-        timelineChanged = setTimelineFamilyVisible(timelineGroup, false, nodes_data, links_data, true) || timelineChanged;
+        timelineChanged = setVisibilityGroupFamilyVisible(timelineGroup, false, nodes_data, links_data, true) || timelineChanged;
         return;
       }
 
@@ -8705,10 +9086,10 @@ wuwei.model = (function () {
     };
 
     const hideLink = function (l) {
-      var timelineGroup = getTimelineVisibilityGroup(l);
+      var timelineGroup = getVisibilityGroup(l);
 
       if (timelineGroup) {
-        timelineChanged = setTimelineFamilyVisible(timelineGroup, false, nodes_data, links_data, true) || timelineChanged;
+        timelineChanged = setVisibilityGroupFamilyVisible(timelineGroup, false, nodes_data, links_data, true) || timelineChanged;
         return;
       }
 
@@ -8719,25 +9100,29 @@ wuwei.model = (function () {
       links_data.push(l);
     };
 
-    const hideRegularGroupByMember = function (memberNode) {
-      var groups, changed;
+    const hideGroupByMember = function (memberNode) {
+      var groups, memberGroup, changed;
 
       if (!memberNode || !memberNode.id) {
         return false;
       }
 
       groups = findGroupsByNodeId(memberNode.id).filter(function (group) {
-        return isRegularVisibilityGroup(group) &&
-          false !== group.visible &&
-          getGroupNodeIds(group).indexOf(root.id) < 0;
+        return false !== group.visible && getGroupNodeIds(group).indexOf(root.id) < 0;
       });
+
+      memberGroup = getVisibilityGroup(memberNode);
+      if (memberGroup && false !== memberGroup.visible && getGroupNodeIds(memberGroup).indexOf(root.id) < 0) {
+        util.appendById(groups, memberGroup);
+      }
+
       if (!groups.length) {
         return false;
       }
 
       changed = false;
       groups.forEach(function (group) {
-        changed = setRegularGroupFamilyVisible(group, false, nodes_data, links_data, true) || changed;
+        changed = setVisibilityGroupFamilyVisible(group, false, nodes_data, links_data, true) || changed;
       });
 
       return changed;
@@ -8751,7 +9136,7 @@ wuwei.model = (function () {
       }
       path.add(node.id);
 
-      if (parentLink && hideRegularGroupByMember(node)) {
+      if (parentLink && hideGroupByMember(node)) {
         path.delete(node.id);
         setGraphFromCurrentPage();
         return true;
@@ -8963,17 +9348,10 @@ wuwei.model = (function () {
     }
 
     var changedItems = [];
-    var timelineGroup = getTimelineVisibilityGroup(node);
-    var regularGroup = getRegularVisibilityGroup(node);
+    var visibilityGroup = getVisibilityGroup(node);
 
-    if (timelineGroup) {
-      setTimelineFamilyVisible(timelineGroup, !!visible, changedItems, changedItems, true);
-      setGraphFromCurrentPage();
-      return changedItems;
-    }
-
-    if (regularGroup) {
-      setRegularGroupFamilyVisible(regularGroup, !!visible, changedItems, changedItems, true);
+    if (visibilityGroup) {
+      setVisibilityGroupFamilyVisible(visibilityGroup, !!visible, changedItems, changedItems, true);
       setGraphFromCurrentPage();
       return changedItems;
     }
@@ -9861,10 +10239,12 @@ wuwei.model = (function () {
     groupDragStarted: groupDragStarted,
     groupDragged: groupDragged,
     groupDragEnded: groupDragEnded,
+    translateGroupBy: translateGroupBy,
 
     findNodeById: findNodeById,
     getGroupMembers: getGroupMembers,
     getGroupNodeIds: getGroupNodeIds,
+    getGroupSourceNodeIds: getGroupSourceNodeIds,
     findGroupById: findGroupById,
     findGroupByTarget: findGroupByTarget,
     findGroupNodes: findGroupNodes,

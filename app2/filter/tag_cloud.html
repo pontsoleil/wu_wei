@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Tag Cloud Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+    }
+
+    .tag-cloud {
+      display: flex;
+      flex-wrap: wrap;
+    }
+
+    .tag {
+      margin: 5px;
+      padding: 5px 10px;
+      background-color: #f0f0f0;
+      border-radius: 5px;
+    }
+
+    /* サイズの種類によってフォントサイズを変える */
+    .tag.normal {
+      font-size: 12px;
+      height: 16px;
+    }
+
+    .tag.important {
+      font-size: 16px;
+      height: 20px;
+    }
+
+    .tag.more-important {
+      font-size: 20px;
+      height: 24px;
+    }
+
+    .tag.most-important {
+      font-size: 24px;
+      height: 28px;
+    }
+  </style>
+</head>
+<body>
+  <div class="tag-cloud">
+    <!-- タグのデータは50件と仮定し、サイズをランダムに割り当てる -->
+    <!-- サイズの種類は通常、重要、さらに重要、最も重要の4種類 -->
+    <!-- 仮のデータなのでタグ名は適当に設定しています -->
+    <span class="tag normal">Tag1</span>
+    <span class="tag more-important">Tag3</span>
+    <span class="tag important">Tag2</span>
+    <span class="tag most-important">Tag4</span>
+    <span class="tag normal">Tag1</span>
+    <span class="tag important">Tag2</span>
+    <span class="tag more-important">Tag3</span>
+    <span class="tag most-important">Tag4</span>
+    <span class="tag more-important">Tag3</span>
+    <span class="tag normal">Tag1</span>
+    <span class="tag important">Tag2</span>
+    <span class="tag more-important">Tag3</span>
+    <span class="tag normal">Tag1</span>
+    <span class="tag important">Tag2</span>
+    <span class="tag most-important">Tag4</span>
+    <span class="tag most-important">Tag4</span>
+    <span class="tag normal">Tag1</span>
+    <span class="tag important">Tag2</span>
+    <span class="tag more-important">Tag3</span>
+    <span class="tag more-important">Tag3</span>
+    <span class="tag normal">Tag1</span>
+    <span class="tag important">Tag2</span>
+    <span class="tag most-important">Tag4</span>
+    <span class="tag more-important">Tag3</span>
+    <span class="tag most-important">Tag4</span>
+    <span class="tag normal">Tag1</span>
+    <span class="tag important">Tag2</span>
+    <span class="tag most-important">Tag4</span>
+    <!-- 他のタグも同様に記述 -->
+  </div>
+</body>
+</html>

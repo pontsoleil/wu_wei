@@ -2350,7 +2350,7 @@ wuwei.util = (function () {
       height = (+vb[3]) / k;
 
       frameEl = createSvgEl('rect');
-      frameEl.setAttribute('id', 'miniFrame');
+      frameEl.setAttribute('class', 'miniFrame');
       frameEl.setAttribute('x', '' + (offsetX + (left - border.left) * zoom));
       frameEl.setAttribute('y', '' + (offsetY + (top - border.top) * zoom));
       frameEl.setAttribute('width', '' + (width * zoom));

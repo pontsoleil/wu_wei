@@ -97,14 +97,18 @@ wuwei.menu.note = wuwei.menu.note || {};
     var description = wuwei.common.current.description || document.querySelector('#note_name .description').innerHTML;
     description = decodeMaybe(description);
     
-    var thumbnail = util.buildMiniatureSvgString({
-      width: 200,
-      height: 200,
-      nodes: graph.nodes,
-      links: graph.links
-    });
-    current.page.thumbnail = thumbnail
-    noteEl.innerHTML = wuwei.menu.note.markup.save_template(name, description, thumbnail);
+    var thumbnail = (wuwei.note && typeof wuwei.note.updatePageThumbnail === 'function')
+      ? wuwei.note.updatePageThumbnail(current.page)
+      : util.buildMiniatureSvgString({
+        width: 200,
+        height: 200,
+        nodes: graph.nodes,
+        links: graph.links
+      });
+    if (thumbnail) {
+      current.page.thumbnail = thumbnail;
+    }
+    noteEl.innerHTML = wuwei.menu.note.markup.save_template(name, description, thumbnail || current.page.thumbnail || '');
 
     noteEl.style.display = 'block';
   }

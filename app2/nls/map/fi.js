@@ -523,8 +523,9 @@ wuwei.nls.FI = {
   'Create a personal content collection and annotate it.': 'Create a personal content collection and annotate it.',
   'Visual notes will help you organize your thoughts.': 'Visual notes will help you organize your thoughts.',
   'Select colour': 'Valitse väri',
-  'HTML contentTarget must specify anchorHref starting with #.': 'HTML contentTarget -kohteessa on määritettävä # merkillä alkava anchorHref.',
+  'HTML PageMarker must specify anchorHref starting with #.': 'HTML PageMarker -kohteessa on määritettävä # merkillä alkava anchorHref.',
   'Page number': 'Sivunumero',
+  'Page sequence number': 'Järjestysnumero',
   'Apply to group members': 'Käytä ryhmän jäseniin',
   'This preview cannot create a thumbnail. Please try an HTML5 video such as mp4.': 'Tästä esikatselusta ei voi luoda pikkukuvaa. Kokeile HTML5-videota, kuten mp4.',
   'This video format is not supported in embedded preview.': 'Tätä videomuotoa ei tueta upotetussa esikatselussa.',
@@ -549,5 +550,8 @@ wuwei.nls.FI = {
   '{name} loaded the note.': '{name} latasi muistiinpanon.',
   '{name} created': '{name} loi',
   '{name} modified': '{name} muutti',
-  '{name} deleted': '{name} poisti'
+  '{name} deleted': '{name} poisti',
+  'Physical page 1 corresponds to': 'Fyysinen sivu 1 vastaa näytettävää sivunumeroa',
+
+
 };

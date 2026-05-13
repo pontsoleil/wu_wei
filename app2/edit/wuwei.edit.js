@@ -1217,6 +1217,7 @@ wuwei.edit = wuwei.edit || {};
     if (document.getElementById('edit-video')) { document.getElementById('edit-video').style.display = 'none'; }
     if (document.getElementById('edit-link')) { document.getElementById('edit-link').style.display = 'none'; }
     if (document.getElementById('edit-contents-axis')) { document.getElementById('edit-contents-axis').style.display = 'none'; }
+    if (document.getElementById('edit-contents-page-marker')) { document.getElementById('edit-contents-page-marker').style.display = 'none'; }
   }
 
   function hideControls() {

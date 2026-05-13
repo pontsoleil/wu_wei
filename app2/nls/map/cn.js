@@ -523,8 +523,9 @@ wuwei.nls.CN = {
   'Create a personal content collection and annotate it.': '创建个人内容集合并添加注释。',
   'Visual notes will help you organize your thoughts.': '视觉化笔记可帮助你整理想法。',
   'Select colour': '选择颜色',
-  'HTML contentTarget must specify anchorHref starting with #.': 'HTML contentTarget 必须指定以 # 开头的 anchorHref。',
+  'HTML PageMarker must specify anchorHref starting with #.': 'HTML PageMarker 必须指定以 # 开头的 anchorHref。',
   'Page number': '页码',
+  'Page sequence number': '顺序页码',
   'Apply to group members': '应用到组成员',
   'This preview cannot create a thumbnail. Please try an HTML5 video such as mp4.': '无法从此预览创建缩略图。请尝试 mp4 等 HTML5 视频。',
   'This video format is not supported in embedded preview.': '嵌入式预览不支持此视频格式。',
@@ -549,5 +550,8 @@ wuwei.nls.CN = {
   '{name} loaded the note.': '{name} 已加载笔记。',
   '{name} created': '{name} 已创建',
   '{name} modified': '{name} 已修改',
-  '{name} deleted': '{name} 已删除'
+  '{name} deleted': '{name} 已删除',
+  'Physical page 1 corresponds to': '物理第1页对应的显示页码',
+
+
 };

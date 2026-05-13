@@ -445,6 +445,7 @@ wuwei.common = (function () {
     // anchor: '#333',
     link: '#c0c0c0',
     linkText: '#303030',
+    searchMatch: '#9ACD32',
     // identifierOutline: '#544',
     // identifierSelectedFill: '#766',
     // identifierUnselectedFill: '#fff',
@@ -454,7 +455,8 @@ wuwei.common = (function () {
   };
 
   var actionColor = {
-    info: { background: '#18C7D4', color: '#37B1BA' },
+    info: { background: '#8B008B', color: '#8B008B' },
+    found: { background: '#9ACD32', color: '#9ACD32' },
     success: { background: '#40c6c6', color: '#00ff00' },
     warning: { background: '#FE9733', color: '#FEA933' },
     error: { background: '#F571BE', color: '#ff0000' }

@@ -121,40 +121,28 @@ input.search[type=text]:focus {
 /**
  * search / filter
  */
-#searchIcon,
-#filterIcon {
+#searchIcon {
   position: fixed;
   font-size: 1.5rem;
   color: #808080;
   cursor: pointer;
   top: 0.4rem;
+  right: 6rem;
   z-index: 2;
   display: none;
 }
 
-#searchIcon.active,
-#filterIcon.active {
+#searchIcon.active {
   display: block;
 }
 
-#searchIcon:hover,
-#filterIcon:hover {
+#searchIcon:hover {
   color: rgb(77, 179, 205);
   text-shadow: 0em 0.1em 0.1em rgba(0, 0, 0, 0.3);
 }
 
-#searchIcon {
-  right: 6rem;
-}
 #searchIcon.simulation {
   right: 8rem;
-}
-
-#filterIcon {
-  right: 8.5rem;
-}
-#filterIcon.simulation {
-  right: 10.5rem;
 }
 
 /**

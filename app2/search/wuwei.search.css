@@ -1,0 +1,175 @@
+.hidden {
+  display: none;
+  transition: 0.4s;
+}
+/** loader */
+.loader {
+  border: 16px solid #f3f3f3;
+  border-radius: 50%;
+  border-top: 16px solid #3498db;
+  width: 120px;
+  height: 120px;
+  margin: 0 auto;
+  -webkit-animation: spin 2s linear infinite; /* Safari */
+  animation: spin 2s linear infinite;
+}
+#search {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 280px;
+  height: 100%;
+  padding: 4px;
+  margin: 4px;
+  background: #fcfdfe;
+          box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+  -webkit-box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+     -moz-box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+      -ms-box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+  overflow-y: auto;
+  cursor: default;
+  z-index: 10;
+}
+#search>header {
+  position: fixed;
+  top: 0;
+  left: 4px;
+  width: 280px;
+  color: #808080;
+  background-image: linear-gradient(to bottom right,#efefef , #fcfdfe);
+}
+#search>header>h2>i:hover {
+  color: #808080;
+}
+#searchDismiss {
+  position: absolute;
+  top: 16px;
+  left: 250px;
+}
+#filterOpen {
+  position: absolute;
+  top: 16px;
+  left: 220px;
+}
+#search header ul {
+  width: 260px;
+  font-size: 0.8rem;
+  list-style-type: none;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  /* border: 1px solid #e7e7e7;
+  background-color: #f3f3f3; */
+}
+#search header li {
+  float: left;
+}
+#search header li a {
+  display: block;
+  color: #666;
+  text-align: center;
+  padding: 4px 8px;
+  text-decoration: none;
+}
+
+#search header li a:hover:not(.active) {
+  background-color: #ddd;
+}
+
+#search header li a.active {
+  color: white;
+  background-color: #4CAF50;
+}
+#search .fa,
+#search .fab,
+#search .fas,
+#search .far {
+  color: #808080;
+  cursor: pointer;
+}
+#search .fa:hover,
+#search .fab:hover,
+#search .fas:hover,
+#search .far:hover  {
+  color: rgb(77, 179, 205);
+  text-shadow: 0em 0.1em 0.1em rgba(0, 0, 0, 0.3);
+}
+
+/* Search / filter condition controls */
+.search-condition-form {
+  padding: 0.5rem;
+}
+.search-condition-block {
+  border: 1px solid #d0d0d0;
+  margin: 0.35rem 0;
+  padding: 0.35rem;
+}
+.search-condition-block legend {
+  font-size: 0.9rem;
+  width: auto;
+  padding: 0 0.25rem;
+}
+.search-condition-checkbox {
+  display: inline-block;
+  margin: 0.15rem 0.5rem 0.15rem 0;
+  white-space: nowrap;
+}
+.search-condition-inline {
+  display: block;
+  margin: 0.2rem 0;
+}
+.search-condition-inline input {
+  margin-left: 0.4rem;
+  max-width: 12rem;
+}
+.search-actions button {
+  margin: 0.15rem;
+}
+.search-result-summary {
+  padding: 0.25rem 0.5rem;
+  color: #666;
+}
+.search-result-list {
+  padding: 0.25rem 0.5rem 0.75rem 0.5rem;
+}
+.search-result-item {
+  list-style: none;
+  border-bottom: 1px solid #e0e0e0;
+  padding: 0.35rem 0;
+}
+.search-result-status {
+  display: inline-block;
+  min-width: 4.5rem;
+  color: #666;
+  font-size: 0.85rem;
+}
+.search-result-title {
+  font-weight: 600;
+}
+.search-result-detail {
+  margin-left: 5.6rem;
+  color: #666;
+  font-size: 0.85rem;
+}
+.search-result-actions {
+  margin-left: 5.6rem;
+  margin-top: 0.2rem;
+}
+
+/* Search matches on the note canvas.  This never changes saved styles. */
+g.node.search-match > :not(text),
+g.link.search-match path,
+g.link.search-match line {
+  stroke: var(--wuwei-search-match-color, #9ACD32) !important;
+  stroke-width: 4px !important;
+}
+
+/* Result row whose target is currently displayed in the Info pane. */
+.search-result-item.search-result-info-current .search-result-type-icon {
+  color: var(--wuwei-info-mark-color, #8B008B) !important;
+}
+
+/* The result item whose target is currently displayed in the Info pane. */
+.search-result-item.search-result-info-current .search-result-type-icon {
+  color: var(--wuwei-info-mark-color, #8B008B) !important;
+}

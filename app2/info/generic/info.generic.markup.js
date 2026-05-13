@@ -15,8 +15,10 @@ wuwei.info.generic.markup = (function () {
     let
       node = param.node,
       option = param.option || {};
+    let displayedPageNumber = getDisplayedPageNumber(option);
     const util = wuwei.util;
     let uri = option && (option.contentViewerUri || option.pdfjsUri) ? String(option.contentViewerUri || option.pdfjsUri || '') : resolveInfoUri(node);
+    uri = applyPageFragment(uri, option);
     let label = node.label || '';
     let value = '';
     let rights = getResourceRights(node);
@@ -48,6 +50,13 @@ wuwei.info.generic.markup = (function () {
       </div>`
         : ''
       }
+  ${displayedPageNumber
+      ? `<div class="w3-row info-page-number">
+          <label class="w3-col s5">${t('Page number')}</label>
+          <span class="w3-col s7">${wuwei.util.encodeHtml(displayedPageNumber)}</span>
+        </div>`
+      : ''
+  }
   ${uri
       ? `<iframe id="infoFrame"
           src="${wuwei.util.encodeHtml(uri)}"
@@ -150,6 +159,40 @@ wuwei.info.generic.markup = (function () {
     setTimeout(function () {
       document.getElementById('info_iframe').classList.add('d-none');
     }, 1000);
+  }
+
+  function getDisplayedPageNumber(option) {
+    var point = option && (
+      option.displayedContentTarget ||
+      option.displayedPageMarker ||
+      option.contentTarget ||
+      option.contentTargetPoint ||
+      option.contentsPoint
+    );
+    var value = point && point.pageNumber;
+    if (value == null || value === '') {
+      value = option && (option.pageNumber || option.contentsPageNumber || option.page);
+    }
+    if (value == null || value === '') {
+      return '';
+    }
+    return String(value);
+  }
+
+  function applyPageFragment(uri, option) {
+    var page = option && (option.page || option.contentsPageNumber);
+    var text = String(uri || '');
+    if (!page || !text || /#page=/i.test(text) || !isPdfLikeUri(text)) {
+      return text;
+    }
+    return text.replace(/#.*$/, '') + '#page=' + encodeURIComponent(Math.max(1, Math.floor(Number(page) || 1)));
+  }
+
+  function isPdfLikeUri(uri) {
+    var text = String(uri || '');
+    var decoded = text;
+    try { decoded = decodeURIComponent(text); } catch (e) { decoded = text; }
+    return /\.pdf(?:[?#].*)?$/i.test(decoded) || /[?&](?:mimeType|content_type)=application%2Fpdf/i.test(text);
   }
 
   return {

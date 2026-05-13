@@ -1,0 +1,121 @@
+#filter {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 280px;
+  height: 280px;
+  padding: 4px;
+  margin: 4px;
+  background: #fcfdfe;
+          box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+  -webkit-box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+     -moz-box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+      -ms-box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+  /* overflow-y: auto; */
+  cursor: default;
+  z-index: 10;
+}
+#filter>header {
+  position: fixed;
+  top: 0;
+  left: 4px;
+  width: 280px;
+  color: #808080;
+  background-image: linear-gradient(to bottom right,#efefef , #fcfdfe);
+}
+#filter>header>h2>i:hover {
+  color: #808080;
+}
+#filterDismiss {
+  position: absolute;
+  top: 16px;
+  left: 250px;
+}
+#searchOpen {
+  position: absolute;
+  top: 16px;
+  left: 220px;
+}
+#filter header ul {
+  width: 260px;
+  font-size: 0.8rem;
+  list-style-type: none;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  /* border: 1px solid #e7e7e7;
+  background-color: #f3f3f3; */
+}
+#filter header li {
+  float: left;
+}
+#filter header li a {
+  display: block;
+  color: #666;
+  text-align: center;
+  padding: 4px 8px;
+  text-decoration: none;
+}
+
+#filter header li a:hover:not(.active) {
+  background-color: #ddd;
+}
+
+#filter header li a.active {
+  color: white;
+  background-color: #4CAF50;
+}
+#filter .fa,
+#filter .fab,
+#filter .fas,
+#filter .far {
+  color: #808080;
+  cursor: pointer;
+}
+#filter .fa:hover,
+#filter .fab:hover,
+#filter .fas:hover,
+#filter .far:hover  {
+  color: rgb(77, 179, 205);
+  text-shadow: 0em 0.1em 0.1em rgba(0, 0, 0, 0.3);
+}
+
+.category,
+.filter-text,
+.year-range {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 1rem;
+}
+
+.category label,
+.filter-text label,
+.year-range label,
+.category input,
+.filter-text input,
+.year-range input {
+  margin: 0;
+}
+
+.year-range input {
+  width: 3rem;
+  text-align: right;
+  border: 0 none;
+}
+
+.year-range label,
+.year-range input,
+.year-range p {
+  margin-bottom: 0;
+}
+
+.buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 1rem;
+  margin-top: 1rem;
+}

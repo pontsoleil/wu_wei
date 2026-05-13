@@ -1881,12 +1881,20 @@ wuwei.menu = wuwei.menu || {};
     return nodes;
   }
 
-  function getEffectiveSelectedGroupIds(page) {
+  function getEffectiveSelectedGroupIds(page, option) {
     var selectedGroupIds = Array.isArray(state.selectedGroupIds) ? state.selectedGroupIds.slice() : [];
+    var allowedTypes = option && Array.isArray(option.types)
+      ? option.types
+      : ['simple', 'horizontal', 'vertical', 'timeline', 'contents'];
+
     return selectedGroupIds.filter(function (gid, index, arr) {
       var group = model.findGroupById(gid);
-      return arr.indexOf(gid) === index && !!group && ['simple', 'horizontal', 'vertical', 'timeline', 'contents'].includes(group.type);
+      return arr.indexOf(gid) === index && !!group && allowedTypes.indexOf(group.type) >= 0;
     });
+  }
+
+  function isNormalRegroupGroup(group) {
+    return !!(group && ['simple', 'horizontal', 'vertical'].indexOf(group.type) >= 0);
   }
 
   function getRepresentativeNodeForGroup(group) {
@@ -1959,6 +1967,230 @@ wuwei.menu = wuwei.menu || {};
     };
   }
 
+
+  function getGroupOperationNodes(group) {
+    var nodes = [];
+    var seen = {};
+
+    if (!group || !group.id || !model) {
+      return nodes;
+    }
+
+    function add(node) {
+      if (!node || !node.id || seen[node.id]) {
+        return;
+      }
+      seen[node.id] = true;
+      nodes.push(node);
+    }
+
+    if (typeof model.findGroupNodes === 'function') {
+      (model.findGroupNodes(group.id) || []).forEach(add);
+    }
+    if (typeof model.getGroupRepresentativeNodes === 'function') {
+      (model.getGroupRepresentativeNodes(group) || []).forEach(add);
+    }
+    return nodes;
+  }
+
+  function getNodeOperationBounds(node) {
+    var halfW;
+    var halfH;
+
+    if (!node || !Number.isFinite(Number(node.x)) || !Number.isFinite(Number(node.y))) {
+      return null;
+    }
+
+    halfW = halfW_(node);
+    halfH = halfH_(node);
+
+    return {
+      left: Number(node.x) - halfW,
+      right: Number(node.x) + halfW,
+      top: Number(node.y) - halfH,
+      bottom: Number(node.y) + halfH,
+      width: 2 * halfW,
+      height: 2 * halfH,
+      cx: Number(node.x),
+      cy: Number(node.y)
+    };
+  }
+
+  function getGroupOperationBounds(group) {
+    var nodes = getGroupOperationNodes(group);
+    var bounds = nodes.map(getNodeOperationBounds).filter(Boolean);
+    var left, right, top, bottom;
+
+    if (!bounds.length) {
+      return null;
+    }
+
+    left = Math.min.apply(null, bounds.map(function (b) { return b.left; }));
+    right = Math.max.apply(null, bounds.map(function (b) { return b.right; }));
+    top = Math.min.apply(null, bounds.map(function (b) { return b.top; }));
+    bottom = Math.max.apply(null, bounds.map(function (b) { return b.bottom; }));
+
+    return {
+      left: left,
+      right: right,
+      top: top,
+      bottom: bottom,
+      width: right - left,
+      height: bottom - top,
+      cx: (left + right) / 2,
+      cy: (top + bottom) / 2
+    };
+  }
+
+  function buildGroupOperationTargets(selectedNodes) {
+    var page = getCurrentPage();
+    var targets = [];
+    var coveredNodeIds = {};
+    var selectedGroupIds = getEffectiveSelectedGroupIds(page);
+
+    selectedGroupIds.forEach(function (gid) {
+      var group = model.findGroupById(gid);
+      var bounds;
+
+      if (!group) {
+        return;
+      }
+
+      bounds = getGroupOperationBounds(group);
+      if (!bounds) {
+        return;
+      }
+
+      getGroupOperationNodes(group).forEach(function (node) {
+        if (node && node.id) {
+          coveredNodeIds[node.id] = true;
+        }
+      });
+
+      targets.push({
+        kind: 'group',
+        group: group,
+        bounds: bounds,
+        x: bounds.cx,
+        y: bounds.cy
+      });
+    });
+
+    (selectedNodes || []).forEach(function (node) {
+      var bounds;
+
+      if (!node || !node.id || coveredNodeIds[node.id]) {
+        return;
+      }
+
+      bounds = getNodeOperationBounds(node);
+      if (!bounds) {
+        return;
+      }
+
+      targets.push({
+        kind: 'node',
+        node: node,
+        bounds: bounds,
+        x: bounds.cx,
+        y: bounds.cy
+      });
+    });
+
+    return targets;
+  }
+
+  function applyOperationTargetTranslate(target, dx, dy) {
+    if (!target) {
+      return;
+    }
+
+    dx = Number(dx || 0);
+    dy = Number(dy || 0);
+
+    if (!Number.isFinite(dx) || !Number.isFinite(dy) || (0 === dx && 0 === dy)) {
+      return;
+    }
+
+    if ('group' === target.kind && target.group && model && typeof model.translateGroupBy === 'function') {
+      model.translateGroupBy(target.group, dx, dy);
+      return;
+    }
+
+    if ('node' === target.kind && target.node) {
+      target.node.x = Number(target.node.x || 0) + dx;
+      target.node.y = Number(target.node.y || 0) + dy;
+      target.node.fx = null;
+      target.node.fy = null;
+      target.node.vx = 0;
+      target.node.vy = 0;
+      target.node.changed = true;
+    }
+  }
+
+  function moveOperationTargetCenter(target, x, y) {
+    var dx;
+    var dy;
+
+    if (!target || !target.bounds) {
+      return;
+    }
+
+    dx = Number.isFinite(Number(x)) ? Number(x) - target.bounds.cx : 0;
+    dy = Number.isFinite(Number(y)) ? Number(y) - target.bounds.cy : 0;
+    applyOperationTargetTranslate(target, dx, dy);
+  }
+
+  function getOperationTargetMetrics(targets) {
+    var xMin;
+    var xMax;
+    var yMin;
+    var yMax;
+    var xSum;
+    var ySum;
+    var leftTarget;
+    var rightTarget;
+    var topTarget;
+    var bottomTarget;
+
+    targets = (targets || []).filter(function (target) { return !!(target && target.bounds); });
+    if (!targets.length) {
+      return null;
+    }
+
+    xMin = Number.MAX_VALUE;
+    xMax = -Number.MAX_VALUE;
+    yMin = Number.MAX_VALUE;
+    yMax = -Number.MAX_VALUE;
+    xSum = 0;
+    ySum = 0;
+
+    targets.forEach(function (target) {
+      var b = target.bounds;
+
+      if (b.left < xMin) { xMin = b.left; leftTarget = target; }
+      if (b.right > xMax) { xMax = b.right; rightTarget = target; }
+      if (b.top < yMin) { yMin = b.top; topTarget = target; }
+      if (b.bottom > yMax) { yMax = b.bottom; bottomTarget = target; }
+      xSum += b.cx;
+      ySum += b.cy;
+    });
+
+    return {
+      count: targets.length,
+      xMin: xMin,
+      xMax: xMax,
+      yMin: yMin,
+      yMax: yMax,
+      xSum: xSum,
+      ySum: ySum,
+      leftTarget: leftTarget,
+      rightTarget: rightTarget,
+      topTarget: topTarget,
+      bottomTarget: bottomTarget
+    };
+  }
+
   function definePersistentGroup(kind, selectedNodes) {
     var page = getCurrentPage();
     var nodes;
@@ -2013,9 +2245,10 @@ wuwei.menu = wuwei.menu || {};
       });
     }
 
-    selectedGroupIds = getEffectiveSelectedGroupIds(page);
+    selectedGroupIds = getEffectiveSelectedGroupIds(page, { types: ['simple', 'horizontal', 'vertical'] });
     requestedGroupIds.forEach(function (gid) {
-      if (selectedGroupIds.indexOf(gid) < 0 && model.findGroupById(gid)) {
+      var requestedGroup = model.findGroupById(gid);
+      if (selectedGroupIds.indexOf(gid) < 0 && isNormalRegroupGroup(requestedGroup)) {
         selectedGroupIds.push(gid);
       }
     });
@@ -2762,6 +2995,30 @@ wuwei.menu = wuwei.menu || {};
             ySum += d.y;
           });
       }
+      var operationTargets = null;
+      var operationMetrics = null;
+      var isGroupPositionOperation = ['alignTop', 'alignHorizontal', 'alignBottom', 'alignLeft',
+        'alignVertical', 'alignRight', 'horizontalEqual', 'verticalEqual'].includes(method);
+
+      if (isGroupPositionOperation) {
+        operationTargets = buildGroupOperationTargets(allNodes);
+        operationMetrics = getOperationTargetMetrics(operationTargets);
+        if (!operationMetrics || operationMetrics.count < 1) {
+          return;
+        }
+        count = operationMetrics.count;
+        xMin = operationMetrics.xMin;
+        xMax = operationMetrics.xMax;
+        yMin = operationMetrics.yMin;
+        yMax = operationMetrics.yMax;
+        xSum = operationMetrics.xSum;
+        ySum = operationMetrics.ySum;
+        LeftNode = operationMetrics.leftTarget;
+        RightNode = operationMetrics.rightTarget;
+        TopNode = operationMetrics.topTarget;
+        BottomNode = operationMetrics.bottomTarget;
+      }
+
       let logData;
       if (['defineSimpleGroup', 'defineHorizontalGroup', 'defineVerticalGroup'].includes(method)) {
         if ('defineSimpleGroup' === method) {
@@ -2818,57 +3075,57 @@ wuwei.menu = wuwei.menu || {};
       }
       else {
         if ('alignTop' === method) {
-          for (var node of allNodes) {
-            node.y = yMin + (node.size.radius || node.size.height / 2);
-          }
+          operationTargets.forEach(function (target) {
+            moveOperationTargetCenter(target, target.bounds.cx, yMin + target.bounds.height / 2);
+          });
         }
         else if ('alignHorizontal' === method) {
           var midY = ySum / count;
-          for (var node of allNodes) {
-            node.y = midY;
-          }
+          operationTargets.forEach(function (target) {
+            moveOperationTargetCenter(target, target.bounds.cx, midY);
+          });
         }
         else if ('alignBottom' === method) {
-          for (var node of allNodes) {
-            node.y = yMax - (node.size.radius || node.size.height / 2);
-          }
+          operationTargets.forEach(function (target) {
+            moveOperationTargetCenter(target, target.bounds.cx, yMax - target.bounds.height / 2);
+          });
         }
         else if ('alignLeft' === method) {
-          for (var node of allNodes) {
-            node.x = xMin + (node.size.radius || node.size.width / 2);
-          }
+          operationTargets.forEach(function (target) {
+            moveOperationTargetCenter(target, xMin + target.bounds.width / 2, target.bounds.cy);
+          });
         }
         else if ('alignVertical' === method) {
           var centerX = xSum / count;
-          for (var node of allNodes) {
-            node.x = centerX;
-          }
+          operationTargets.forEach(function (target) {
+            moveOperationTargetCenter(target, centerX, target.bounds.cy);
+          });
         }
         else if ('alignRight' === method) {
-          for (var node of allNodes) {
-            node.x = xMax - (node.size.radius || node.size.width / 2);
-          }
+          operationTargets.forEach(function (target) {
+            moveOperationTargetCenter(target, xMax - target.bounds.width / 2, target.bounds.cy);
+          });
         }
         else if ('horizontalEqual' === method) {
-          let diff = (xMax - halfW_(RightNode)) - (xMin + halfW_(LeftNode));
-          diff = diff / (count - 1);
-          allNodes = allNodes.sort(function (a, b) {
-            return a.x - b.x;
-          });
-          for (let i = 1; i < allNodes.length - 1; i++) {
-            let node = allNodes[i];
-            node.x = xMin + halfW_(LeftNode) + diff * i;
+          if (count > 1) {
+            let diff = (RightNode.bounds.cx - LeftNode.bounds.cx) / (count - 1);
+            operationTargets = operationTargets.sort(function (a, b) {
+              return a.bounds.cx - b.bounds.cx;
+            });
+            for (let i = 1; i < operationTargets.length - 1; i++) {
+              moveOperationTargetCenter(operationTargets[i], LeftNode.bounds.cx + diff * i, operationTargets[i].bounds.cy);
+            }
           }
         }
         else if ('verticalEqual' === method) {
-          let diff = (yMax - halfH_(BottomNode)) - (yMin + halfH_(TopNode));
-          diff = diff / (count - 1);
-          allNodes = allNodes.sort(function (a, b) {
-            return a.y - b.y;
-          });
-          for (let i = 1; i < allNodes.length - 1; i++) {
-            let node = allNodes[i];
-            node.y = yMin + halfH_(TopNode) + diff * i;
+          if (count > 1) {
+            let diff = (BottomNode.bounds.cy - TopNode.bounds.cy) / (count - 1);
+            operationTargets = operationTargets.sort(function (a, b) {
+              return a.bounds.cy - b.bounds.cy;
+            });
+            for (let i = 1; i < operationTargets.length - 1; i++) {
+              moveOperationTargetCenter(operationTargets[i], operationTargets[i].bounds.cx, TopNode.bounds.cy + diff * i);
+            }
           }
         }
         // logData = { command: method, param: { node: allNodes } };
@@ -2953,7 +3210,7 @@ wuwei.menu = wuwei.menu || {};
         return;
       }
 
-      current = common.current;
+      // current = wuwei.common.current;
       var pageNameEl = document.getElementById('page_name');
       var page = current && current.page;
       if (pageNameEl && page) {
@@ -3113,14 +3370,12 @@ wuwei.menu = wuwei.menu || {};
     var
       headingMenu = document.querySelector('.heading-menu'),
       searchIcon = document.getElementById('searchIcon'),
-      filterIcon = document.getElementById('filterIcon'),
       drawMode = document.getElementById('draw_mode'),
       setting = document.getElementById('setting');
     // shareMode = document.getElementById('share_mode');
     if (headingMenu.classList.contains('active')) {
       headingMenu.classList.remove('active');
       searchIcon.classList.remove('active');
-      filterIcon.classList.remove('active');
       drawMode.classList.remove('active');
       setting.classList.remove('active');
       // shareMode.style.display = 'none';
@@ -3130,7 +3385,6 @@ wuwei.menu = wuwei.menu || {};
     else {
       headingMenu.classList.add('active');
       searchIcon.classList.add('active');
-      filterIcon.classList.add('active');
       drawMode.classList.add('active');
       setting.classList.add('active');
       // shareMode.style.display = 'block';
@@ -4695,7 +4949,6 @@ wuwei.menu = wuwei.menu || {};
         drawIcon.setAttribute('class', 'fas fa-pencil-ruler');
         heading_menu.classList.add('active');
         searchIcon.classList.remove('simulation');
-        filterIcon.classList.remove('simulation');
         settinIgcon.style.display = 'none';
         // shareIcon.style.display = 'block';
         wuwei.menu.setting.close();
@@ -4707,7 +4960,6 @@ wuwei.menu = wuwei.menu || {};
         drawIcon.setAttribute('class', 'far fa-square');
         heading_menu.classList.remove('active');
         searchIcon.classList.remove('simulation');
-        filterIcon.classList.remove('simulation');
         settinIgcon.style.display = 'none';
         // shareIcon.style.display = 'none';
         if (draw && typeof draw.refresh === 'function') {
@@ -4718,7 +4970,6 @@ wuwei.menu = wuwei.menu || {};
         drawIcon.setAttribute('class', 'fas fa-expand-arrows-alt');
         heading_menu.classList.add('active');
         searchIcon.classList.add('simulation');
-        filterIcon.classList.add('simulation');
         settinIgcon.style.display = 'block';
         // shareIcon.style.display = 'none';
         if (draw && typeof draw.restart === 'function') {
@@ -4726,7 +4977,6 @@ wuwei.menu = wuwei.menu || {};
         }
         break;
     }
-    filterIcon.style.display = 'none';
   }
 
   registerClick = function (selector, func) {
@@ -4749,13 +4999,11 @@ wuwei.menu = wuwei.menu || {};
     settingPane = document.getElementById('settingPane');
     heading_menu = document.querySelector('.heading-menu');
     searchIcon = document.getElementById('searchIcon');
-    filterIcon = document.getElementById('filterIcon');
     open_controls = document.getElementById('open_controls');
     controls = document.getElementById('controls');
     drawmode_n = 0;
     drawmode = state.Drawmode[drawmode_n];
 
-    filterIcon.style.display = 'none';
 
     // 初期表示ではメニューを閉じた状態（hamburger だけ）にする
     if (heading_menu) {
@@ -4971,8 +5219,6 @@ wuwei.menu = wuwei.menu || {};
     registerClick('.pulldown.flock .operators .operator.Edit', () => {
       ContextOperate('edit-flock');
     });
-    // filterIcon
-    registerClick('#filterIcon', filterClicked);
     // searchIcon
     registerClick('#searchIcon', searchClicked);
     // // share_mode

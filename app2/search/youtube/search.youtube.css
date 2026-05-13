@@ -1,0 +1,60 @@
+#search-youtube {
+  margin-top: 100px;
+}
+#search-youtube input[type=text] {
+  -webkit-transition: width 0.4s ease-in-out;
+  transition: width 0.4s ease-in-out;
+}
+#search-youtube input[type=text]:focus {
+  width: 100%;
+}
+
+ul.list-group {
+  width: 274px;
+  font-size: 0.8rem;
+  list-style-type: none;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+li.list-item {
+  float: left;
+}
+li.list-item {
+  width: 270px;
+  padding: 2px 4px;
+}
+li.list-item img {
+  cursor: pointer;
+}
+li.list-item img:hover {
+          box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+  -webkit-box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+     -moz-box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+      -ms-box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+}
+li.list-item .content {
+  padding: 0 4px;
+}
+/* li.list-item a {
+  display: block;
+  color: #666;
+  text-align: center;
+  padding: 4px 8px;
+  text-decoration: none;
+}
+li.list-item a:hover:not(.active) {
+  background-color: #ddd;
+}
+li.list-item a.active {
+  color: white;
+  background-color: #4CAF50;
+} */
+.prev-page {
+  float: right;
+  margin: 0 4px;
+}
+.next-page {
+  float: right;
+  margin: 0 4px;
+}

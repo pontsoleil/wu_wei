@@ -1,6 +1,6 @@
 /**
  * info.contents.js
- * contents axis and contentTarget info controller
+ * Contents axis and PageMarker info controller
  */
 wuwei.info = wuwei.info || {};
 wuwei.info.contents = wuwei.info.contents || {};
@@ -67,7 +67,7 @@ wuwei.info.contents = wuwei.info.contents || {};
     delete infoPane.dataset.edit_node_id;
     delete infoPane.dataset.group_id;
 
-    if (target && (target.type === 'PageMarker' || target.nodeKind === 'contentTarget') && target.id) {
+    if (target && (target.type === 'PageMarker') && target.id) {
       infoPane.dataset.node_id = target.id;
       infoPane.dataset.page_marker_id = target.id;
       infoPane.dataset.edit_node_id = target.id;
@@ -131,7 +131,10 @@ wuwei.info.contents = wuwei.info.contents || {};
       group: group,
       documentName: getDocumentName(spec),
       markerCount: Array.isArray(group.members) ? group.members.length : 0,
-      pageCount: group.pageCount || (group.axis && group.axis.end) || ''
+      pageCount: group.pageCount || (group.axis && group.axis.end) || '',
+      firstPageNumber: wuwei.contents && typeof wuwei.contents.getFirstPageNumber === 'function'
+        ? wuwei.contents.getFirstPageNumber(group)
+        : (group.firstPageNumber || group.axis && group.axis.start || 1)
     });
     pane.style.display = 'block';
     return true;
@@ -193,9 +196,9 @@ wuwei.info.contents = wuwei.info.contents || {};
   ns.canOpen = canOpen;
   ns.getCurrentMarker = getCurrentMarker;
   ns.openContentTargetInInfo = openContentTargetInInfo;
-  ns.openPageMarkerInInfo = openContentTargetInInfo; // backward compatibility
+  ns.openPageMarkerInInfo = openContentTargetInInfo
   ns.openContentsAxisInInfo = openContentsAxisInInfo;
   wuwei.info.openContentTargetInInfo = openContentTargetInInfo;
-  wuwei.info.openPageMarkerInInfo = openContentTargetInInfo; // backward compatibility
+  wuwei.info.openPageMarkerInInfo = openContentTargetInInfo
   wuwei.info.openContentsAxisInInfo = openContentsAxisInInfo;
 })(wuwei.info.contents);

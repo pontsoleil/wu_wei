@@ -571,8 +571,6 @@ wuwei.note = (function () {
 
     if (src.type === 'PageMarker' || src.topicKind === 'contents-page') {
       out.type = 'PageMarker';
-      out.nodeKind = 'contentTarget';
-      out.targetKind = 'contentTarget';
       out.topicKind = 'contents-page';
       out.groupRef = out.groupRef || (typeof src.contentsRef === 'string' ? src.contentsRef : '');
       if (typeof src.documentRef === 'string' && src.documentRef) {
@@ -580,6 +578,27 @@ wuwei.note = (function () {
       }
       if (Number.isFinite(Number(src.pageNumber))) {
         out.pageNumber = Number(src.pageNumber);
+      }
+      if (Number.isFinite(Number(src.pageSequenceNumber))) {
+        out.pageSequenceNumber = Math.max(1, Math.floor(Number(src.pageSequenceNumber)));
+      }
+      if (Number.isFinite(Number(src.sequenceNumber))) {
+        out.sequenceNumber = Math.max(1, Math.floor(Number(src.sequenceNumber)));
+      }
+      if (Number.isFinite(Number(src.physicalPageNumber))) {
+        out.physicalPageNumber = Math.max(1, Math.floor(Number(src.physicalPageNumber)));
+      }
+      if (!Number.isFinite(Number(out.pageSequenceNumber)) && Number.isFinite(Number(out.sequenceNumber))) {
+        out.pageSequenceNumber = out.sequenceNumber;
+      }
+      if (!Number.isFinite(Number(out.sequenceNumber)) && Number.isFinite(Number(out.pageSequenceNumber))) {
+        out.sequenceNumber = out.pageSequenceNumber;
+      }
+      if (!Number.isFinite(Number(out.physicalPageNumber)) && Number.isFinite(Number(out.pageSequenceNumber))) {
+        out.physicalPageNumber = out.pageSequenceNumber;
+      }
+      if (Number.isFinite(Number(src.axisPos))) {
+        out.axisPos = Number(src.axisPos);
       }
     }
     if (src.representativeOf && 'object' === typeof src.representativeOf) {
@@ -759,12 +778,22 @@ wuwei.note = (function () {
         return !!m.nodeId;
       }),
       entries: (type === 'contents') ? entries.map(function (entry) {
-        return {
+        var outEntry = {
           role: entry && entry.role || 'entry',
           nodeId: entry && (entry.nodeId || entry.id) || '',
           pageNumber: Math.max(1, Math.floor(Number(entry && entry.pageNumber || 1))),
           comment: String(entry && entry.comment || '')
         };
+        if (Number.isFinite(Number(entry && entry.pageSequenceNumber))) {
+          outEntry.pageSequenceNumber = Math.max(1, Math.floor(Number(entry.pageSequenceNumber)));
+        }
+        if (Number.isFinite(Number(entry && entry.sequenceNumber))) {
+          outEntry.sequenceNumber = Math.max(1, Math.floor(Number(entry.sequenceNumber)));
+        }
+        if (Number.isFinite(Number(entry && entry.physicalPageNumber))) {
+          outEntry.physicalPageNumber = Math.max(1, Math.floor(Number(entry.physicalPageNumber)));
+        }
+        return outEntry;
       }).filter(function (entry) {
         return !!entry.nodeId;
       }) : undefined,
@@ -776,6 +805,12 @@ wuwei.note = (function () {
       documentRef: src.documentRef || '',
       representativeNodeId: src.representativeNodeId || '',
       pageCount: Number.isFinite(pageCount) ? pageCount : undefined,
+      documentPageCount: Number.isFinite(Number(src.documentPageCount)) ? Math.max(1, Math.floor(Number(src.documentPageCount))) : undefined,
+      physicalPageCount: Number.isFinite(Number(src.physicalPageCount)) ? Math.max(1, Math.floor(Number(src.physicalPageCount))) : undefined,
+      firstPageNumber: Number.isFinite(Number(src.firstPageNumber)) ? Math.max(1, Math.floor(Number(src.firstPageNumber))) : undefined,
+      firstDisplayedPageNumber: Number.isFinite(Number(src.firstDisplayedPageNumber)) ? Math.max(1, Math.floor(Number(src.firstDisplayedPageNumber))) : undefined,
+      documentFirstPageNumber: Number.isFinite(Number(src.documentFirstPageNumber)) ? Math.max(1, Math.floor(Number(src.documentFirstPageNumber))) : undefined,
+      hasPageCount: (typeof src.hasPageCount === 'boolean') ? src.hasPageCount : undefined,
       timeStart: Number.isFinite(Number(src.timeStart)) ? Number(src.timeStart) : undefined,
       timeEnd: Number.isFinite(Number(src.timeEnd)) ? Number(src.timeEnd) : undefined,
       defaultPlayDuration: Number.isFinite(Number(src.defaultPlayDuration)) ? Number(src.defaultPlayDuration) : undefined,
@@ -878,16 +913,16 @@ wuwei.note = (function () {
   function ensurePagesArray(note, resourceById) {
     var src = note || common.current || {};
 
-    if (!Array.isArray(src.pages)) {
-      /*
-       * Legacy note files used pages as an object keyed by page number:
-       *   { "1": page1, "2": page2 }
-       * Convert that shape here and keep the rest of the application on the
-       * canonical array shape:
-       *   [ { pp: 1 }, { pp: 2 } ]
-       */
-      src.pages = normalizePagesCollection(src.pages, resourceById || {});
-    }
+    // if (!Array.isArray(src.pages)) {
+    //   /*
+    //    * Legacy note files used pages as an object keyed by page number:
+    //    *   { "1": page1, "2": page2 }
+    //    * Convert that shape here and keep the rest of the application on the
+    //    * canonical array shape:
+    //    *   [ { pp: 1 }, { pp: 2 } ]
+    //    */
+    //   src.pages = normalizePagesCollection(src.pages, resourceById || {});
+    // }
 
     if (!src.pages.length) {
       src.pages.push(createPage(1));
@@ -1197,6 +1232,27 @@ wuwei.note = (function () {
       }
       else {
         out.pageNumber = 1;
+      }
+      if (Number.isFinite(Number(out.pageSequenceNumber))) {
+        out.pageSequenceNumber = Math.max(1, Math.floor(Number(out.pageSequenceNumber)));
+      }
+      if (Number.isFinite(Number(out.sequenceNumber))) {
+        out.sequenceNumber = Math.max(1, Math.floor(Number(out.sequenceNumber)));
+      }
+      if (Number.isFinite(Number(out.physicalPageNumber))) {
+        out.physicalPageNumber = Math.max(1, Math.floor(Number(out.physicalPageNumber)));
+      }
+      if (!Number.isFinite(Number(out.pageSequenceNumber)) && Number.isFinite(Number(out.sequenceNumber))) {
+        out.pageSequenceNumber = out.sequenceNumber;
+      }
+      if (!Number.isFinite(Number(out.sequenceNumber)) && Number.isFinite(Number(out.pageSequenceNumber))) {
+        out.sequenceNumber = out.pageSequenceNumber;
+      }
+      if (!Number.isFinite(Number(out.physicalPageNumber)) && Number.isFinite(Number(out.pageSequenceNumber))) {
+        out.physicalPageNumber = out.pageSequenceNumber;
+      }
+      if (Number.isFinite(Number(out.axisPos))) {
+        out.axisPos = Number(out.axisPos);
       }
     }
     if (out.type === 'Content') {
@@ -1904,6 +1960,41 @@ wuwei.note = (function () {
     });
   }
 
+  function isBlankPageThumbnail(thumbnail) {
+    var text = String(thumbnail || '').trim();
+    var testText;
+
+    if (!text) {
+      return true;
+    }
+
+    /*
+     * Non-SVG thumbnails, for example a URL or data URI, should be preserved.
+     */
+    if (!/<svg[\s>]/i.test(text)) {
+      return false;
+    }
+
+    /*
+     * Stored miniature thumbnails are useful when they contain a rendered node,
+     * link, axis, group box, image, or text.  A plain white SVG containing only
+     * the background/view frame is treated as blank and must not overwrite an
+     * existing page.thumbnail.
+     */
+    if (/(class=["'][^"']*(?:\bnode\b|\blink\b|shape-node|memo-node|thumbnail-outline|group-box|group-axis|timeline-axis)[^"']*["'])/i.test(text)) {
+      return false;
+    }
+    if (/<(?:circle|path|polygon|polyline|line|image|text)\b/i.test(text)) {
+      return false;
+    }
+
+    testText = text
+      .replace(/<rect\b[^>]*(?:id=["']miniFrame["']|class=["'][^"']*\bminiFrame\b[^"']*["'])[^>]*>/ig, '')
+      .replace(/<rect\b[^>]*(?:fill=["'](?:#fff|#ffffff|white|none)["']|stroke=["']none["'])[^>]*>/ig, '');
+
+    return !/<rect\b/i.test(testText);
+  }
+
   function captureCurrentMiniatureThumbnail() {
     var svg, clone, serialized;
 
@@ -1931,7 +2022,9 @@ wuwei.note = (function () {
 
   function updatePageThumbnail(page) {
     var targetPage = page;
-    var isCurrentPage, thumbnail;
+    var isCurrentPage, thumbnail, fallback;
+    var existingThumbnail;
+    var current;
 
     current = common.current;
     if (!targetPage) {
@@ -1944,14 +2037,41 @@ wuwei.note = (function () {
       return '';
     }
 
+    existingThumbnail = targetPage.thumbnail || '';
     isCurrentPage = current && current.page && (
       current.page === targetPage ||
       current.currentPage === targetPage.id
     );
 
+    /*
+     * 他ページの既存サムネイルは、ページ一覧表示や削除処理で再生成しない。
+     * pages[n].thumbnail を正とし、空白でない限りそのまま返す。
+     */
+    if (!isCurrentPage && existingThumbnail && !isBlankPageThumbnail(existingThumbnail)) {
+      return existingThumbnail;
+    }
+
     thumbnail = isCurrentPage ? captureCurrentMiniatureThumbnail() : '';
-    targetPage.thumbnail = thumbnail || buildPageThumbnail(targetPage);
-    return targetPage.thumbnail;
+    if (isBlankPageThumbnail(thumbnail)) {
+      thumbnail = '';
+    }
+
+    if (!thumbnail) {
+      fallback = buildPageThumbnail(targetPage);
+      thumbnail = isBlankPageThumbnail(fallback) ? '' : fallback;
+    }
+
+    if (thumbnail) {
+      targetPage.thumbnail = thumbnail;
+    }
+    else if (existingThumbnail && !isBlankPageThumbnail(existingThumbnail)) {
+      targetPage.thumbnail = existingThumbnail;
+    }
+    else if (typeof targetPage.thumbnail === 'undefined' || targetPage.thumbnail === null) {
+      targetPage.thumbnail = '';
+    }
+
+    return targetPage.thumbnail || '';
   }
 
   function snapshotCurrentPageThumbnail() {
@@ -2226,6 +2346,10 @@ wuwei.note = (function () {
 
     if (targetIndex < 0) {
       return current.page || wuwei.model.getCurrentPage();
+    }
+
+    if (!deletingCurrent) {
+      snapshotCurrentPageThumbnail();
     }
 
     pages.splice(targetIndex, 1);

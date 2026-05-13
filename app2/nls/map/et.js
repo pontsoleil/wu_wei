@@ -523,8 +523,9 @@ wuwei.nls.ET = {
   'Create a personal content collection and annotate it.': 'Create a personal content collection and annotate it.',
   'Visual notes will help you organize your thoughts.': 'Visual notes will help you organize your thoughts.',
   'Select colour': 'Vali värv',
-  'HTML contentTarget must specify anchorHref starting with #.': 'HTML contentTarget peab määrama anchorHref-i, mis algab märgiga #.',
+  'HTML PageMarker must specify anchorHref starting with #.': 'HTML PageMarker peab määrama anchorHref-i, mis algab märgiga #.',
   'Page number': 'Lehekülje number',
+  'Page sequence number': 'Järjekorranumber',
   'Apply to group members': 'Rakenda rühma liikmetele',
   'This preview cannot create a thumbnail. Please try an HTML5 video such as mp4.': 'Sellest eelvaatest ei saa pisipilti luua. Proovi HTML5-videot, näiteks mp4.',
   'This video format is not supported in embedded preview.': 'Seda videovormingut ei toetata manustatud eelvaates.',
@@ -549,5 +550,8 @@ wuwei.nls.ET = {
   '{name} loaded the note.': '{name} laadis noodi.',
   '{name} created': '{name} lõi',
   '{name} modified': '{name} muutis',
-  '{name} deleted': '{name} kustutas'
+  '{name} deleted': '{name} kustutas',
+  'Physical page 1 corresponds to': 'Füüsiline lehekülg 1 vastab kuvatavale leheküljele',
+
+
 };

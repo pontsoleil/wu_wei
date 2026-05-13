@@ -22,6 +22,7 @@ wuwei.info.uploaded.markup = ( function () {
       creativeCommons = common.nls.creativeCommons[lang];
     let uri = resolveInfoUri(node);
     let label = (node && node.label) || "";
+    let displayedPageNumber = getDisplayedPageNumber(option);
     let size;
     let width, height;
     if (node && !!node.size) {
@@ -33,6 +34,9 @@ wuwei.info.uploaded.markup = ( function () {
     }
     if (option && (option.contentViewerUri || option.pdfjsUri)) {
       uri = String(option.contentViewerUri || option.pdfjsUri || '');
+      if (option.page && !/#page=/i.test(uri) && isPdfLikeUri(uri)) {
+        uri = appendPageFragment(uri, option.page);
+      }
     }
     else {
       uri = resolveFrameUri(node, uri);
@@ -61,6 +65,13 @@ wuwei.info.uploaded.markup = ( function () {
     ? `<div class="w3-row">
         <textarea id="label" name="label" class="w3-col s12" rows="${rowcount(label)}"
             placeholder="${t('Label')}" disabled>${label}</textarea>
+      </div>`
+    : ''
+  }
+  ${displayedPageNumber
+    ? `<div class="w3-row info-page-number">
+        <label class="w3-col s5">${t('Page number')}</label>
+        <span class="w3-col s7">${escapeAttr(displayedPageNumber)}</span>
       </div>`
     : ''
   }
@@ -100,6 +111,24 @@ wuwei.info.uploaded.markup = ( function () {
 `;
     return html;
   };
+
+  function getDisplayedPageNumber(option) {
+    var point = option && (
+      option.displayedContentTarget ||
+      option.displayedPageMarker ||
+      option.contentTarget ||
+      option.contentTargetPoint ||
+      option.contentsPoint
+    );
+    var value = point && point.pageNumber;
+    if (value == null || value === '') {
+      value = option && (option.pageNumber || option.contentsPageNumber || option.page);
+    }
+    if (value == null || value === '') {
+      return '';
+    }
+    return String(value);
+  }
 
   function toText(str) {
     str = str.replace(/\n/gi, "");

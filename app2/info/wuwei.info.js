@@ -164,9 +164,7 @@ wuwei.info = wuwei.info || {};
       target &&
       (
         target.type === 'PageMarker' ||
-        target.nodeKind === 'contentTarget' ||
         target.nodeKind === 'PageMarker' ||
-        target.kind === 'contentTarget' ||
         target.kind === 'PageMarker' ||
         target.topicKind === 'contents-page'
       )
@@ -229,6 +227,145 @@ wuwei.info = wuwei.info || {};
     }
     pane.style.display = 'none';
     pane.innerHTML = '';
+  }
+
+
+  function getInformationMarkColor() {
+    if (common && common.actionColor && common.actionColor.info) {
+      return common.actionColor.info.color || common.actionColor.info.background || '#8B008B';
+    }
+    return '#8B008B';
+  }
+
+  function getInformationCircle() {
+    var circle = document.getElementById('Information');
+    var canvas;
+
+    if (circle) {
+      return circle;
+    }
+
+    canvas = document.getElementById('canvas');
+    if (!canvas || !document.createElementNS) {
+      return null;
+    }
+
+    circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('id', 'Information');
+    circle.setAttribute('r', '34');
+    circle.setAttribute('fill', 'none');
+    circle.setAttribute('stroke', getInformationMarkColor());
+    circle.setAttribute('stroke-width', '4');
+    circle.setAttribute('pointer-events', 'none');
+    circle.style.opacity = '0';
+    canvas.appendChild(circle);
+    return circle;
+  }
+
+  function hideInformationMark() {
+    var circle = document.getElementById('Information');
+    if (!circle) {
+      return;
+    }
+    circle.style.opacity = '0';
+    delete circle.dataset.node_id;
+    notifySearchInfoClosed();
+  }
+
+  function scheduleSearchMatchReapply() {
+    if (wuwei.search && wuwei.search.this_note &&
+      typeof wuwei.search.this_note.reapplySearchMatch === 'function') {
+      window.setTimeout(wuwei.search.this_note.reapplySearchMatch, 0);
+      window.setTimeout(wuwei.search.this_note.reapplySearchMatch, 80);
+    }
+  }
+
+  function notifySearchInfoTarget(node) {
+    if (wuwei.search && wuwei.search.this_note &&
+      typeof wuwei.search.this_note.setInfoTarget === 'function') {
+      wuwei.search.this_note.setInfoTarget(node);
+    }
+  }
+
+  function notifySearchInfoClosed() {
+    if (wuwei.search && wuwei.search.this_note &&
+      typeof wuwei.search.this_note.clearInfoTarget === 'function') {
+      wuwei.search.this_note.clearInfoTarget();
+    }
+  }
+
+  function isGroupDefinitionTarget(target) {
+    var type;
+    if (!target) {
+      return false;
+    }
+    type = String(target.type || '');
+    return !!(
+      Array.isArray(target.members) ||
+      ['Group', 'simple', 'horizontal', 'vertical', 'timeline', 'contents'].indexOf(type) >= 0
+    );
+  }
+
+  function resolveInformationMarkNode(target) {
+    var candidate = resolveTarget(target);
+    var group;
+    var representative;
+
+    if (candidate && candidate.groupRole === 'representative') {
+      return candidate;
+    }
+
+    if (isGroupDefinitionTarget(candidate) && model && typeof model.findGroupByTarget === 'function') {
+      group = model.findGroupByTarget(candidate);
+      if (group) {
+        representative = group.representativeNodeId &&
+          typeof model.findNodeById === 'function'
+          ? model.findNodeById(group.representativeNodeId)
+          : null;
+        if (!representative && typeof model.ensureGroupRepresentativeTopic === 'function') {
+          representative = model.ensureGroupRepresentativeTopic(group);
+        }
+        if (representative) {
+          return representative;
+        }
+      }
+    }
+
+    return candidate;
+  }
+
+  function showInformationMark(target) {
+    var circle;
+    var node;
+    var canvas;
+    var x;
+    var y;
+
+    node = resolveInformationMarkNode(target);
+    if (!node || !node.id || !isFinite(node.x) || !isFinite(node.y)) {
+      hideInformationMark();
+      return;
+    }
+
+    circle = getInformationCircle();
+    if (!circle) {
+      return;
+    }
+
+    x = Number(node.x);
+    y = Number(node.y);
+    circle.dataset.node_id = node.id;
+    circle.setAttribute('cx', String(x));
+    circle.setAttribute('cy', String(y));
+    circle.setAttribute('stroke', getInformationMarkColor());
+    circle.style.opacity = '1';
+    notifySearchInfoTarget(node);
+
+    canvas = document.getElementById('canvas');
+    if (canvas) {
+      canvas.appendChild(circle);
+    }
+    scheduleSearchMatchReapply();
   }
 
   function hideInfoPanes() {
@@ -388,6 +525,7 @@ wuwei.info = wuwei.info || {};
       stateMap.editTarget = null;
       stateMap.displayedContentTarget = null;
       stateMap.option = null;
+      hideInformationMark();
       return;
     }
 
@@ -414,8 +552,24 @@ wuwei.info = wuwei.info || {};
       delete infoPane.dataset.edit_node_id;
     }
 
+    showInformationMark(stateMap.displayedContentTarget || resolvedNode);
+
     if (isTimelinePointNode(resolvedNode) || isTimelineAxisLink(resolvedNode)) {
       openTimelineInfo(resolvedNode);
+      return;
+    }
+
+    /*
+     * A PageMarker represents a page/anchor inside its source Content.
+     * Opening Info for the marker should therefore open the source document
+     * at the specified page in the info pane.  The marker's own metadata is
+     * edited in the Contents edit panel, not shown as a standalone Info view.
+     */
+    if (isContentTargetMarker(resolvedNode) &&
+      !(stateMap.option && stateMap.option.contentTargetView) &&
+      wuwei.menu && wuwei.menu.contents &&
+      typeof wuwei.menu.contents.openContentTargetInInfo === 'function') {
+      wuwei.menu.contents.openContentTargetInInfo(resolvedNode);
       return;
     }
 
@@ -489,7 +643,7 @@ wuwei.info = wuwei.info || {};
     }
 
     /*
-     * contentTarget information opened through menu.contents.openContentTargetInInfo() is
+     * PageMarker information opened through menu.contents.openContentTargetInInfo() is
      * primarily a content preview request. Do not open the contents marker
      * pane afterwards, because it can hide the generic iframe/viewer and the
      * selected content target is no longer visible.
@@ -530,6 +684,7 @@ wuwei.info = wuwei.info || {};
     }
 
     hideInfoPanes();
+    hideInformationMark();
 
     if (infoPane) {
       infoPane.innerHTML = '';
@@ -820,11 +975,12 @@ wuwei.info = wuwei.info || {};
 
   ns.open = open;
   ns.close = close;
+  ns.hideInformationMark = hideInformationMark;
   ns.editOpen = editOpen;
   ns.getDisplayedContentTarget = function () {
     return stateMap.displayedContentTarget;
   };
-  ns.getDisplayedPageMarker = ns.getDisplayedContentTarget; // backward compatibility
+  ns.getDisplayedPageMarker = ns.getDisplayedContentTarget
   ns.widen = widen;
   ns.openWindow = openWindow;
   ns.closeWindow = closeWindow;

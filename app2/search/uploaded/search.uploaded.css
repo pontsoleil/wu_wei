@@ -1,0 +1,135 @@
+#search-uploaded {
+  margin-top: 100px;
+}
+#search-uploaded input[type=text] {
+  -webkit-transition: width 0.4s ease-in-out;
+  transition: width 0.4s ease-in-out;
+}
+#search-uploaded input[type=text]:focus {
+  width: 100%;
+}
+
+/** calendar */
+#search-uploaded * {box-sizing: border-box;}
+#search-uploaded ul {list-style-type: none;}
+/*body {font-family: Verdana, sans-serif;}
+*/
+#search-uploaded .calendar {
+  width: 200px;
+  margin: 0 auto;
+}
+#search-uploaded .month {
+  padding: 4px 16px;
+  width: 100%;
+  background: #818181;
+  text-align: center;
+}
+#search-uploaded .month ul {
+  margin: 0;
+  padding: 0;
+}
+#search-uploaded .month ul li {
+  color: white;
+  font-size: 20px;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+}
+#search-uploaded .month .prev {
+  float: left;
+  padding-top: 14px;
+}
+#search-uploaded .month .next {
+  float: right;
+  padding-top: 14px;
+}
+#search-uploaded .weekdays {
+  margin: 0;
+  padding: 4px 0;
+  background-color: #ddd;
+}
+#search-uploaded .weekdays li {
+  display: inline-block;
+  width: 13.6%;
+  color: #666;
+  text-align: center;
+}
+#search-uploaded .days {
+  padding: 4px 0;
+  background: #eee;
+  margin: 0;
+}
+#search-uploaded .days li {
+  list-style-type: none;
+  display: inline-block;
+  width: 13.6%;
+  text-align: center;
+  margin-bottom: 2px;
+  font-size:12px;
+  color: #777;
+}
+#search-uploaded .days li.today {
+  background: #adadad;
+  color: white !important
+}
+#search-uploaded .days li.sunday {
+  background: #d8d8d8;
+  border-radius: 9px;
+}
+#search-uploaded .days li.active {
+  background: #c9c9c9;
+  color: white !important
+}
+/* Add media queries for smaller screens */
+@media screen and (max-width:720px) {
+  #search-uploaded .weekdays li, .days li {width: 13.1%;}
+}
+@media screen and (max-width: 420px) {
+  #search-uploaded .weekdays li, .days li {width: 12.5%;}
+  #search-uploaded .days li .active {padding: 2px;}
+}
+@media screen and (max-width: 290px) {
+  #search-uploaded .weekdays li, .days li {width: 12.2%;}
+}
+
+/** files */
+ul.list-group {
+  width: 274px;
+  font-size: 0.8rem;
+  list-style-type: none;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+li.list-item {
+  float: left;
+}
+li.list-item {
+  width: 270px;
+  padding: 2px 4px;
+}
+li.list-item img {
+  cursor: pointer;
+}
+li.list-item img:hover {
+          box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+  -webkit-box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+     -moz-box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+      -ms-box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+}
+li.list-item .content {
+  padding: 0 4px;
+}
+/* li.list-item a {
+  display: block;
+  color: #666;
+  text-align: center;
+  padding: 4px 8px;
+  text-decoration: none;
+}
+li.list-item a:hover:not(.active) {
+  background-color: #ddd;
+}
+li.list-item a.active {
+  color: white;
+  background-color: #4CAF50;
+} */

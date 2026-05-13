@@ -527,8 +527,9 @@ wuwei.nls.EN = {
   'Contents module is not available.': 'Contents module is not available.',
   'Failed to add table of contents.': 'Failed to add table of contents.',
   'Select colour': 'Select colour',
-  'HTML contentTarget must specify anchorHref starting with #.': 'HTML contentTarget must specify anchorHref starting with #.',
+  'HTML PageMarker must specify anchorHref starting with #.': 'HTML PageMarker must specify anchorHref starting with #.',
   'Page number': 'Page number',
+  'Page sequence number': 'Page sequence number',
   'Apply to group members': 'Apply to group members',
   'This preview cannot create a thumbnail. Please try an HTML5 video such as mp4.': 'This preview cannot create a thumbnail. Please try an HTML5 video such as mp4.',
   'This video format is not supported in embedded preview.': 'This video format is not supported in embedded preview.',
@@ -553,5 +554,25 @@ wuwei.nls.EN = {
   '{name} loaded the note.': '{name} loaded the note.',
   '{name} created': '{name} created',
   '{name} modified': '{name} modified',
-  '{name} deleted': '{name} deleted'
+  '{name} deleted': '{name} deleted',
+  'Target': 'Target',
+
+  'Content kind': 'Content kind',
+
+  'Link condition': 'Link condition',
+
+  'Show matching items': 'Show matching items',
+
+  'Hide matching items': 'Hide matching items',
+
+  'Show all page data': 'Show all page data',
+
+  'matches': 'matches',
+
+  'Enter search string': 'Enter search string',
+
+  'Office document': 'Office document',
+  'Physical page 1 corresponds to': 'Physical page 1 corresponds to',
+
+
 };

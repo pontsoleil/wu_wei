@@ -1210,6 +1210,8 @@ wuwei.timeline = wuwei.timeline || {};
     endNode.label = formatTime(endNode.mediaStart);
     delete endNode.name;
 
+    ensureTimelineRepresentativeEntryLink(page, group);
+
     layoutAxisGroup(group);
     return group;
   }
@@ -1341,6 +1343,89 @@ wuwei.timeline = wuwei.timeline || {};
         link.relation === 'timeline'
       )
     );
+  }
+
+
+  function makeTimelineRepresentativeEntryLink(group, representative, entryNode) {
+    return {
+      id: makeUuid(),
+      type: 'Link',
+      from: representative.id,
+      to: entryNode.id,
+      relation: 'timeline',
+      label: '',
+      description: { format: 'plain', body: '' },
+      shape: 'NORMAL',
+      visible: true,
+      changed: true,
+      style: {
+        font: common.defaultFont,
+        line: { kind: 'SOLID', color: '#c0c0c0', width: 2 }
+      },
+      color: '#c0c0c0',
+      size: 2,
+      groupRef: group.id,
+      linkRole: 'contents-first-entry',
+      linkType: 'contents-first-entry',
+      audit: {
+        owner: 'guest',
+        createdBy: getCurrentOwnerId(),
+        createdAt: new Date().toISOString(),
+        lastModifiedBy: '',
+        lastModifiedAt: ''
+      }
+    };
+  }
+
+  function ensureTimelineRepresentativeEntryLink(page, group) {
+    var representative;
+    var firstNode;
+    var existing;
+    var link;
+
+    if (!page || !group) {
+      return null;
+    }
+    ensurePageCollections(page);
+    representative = getTimelineRepresentativeNode(group);
+    firstNode = sortTimelineMembers(group)[0] || null;
+    if (!representative || !firstNode) {
+      return null;
+    }
+
+    existing = null;
+    page.links = (page.links || []).filter(function (item) {
+      if (!item || item.groupRef !== group.id ||
+          (item.linkRole !== 'contents-first-entry' && item.linkRole !== 'timeline-entry')) {
+        return true;
+      }
+      if (getLinkSourceId(item) === representative.id && getLinkTargetId(item) === firstNode.id) {
+        if (!existing) {
+          existing = item;
+          return true;
+        }
+        return false;
+      }
+      return false;
+    });
+
+    if (existing) {
+      existing.visible = true;
+      existing.changed = true;
+      existing.relation = existing.relation || 'timeline';
+      existing.linkRole = 'contents-first-entry';
+      existing.linkType = 'contents-first-entry';
+      setLinkTargetId(existing, firstNode.id);
+      existing.from = representative.id;
+      if (undefined !== existing.source) {
+        existing.source = representative.id;
+      }
+      return existing;
+    }
+
+    link = makeTimelineRepresentativeEntryLink(group, representative, firstNode);
+    page.links.push(link);
+    return link;
   }
 
   function ensureVideoToTimelineRepresentativeLink(page, group, videoNode) {
@@ -1479,6 +1564,7 @@ wuwei.timeline = wuwei.timeline || {};
 
     // Video Content → timeline representative の Link を作成
     ensureVideoToTimelineRepresentativeLink(page, group, videoNode);
+    ensureTimelineRepresentativeEntryLink(page, group);
 
     normalizeAxisGroup(group);
     rebuildGraphAndRefresh();

@@ -30,10 +30,6 @@ wuwei.menu.markup = (function () {
     <span>▼</span>
   </a>
 
-  <a href="#" id="filterIcon" class="command">
-    <i class="fas fa-filter fa-lg fa-fw"></i>
-    <span class="tooltiptext">${translate('Filter')}</span>
-  </a>
   <a href="#" id="searchIcon" class="command">
     <i class="fas fa-search fa-lg fa-fw"></i>
     <span class="tooltiptext">${translate('Search')}</span>
@@ -345,23 +341,6 @@ wuwei.menu.markup = (function () {
       <div class="operator DeselectFlock selecting">
         <span>${translate('Deselect')}</span>
       </div>
-      </div>
-    </div>
-  </div>
-`);
-
-    // filter menu
-    html.push(`
-  <div id="filterMenu" class="pulldown" style="display: none;">
-    <span class="header">
-      <i class="fa fa-filter fa-fw">${translate('Filter')}</i>
-    </span>
-    <div class="operators">
-      <div class="operator">
-        <span>${translate('Show All')}</span>
-      </div>
-      <div class="operator">
-        <span>${translate('Clear Screen')}</span>
       </div>
     </div>
   </div>
