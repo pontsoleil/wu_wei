@@ -525,7 +525,6 @@ wuwei.nls.CN = {
   'Select colour': '选择颜色',
   'HTML PageMarker must specify anchorHref starting with #.': 'HTML PageMarker 必须指定以 # 开头的 anchorHref。',
   'Page number': '页码',
-  'Page sequence number': '顺序页码',
   'Apply to group members': '应用到组成员',
   'This preview cannot create a thumbnail. Please try an HTML5 video such as mp4.': '无法从此预览创建缩略图。请尝试 mp4 等 HTML5 视频。',
   'This video format is not supported in embedded preview.': '嵌入式预览不支持此视频格式。',
@@ -552,6 +551,13 @@ wuwei.nls.CN = {
   '{name} modified': '{name} 已修改',
   '{name} deleted': '{name} 已删除',
   'Physical page 1 corresponds to': '物理第1页对应的显示页码',
+  'Page offset': '页码偏移',
+  'Page max': '最大页码',
+  'Page min': '最小页码',
 
+  'Page number is below the valid range.': '页码小于有效范围。',
+  'Page number is above the valid range.': '页码大于有效范围。',
+  'Corrected to minimum page number': '已修正为最小页码',
+  'Corrected to maximum page number': '已修正为最大页码',
 
 };

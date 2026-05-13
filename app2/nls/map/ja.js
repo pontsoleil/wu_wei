@@ -535,7 +535,6 @@ wuwei.nls.JA = {
   'Select colour': '色選択',
   'HTML PageMarker must specify anchorHref starting with #.': 'HTML PageMarkerには # で始まる anchorHref を指定してください。',
   'Page number': 'ページ番号',
-  'Page sequence number': '順序番号',
   'Apply to group members': 'グループメンバーへ一括適用',
   'This preview cannot create a thumbnail. Please try an HTML5 video such as mp4.': 'この preview からはサムネを作成できません。mp4 などの HTML5 動画で試してください。',
   'This video format is not supported in embedded preview.': 'この映像形式は埋め込み preview に未対応です。',
@@ -579,6 +578,13 @@ wuwei.nls.JA = {
 
   'Office document': 'Office文書',
   'Physical page 1 corresponds to': '物理1ページ目の表示ページ番号',
+  'Page offset': 'ページオフセット',
+  'Page max': 'ページ最大値',
+  'Page min': 'ページ最小値',
 
+  'Page number is below the valid range.': 'ページ番号が有効範囲より小さい値です。',
+  'Page number is above the valid range.': 'ページ番号が有効範囲より大きい値です。',
+  'Corrected to minimum page number': '最小ページ番号に修正しました',
+  'Corrected to maximum page number': '最大ページ番号に修正しました',
 
 };

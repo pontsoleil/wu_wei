@@ -148,84 +148,199 @@ wuwei.contents = wuwei.contents || {};
     return getDocumentPageCount(node) > 0;
   }
 
-  function getFirstPageNumber(group) {
-    var value = Number(group && (
-      group.firstPageNumber ||
-      group.firstDisplayedPageNumber ||
-      group.documentFirstPageNumber ||
-      group.axis && group.axis.start ||
-      1
-    ));
-    value = Number.isFinite(value) ? Math.floor(value) : 1;
-    return Math.max(1, value);
+  function getResourceContentsMeta(node, create) {
+    if (!node || node.type !== 'Content') { return null; }
+    if (!node.resource || typeof node.resource !== 'object') {
+      if (!create) { return null; }
+      node.resource = {};
+    }
+    if (!node.resource.contents || typeof node.resource.contents !== 'object') {
+      if (!create) { return null; }
+      node.resource.contents = {};
+    }
+    return node.resource.contents;
+  }
+
+  function getDocumentNode(group) {
+    return findDocumentNodeForGroup(group);
+  }
+
+  function getDocumentPageNumberOffset(documentNode) {
+    var meta = getResourceContentsMeta(documentNode, false);
+    var value = Number(meta && meta.pageOffset);
+    if (Number.isFinite(value) && value >= 0) {
+      return Math.max(0, Math.floor(value));
+    }
+    return 0;
+  }
+
+  function setDocumentPageNumberOffset(documentNode, pageOffset) {
+    var meta;
+
+    if (!documentNode || documentNode.type !== 'Content' || !Number.isFinite(Number(pageOffset))) {
+      return false;
+    }
+    pageOffset = Math.max(0, Math.floor(Number(pageOffset)));
+    meta = getResourceContentsMeta(documentNode, true);
+    meta.pageOffset = pageOffset;
+    meta.firstPageNumber = pageOffset + 1;
+    documentNode.changed = true;
+    return true;
   }
 
   function getPageNumberOffset(group) {
-    return getFirstPageNumber(group) - 1;
+    return getDocumentPageNumberOffset(getDocumentNode(group));
   }
 
-  function toPhysicalPageNumber(group, displayedPageNumber) {
-    var value = Math.floor(Number(displayedPageNumber || getFirstPageNumber(group)));
-    if (!Number.isFinite(value)) { value = getFirstPageNumber(group); }
+  function getFirstPageNumber(group) {
+    return getPageNumberOffset(group) + 1;
+  }
+
+  function toViewerPageNumber(group, pageNumber) {
+    var value = Number(pageNumber);
+    if (!Number.isFinite(value)) {
+      value = getFirstPageNumber(group);
+    }
+    value = Math.floor(value);
     return Math.max(1, value - getPageNumberOffset(group));
   }
 
-  function toDisplayedPageNumber(group, physicalPageNumber) {
-    var value = Math.floor(Number(physicalPageNumber || 1));
+  function toDisplayedPageNumber(group, viewerPageNumber) {
+    var value = Math.floor(Number(viewerPageNumber || 1));
     if (!Number.isFinite(value)) { value = 1; }
     return Math.max(1, value + getPageNumberOffset(group));
   }
-  function recomputePageSequenceNumbersFromPageNumbers(group) {
-    var members;
+  function isAutomaticPageMarkerLabel(label, oldPageNumber) {
+    var value = String(label || '').trim();
+    if (!value) { return true; }
+    return value === String(Math.max(1, Math.floor(Number(oldPageNumber || 1))));
+  }
+
+  function recomputePageNumbersFromPageNumbers(group, previousOffset) {
+    var members, offset;
 
     if (!group || !isContentsGroup(group)) { return false; }
 
+    offset = getPageNumberOffset(group);
+    previousOffset = Number.isFinite(Number(previousOffset))
+      ? Math.max(0, Math.floor(Number(previousOffset)))
+      : offset;
+
     members = getMemberNodes(group);
     members.forEach(function (node) {
-      var pageNumber = Math.max(1, Math.floor(Number(node && node.pageNumber || 1)));
-      var sequenceNumber = toPhysicalPageNumber(group, pageNumber);
-      node.pageNumber = pageNumber;
-      node.pageSequenceNumber = sequenceNumber;
-      node.sequenceNumber = sequenceNumber;
-      node.physicalPageNumber = sequenceNumber;
+      var oldPageNumber = Math.max(1, Math.floor(Number(node && node.pageNumber || 1)));
+      var viewerPage = Math.max(1, oldPageNumber - previousOffset);
+      var newPageNumber = Math.max(1, viewerPage + offset);
+
+      node.pageNumber = newPageNumber;
+      if (isAutomaticPageMarkerLabel(node.label, oldPageNumber)) {
+        node.label = String(newPageNumber);
+      }
       node.changed = true;
     });
     return true;
   }
 
-  function updatePageNumberMappingFromMarker(group, pageNumber, pageSequenceNumber) {
-    var first;
+  function updatePageOffsetMapping(group, pageOffset) {
+    var documentNode, previousOffset, page, documentId, groups;
 
-    if (!group || !Number.isFinite(Number(pageNumber)) || !Number.isFinite(Number(pageSequenceNumber))) {
+    if (!group || !Number.isFinite(Number(pageOffset))) {
       return false;
     }
 
-    pageNumber = Math.max(1, Math.floor(Number(pageNumber)));
-    pageSequenceNumber = Math.max(1, Math.floor(Number(pageSequenceNumber)));
-    first = Math.max(1, pageNumber - pageSequenceNumber + 1);
+    documentNode = getDocumentNode(group);
+    if (!documentNode) {
+      return false;
+    }
 
-    group.firstPageNumber = first;
-    group.firstDisplayedPageNumber = first;
-    group.documentFirstPageNumber = first;
-    group.axis = group.axis || {};
-    group.axis.start = first;
+    previousOffset = getDocumentPageNumberOffset(documentNode);
+    pageOffset = Math.max(0, Math.floor(Number(pageOffset)));
 
-    /*
-     * When the page-number mapping is edited from one PageMarker, keep the
-     * displayed pageNumber of all other PageMarkers as the human-authored
-     * source of truth and recalculate their page sequence numbers from the
-     * updated group mapping.
-     */
-    recomputePageSequenceNumbersFromPageNumbers(group);
+    if (!setDocumentPageNumberOffset(documentNode, pageOffset)) {
+      return false;
+    }
+
+    page = getCurrentPage();
+    documentId = documentNode.id;
+    groups = page && Array.isArray(page.groups)
+      ? page.groups.filter(function (candidate) {
+        return isContentsGroup(candidate) &&
+          (candidate.documentRef === documentId || candidate.mediaRef === documentId);
+      })
+      : [group];
+
+    groups.forEach(function (candidate) {
+      candidate.axis = candidate.axis || {};
+      candidate.axis.start = getFirstPageNumber(candidate);
+      recomputePageNumbersFromPageNumbers(candidate, previousOffset);
+      layoutAxisGroup(candidate);
+    });
+
     return true;
   }
 
-
   function getContentsAxisPageCount(group) {
-    var pageCount = Number(group && (group.documentPageCount || group.physicalPageCount || 0));
+    var documentNode = getDocumentNode(group);
+    var pageCount = getDocumentPageCount(documentNode);
 
-    pageCount = Number.isFinite(pageCount) && pageCount > 0 ? Math.floor(pageCount) : 0;
+    if (!(pageCount > 0)) {
+      pageCount = Number(group && (group.documentPageCount || group.physicalPageCount || 0));
+      pageCount = Number.isFinite(pageCount) && pageCount > 0 ? Math.floor(pageCount) : 0;
+    }
     return Math.max(1, pageCount);
+  }
+
+  function getKnownContentsAxisPageCount(group) {
+    var documentNode = getDocumentNode(group);
+    var pageCount = getDocumentPageCount(documentNode);
+
+    if (!(pageCount > 0)) {
+      pageCount = Number(group && (group.documentPageCount || group.physicalPageCount || 0));
+      pageCount = Number.isFinite(pageCount) && pageCount > 0 ? Math.floor(pageCount) : 0;
+    }
+    return pageCount > 0 ? pageCount : 0;
+  }
+
+  function getDocumentPageNumberBounds(documentNode) {
+    var meta = getResourceContentsMeta(documentNode, false) || {};
+    var min = Number(meta.pageMin);
+    var max = Number(meta.pageMax);
+    return {
+      min: Number.isFinite(min) && min >= 1 ? Math.floor(min) : null,
+      max: Number.isFinite(max) && max >= 1 ? Math.floor(max) : null
+    };
+  }
+
+  function getPageMarkerPageNumberRange(group) {
+    var documentNode = getDocumentNode(group);
+    var offset = getPageNumberOffset(group);
+    var pageCount = getKnownContentsAxisPageCount(group);
+    var bounds = getDocumentPageNumberBounds(documentNode);
+    var min = bounds.min || (pageCount > 0 ? Math.max(1, offset + 1) : 1);
+    var max = bounds.max || (pageCount > 0 ? offset + pageCount : null);
+
+    if (max != null && max < min) {
+      max = min;
+    }
+    return {
+      hasPageCount: !!(max != null),
+      min: min,
+      max: max,
+      pageOffset: offset,
+      pageCount: pageCount
+    };
+  }
+
+  function clampPageMarkerPageNumber(group, pageNumber) {
+    var value = Math.floor(Number(pageNumber || 1));
+    var range = getPageMarkerPageNumberRange(group);
+
+    if (!Number.isFinite(value)) { value = range.min || 1; }
+    value = Math.max(1, value);
+    if (range.hasPageCount) {
+      value = Math.max(range.min, Math.min(range.max, value));
+    }
+    return value;
   }
 
   function getContentsAxisDisplayEnd(group) {
@@ -497,9 +612,6 @@ wuwei.contents = wuwei.contents || {};
       groupRef: group.id,
       documentRef: group.documentRef,
       pageNumber: pageNumber,
-      pageSequenceNumber: option.pageSequenceNumber || option.sequenceNumber || option.physicalPageNumber || toPhysicalPageNumber(group, pageNumber),
-      sequenceNumber: option.sequenceNumber || option.pageSequenceNumber || option.physicalPageNumber || toPhysicalPageNumber(group, pageNumber),
-      physicalPageNumber: option.physicalPageNumber || option.sequenceNumber || option.pageSequenceNumber || toPhysicalPageNumber(group, pageNumber),
       axisRole: option.axisRole || 'entry',
       label: makeContentTargetLabel(group, pageNumber, option),
       description: { format: 'plain/text', body: option.comment || option.description || '' },
@@ -530,12 +642,6 @@ wuwei.contents = wuwei.contents || {};
     node.groupRef = group.id;
     node.documentRef = group.documentRef;
     node.pageNumber = Math.max(1, Math.floor(Number(node.pageNumber || index + 1)));
-    if (!Number.isFinite(Number(node.pageSequenceNumber || node.sequenceNumber || node.physicalPageNumber))) {
-      node.pageSequenceNumber = toPhysicalPageNumber(group, node.pageNumber);
-    }
-    node.sequenceNumber = Math.max(1, Math.floor(Number(node.sequenceNumber || node.pageSequenceNumber || node.physicalPageNumber || toPhysicalPageNumber(group, node.pageNumber))));
-    node.pageSequenceNumber = node.sequenceNumber;
-    node.physicalPageNumber = node.sequenceNumber;
     node.axisRole = node.axisRole || 'entry';
     node.label = node.label || makeContentTargetLabel(group, node.pageNumber, null);
     node.shape = 'CIRCLE';
@@ -559,10 +665,7 @@ wuwei.contents = wuwei.contents || {};
   }
 
   function clampPageNumber(group, pageNumber) {
-    var value = Math.floor(Number(pageNumber || 1));
-    if (!Number.isFinite(value)) { value = 1; }
-    if (value < 1) { value = 1; }
-    return value;
+    return clampPageMarkerPageNumber(group, pageNumber);
   }
 
   function axisOrientation(group) {
@@ -718,11 +821,8 @@ wuwei.contents = wuwei.contents || {};
 
   function pageRatio(group, node, pageCount) {
     var range = Math.max(pageCount - 1, 1);
-    var physicalPageNumber = Number(node && (node.pageSequenceNumber || node.sequenceNumber || node.physicalPageNumber));
-    if (!Number.isFinite(physicalPageNumber) || physicalPageNumber <= 0) {
-      physicalPageNumber = toPhysicalPageNumber(group, node && node.pageNumber);
-    }
-    return Math.max(0, Math.min(1, (physicalPageNumber - 1) / range));
+    var viewerPage = toViewerPageNumber(group, node && node.pageNumber);
+    return Math.max(0, Math.min(1, (viewerPage - 1) / range));
   }
 
   function orderedPageMembers(group) {
@@ -854,16 +954,18 @@ wuwei.contents = wuwei.contents || {};
     axis = group.axis || {};
     pageCount = getContentsAxisPageCount(group);
     getMemberNodes(group).forEach(function (node) {
-      var seq = Number(node && (node.pageSequenceNumber || node.sequenceNumber || node.physicalPageNumber));
-      pageCount = Math.max(pageCount, Number.isFinite(seq) && seq > 0 ? seq : toPhysicalPageNumber(group, node && node.pageNumber));
+      pageCount = Math.max(pageCount, toViewerPageNumber(group, node && node.pageNumber));
     });
     displayStart = getFirstPageNumber(group);
     displayEnd = toDisplayedPageNumber(group, pageCount);
     length = Math.max(60, Number(group.length || AXIS_LENGTH));
     anchor = axisAnchor(group);
 
-    group.firstPageNumber = displayStart;
     group.axis = group.axis || {};
+    delete group.pageOffset;
+    delete group.firstPageNumber;
+    delete group.firstDisplayedPageNumber;
+    delete group.documentFirstPageNumber;
     group.axis.anchor = anchor;
     group.origin = { x: anchor.x, y: anchor.y };
     group.axis.start = displayStart;
@@ -881,9 +983,6 @@ wuwei.contents = wuwei.contents || {};
       var pageNumber = clampPageNumber(group, node.pageNumber || toDisplayedPageNumber(group, index + 1));
       ensurePageNodeDefaults(group, node, index);
       node.pageNumber = pageNumber;
-      node.pageSequenceNumber = Math.max(1, Math.floor(Number(node.pageSequenceNumber || node.sequenceNumber || node.physicalPageNumber || toPhysicalPageNumber(group, pageNumber))));
-      node.sequenceNumber = node.pageSequenceNumber;
-      node.physicalPageNumber = node.pageSequenceNumber;
       if (index === 0) {
         node.axisPos = axisOrientation(group) === 'vertical' ? anchor.y : anchor.x;
       }
@@ -1083,7 +1182,7 @@ wuwei.contents = wuwei.contents || {};
   }
 
   function createAxisGroup(axis, documentCandidate, option) {
-    var page, documentNode, pageCount, firstPageNumber, displayEnd, origin, group, nodes, axisStartPos;
+    var page, documentNode, pageCount, pageOffset, firstPageNumber, displayEnd, origin, group, nodes, axisStartPos;
     option = option || {};
     if (model && typeof model.syncPageFromGraph === 'function') {
       model.syncPageFromGraph();
@@ -1101,7 +1200,13 @@ wuwei.contents = wuwei.contents || {};
       return null;
     }
     pageCount = getDocumentPageCount(documentNode);
-    firstPageNumber = Math.max(1, Math.floor(Number(option.firstPageNumber || option.firstDisplayedPageNumber || 1)));
+    pageOffset = Number.isFinite(Number(option.pageOffset))
+      ? Math.max(0, Math.floor(Number(option.pageOffset)))
+      : (Number.isFinite(Number(option.firstPageNumber || option.firstDisplayedPageNumber))
+        ? Math.max(0, Math.floor(Number(option.firstPageNumber || option.firstDisplayedPageNumber)) - 1)
+        : getDocumentPageNumberOffset(documentNode));
+    setDocumentPageNumberOffset(documentNode, pageOffset);
+    firstPageNumber = pageOffset + 1;
     displayEnd = firstPageNumber + Math.max(1, pageCount || 1) - 1;
 
     origin = defaultAxisOrigin(documentNode, axis === 'vertical' ? 'vertical' : 'horizontal');
@@ -1114,7 +1219,6 @@ wuwei.contents = wuwei.contents || {};
       documentRef: documentNode.id,
       pageCount: displayEnd,
       documentPageCount: pageCount || 0,
-      firstPageNumber: firstPageNumber,
       hasPageCount: pageCount > 0,
       spine: { visible: true, color: '#4c6b8a', width: 4, padding: 12 },
       axis: {
@@ -1132,7 +1236,6 @@ wuwei.contents = wuwei.contents || {};
     group.mediaRef = documentNode.id;
     group.pageCount = displayEnd;
     group.documentPageCount = pageCount || 0;
-    group.firstPageNumber = firstPageNumber;
     group.hasPageCount = pageCount > 0;
     page.groups.push(group);
     axisStartPos = group.orientation === 'vertical' ? origin.y : origin.x;
@@ -1200,11 +1303,8 @@ wuwei.contents = wuwei.contents || {};
       group.spine.color = props.strokeColor;
       group.strokeColor = props.strokeColor;
     }
-    if (Number.isFinite(Number(props.firstPageNumber))) {
-      group.firstPageNumber = Math.max(1, Math.floor(Number(props.firstPageNumber)));
-      group.firstDisplayedPageNumber = group.firstPageNumber;
-      group.documentFirstPageNumber = group.firstPageNumber;
-      recomputePageSequenceNumbersFromPageNumbers(group);
+    if (Number.isFinite(Number(props.pageOffset))) {
+      updatePageOffsetMapping(group, props.pageOffset);
     }
 
     setAxisAnchor(group, nextAnchor);
@@ -1353,7 +1453,9 @@ wuwei.contents = wuwei.contents || {};
   }
 
   function appendPageFragment(uri, pageNumber) {
-    var page = Math.max(1, Math.floor(Number(pageNumber || 1)));
+    var page = Number(pageNumber);
+    if (!Number.isFinite(page)) { page = 1; }
+    page = Math.max(1, Math.floor(page));
     var base = toDirectUploadContentUri(String(uri || '').replace(/#.*$/, ''));
     if (!base) { return ''; }
     return base + '#page=' + encodeURIComponent(page);
@@ -1418,11 +1520,7 @@ wuwei.contents = wuwei.contents || {};
     var group = contentTarget && contentTarget.groupRef && model && typeof model.findGroupById === 'function'
       ? model.findGroupById(contentTarget.groupRef)
       : null;
-    var viewerPageNumber = contentTarget && Number.isFinite(Number(
-      contentTarget.pageSequenceNumber || contentTarget.sequenceNumber || contentTarget.physicalPageNumber
-    ))
-      ? Math.max(1, Math.floor(Number(contentTarget.pageSequenceNumber || contentTarget.sequenceNumber || contentTarget.physicalPageNumber)))
-      : (group ? toPhysicalPageNumber(group, pageNumber) : pageNumber);
+    var viewerPageNumber = group ? toViewerPageNumber(group, pageNumber) : pageNumber;
 
     if (!documentNode) { return ''; }
     if (util && typeof util.getResourcePreviewUri === 'function') {
@@ -1443,10 +1541,13 @@ wuwei.contents = wuwei.contents || {};
   ns.getDocumentPageCount = getDocumentPageCount;
   ns.hasKnownDocumentPages = hasKnownDocumentPages;
   ns.getFirstPageNumber = getFirstPageNumber;
-  ns.toPhysicalPageNumber = toPhysicalPageNumber;
+  ns.getPageNumberOffset = getPageNumberOffset;
+  ns.toViewerPageNumber = toViewerPageNumber;
   ns.toDisplayedPageNumber = toDisplayedPageNumber;
-  ns.recomputePageSequenceNumbersFromPageNumbers = recomputePageSequenceNumbersFromPageNumbers;
-  ns.updatePageNumberMappingFromMarker = updatePageNumberMappingFromMarker;
+  ns.getPageMarkerPageNumberRange = getPageMarkerPageNumberRange;
+  ns.clampPageMarkerPageNumber = clampPageMarkerPageNumber;
+  ns.recomputePageNumbersFromPageNumbers = recomputePageNumbersFromPageNumbers;
+  ns.updatePageOffsetMapping = updatePageOffsetMapping;
   ns.createAxisGroup = createAxisGroup;
   ns.addTableOfContents = addTableOfContents;
   ns.updateAxisGroup = updateAxisGroup;

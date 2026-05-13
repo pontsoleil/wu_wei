@@ -163,6 +163,13 @@ wuwei.edit.generic.markup = ( function () {
     );
   }
 
+
+  function getResourceContentsValue(node, key) {
+    var contents = node && node.resource && node.resource.contents;
+    var value = contents && contents[key];
+    return Number.isFinite(Number(value)) ? String(Math.floor(Number(value))) : '';
+  }
+
   const template = function (param) {
     const
       common = wuwei.common,
@@ -238,6 +245,18 @@ wuwei.edit.generic.markup = ( function () {
           ],
           null,
           's6'),
+        '</div>',
+
+        '<div class="w3-row">',
+        '  <label for="resource_contents_pageMin" class="w3-col s5">' + t('Page min') + '</label>',
+        '  <input type="number" id="resource_contents_pageMin" name="resource.contents.pageMin" class="w3-col s7 edit-value"',
+        ' min="1" step="1" value="' + getResourceContentsValue(node, 'pageMin') + '">',
+        '</div>',
+
+        '<div class="w3-row">',
+        '  <label for="resource_contents_pageMax" class="w3-col s5">' + t('Page max') + '</label>',
+        '  <input type="number" id="resource_contents_pageMax" name="resource.contents.pageMax" class="w3-col s7 edit-value"',
+        ' min="1" step="1" value="' + getResourceContentsValue(node, 'pageMax') + '">',
         '</div>',
 
         '<div class="w3-row">',

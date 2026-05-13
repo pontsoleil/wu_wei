@@ -529,7 +529,6 @@ wuwei.nls.EN = {
   'Select colour': 'Select colour',
   'HTML PageMarker must specify anchorHref starting with #.': 'HTML PageMarker must specify anchorHref starting with #.',
   'Page number': 'Page number',
-  'Page sequence number': 'Page sequence number',
   'Apply to group members': 'Apply to group members',
   'This preview cannot create a thumbnail. Please try an HTML5 video such as mp4.': 'This preview cannot create a thumbnail. Please try an HTML5 video such as mp4.',
   'This video format is not supported in embedded preview.': 'This video format is not supported in embedded preview.',
@@ -573,6 +572,13 @@ wuwei.nls.EN = {
 
   'Office document': 'Office document',
   'Physical page 1 corresponds to': 'Physical page 1 corresponds to',
+  'Page offset': 'Page offset',
+  'Page max': 'Page max',
+  'Page min': 'Page min',
 
+  'Page number is below the valid range.': 'Page number is below the valid range.',
+  'Page number is above the valid range.': 'Page number is above the valid range.',
+  'Corrected to minimum page number': 'Corrected to minimum page number',
+  'Corrected to maximum page number': 'Corrected to maximum page number',
 
 };

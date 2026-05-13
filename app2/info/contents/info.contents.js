@@ -132,9 +132,9 @@ wuwei.info.contents = wuwei.info.contents || {};
       documentName: getDocumentName(spec),
       markerCount: Array.isArray(group.members) ? group.members.length : 0,
       pageCount: group.pageCount || (group.axis && group.axis.end) || '',
-      firstPageNumber: wuwei.contents && typeof wuwei.contents.getFirstPageNumber === 'function'
-        ? wuwei.contents.getFirstPageNumber(group)
-        : (group.firstPageNumber || group.axis && group.axis.start || 1)
+      pageOffset: wuwei.contents && typeof wuwei.contents.getPageNumberOffset === 'function'
+        ? wuwei.contents.getPageNumberOffset(group)
+        : 0
     });
     pane.style.display = 'block';
     return true;

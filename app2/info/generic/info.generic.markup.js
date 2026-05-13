@@ -180,12 +180,17 @@ wuwei.info.generic.markup = (function () {
   }
 
   function applyPageFragment(uri, option) {
-    var page = option && (option.page || option.contentsPageNumber);
+    var page = option && option.page;
     var text = String(uri || '');
-    if (!page || !text || /#page=/i.test(text) || !isPdfLikeUri(text)) {
+    if ((page == null || page === '') && option) {
+      page = option.contentsPageNumber;
+    }
+    if (page == null || page === '' || !text || /#page=/i.test(text) || !isPdfLikeUri(text)) {
       return text;
     }
-    return text.replace(/#.*$/, '') + '#page=' + encodeURIComponent(Math.max(1, Math.floor(Number(page) || 1)));
+    page = Number(page);
+    if (!Number.isFinite(page)) { page = 1; }
+    return text.replace(/#.*$/, '') + '#page=' + encodeURIComponent(Math.max(1, Math.floor(page)));
   }
 
   function isPdfLikeUri(uri) {

@@ -579,24 +579,6 @@ wuwei.note = (function () {
       if (Number.isFinite(Number(src.pageNumber))) {
         out.pageNumber = Number(src.pageNumber);
       }
-      if (Number.isFinite(Number(src.pageSequenceNumber))) {
-        out.pageSequenceNumber = Math.max(1, Math.floor(Number(src.pageSequenceNumber)));
-      }
-      if (Number.isFinite(Number(src.sequenceNumber))) {
-        out.sequenceNumber = Math.max(1, Math.floor(Number(src.sequenceNumber)));
-      }
-      if (Number.isFinite(Number(src.physicalPageNumber))) {
-        out.physicalPageNumber = Math.max(1, Math.floor(Number(src.physicalPageNumber)));
-      }
-      if (!Number.isFinite(Number(out.pageSequenceNumber)) && Number.isFinite(Number(out.sequenceNumber))) {
-        out.pageSequenceNumber = out.sequenceNumber;
-      }
-      if (!Number.isFinite(Number(out.sequenceNumber)) && Number.isFinite(Number(out.pageSequenceNumber))) {
-        out.sequenceNumber = out.pageSequenceNumber;
-      }
-      if (!Number.isFinite(Number(out.physicalPageNumber)) && Number.isFinite(Number(out.pageSequenceNumber))) {
-        out.physicalPageNumber = out.pageSequenceNumber;
-      }
       if (Number.isFinite(Number(src.axisPos))) {
         out.axisPos = Number(src.axisPos);
       }
@@ -784,15 +766,6 @@ wuwei.note = (function () {
           pageNumber: Math.max(1, Math.floor(Number(entry && entry.pageNumber || 1))),
           comment: String(entry && entry.comment || '')
         };
-        if (Number.isFinite(Number(entry && entry.pageSequenceNumber))) {
-          outEntry.pageSequenceNumber = Math.max(1, Math.floor(Number(entry.pageSequenceNumber)));
-        }
-        if (Number.isFinite(Number(entry && entry.sequenceNumber))) {
-          outEntry.sequenceNumber = Math.max(1, Math.floor(Number(entry.sequenceNumber)));
-        }
-        if (Number.isFinite(Number(entry && entry.physicalPageNumber))) {
-          outEntry.physicalPageNumber = Math.max(1, Math.floor(Number(entry.physicalPageNumber)));
-        }
         return outEntry;
       }).filter(function (entry) {
         return !!entry.nodeId;
@@ -807,9 +780,6 @@ wuwei.note = (function () {
       pageCount: Number.isFinite(pageCount) ? pageCount : undefined,
       documentPageCount: Number.isFinite(Number(src.documentPageCount)) ? Math.max(1, Math.floor(Number(src.documentPageCount))) : undefined,
       physicalPageCount: Number.isFinite(Number(src.physicalPageCount)) ? Math.max(1, Math.floor(Number(src.physicalPageCount))) : undefined,
-      firstPageNumber: Number.isFinite(Number(src.firstPageNumber)) ? Math.max(1, Math.floor(Number(src.firstPageNumber))) : undefined,
-      firstDisplayedPageNumber: Number.isFinite(Number(src.firstDisplayedPageNumber)) ? Math.max(1, Math.floor(Number(src.firstDisplayedPageNumber))) : undefined,
-      documentFirstPageNumber: Number.isFinite(Number(src.documentFirstPageNumber)) ? Math.max(1, Math.floor(Number(src.documentFirstPageNumber))) : undefined,
       hasPageCount: (typeof src.hasPageCount === 'boolean') ? src.hasPageCount : undefined,
       timeStart: Number.isFinite(Number(src.timeStart)) ? Number(src.timeStart) : undefined,
       timeEnd: Number.isFinite(Number(src.timeEnd)) ? Number(src.timeEnd) : undefined,
@@ -1225,34 +1195,32 @@ wuwei.note = (function () {
     var out = stripRuntimeNode(node);
     var compactResource;
     if (out.topicKind === 'contents-page' || out.type === 'PageMarker') {
-      out.type = 'PageMarker';
-      out.topicKind = 'contents-page';
-      if (Number.isFinite(Number(out.pageNumber))) {
-        out.pageNumber = Math.max(1, Math.floor(Number(out.pageNumber)));
-      }
-      else {
-        out.pageNumber = 1;
-      }
-      if (Number.isFinite(Number(out.pageSequenceNumber))) {
-        out.pageSequenceNumber = Math.max(1, Math.floor(Number(out.pageSequenceNumber)));
-      }
-      if (Number.isFinite(Number(out.sequenceNumber))) {
-        out.sequenceNumber = Math.max(1, Math.floor(Number(out.sequenceNumber)));
-      }
-      if (Number.isFinite(Number(out.physicalPageNumber))) {
-        out.physicalPageNumber = Math.max(1, Math.floor(Number(out.physicalPageNumber)));
-      }
-      if (!Number.isFinite(Number(out.pageSequenceNumber)) && Number.isFinite(Number(out.sequenceNumber))) {
-        out.pageSequenceNumber = out.sequenceNumber;
-      }
-      if (!Number.isFinite(Number(out.sequenceNumber)) && Number.isFinite(Number(out.pageSequenceNumber))) {
-        out.sequenceNumber = out.pageSequenceNumber;
-      }
-      if (!Number.isFinite(Number(out.physicalPageNumber)) && Number.isFinite(Number(out.pageSequenceNumber))) {
-        out.physicalPageNumber = out.pageSequenceNumber;
-      }
-      if (Number.isFinite(Number(out.axisPos))) {
-        out.axisPos = Number(out.axisPos);
+      out = {
+        id: out.id,
+        type: 'PageMarker',
+        topicKind: 'contents-page',
+        groupRef: out.groupRef || '',
+        documentRef: out.documentRef || '',
+        axisRole: out.axisRole || 'entry',
+        pageNumber: Number.isFinite(Number(out.pageNumber))
+          ? Math.max(1, Math.floor(Number(out.pageNumber)))
+          : 1,
+        label: String(out.label || ''),
+        description: out.description,
+        x: Number.isFinite(Number(out.x)) ? Number(out.x) : 0,
+        y: Number.isFinite(Number(out.y)) ? Number(out.y) : 0,
+        shape: out.shape || 'CIRCLE',
+        size: out.size,
+        color: out.color,
+        outline: out.outline,
+        outlineWidth: out.outlineWidth,
+        style: out.style,
+        font: out.font,
+        visible: false !== out.visible,
+        audit: out.audit
+      };
+      if (Number.isFinite(Number(node.axisPos))) {
+        out.axisPos = Number(node.axisPos);
       }
     }
     if (out.type === 'Content') {

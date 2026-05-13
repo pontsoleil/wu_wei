@@ -275,58 +275,49 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     return !value || value === pageLabel;
   }
 
-  function getPageSequenceNumber(point, group) {
-    var value;
-
-    if (!point) {
-      return 1;
+  function getPageNumberRange(group) {
+    if (wuwei.contents && typeof wuwei.contents.getPageMarkerPageNumberRange === 'function') {
+      return wuwei.contents.getPageMarkerPageNumberRange(group);
     }
-    value = Number(
-      point.pageSequenceNumber ||
-      point.sequenceNumber ||
-      point.physicalPageNumber ||
-      0
-    );
-    if (Number.isFinite(value) && value > 0) {
-      return Math.max(1, Math.floor(value));
+    return { hasPageCount: false, min: 1, max: null, pageOffset: 0, pageCount: 0 };
+  }
+  function clampPageNumberForEdit(value, group) {
+    if (wuwei.contents && typeof wuwei.contents.clampPageMarkerPageNumber === 'function') {
+      return wuwei.contents.clampPageMarkerPageNumber(group, value);
     }
-    if (wuwei.contents && typeof wuwei.contents.toPhysicalPageNumber === 'function') {
-      return wuwei.contents.toPhysicalPageNumber(group, point.pageNumber || 1);
-    }
-    return Math.max(1, Math.floor(Number(point.pageNumber || 1)));
+    return Math.max(1, Math.floor(Number(value || 1)));
   }
 
-  function updateGroupFirstPageNumberFromMarker(group, pageNumber, sequenceNumber) {
-    var first;
+  function warnPageNumberCorrected(inputValue, correctedValue, group) {
+    var range = getPageNumberRange(group);
+    var inputNumber = Math.floor(Number(inputValue || 1));
+    var message;
 
-    if (!group || !Number.isFinite(Number(pageNumber)) || !Number.isFinite(Number(sequenceNumber))) {
+    if (!range.hasPageCount || inputNumber === correctedValue) {
       return;
     }
-    if (wuwei.contents && typeof wuwei.contents.updatePageNumberMappingFromMarker === 'function') {
-      wuwei.contents.updatePageNumberMappingFromMarker(group, pageNumber, sequenceNumber);
-      return;
+    if (inputNumber < range.min) {
+      message = wuwei.nls.translate('Page number is below the valid range.') + '\n' +
+        wuwei.nls.translate('Corrected to minimum page number') + ': ' + correctedValue;
     }
-    pageNumber = Math.max(1, Math.floor(Number(pageNumber)));
-    sequenceNumber = Math.max(1, Math.floor(Number(sequenceNumber)));
-    first = Math.max(1, pageNumber - sequenceNumber + 1);
-    group.firstPageNumber = first;
-    group.firstDisplayedPageNumber = first;
-    group.documentFirstPageNumber = first;
-    group.axis = group.axis || {};
-    group.axis.start = first;
+    else if (inputNumber > range.max) {
+      message = wuwei.nls.translate('Page number is above the valid range.') + '\n' +
+        wuwei.nls.translate('Corrected to maximum page number') + ': ' + correctedValue;
+    }
+    if (message) {
+      window.alert(message);
+    }
   }
 
   function configureAxis(group) {
     $('editContentsAxisId').value = group.id || '';
     $('editContentsAxisDirection').value = group.orientation || 'horizontal';
     $('editContentsAxisLength').value = Number(group.length || 480);
-    if ($('editContentsFirstPageNumber')) {
-      $('editContentsFirstPageNumber').value = Number(
-        group.firstPageNumber ||
-        group.firstDisplayedPageNumber ||
-        group.documentFirstPageNumber ||
-        group.axis && group.axis.start ||
-        1
+    if ($('editContentsPageOffset')) {
+      $('editContentsPageOffset').value = Number(
+        wuwei.contents && typeof wuwei.contents.getPageNumberOffset === 'function'
+          ? wuwei.contents.getPageNumberOffset(group)
+          : 0
       );
     }
     $('editContentsAxisStrokeWidth').value = Number(group.strokeWidth || (group.spine && group.spine.width) || 4);
@@ -352,14 +343,10 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     if ($('pageNumber')) {
       $('pageNumber').value = Number(point.pageNumber || 1);
     }
-    if ($('pageSequenceNumber')) {
-      $('pageSequenceNumber').value = getPageSequenceNumber(point, currentGroup);
-    }
     if ($('anchorHref')) {
       $('anchorHref').value = anchorHref;
     }
     setRowVisible('pageNumberRow', !htmlMarker);
-    setRowVisible('pageSequenceNumberRow', !htmlMarker);
     setRowVisible('anchorHrefRow', htmlMarker);
     $('style_fill').value = toHexColor(style.fill || point.color || '#ffffff', '#ffffff');
     $('style_line_width').value = Number(
@@ -446,7 +433,7 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     wuwei.contents.updateAxisGroup(currentGroup, {
       orientation: $('editContentsAxisDirection').value,
       length: Number($('editContentsAxisLength').value || currentGroup.length || 480),
-      firstPageNumber: $('editContentsFirstPageNumber') ? Number($('editContentsFirstPageNumber').value || currentGroup.firstPageNumber || 1) : undefined,
+      pageOffset: $('editContentsPageOffset') ? Number($('editContentsPageOffset').value || 0) : undefined,
       strokeWidth: Number($('editContentsAxisStrokeWidth').value || 4),
       strokeColor: $('editContentsAxisStrokeColor').value || '#4c6b8a'
     });
@@ -459,16 +446,13 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     }
 
     var pageNumberEl = $('pageNumber');
-    var pageSequenceNumberEl = $('pageSequenceNumber');
     var anchorHrefEl = $('anchorHref');
     var htmlMarker = isHtmlContentTarget(currentPoint);
     var anchorHref;
     var oldLabel;
     var oldPageNumber;
-    var oldSequenceNumber;
     var labelValue;
     var newPageNumber;
-    var newSequenceNumber;
     var labelWasUnchanged;
     var labelWasAutomatic;
 
@@ -492,7 +476,6 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     var labelOffset = Math.max(0, Number($('labelOffset').value || 0));
     oldLabel = currentPoint.label || '';
     oldPageNumber = Math.max(1, Math.floor(Number(currentPoint.pageNumber || 1)));
-    oldSequenceNumber = getPageSequenceNumber(currentPoint, currentGroup);
     labelValue = $('label').value || '';
     labelWasUnchanged = labelValue === oldLabel;
     labelWasAutomatic = isAutoPageMarkerLabel(oldLabel, oldPageNumber);
@@ -513,17 +496,13 @@ wuwei.edit.contents = wuwei.edit.contents || {};
       updateTargetHrefAnchor(currentPoint, anchorHref);
     }
     else if (String(pageNumberEl.value || '').trim()) {
-      newPageNumber = Math.max(1, Math.floor(Number(pageNumberEl.value || currentPoint.pageNumber || 1)));
-      newSequenceNumber = String(pageSequenceNumberEl && pageSequenceNumberEl.value || '').trim()
-        ? Math.max(1, Math.floor(Number(pageSequenceNumberEl.value || oldSequenceNumber || 1)))
-        : (wuwei.contents && typeof wuwei.contents.toPhysicalPageNumber === 'function'
-          ? wuwei.contents.toPhysicalPageNumber(currentGroup, newPageNumber)
-          : oldSequenceNumber);
+      newPageNumber = clampPageNumberForEdit(
+        pageNumberEl.value || currentPoint.pageNumber || 1,
+        currentGroup
+      );
+      warnPageNumberCorrected(pageNumberEl.value, newPageNumber, currentGroup);
       currentPoint.pageNumber = newPageNumber;
-      currentPoint.pageSequenceNumber = newSequenceNumber;
-      currentPoint.sequenceNumber = newSequenceNumber;
-      currentPoint.physicalPageNumber = newSequenceNumber;
-      updateGroupFirstPageNumberFromMarker(currentGroup, newPageNumber, newSequenceNumber);
+      pageNumberEl.value = String(newPageNumber);
     }
     if (!String(labelValue || '').trim()) {
       currentPoint.label = defaultPageMarkerLabel(currentPoint.pageNumber || oldPageNumber);

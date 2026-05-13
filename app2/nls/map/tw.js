@@ -525,7 +525,6 @@ wuwei.nls.TW = {
   'Select colour': '選擇顏色',
   'HTML PageMarker must specify anchorHref starting with #.': 'HTML PageMarker 必須指定以 # 開頭的 anchorHref。',
   'Page number': '頁碼',
-  'Page sequence number': '順序頁碼',
   'Apply to group members': '套用到群組成員',
   'This preview cannot create a thumbnail. Please try an HTML5 video such as mp4.': '無法從此預覽建立縮圖。請嘗試 mp4 等 HTML5 影片。',
   'This video format is not supported in embedded preview.': '嵌入式預覽不支援此影片格式。',
@@ -552,6 +551,13 @@ wuwei.nls.TW = {
   '{name} modified': '{name} 已修改',
   '{name} deleted': '{name} 已刪除',
   'Physical page 1 corresponds to': '物理第1頁對應的顯示頁碼',
+  'Page offset': '頁碼偏移',
+  'Page max': '最大頁碼',
+  'Page min': '最小頁碼',
 
+  'Page number is below the valid range.': '頁碼小於有效範圍。',
+  'Page number is above the valid range.': '頁碼大於有效範圍。',
+  'Corrected to minimum page number': '已修正為最小頁碼',
+  'Corrected to maximum page number': '已修正為最大頁碼',
 
 };

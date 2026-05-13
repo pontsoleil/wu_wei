@@ -525,7 +525,6 @@ wuwei.nls.KR = {
   'Select colour': '색 선택',
   'HTML PageMarker must specify anchorHref starting with #.': 'HTML PageMarker에는 #으로 시작하는 anchorHref를 지정해야 합니다.',
   'Page number': '페이지 번호',
-  'Page sequence number': '순서 번호',
   'Apply to group members': '그룹 멤버에 일괄 적용',
   'This preview cannot create a thumbnail. Please try an HTML5 video such as mp4.': '이 preview에서는 썸네일을 만들 수 없습니다. mp4 등 HTML5 동영상으로 시도해 주세요.',
   'This video format is not supported in embedded preview.': '이 영상 형식은 embedded preview에서 지원되지 않습니다.',
@@ -552,6 +551,13 @@ wuwei.nls.KR = {
   '{name} modified': '{name}님이 변경했습니다',
   '{name} deleted': '{name}님이 삭제했습니다',
   'Physical page 1 corresponds to': '물리적 1페이지에 해당하는 표시 페이지 번호',
+  'Page offset': '페이지 오프셋',
+  'Page max': '최대 페이지',
+  'Page min': '최소 페이지',
 
+  'Page number is below the valid range.': '페이지 번호가 유효 범위보다 작습니다.',
+  'Page number is above the valid range.': '페이지 번호가 유효 범위보다 큽니다.',
+  'Corrected to minimum page number': '최소 페이지 번호로 수정했습니다',
+  'Corrected to maximum page number': '최대 페이지 번호로 수정했습니다',
 
 };

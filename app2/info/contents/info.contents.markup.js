@@ -40,7 +40,7 @@ wuwei.info.contents.markup = (function () {
           block(t('Unit'), (group.axis && group.axis.unit) || 'page', 'unit') +
           block(t('Length'), group.length || '', 'length') +
           block(t('Pages'), (param && param.pageCount) || group.pageCount || '', 'pages') +
-          block(t('Physical page 1 corresponds to'), (param && param.firstPageNumber) || group.firstPageNumber || 1, 'first-page') +
+          block(t('Page offset'), (param && Number.isFinite(Number(param.pageOffset)) ? param.pageOffset : 0), 'page-offset') +
           block(t('Markers'), (param && param.markerCount) || 0, 'markers') +
           block(t('Document'), (param && param.documentName) || '', 'document') +
         '</div>' +

@@ -34,13 +34,13 @@ wuwei.info.uploaded.markup = ( function () {
     }
     if (option && (option.contentViewerUri || option.pdfjsUri)) {
       uri = String(option.contentViewerUri || option.pdfjsUri || '');
-      if (option.page && !/#page=/i.test(uri) && isPdfLikeUri(uri)) {
+      if (hasPageValue(option.page) && !/#page=/i.test(uri) && isPdfLikeUri(uri)) {
         uri = appendPageFragment(uri, option.page);
       }
     }
     else {
       uri = resolveFrameUri(node, uri);
-      if (option && option.page) {
+      if (option && hasPageValue(option.page)) {
         uri = appendPageFragment(uri, option.page);
       }
     }
@@ -423,8 +423,14 @@ wuwei.info.uploaded.markup = ( function () {
     return /(?:^|\/)(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i.test(String(uri || ''));
   }
 
+  function hasPageValue(page) {
+    return page != null && page !== '';
+  }
+
   function appendPageFragment(uri, page) {
-    var n = Math.max(1, Math.floor(Number(page || 1)));
+    var n = Number(page);
+    if (!Number.isFinite(n)) { n = 1; }
+    n = Math.max(1, Math.floor(n));
     var text = String(uri || '').replace(/#.*$/, '');
     return text ? (text + '#page=' + encodeURIComponent(n)) : '';
   }

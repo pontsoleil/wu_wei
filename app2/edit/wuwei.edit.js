@@ -564,6 +564,34 @@ wuwei.edit = wuwei.edit || {};
     syncNodeRuntimeMirrors(node, path, value);
   }
 
+
+  function sanitizeContentPageRange(node) {
+    var contents, min, max;
+    if (!node || node.type !== 'Content' || !node.resource || !node.resource.contents) {
+      return;
+    }
+    contents = node.resource.contents;
+    min = Number(contents.pageMin);
+    max = Number(contents.pageMax);
+    if (!Number.isFinite(min) || min < 1) {
+      delete contents.pageMin;
+    }
+    else {
+      contents.pageMin = Math.floor(min);
+    }
+    if (!Number.isFinite(max) || max < 1) {
+      delete contents.pageMax;
+    }
+    else {
+      contents.pageMax = Math.floor(max);
+    }
+    if (Number.isFinite(Number(contents.pageMin)) &&
+      Number.isFinite(Number(contents.pageMax)) &&
+      Number(contents.pageMax) < Number(contents.pageMin)) {
+      contents.pageMax = contents.pageMin;
+    }
+  }
+
   function setLinkPath(link, path, value) {
     if (!link || !path) {
       return;
@@ -890,6 +918,9 @@ wuwei.edit = wuwei.edit || {};
     }
     else {
       setNodePath(node, path, value);
+    }
+    if (path === 'resource.contents.pageMin' || path === 'resource.contents.pageMax') {
+      sanitizeContentPageRange(node);
     }
     if (('resource.uri' === path || 'resource.canonicalUri' === path) && node.resource) {
       if (wuwei.util && typeof wuwei.util.toStorageRelativePath === 'function' &&

@@ -525,7 +525,6 @@ wuwei.nls.ET = {
   'Select colour': 'Vali värv',
   'HTML PageMarker must specify anchorHref starting with #.': 'HTML PageMarker peab määrama anchorHref-i, mis algab märgiga #.',
   'Page number': 'Lehekülje number',
-  'Page sequence number': 'Järjekorranumber',
   'Apply to group members': 'Rakenda rühma liikmetele',
   'This preview cannot create a thumbnail. Please try an HTML5 video such as mp4.': 'Sellest eelvaatest ei saa pisipilti luua. Proovi HTML5-videot, näiteks mp4.',
   'This video format is not supported in embedded preview.': 'Seda videovormingut ei toetata manustatud eelvaates.',
@@ -552,6 +551,13 @@ wuwei.nls.ET = {
   '{name} modified': '{name} muutis',
   '{name} deleted': '{name} kustutas',
   'Physical page 1 corresponds to': 'Füüsiline lehekülg 1 vastab kuvatavale leheküljele',
+  'Page offset': 'Lehekülje nihe',
+  'Page max': 'Maksimaalne lehekülg',
+  'Page min': 'Minimaalne lehekülg',
 
+  'Page number is below the valid range.': 'Leheküljenumber on kehtivast vahemikust väiksem.',
+  'Page number is above the valid range.': 'Leheküljenumber on kehtivast vahemikust suurem.',
+  'Corrected to minimum page number': 'Parandatud vähimaks leheküljenumbriks',
+  'Corrected to maximum page number': 'Parandatud suurimaks leheküljenumbriks',
 
 };

@@ -525,7 +525,6 @@ wuwei.nls.FI = {
   'Select colour': 'Valitse väri',
   'HTML PageMarker must specify anchorHref starting with #.': 'HTML PageMarker -kohteessa on määritettävä # merkillä alkava anchorHref.',
   'Page number': 'Sivunumero',
-  'Page sequence number': 'Järjestysnumero',
   'Apply to group members': 'Käytä ryhmän jäseniin',
   'This preview cannot create a thumbnail. Please try an HTML5 video such as mp4.': 'Tästä esikatselusta ei voi luoda pikkukuvaa. Kokeile HTML5-videota, kuten mp4.',
   'This video format is not supported in embedded preview.': 'Tätä videomuotoa ei tueta upotetussa esikatselussa.',
@@ -552,6 +551,13 @@ wuwei.nls.FI = {
   '{name} modified': '{name} muutti',
   '{name} deleted': '{name} poisti',
   'Physical page 1 corresponds to': 'Fyysinen sivu 1 vastaa näytettävää sivunumeroa',
+  'Page offset': 'Sivun siirtymä',
+  'Page max': 'Suurin sivunumero',
+  'Page min': 'Pienin sivunumero',
 
+  'Page number is below the valid range.': 'Sivunumero on kelvollisen alueen alapuolella.',
+  'Page number is above the valid range.': 'Sivunumero on kelvollisen alueen yläpuolella.',
+  'Corrected to minimum page number': 'Korjattu pienimpään sivunumeroon',
+  'Corrected to maximum page number': 'Korjattu suurimpaan sivunumeroon',
 
 };
