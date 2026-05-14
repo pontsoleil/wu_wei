@@ -793,9 +793,139 @@ wuwei.info = wuwei.info || {};
     return uri;
   }
 
-  function openWindow(uri, name) {
+  function decodeUriComponentSafe(value) {
+    var s = String(value || '');
+    try {
+      return decodeURIComponent(s);
+    }
+    catch (e) {
+      return s;
+    }
+  }
+
+  function getNestedViewerUri(url) {
+    var pathname;
+    var host;
+    var key;
+    var params = ['src', 'file', 'url', 'uri', 'href', 'path'];
+    var i;
+    var value;
+
+    if (!url || !url.searchParams) {
+      return '';
+    }
+
+    host = String(url.hostname || '').toLowerCase();
+    pathname = String(url.pathname || '').toLowerCase();
+
+    if (host === 'view.officeapps.live.com') {
+      value = url.searchParams.get('src');
+      return value ? decodeUriComponentSafe(value) : '';
+    }
+
+    if (/(?:^|\/)(?:viewer\.html|text-viewer\.html)$/.test(pathname) ||
+      /(?:^|\/)(?:load-file|proxy-file|proxy)\.(?:cgi|py)$/.test(pathname)) {
+      for (i = 0; i < params.length; i += 1) {
+        key = params[i];
+        value = url.searchParams.get(key);
+        if (value) {
+          return decodeUriComponentSafe(value);
+        }
+      }
+    }
+
+    return '';
+  }
+
+  function getWindowReuseKey(uri) {
+    var nested;
+    var url;
+    var s = String(uri || '').trim();
+
+    if (!s) {
+      return '';
+    }
+
+    try {
+      url = new URL(s, location.href);
+      nested = getNestedViewerUri(url);
+      if (nested) {
+        return getWindowReuseKey(nested);
+      }
+      url.search = '';
+      url.hash = '';
+      return url.href;
+    }
+    catch (e) {
+      return s.split('#')[0].split('?')[0];
+    }
+  }
+
+  function makeWindowName(key, fallbackName) {
+    var hash = 0;
+    var i;
+    var chr;
+    var s = String(key || fallbackName || 'wuwei');
+
+    if (fallbackName && fallbackName !== 'wuwei') {
+      return String(fallbackName).replace(/[^A-Za-z0-9_\-]/g, '_');
+    }
+
+    for (i = 0; i < s.length; i += 1) {
+      chr = s.charCodeAt(i);
+      hash = ((hash << 5) - hash) + chr;
+      hash |= 0;
+    }
+
+    return 'wuwei_' + Math.abs(hash).toString(36);
+  }
+
+  function getOpenWindowRecord(key) {
+    var record;
+    var found = null;
+
+    stateMap._window.forEach(function (value, mapKey) {
+      var win = value && value.win ? value.win : value;
+      if (!win || win.closed) {
+        stateMap._window.delete(mapKey);
+        return;
+      }
+      record = value && value.win ? value : {
+        key: mapKey,
+        name: mapKey,
+        win: win
+      };
+      if (!found && record.key === key) {
+        found = record;
+      }
+    });
+
+    return found;
+  }
+
+  function normaliseWindowFeatures(features) {
+    var list;
+
+    if (!features) {
+      return '';
+    }
+
+    list = String(features).split(',').map(function (item) {
+      return item.trim();
+    }).filter(function (item) {
+      return item && !/^(?:noopener|noreferrer)(?:=|$)/i.test(item);
+    });
+
+    return list.join(',');
+  }
+
+  function openWindow(uri, name, windowFeatures) {
+    var defaultFeatures;
     var features;
     var win;
+    var record;
+    var key;
+    var windowName;
     var match;
     var base = '';
 
@@ -804,13 +934,17 @@ wuwei.info = wuwei.info || {};
     }
 
     uri = normalizeOpenUri(uri);
+    key = getWindowReuseKey(uri);
+    record = getOpenWindowRecord(key);
+    windowName = record ? record.name : makeWindowName(key, name);
 
-    if (!name) {
+    if (!windowName) {
       if (0 === uri.indexOf('http')) {
-        name = uri.match(/http[s]*:\/\/([^\/]*)/)[1].replace(/\./g, '_');
+        match = uri.match(/http[s]*:\/\/([^\/]*)/);
+        windowName = match && match[1] ? match[1].replace(/\./g, '_') : 'wuwei';
       }
       else {
-        name = 'wuwei';
+        windowName = 'wuwei';
         match = location.pathname.match(/^\/(.*)\/.+$/);
         if (match) {
           base = match[1] + '/';
@@ -821,22 +955,46 @@ wuwei.info = wuwei.info || {};
       }
     }
 
-    features = 'menubar=no,location=no,resizable=yes,scrollbars=yes,status=no';
-    win = window.open(uri, name, 'width=600,height=700,' + features);
-    stateMap._window.set(name, win);
+    defaultFeatures = 'width=600,height=700,menubar=no,location=no,resizable=yes,scrollbars=yes,status=no';
+    features = normaliseWindowFeatures(windowFeatures) || defaultFeatures;
+    win = window.open(uri, windowName, features);
+
+    if (win) {
+      try {
+        win.focus();
+      }
+      catch (e) {
+        // Ignore focus failures caused by browser settings.
+      }
+      stateMap._window.set(key || windowName, {
+        key: key || windowName,
+        name: windowName,
+        url: uri,
+        win: win
+      });
+    }
   }
 
   function closeWindow(name) {
-    var win;
     if (name) {
-      win = stateMap._window.get(name);
-      if (win) {
-        win.close();
-      }
+      stateMap._window.forEach(function (value, mapKey) {
+        var win = value && value.win ? value.win : value;
+        var recordName = value && value.name ? value.name : mapKey;
+        if (mapKey === name || recordName === name) {
+          if (win) {
+            win.close();
+          }
+          stateMap._window.delete(mapKey);
+        }
+      });
       return;
     }
-    stateMap._window.forEach(function (openedWin) {
-      openedWin.close();
+    stateMap._window.forEach(function (value, mapKey) {
+      var openedWin = value && value.win ? value.win : value;
+      if (openedWin) {
+        openedWin.close();
+      }
+      stateMap._window.delete(mapKey);
     });
   }
 

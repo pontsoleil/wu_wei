@@ -597,7 +597,7 @@ wuwei.menu = wuwei.menu || {};
     if (!url) {
       return false;
     }
-    window.open(url, 'timelineVideo', 'width=900,height=680,noopener,resizable=yes,scrollbars=yes');
+    wuwei.info.openWindow(url, null, 'width=900,height=680,noopener,resizable=yes,scrollbars=yes');
     return true;
   }
 
@@ -3009,7 +3009,7 @@ wuwei.menu = wuwei.menu || {};
       if (contentsSpecForWindow && contentsSpecForWindow.point && wuwei.contents) {
         var contentsWindowUrl = wuwei.menu.contents.getContentTargetOpenUrl(contentsSpecForWindow.point);
         if (contentsWindowUrl) {
-          window.open(contentsWindowUrl, 'contentsDocument', 'width=900,height=680,noopener,resizable=yes,scrollbars=yes');
+          wuwei.info.openWindow(contentsWindowUrl, null, 'width=900,height=680,noopener,resizable=yes,scrollbars=yes');
         }
         closeContextMenu();
         return;

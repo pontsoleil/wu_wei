@@ -69,7 +69,7 @@ wuwei.info.generic.markup = (function () {
         </div>
         <div class="link"
           data-open-uri="${wuwei.util.encodeHtml(uri)}"
-          onclick="window.open(this.getAttribute('data-open-uri'), 'wuwei', 'width=600,height=400')">
+          onclick="wuwei.info.openWindow(this.getAttribute('data-open-uri'), null, 'width=600,height=400,resizable=yes,scrollbars=yes')">
           ${t('Click to open window')}<i class="fas fa-external-link-alt"></i>
         </div>`
       : (thumbnailUri
@@ -77,7 +77,7 @@ wuwei.info.generic.markup = (function () {
             <img src="${wuwei.util.encodeHtml(thumbnailUri)}"
               style="display:block; max-width:100%; height:auto;"
               ${uri
-                ? `onclick="window.open('${uri}', 'wuwei', 'width=600,height=400')"`
+                ? `onclick="wuwei.info.openWindow('${uri}', null, 'width=600,height=400,resizable=yes,scrollbars=yes')"`
                 : ''
               }>
           </div>`
