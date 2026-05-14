@@ -1861,8 +1861,20 @@ wuwei.contents = wuwei.contents || {};
   }
 
   function isPdfLikeUri(uri) {
-    var text = String(uri || '').split('?path=').pop() || String(uri || '');
-    return /\.pdf(?:[?#].*)?$/i.test(text);
+    var text = String(uri || '').trim();
+    var parsed, path;
+
+    if (!text) { return false; }
+    if (/\.pdf(?:[?#].*)?$/i.test(text)) { return true; }
+    try {
+      parsed = new URL(text, window.location && window.location.href ? window.location.href : undefined);
+      path = parsed.searchParams.get('path') || parsed.pathname || '';
+      try { path = decodeURIComponent(path); } catch (e) { /* keep path */ }
+      return /\.pdf$/i.test(String(path || '').split(/[?#]/)[0]);
+    }
+    catch (e2) {
+      return false;
+    }
   }
 
   function appendPageFragment(uri, pageNumber) {
@@ -2045,7 +2057,7 @@ wuwei.contents = wuwei.contents || {};
     if (!documentNode) { return ''; }
 
     if (isOfficeDocumentNode(documentNode)) {
-      uri = getOfficeDocumentViewerUrl(documentNode, viewerPageNumber);
+      uri = getOfficeDocumentViewerUrl(documentNode, viewerPageNumber, contentTarget);
       if (uri) {
         return buildContentTargetViewerUrl(uri, viewerPageNumber, contentTarget);
       }
@@ -2140,7 +2152,16 @@ wuwei.contents = wuwei.contents || {};
       /(?:office|msword|ms-excel|ms-powerpoint|officedocument|\.docx?\b|\.xlsx?\b|\.pptx?\b)/i.test(text);
   }
 
-  function getOfficeDocumentViewerUrl(documentNode, pageNumber) {
+  function isPageMarkerContentTarget(contentTarget) {
+    return !!(contentTarget && (
+      contentTarget.type === 'PageMarker' ||
+      contentTarget.nodeKind === 'PageMarker' ||
+      contentTarget.kind === 'PageMarker' ||
+      contentTarget.topicKind === 'contents-page'
+    ));
+  }
+
+  function getOfficeDocumentViewerUrl(documentNode, pageNumber, contentTarget) {
     var previewUri = util && typeof util.getResourcePdfPreviewUri === 'function'
       ? util.getResourcePdfPreviewUri(documentNode)
       : '';
@@ -2148,6 +2169,15 @@ wuwei.contents = wuwei.contents || {};
       ? util.getResourceOriginalUri(documentNode)
       : String(documentNode && documentNode.resource && (documentNode.resource.canonicalUri || documentNode.resource.uri) || '');
 
+    /*
+     * Office Viewer cannot jump to a page.  Therefore a Contents PageMarker
+     * for an Office document must use the OpenOffice/LibreOffice converted
+     * PDF preview, even on the EC2 server.  The Office Content itself still
+     * uses Office Viewer on EC2, while localhost uses the converted PDF.
+     */
+    if (previewUri && isPageMarkerContentTarget(contentTarget)) {
+      return appendPageFragment(previewUri, pageNumber);
+    }
     if (previewUri && util && typeof util.isLocalHost === 'function' && util.isLocalHost()) {
       return appendPageFragment(previewUri, pageNumber);
     }
@@ -2155,7 +2185,7 @@ wuwei.contents = wuwei.contents || {};
       return 'https://view.officeapps.live.com/op/embed.aspx?src=' +
         encodeURIComponent(toOfficeViewerFetchUri(originalUri, documentNode));
     }
-    return previewUri || originalUri || '';
+    return previewUri ? appendPageFragment(previewUri, pageNumber) : (originalUri || '');
   }
 
   function canOfficeViewerFetch(uri) {
