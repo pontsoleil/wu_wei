@@ -5346,11 +5346,10 @@ wuwei.model = (function () {
         text: gText,
         width: Math.max(1, labelStyle.width),
         lines: Math.max(1, labelStyle.lines),
-        offsetx: ('start' === text_anchor)
-          ? Math.max(0, Number(labelStyle.offset.x) || 0)
-          : (('end' === text_anchor)
-            ? -Math.max(0, Number(labelStyle.offset.x) || 0)
-            : (Number(labelStyle.offset.x) || 0)),
+        // Label offset is a signed value regardless of label alignment.
+        // For example, PageMarker labels aligned left can still use a negative X offset
+        // to move the label to the left of the marker.
+        offsetx: Number(labelStyle.offset.x) || 0,
         offsety: Number(labelStyle.offset.y) || 0,
         verticalAlign: (Number(labelStyle.offset.y) > 0)
           ? 'top'
