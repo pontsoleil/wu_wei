@@ -639,6 +639,14 @@ wuwei.common = (function () {
   };
 
   var defaultStyle = {
+    label: {
+      width: 120,
+      lines: 1,
+      offset: {
+        x: 0,
+        y: 0
+      }
+    },
     group: {
       kind: "SOLID",
       color: "#888888",

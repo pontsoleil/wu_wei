@@ -560,4 +560,12 @@ wuwei.nls.KR = {
   'Corrected to minimum page number': '최소 페이지 번호로 수정했습니다',
   'Corrected to maximum page number': '최대 페이지 번호로 수정했습니다',
 
+  'Label position': '라벨 위치',
+  'Label align': '라벨 정렬',
+  'Label width': '라벨 너비',
+  'Label lines': '라벨 행 수',
+  'Label offset X': '라벨 수평 거리',
+  'Label offset Y': '라벨 수직 거리',
+  'Select label position': '라벨 위치 선택',
+
 };

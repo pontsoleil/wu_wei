@@ -560,4 +560,12 @@ wuwei.nls.ET = {
   'Corrected to minimum page number': 'Parandatud vähimaks leheküljenumbriks',
   'Corrected to maximum page number': 'Parandatud suurimaks leheküljenumbriks',
 
+  'Label position': 'Sildi asukoht',
+  'Label align': 'Sildi joondus',
+  'Label width': 'Sildi laius',
+  'Label lines': 'Sildi read',
+  'Label offset X': 'Sildi horisontaalne kaugus',
+  'Label offset Y': 'Sildi vertikaalne kaugus',
+  'Select label position': 'Vali sildi asukoht',
+
 };

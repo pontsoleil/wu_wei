@@ -560,4 +560,12 @@ wuwei.nls.TW = {
   'Corrected to minimum page number': '已修正為最小頁碼',
   'Corrected to maximum page number': '已修正為最大頁碼',
 
+  'Label position': '標籤位置',
+  'Label align': '標籤對齊',
+  'Label width': '標籤寬度',
+  'Label lines': '標籤行數',
+  'Label offset X': '標籤水平距離',
+  'Label offset Y': '標籤垂直距離',
+  'Select label position': '選擇標籤位置',
+
 };

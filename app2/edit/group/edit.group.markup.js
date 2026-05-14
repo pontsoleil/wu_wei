@@ -74,9 +74,6 @@ wuwei.edit.group.markup = (function () {
     return `
 <form id="editform" class="group form-group content">
   <div class="w3-row">
-    <textarea id="name" name="name" class="w3-col s12 edit-value" rows="2" placeholder="${t('Label')}">${esc(group && group.name)}</textarea>
-  </div>
-  <div class="w3-row">
     <textarea id="description_body" name="description.body" class="w3-col s12 edit-value" rows="4" placeholder="${t('Description')}">${esc(description.body)}</textarea>
   </div>
   <div class="w3-row">

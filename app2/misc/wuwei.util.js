@@ -119,6 +119,7 @@ wuwei.util = (function () {
       getResourceFile,
       getResourceFilePath,
       getResourceFileUri,
+      getResourcePdfPreviewUri,
       getResourcePreviewUri,
       getResourceOriginalPath,
       getResourceOriginalUri,
@@ -3979,6 +3980,195 @@ wuwei.util = (function () {
     return toStorageRelativePath(raw, uid, area);
   };
 
+  function isPdfPreviewUri(value) {
+    var text = String(value || '').trim();
+    var parsed, path;
+
+    if (!text) {
+      return false;
+    }
+    try {
+      if (/\.pdf(?:[?#].*)?$/i.test(decodeURIComponent(text))) {
+        return true;
+      }
+    }
+    catch (e) {
+      if (/\.pdf(?:[?#].*)?$/i.test(text)) {
+        return true;
+      }
+    }
+    try {
+      parsed = new URL(text, window.location && window.location.href ? window.location.href : undefined);
+      path = parsed.searchParams.get('path') || parsed.pathname || '';
+      try { path = decodeURIComponent(path); } catch (e2) { /* keep path */ }
+      return /\.pdf$/i.test(String(path || '').split(/[?#]/)[0]);
+    }
+    catch (e3) {
+      return false;
+    }
+  }
+
+  function firstPdfPreviewUri(candidates) {
+    var i, uri;
+    for (i = 0; i < candidates.length; i += 1) {
+      uri = String(candidates[i] || '').trim();
+      if (uri && isPdfPreviewUri(uri)) {
+        return uri;
+      }
+    }
+    return '';
+  }
+
+  function isOfficeResourceObject(resource) {
+    var media = (resource && resource.media && 'object' === typeof resource.media) ? resource.media : {};
+    var mime = String((resource && resource.mimeType) || media.mimeType || '').toLowerCase();
+    var text = [
+      mime,
+      resource && resource.kind,
+      resource && resource.type,
+      resource && resource.file,
+      resource && resource.filename,
+      resource && resource.uri,
+      resource && resource.canonicalUri,
+      resource && resource.title,
+      resource && resource.label
+    ].join(' ').toLowerCase();
+
+    return isOfficeDocument(mime) ||
+      /(?:office|msword|ms-excel|ms-powerpoint|officedocument|\.docx?\b|\.xlsx?\b|\.pptx?\b)/i.test(text);
+  }
+
+  function makeResourceFileUri(resource, file, role, node) {
+    var area, raw, uid, path;
+
+    if (!file) { return ''; }
+    raw = chooseResourceFilePathValue(file);
+    if (!raw) { return ''; }
+    if (/^https?:\/\//i.test(raw) && raw.indexOf('/wu_wei2/') < 0) {
+      return raw;
+    }
+    area = String(file.area || '').trim();
+    if (!area) {
+      area = (String(role || file.role || '').toLowerCase() === 'original') ? 'upload' : 'resource';
+    }
+    uid = getResourceOwnerUserId(resource, node);
+    path = toStorageRelativePath(raw, uid, area);
+    return toPublicResourceUri(area, path, uid);
+  }
+
+  function derivePdfPreviewCandidatesFromOfficeOriginal(resource, node) {
+    var candidates = [];
+    var originalFile = getResourceFile(resource, 'original');
+    var originalUri = getResourceFileUri(resource, 'original', node);
+    var originalPath = getResourceFilePath(resource, 'original', node);
+    var uid = getResourceOwnerUserId(resource, node);
+
+    function addDerivedFromPath(path, area) {
+      var text = String(path || '').replace(/\\/g, '/').trim();
+      var pdfPath;
+      if (!text || !/\.(docx?|xlsx?|pptx?)$/i.test(text.split(/[?#]/)[0])) {
+        return;
+      }
+      pdfPath = text.replace(/\.(docx?|xlsx?|pptx?)([?#].*)?$/i, '.pdf');
+      candidates.push(toPublicResourceUri(area || 'upload', toStorageRelativePath(pdfPath, uid, area || 'upload'), uid));
+    }
+
+    function addDerivedFromUrl(value) {
+      var text = String(value || '').trim();
+      var parsed, path, pdfPath;
+      if (!text) { return; }
+      try {
+        parsed = new URL(text, window.location && window.location.href ? window.location.href : undefined);
+        path = parsed.searchParams.get('path') || '';
+        if (path && /\.(docx?|xlsx?|pptx?)$/i.test(path)) {
+          pdfPath = path.replace(/\.(docx?|xlsx?|pptx?)$/i, '.pdf');
+          parsed.searchParams.set('path', pdfPath);
+          candidates.push(parsed.href);
+        }
+        else if (/\.(docx?|xlsx?|pptx?)$/i.test(parsed.pathname)) {
+          parsed.pathname = parsed.pathname.replace(/\.(docx?|xlsx?|pptx?)$/i, '.pdf');
+          candidates.push(parsed.href);
+        }
+      }
+      catch (e) {
+        if (/\.(docx?|xlsx?|pptx?)$/i.test(text.split(/[?#]/)[0])) {
+          candidates.push(text.replace(/\.(docx?|xlsx?|pptx?)([?#].*)?$/i, '.pdf'));
+        }
+      }
+    }
+
+    addDerivedFromPath(originalFile && originalFile.path, originalFile && originalFile.area || 'upload');
+    addDerivedFromPath(originalPath, originalFile && originalFile.area || 'upload');
+    addDerivedFromUrl(originalUri);
+    return candidates;
+  }
+
+  getResourcePdfPreviewUri = function (node) {
+    var resource = getResource(node);
+    var viewer = (resource && resource.viewer && 'object' === typeof resource.viewer) ? resource.viewer : {};
+    var embed = (viewer.embed && 'object' === typeof viewer.embed) ? viewer.embed : {};
+    var media = (resource && resource.media && 'object' === typeof resource.media) ? resource.media : {};
+    var identity = (resource && resource.identity && 'object' === typeof resource.identity) ? resource.identity : {};
+    var snapshotSources = (resource && resource.snapshotSources && 'object' === typeof resource.snapshotSources) ? resource.snapshotSources : {};
+    var storage = (resource && resource.storage && 'object' === typeof resource.storage) ? resource.storage : {};
+    var files = Array.isArray(storage.files) ? storage.files : [];
+    var candidates = [];
+    var i, file, role, mime;
+
+    function push(value) {
+      if (value) { candidates.push(value); }
+    }
+
+    for (i = 0; i < files.length; i += 1) {
+      file = files[i] || {};
+      role = String(file.role || '').toLowerCase();
+      mime = String(file.mimeType || file.contentType || '').toLowerCase();
+      if (role === 'preview' || role === 'pdf' || role === 'converted' ||
+        role === 'convertedpdf' || role === 'officepdf' || role === 'pdfpreview' ||
+        mime.indexOf('application/pdf') === 0 || isPdfPreviewUri(chooseResourceFilePathValue(file))) {
+        push(makeResourceFileUri(resource, file, role || 'preview', node));
+      }
+    }
+
+    push(getResourceFileUri(resource, 'preview', node));
+    push(resource && resource.previewPdfUri);
+    push(resource && resource.previewPdfUrl);
+    push(resource && resource.convertedPdfUri);
+    push(resource && resource.convertedPdfUrl);
+    push(resource && resource.pdfUri);
+    push(resource && resource.pdfUrl);
+    push(resource && resource.previewUri);
+    push(resource && resource.previewUrl);
+    push(identity.previewUri);
+    push(identity.previewUrl);
+    push(media.previewUri);
+    push(media.previewUrl);
+    push(viewer.previewPdfUri);
+    push(viewer.previewPdfUrl);
+    push(viewer.pdfUri);
+    push(viewer.pdfUrl);
+    push(viewer.previewUri);
+    push(viewer.uri);
+    push(embed.previewPdfUri);
+    push(embed.previewPdfUrl);
+    push(embed.pdfUri);
+    push(embed.pdfUrl);
+    push(embed.previewUri);
+    push(embed.uri);
+    push(snapshotSources.previewPdfUri);
+    push(snapshotSources.previewPdfUrl);
+    push(snapshotSources.pdfUri);
+    push(snapshotSources.pdfUrl);
+    push(snapshotSources.previewUri);
+    push(resource && resource.uri);
+
+    if (isOfficeResourceObject(resource)) {
+      candidates = candidates.concat(derivePdfPreviewCandidatesFromOfficeOriginal(resource, node));
+    }
+
+    return firstPdfPreviewUri(candidates);
+  };
+
   getResourcePreviewUri = function (node) {
     var resource = getResource(node);
     var viewer = (resource && resource.viewer && 'object' === typeof resource.viewer) ? resource.viewer : {};
@@ -4015,6 +4205,12 @@ wuwei.util = (function () {
         return toPublicResourceUri(area, toStorageRelativePath(text, uid, area), uid);
       }
       return text;
+    }
+    if (isOfficeResourceObject(resource)) {
+      originalUri = getResourcePdfPreviewUri(node);
+      if (originalUri) {
+        return originalUri;
+      }
     }
     if (originalMime.indexOf('application/pdf') === 0) {
       originalUri = getResourceFileUri(resource, 'original', node) || legacyUploadUri();
@@ -4267,6 +4463,7 @@ wuwei.util = (function () {
       getResourceFile: getResourceFile,
       getResourceFilePath: getResourceFilePath,
       getResourceFileUri: getResourceFileUri,
+      getResourcePdfPreviewUri: getResourcePdfPreviewUri,
       getResourcePreviewUri: getResourcePreviewUri,
       getResourceOriginalPath: getResourceOriginalPath,
       getResourceOriginalUri: getResourceOriginalUri,

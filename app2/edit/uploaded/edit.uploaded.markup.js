@@ -85,6 +85,49 @@ wuwei.edit.uploaded.markup = ( function () {
     return Number.isFinite(Number(value)) ? String(Math.floor(Number(value))) : '';
   }
 
+
+  function getLabelStyleValue(node, path, fallback) {
+    var labelStyle = node && node.style && node.style.label;
+    var offset;
+    if (!labelStyle || 'object' !== typeof labelStyle) {
+      return fallback;
+    }
+    if ('offset.x' === path || 'offset.y' === path) {
+      offset = labelStyle.offset || {};
+      return Number.isFinite(Number(offset[path.slice(-1)])) ? Number(offset[path.slice(-1)]) : fallback;
+    }
+    return Number.isFinite(Number(labelStyle[path])) ? Number(labelStyle[path]) : (labelStyle[path] || fallback);
+  }
+
+
+  function getDefaultLabelStyle() {
+    return (wuwei.common && wuwei.common.defaultStyle && wuwei.common.defaultStyle.label) || {};
+  }
+
+  function getDefaultLabelWidth(node) {
+    var style = getDefaultLabelStyle();
+    var width = Number(style.width);
+    if (Number.isFinite(width) && width > 0) { return width; }
+    return node && node.size && Number(node.size.width) > 0 ? Number(node.size.width) : 120;
+  }
+
+  function getDefaultLabelLines() {
+    var lines = Number(getDefaultLabelStyle().lines);
+    return Number.isFinite(lines) && lines > 0 ? Math.floor(lines) : 1;
+  }
+
+  function getDefaultLabelOffsetX() {
+    var offset = getDefaultLabelStyle().offset || {};
+    var x = Number(offset.x);
+    return Number.isFinite(x) ? x : 0;
+  }
+
+  function getDefaultLabelOffsetY() {
+    var offset = getDefaultLabelStyle().offset || {};
+    var y = Number(offset.y);
+    return Number.isFinite(y) ? y : 0;
+  }
+
   function getSnapshotDisplayPath(node, role, current) {
     var resource = node && node.resource;
     var storage = resource && resource.storage;
@@ -131,6 +174,10 @@ wuwei.edit.uploaded.markup = ( function () {
       option = param.option;
     const fontAlign = getFontAlign(node);
     const fontSizeValue = normalizeFontSizeValue(font && font.size);
+    const labelStyleWidth = getLabelStyleValue(node, 'width', getDefaultLabelWidth(node));
+    const labelStyleLines = getLabelStyleValue(node, 'lines', getDefaultLabelLines());
+    const labelOffsetX = getLabelStyleValue(node, 'offset.x', getDefaultLabelOffsetX());
+    const labelOffsetY = getLabelStyleValue(node, 'offset.y', getDefaultLabelOffsetY());
     matchP = String(resourceUri || '').match(/^(.*)#page=([0-9]+)$/);
     if (matchP) {
       resourceUri = matchP[1];
@@ -164,14 +211,10 @@ wuwei.edit.uploaded.markup = ( function () {
     <textarea id="label" name="label" class="w3-col s12 edit-value" rows="${rowcount(node.label || '')}" 
         placeholder="${t('Label')}">${node.label || ''}</textarea>
   </div>
-  ${node && node.font
-    ? `<div class="nFont_text-anchor w3-row">
-        <i class="nFont_text-anchor start fas fa-align-left ${'left' === fontAlign ? 'checked' : ''}"></i>  
-        <i class="nFont_text-anchor middle fas fa-align-center ${'center' === fontAlign ? 'checked' : ''}"></i>
-        <i class="nFont_text-anchor end fas fa-align-right ${'right' === fontAlign ? 'checked' : ''}"></i>
-      </div>`
-    : ''
-  }
+  <div class="w3-row">
+    <label class="w3-col s4">${t('Label align')}</label>
+    ${labelAlignIcons(fontAlign, 's8')}
+  </div>
   <div class="w3-row">
     <textarea id="description_body" name="description.body" class="w3-col s12 edit-value" rows="${rowcount(value || '')}"
           placeholder="${t('Comment')}\nAsciiDoc\n**text** Bold Text\n*text* Italic Text\n+text+ Underline Text\n~~text~~ Strikethrough Text\n^text^ Superscript\n~text~ Subscript\n* text <ul>\n. text <ol>\n= text <h1>\n====== text <h6>\n----\nsource code\n----">${value}</textarea>
@@ -268,16 +311,22 @@ wuwei.edit.uploaded.markup = ( function () {
     <label for="size_height" class="w3-col s2">${t('Height')}</label>  
     <input type="number" id="size_height" name="size.height" value="${node.size && node.size.height}" class="w3-col s4 edit-value">
   </div>
-  ${'Topic' === node.type && node.text
-    ? `<div class="w3-row" id="text_position">
-        <label for="text_position" class="w3-col s4">${t('Text position')}</label>
-        ${selectOptions('text.position', node.text.position, positions, 'Select text position')}
+  ${node.label || 'PageMarker' === node.type || 'Segment' === node.type || 'Topic' === node.type || 'Content' === node.type
+    ? `<div class="w3-row" id="style_label_width-row">
+        <label for="style_label_width" class="w3-col s4">${t('Label width')}</label>  
+        <input type="number" id="style_label_width" name="style.label.width" value="${labelStyleWidth}" class="w3-col s8 edit-value" min="1" step="1">
       </div>
-      <div class="w3-row" id="text_width-height">
-        <label for="text_width" class="w3-col s2">${t('Width')}</label>  
-        <input type="number" id="text_width" name="text.width" value="${node.text.width}" class="w3-col s4 edit-value">
-        <label for="text_height" class="w3-col s2">${t('Height')}</label>  
-        <input type="number" id="text_height" name="text.height" value="${node.text.height}" class="w3-col s4 edit-value">
+      <div class="w3-row" id="style_label_lines-row">
+        <label for="style_label_lines" class="w3-col s4">${t('Label lines')}</label>  
+        <input type="number" id="style_label_lines" name="style.label.lines" value="${labelStyleLines}" class="w3-col s8 edit-value" min="1" step="1">
+      </div>
+      <div class="w3-row" id="style_label_offset_x-row">
+        <label for="style_label_offset_x" class="w3-col s4">${t('Label offset X')}</label>  
+        <input type="number" id="style_label_offset_x" name="style.label.offset.x" value="${labelOffsetX}" class="w3-col s8 edit-value" step="1">
+      </div>
+      <div class="w3-row" id="style_label_offset_y-row">
+        <label for="style_label_offset_y" class="w3-col s4">${t('Label offset Y')}</label>  
+        <input type="number" id="style_label_offset_y" name="style.label.offset.y" value="${labelOffsetY}" class="w3-col s8 edit-value" step="1">
       </div>`
     : ''
   }
@@ -316,6 +365,17 @@ wuwei.edit.uploaded.markup = ( function () {
 `;
     return html;
   };
+
+  function labelAlignIcons(value, size) {
+    value = String(value || 'center').toLowerCase();
+    return [
+      '<div class="nFont_text-anchor w3-col ' + (size || 's8') + '">',
+      '  <i class="nFont_text-anchor start fas fa-align-left ' + (('left' === value) ? 'checked' : '') + '" title="left"></i>',
+      '  <i class="nFont_text-anchor middle fas fa-align-center ' + (('center' === value) ? 'checked' : '') + '" title="center"></i>',
+      '  <i class="nFont_text-anchor end fas fa-align-right ' + (('right' === value) ? 'checked' : '') + '" title="right"></i>',
+      '</div>'
+    ].join('');
+  }
 
   function selectOptions(name, value, options, placeholder, size) { 
     return wuwei.edit.markup.selectOptions(name, value, options, placeholder, size);

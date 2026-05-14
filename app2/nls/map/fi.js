@@ -560,4 +560,12 @@ wuwei.nls.FI = {
   'Corrected to minimum page number': 'Korjattu pienimpään sivunumeroon',
   'Corrected to maximum page number': 'Korjattu suurimpaan sivunumeroon',
 
+  'Label position': 'Otsikon sijainti',
+  'Label align': 'Selitteen tasaus',
+  'Label width': 'Otsikon leveys',
+  'Label lines': 'Otsikon rivimäärä',
+  'Label offset X': 'Otsikon vaakasuuntainen etäisyys',
+  'Label offset Y': 'Otsikon pystysuuntainen etäisyys',
+  'Select label position': 'Valitse otsikon sijainti',
+
 };

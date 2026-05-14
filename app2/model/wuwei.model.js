@@ -1081,6 +1081,19 @@ wuwei.model = (function () {
       width: 1
     };
 
+    self.style.label = (self.style.label && 'object' === typeof self.style.label)
+      ? self.style.label
+      : {};
+    if (!Number.isFinite(Number(self.style.label.lines))) {
+      self.style.label.lines = (common.defaultStyle && common.defaultStyle.label && common.defaultStyle.label.lines) || 1;
+    }
+    if (self.style.label.offset && 'object' === typeof self.style.label.offset) {
+      self.style.label.offset = {
+        x: Number.isFinite(Number(self.style.label.offset.x)) ? Number(self.style.label.offset.x) : undefined,
+        y: Number.isFinite(Number(self.style.label.offset.y)) ? Number(self.style.label.offset.y) : undefined
+      };
+    }
+
     // runtime mirror for draw/text rendering
     self.color = self.style.fill;
     self.outline = self.style.line.color;
@@ -1934,7 +1947,9 @@ wuwei.model = (function () {
 
     if ('node' === direction && groupOrTarget && groupOrTarget.id) {
       node = groupOrTarget;
-      group.name = node.label || group.name || 'Group';
+      // The visible group label is the representative node label.
+      // group.name is kept only as a fallback for older data and is not edited directly.
+      group.name = group.name || node.label || 'Group';
       group.description = cloneDescription(node.description);
       group.representativeNodeId = node.id;
     }
@@ -1951,7 +1966,9 @@ wuwei.model = (function () {
         });
       }
       if (node) {
-        node.label = group.name || node.label || 'Group';
+        if (!node.label) {
+          node.label = group.name || 'Group';
+        }
         node.description = cloneDescription(group.description);
       }
     }
@@ -3977,6 +3994,7 @@ wuwei.model = (function () {
       t = item.text, // svg text
       WIDTH = item.width,
       HEIGHT = item.height,
+      MAX_LINES = Number(item.lines),
       verticalAlign = item.verticalAlign || 'top',
       OFFSET_X = item.offsetx || 0,
       OFFSET_Y = item.offsety || 0,
@@ -4039,6 +4057,9 @@ wuwei.model = (function () {
 
     bbox = t.node().getBBox();
     lineHeight = bbox.height + SPACING;
+    if (Number.isFinite(MAX_LINES) && MAX_LINES > 0) {
+      HEIGHT = Math.max(1, Math.floor(MAX_LINES)) * lineHeight;
+    }
     lines = content.split(/\n/);
     tempHeight = lineHeight;
     tempText = '';
@@ -4053,7 +4074,7 @@ wuwei.model = (function () {
       lineLength = line.length;
       if (0 === lineLength) {
         tempHeight += lineHeight;
-        if (tempHeight > HEIGHT - lineHeight) {
+        if (tempHeight > HEIGHT) {
           break LOOP;
         }
         tempText = '';
@@ -4074,7 +4095,7 @@ wuwei.model = (function () {
               tempText = '';
               t.text(word);
               tempHeight += lineHeight;
-              if (tempHeight > HEIGHT - lineHeight) {
+              if (tempHeight > HEIGHT) {
                 tArray[tArray.length - 1] += '...';
                 break LOOP;
               }
@@ -4097,7 +4118,7 @@ wuwei.model = (function () {
               tempText = '';
               t.text(ltr);
               tempHeight += lineHeight;
-              if (tempHeight > HEIGHT - lineHeight) {
+              if (tempHeight > HEIGHT) {
                 tArray[tArray.length - 1] += '...';
                 break LOOP;
               }
@@ -4166,6 +4187,61 @@ wuwei.model = (function () {
     };
   }
 
+
+  function getLabelStyle(node, fallback) {
+    var style = (node && node.style && node.style.label && 'object' === typeof node.style.label)
+      ? node.style.label
+      : {};
+    var defaults = (common && common.defaultStyle && common.defaultStyle.label) || {};
+    var offset = (style.offset && 'object' === typeof style.offset) ? style.offset : {};
+    var defaultOffset = (defaults.offset && 'object' === typeof defaults.offset) ? defaults.offset : {};
+    var width = Number(style.width);
+    var lines = Number(style.lines);
+    var offsetX = Number(offset.x);
+    var offsetY = Number(offset.y);
+
+    return {
+      width: Number.isFinite(width) && width > 0
+        ? width
+        : Number(fallback && fallback.width) || 0,
+      lines: Number.isFinite(lines) && lines > 0
+        ? Math.floor(lines)
+        : Math.max(1, Math.floor(Number(fallback && fallback.lines) || Number(defaults.lines) || 1)),
+      offset: {
+        x: Number.isFinite(offsetX) ? offsetX : Number(fallback && fallback.offsetX) || Number(defaultOffset.x) || 0,
+        y: Number.isFinite(offsetY) ? offsetY : Number(fallback && fallback.offsetY) || Number(defaultOffset.y) || 0
+      }
+    };
+  }
+
+  function getDefaultLabelPosition(node, type, shape, text_anchor) {
+    var align;
+    if ('PageMarker' === type) {
+      align = (node.style && node.style.font && node.style.font.align) ||
+        node.labelAlign ||
+        (node.font && node.font.align) ||
+        text_anchor;
+      if ('start' === align || 'left' === align) {
+        return 'right';
+      }
+      if ('end' === align || 'right' === align) {
+        return 'left';
+      }
+      return 'center';
+    }
+    if ('Content' === type || 'THUMBNAIL' === shape) {
+      return 'top';
+    }
+    return 'center';
+  }
+
+  function getShapeExtent(node, shape, width, height, radius) {
+    if ('CIRCLE' === shape) {
+      return { width: radius * 2, height: radius * 2, radius: radius };
+    }
+    return { width: width, height: height, radius: radius };
+  }
+
   function renderWrappedTopLabel(d3node, node, label, options) {
     var shape = node.shape;
     var size = node.size || {};
@@ -4182,6 +4258,8 @@ wuwei.model = (function () {
     var labelGap = (options && options.labelGap != null) ? options.labelGap : 10;
     var lineHeight = (options && options.lineHeight != null) ? options.lineHeight : 20;
     var maxWidthFactor = (options && options.maxWidthFactor != null) ? options.maxWidthFactor : 3;
+    var optionWrapWidth = Number(options && options.wrapWidth);
+    var optionMaxLines = Number(options && options.maxLines);
 
     var anchor = getTopLabelAnchor(shape, width, height, radius, text_anchor, labelGap);
     var baseFigureWidth;
@@ -4202,7 +4280,9 @@ wuwei.model = (function () {
     }
 
     // ラベル幅は基準図形の3倍以内
-    wrapWidth = Math.max(1, baseFigureWidth * maxWidthFactor);
+    wrapWidth = Number.isFinite(optionWrapWidth) && optionWrapWidth > 0
+      ? optionWrapWidth
+      : Math.max(1, baseFigureWidth * maxWidthFactor);
 
     gText = d3node.append('text')
       .attr('class', 'node-label')
@@ -4218,7 +4298,7 @@ wuwei.model = (function () {
     setMultipleLine({
       text: gText,
       width: wrapWidth,
-      height: 9999,
+      lines: Number.isFinite(optionMaxLines) && optionMaxLines > 0 ? Math.floor(optionMaxLines) : 9999,
       offsetx: 0,
       offsety: 0
     });
@@ -4964,6 +5044,8 @@ wuwei.model = (function () {
       padding,
       gText,
       item,
+      labelStyle,
+      shapeExtent,
       linkCountNode;
     thumbnail = node.thumbnailUri || node.thumbnail || '';
     if (util.getResourceThumbnailUri) {
@@ -5003,6 +5085,18 @@ wuwei.model = (function () {
     if (height < 0) {
       height = 1;
     }
+
+    shapeExtent = getShapeExtent(node, shape, width, height, radius);
+    labelStyle = getLabelStyle(node, {
+      width: ('Content' === type || 'THUMBNAIL' === shape)
+        ? Math.max(1, shapeExtent.width * 3)
+        : (('PageMarker' === type && 'CIRCLE' === shape)
+          ? Math.max(1, radius * 6)
+          : Math.max(1, ('CIRCLE' === shape ? 2 * radius : 2 * width))),
+      lines: 1,
+      offsetX: undefined,
+      offsetY: undefined
+    });
 
     linkCount = countHiddenLink(node);
 
@@ -5223,8 +5317,10 @@ wuwei.model = (function () {
     if (('THUMBNAIL' === shape || 'Content' === type) && label) {
       renderWrappedTopLabel(d3node, node, label, {
         paddingX: 4,
-        labelGap: 10,
-        lineHeight: 20
+        labelGap: Number.isFinite(Number(labelStyle.offset.y)) ? Number(labelStyle.offset.y) : 10,
+        lineHeight: 20,
+        wrapWidth: labelStyle.width,
+        maxLines: labelStyle.lines
       });
     }
 
@@ -5232,24 +5328,11 @@ wuwei.model = (function () {
 
     // Render plain text labels for ordinary Topic nodes and real timeline Segment nodes.
     // Segment is stored as a real node in page.nodes, so it should show its label like Topic.
-    if ('PageMarker' === type) {
-      let markerAlign = (node.style && node.style.font && node.style.font.align) ||
-        node.labelAlign ||
-        (node.font && node.font.align) ||
-        text_anchor;
-      markerAlign = ('start' === markerAlign) ? 'left' : (('end' === markerAlign) ? 'right' : markerAlign);
-      if ('left' === markerAlign) {
-        text_anchor = 'start';
-      }
-      else if ('right' === markerAlign) {
-        text_anchor = 'end';
-      }
-      else {
+    if (('Topic' === type || 'Segment' === type || 'PageMarker' === type) && 'THUMBNAIL' !== shape && label) {
+      if (!text_anchor) {
         text_anchor = 'middle';
       }
-    }
 
-    if (('Topic' === type || 'Segment' === type || 'PageMarker' === type) && 'THUMBNAIL' !== shape && label) {
       gText = d3node.append('text')
         .attr('class', 'node-label')
         .attr('font-family', font_family)
@@ -5258,54 +5341,23 @@ wuwei.model = (function () {
         .attr('text-anchor', text_anchor)
         .attr('alignment-baseline', alignment_baseline)
         .text(label);
-      if ('PageMarker' === type && 'CIRCLE' === shape && ('start' === text_anchor || 'end' === text_anchor)) {
-        var markerGap = Number.isFinite(Number(node.labelOffset)) ? Number(node.labelOffset) : 6;
-        item = {
-          text: gText,
-          width: Math.max(1, radius * 6),
-          height: 2 * radius,
-          offsetx: ('start' === text_anchor) ? (radius + markerGap) : (-radius - markerGap),
-          offsety: -radius
-        };
-      }
-      else if ('CIRCLE' === shape) {
-        item = {
-          text: gText,
-          width: width,
-          height: 2 * radius,
-          offsetx: 0,
-          offsety: -radius
-        };
-      }
-      else {
-        item = {
-          text: gText,
-          width: 2 * width,
-          height: height,
-          offsetx: 0,
-          offsety: 0
-        };
-      }
+
+      item = {
+        text: gText,
+        width: Math.max(1, labelStyle.width),
+        lines: Math.max(1, labelStyle.lines),
+        offsetx: ('start' === text_anchor)
+          ? Math.max(0, Number(labelStyle.offset.x) || 0)
+          : (('end' === text_anchor)
+            ? -Math.max(0, Number(labelStyle.offset.x) || 0)
+            : (Number(labelStyle.offset.x) || 0)),
+        offsety: Number(labelStyle.offset.y) || 0,
+        verticalAlign: (Number(labelStyle.offset.y) > 0)
+          ? 'top'
+          : ((Number(labelStyle.offset.y) < 0) ? 'bottom' : 'center')
+      };
 
       setMultipleLine(item);
-
-      var
-        tspans = d3.selectAll(`g.node#${node.id} text.node-label tspan`).nodes(),
-        line_count = tspans.length,
-        start = -20 * line_count / 2;
-      for (var i = 0; i < line_count; i++) {
-        if ('PageMarker' === type && 'CIRCLE' === shape && ('start' === text_anchor || 'end' === text_anchor)) {
-          // PageMarker side labels use item.offsetx so the configured gap is measured from the circle edge.
-        }
-        else if ('start' === text_anchor) {
-          tspans[i].setAttribute('x', (padding.x - (width / 2)) + 'px');
-        }
-        else if ('end' === text_anchor) {
-          tspans[i].setAttribute('x', ((width / 2) - padding.x) + 'px');
-        }
-        else if ('middle' === text_anchor) { }
-        tspans[i].setAttribute('y', (start + 20 * i) + 'px');
-      }
     }
 
     function renderNodeAdocHtml(node, type) {

@@ -180,6 +180,9 @@ wuwei.info.uploaded.markup = ( function () {
     if (isOfficeResource(resource, mimeType)) {
       return resolveOfficeInfoUri(node, resource, viewer, embed, snapshotSources);
     }
+    if (isHtmlResource(node, resource, mimeType)) {
+      return resolveHtmlInfoUri(node, resource, embed, snapshotSources);
+    }
     var previewUri = getOfficePreviewUri(node, resource, viewer, embed, snapshotSources);
     if (previewUri) {
       return previewUri;
@@ -212,6 +215,55 @@ wuwei.info.uploaded.markup = ( function () {
     return uri;
   }
 
+  function isHtmlResource(node, resource, mimeType) {
+    var media = (resource && resource.media && 'object' === typeof resource.media) ? resource.media : {};
+    var contents = (resource && resource.contents && 'object' === typeof resource.contents) ? resource.contents : {};
+    var viewer = (resource && resource.viewer && 'object' === typeof resource.viewer) ? resource.viewer : {};
+    var embed = (viewer.embed && 'object' === typeof viewer.embed) ? viewer.embed : {};
+    var text = [
+      mimeType,
+      resource && resource.kind,
+      resource && resource.type,
+      contents.type,
+      media.type,
+      resource && resource.file,
+      resource && resource.filename,
+      resource && resource.uri,
+      resource && resource.canonicalUri,
+      embed.uri,
+      node && node.contenttype,
+      node && node.contentType,
+      node && node.label
+    ].join(' ').toLowerCase();
+
+    return String(mimeType || '').indexOf('text/html') === 0 ||
+      String(mimeType || '').indexOf('application/xhtml+xml') === 0 ||
+      /(?:^|\s)(?:html|web)(?:\s|$)/.test(String(resource && (resource.kind || resource.type) || '').toLowerCase()) ||
+      /(?:^|\s)(?:html|web)(?:\s|$)/.test(String(contents.type || media.type || '').toLowerCase()) ||
+      /\.(?:html?|xhtml)(?:[?#]|$)/i.test(text);
+  }
+
+  function resolveHtmlInfoUri(node, resource, embed, snapshotSources) {
+    var original = wuwei.util && typeof wuwei.util.getResourceOriginalUri === 'function'
+      ? wuwei.util.getResourceOriginalUri(node)
+      : '';
+    var fileOriginal = wuwei.util && typeof wuwei.util.getResourceFileUri === 'function'
+      ? wuwei.util.getResourceFileUri(resource, 'original', node)
+      : '';
+
+    /* HTML/web resources are normal iframe targets. */
+    return String(
+      fileOriginal ||
+      original ||
+      (embed && embed.uri) ||
+      resource.canonicalUri ||
+      resource.uri ||
+      snapshotSources.originalUri ||
+      snapshotSources.previewUri ||
+      ''
+    ).trim();
+  }
+
   function resolveOfficeInfoUri(node, resource, viewer, embed, snapshotSources) {
     var previewUri = getOfficePreviewUri(node, resource, viewer, embed, snapshotSources);
     var originalUri;
@@ -231,6 +283,9 @@ wuwei.info.uploaded.markup = ( function () {
 
   function getOfficePreviewUri(node, resource, viewer, embed, snapshotSources) {
     var candidates = [];
+    if (wuwei.util && typeof wuwei.util.getResourcePdfPreviewUri === 'function') {
+      candidates.push(wuwei.util.getResourcePdfPreviewUri(node));
+    }
     if (wuwei.util && typeof wuwei.util.getResourceFileUri === 'function') {
       candidates.push(wuwei.util.getResourceFileUri(resource, 'preview', node));
     }
@@ -238,14 +293,34 @@ wuwei.info.uploaded.markup = ( function () {
       candidates.push(wuwei.util.getResourcePreviewUri(node));
     }
     candidates.push(
+      resource.previewPdfUri,
+      resource.previewPdfUrl,
+      resource.convertedPdfUri,
+      resource.convertedPdfUrl,
+      resource.pdfUri,
+      resource.pdfUrl,
       resource.uri,
       resource.canonicalUri,
       resource.identity && resource.identity.uri,
+      embed.previewPdfUri,
+      embed.previewPdfUrl,
+      embed.pdfUri,
+      embed.pdfUrl,
       embed.previewUri,
       embed.uri,
+      viewer.previewPdfUri,
+      viewer.previewPdfUrl,
+      viewer.pdfUri,
+      viewer.pdfUrl,
       viewer.previewUri,
+      viewer.uri,
+      snapshotSources.previewPdfUri,
+      snapshotSources.previewPdfUrl,
+      snapshotSources.pdfUri,
+      snapshotSources.pdfUrl,
       snapshotSources.previewUri,
-      resource.previewUri
+      resource.previewUri,
+      resource.previewUrl
     );
     return firstPdfLikeUri(candidates);
   }

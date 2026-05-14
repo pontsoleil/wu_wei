@@ -582,6 +582,19 @@ wuwei.note = (function () {
       if (Number.isFinite(Number(src.axisPos))) {
         out.axisPos = Number(src.axisPos);
       }
+      [
+        'anchorHref',
+        'htmlAnchorHref',
+        'href',
+        'targetHref',
+        'sectionId',
+        'contentsKind',
+        'markerKind'
+      ].forEach(function (key) {
+        if (typeof src[key] === 'string' && src[key]) {
+          out[key] = src[key];
+        }
+      });
     }
     if (src.representativeOf && 'object' === typeof src.representativeOf) {
       out.representativeOf = {
@@ -1222,6 +1235,19 @@ wuwei.note = (function () {
       if (Number.isFinite(Number(node.axisPos))) {
         out.axisPos = Number(node.axisPos);
       }
+      [
+        'anchorHref',
+        'htmlAnchorHref',
+        'href',
+        'targetHref',
+        'sectionId',
+        'contentsKind',
+        'markerKind'
+      ].forEach(function (key) {
+        if (typeof node[key] === 'string' && node[key]) {
+          out[key] = node[key];
+        }
+      });
     }
     if (out.type === 'Content') {
       compactResource = compactResourceForSave(out);

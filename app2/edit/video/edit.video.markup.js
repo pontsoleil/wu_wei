@@ -22,6 +22,17 @@ wuwei.edit.video.markup = (function () {
   function t(str) {
     return wuwei.nls.translate(str)
   }
+  function labelAlignIcons(value, size) {
+    value = String(value || 'center').toLowerCase();
+    return [
+      '<div class="nFont_text-anchor w3-col ' + (size || 's8') + '">',
+      '  <i class="nFont_text-anchor start fas fa-align-left ' + (('left' === value) ? 'checked' : '') + '" title="left"></i>',
+      '  <i class="nFont_text-anchor middle fas fa-align-center ' + (('center' === value) ? 'checked' : '') + '" title="center"></i>',
+      '  <i class="nFont_text-anchor end fas fa-align-right ' + (('right' === value) ? 'checked' : '') + '" title="right"></i>',
+      '</div>'
+    ].join('');
+  }
+
   function selectOptions(name, value, options, placeholder, size) {
     return wuwei.edit.markup.selectOptions(name, value, options, placeholder, size);
   }
@@ -29,6 +40,16 @@ wuwei.edit.video.markup = (function () {
     if (value == null || value === '' || Number(value) === 14) { return '12pt'; }
     if ('number' === typeof value || /^\d+(\.\d+)?$/.test(String(value))) { return String(value) + 'pt'; }
     return String(value);
+  }
+
+  function getFontAlign(node) {
+    var align = node && node.style && node.style.font && node.style.font.align;
+    var anchor;
+    if (align) { return String(align).toLowerCase(); }
+    anchor = node && node.font && node.font['text-anchor'];
+    if ('start' === anchor) { return 'left'; }
+    if ('end' === anchor) { return 'right'; }
+    return 'center';
   }
   function getMediaKindValue(resource) {
     const kind = String(resource && resource.kind || '').toLowerCase();
@@ -54,6 +75,7 @@ wuwei.edit.video.markup = (function () {
     const style = node && node.style ? node.style : {};
     const font = (node && node.style && node.style.font) || (node && node.font) || {};
     const fontSizeValue = normalizeFontSizeValue(font && font.size);
+    const fontAlign = getFontAlign(node);
     const resourceUri = resource.canonicalUri || resource.uri || '';
     const description = node && node.description;
     const value = (description && typeof description.body === 'string') ? description.body : '';
@@ -67,6 +89,10 @@ wuwei.edit.video.markup = (function () {
     html.push('<div class="edit">',
       '<div>',
         '<textarea id="label" name="label" class="w3-col s12 edit-value" rows="' + rowcount(title) + '" placeholder="' + t('Label') + '">' + escapeHtml(title) + '</textarea>',
+      '</div>',
+      '<div class="w3-row">',
+        '<label class="w3-col s4">' + t('Label align') + '</label>',
+        labelAlignIcons(fontAlign, 's8'),
       '</div>',
       '<div class="w3-row">',
         '<textarea id="description_body" name="description.body" class="w3-col s12 edit-value" rows="' + rowcount(value) + '" placeholder="' + t('Comment') + '">' + escapeHtml(value) + '</textarea>',

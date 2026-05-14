@@ -28,8 +28,39 @@ wuwei.info.contents.markup = (function () {
       '</div>';
   }
 
+  function markerListTemplate(markers) {
+    markers = Array.isArray(markers) ? markers : [];
+    if (!markers.length) { return ''; }
+
+    return '' +
+      '<div class="contents-marker-list-wrap">' +
+        '<h4 class="contents-subheading">' + esc(t('PageMarkers')) + '</h4>' +
+        '<div class="contents-marker-list">' +
+          markers.map(function (marker) {
+            var hasAnchor = !!marker.anchorHref;
+            var refLabel = hasAnchor ? t('Anchor href') : t('Page number');
+            var refValue = hasAnchor ? marker.anchorHref : marker.pageNumber;
+            return '' +
+              '<div class="contents-marker-row">' +
+                '<div class="contents-marker-title">' + esc(marker.label || t('PageMarker')) + '</div>' +
+                '<div class="contents-marker-ref"><span>' + esc(refLabel) + ':</span> ' + esc(refValue) + '</div>' +
+                (marker.description
+                  ? '<pre class="contents-marker-description">' + esc(marker.description) + '</pre>'
+                  : '') +
+              '</div>';
+          }).join('') +
+        '</div>' +
+      '</div>';
+  }
+
   function axisTemplate(param) {
     var group = (param && param.group) || {};
+    var markers = (param && param.markers) || [];
+    var showPageOffset = !!(param && param.showPageOffset);
+    var pageOffset = showPageOffset && Number.isFinite(Number(param.pageOffset))
+      ? Math.max(0, Math.floor(Number(param.pageOffset)))
+      : 0;
+
     return '' +
       '<section class="contents-info contents-axis-info">' +
         '<div class="contents-heading-wrap">' +
@@ -38,12 +69,11 @@ wuwei.info.contents.markup = (function () {
         '<div class="contents-grid">' +
           block(t('Axis'), group.orientation || '', 'axis') +
           block(t('Unit'), (group.axis && group.axis.unit) || 'page', 'unit') +
-          block(t('Length'), group.length || '', 'length') +
-          block(t('Pages'), (param && param.pageCount) || group.pageCount || '', 'pages') +
-          block(t('Page offset'), (param && Number.isFinite(Number(param.pageOffset)) ? param.pageOffset : 0), 'page-offset') +
+          (showPageOffset ? block(t('Page offset'), pageOffset, 'page-offset') : '') +
           block(t('Markers'), (param && param.markerCount) || 0, 'markers') +
           block(t('Document'), (param && param.documentName) || '', 'document') +
         '</div>' +
+        markerListTemplate(markers) +
       '</section>';
   }
 

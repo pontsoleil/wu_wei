@@ -587,4 +587,16 @@ wuwei.nls.JA = {
   'Corrected to minimum page number': '最小ページ番号に修正しました',
   'Corrected to maximum page number': '最大ページ番号に修正しました',
 
+  'Label position': 'ラベル位置',
+  'Label align': 'ラベル揃え',
+  'Label width': 'ラベル幅',
+  'Label lines': 'ラベル行数',
+  'Label offset X': 'ラベル水平距離',
+  'Label offset Y': 'ラベル垂直距離',
+  'Select label position': 'ラベル位置を選択',
+
+  'PageMarkers': 'PageMarker一覧',
+  'Anchor href': 'anchor href',
+  'Description': '説明',
+
 };

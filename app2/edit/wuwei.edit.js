@@ -679,6 +679,10 @@ wuwei.edit = wuwei.edit || {};
       text_position: 'text.position',
       text_width: 'text.width',
       text_height: 'text.height',
+      style_label_width: 'style.label.width',
+      style_label_lines: 'style.label.lines',
+      style_label_offset_x: 'style.label.offset.x',
+      style_label_offset_y: 'style.label.offset.y',
       group: 'group',
       style_line_kind: 'style.line.kind',
       routing_startArrow_kind: 'routing.startArrow.kind',
@@ -722,6 +726,10 @@ wuwei.edit = wuwei.edit || {};
       nText_position: 'text.position',
       nText_width: 'text.width',
       nText_height: 'text.height',
+      nStyle_label_width: 'style.label.width',
+      nStyle_label_lines: 'style.label.lines',
+      nStyle_label_offset_x: 'style.label.offset.x',
+      nStyle_label_offset_y: 'style.label.offset.y',
       nGroup: 'group',
       lLabel: 'label',
       lShape: 'shape',
@@ -910,7 +918,8 @@ wuwei.edit = wuwei.edit || {};
     if (state.Selecting && Array.isArray(stateMap.selecteds) &&
       ['shape', 'size.radius', 'size.width', 'size.height', 'style.fill', 'style.line.color',
         'style.line.width', 'style.font.color', 'style.font.size', 'style.font.family',
-        'style.font.align'].indexOf(path) >= 0) {
+        'style.font.align', 'style.label.width', 'style.label.lines',
+        'style.label.offset.x', 'style.label.offset.y'].indexOf(path) >= 0) {
       stateMap.selecteds.forEach(function (selectedNode) {
         setNodePath(selectedNode, path, value);
         selectedNode.changed = true;

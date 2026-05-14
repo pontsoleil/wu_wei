@@ -1539,10 +1539,11 @@ wuwei.menu = wuwei.menu || {};
 
   getOpenUrl = function (node) {
     var resource = getNodeResource(node);
-    var href = (resource && (resource.canonicalUri || resource.uri)) || '';
+    var href = getTextOriginalHref(node, resource) ||
+      (resource && (resource.canonicalUri || resource.uri)) || '';
     var previewUrl = getOfficePreviewOpenUrl(node);
     var officeUrl = getOfficeViewerOpenUrl(node);
-    var base;
+    var absoluteUrl;
 
     if (previewUrl) {
       return previewUrl;
@@ -1550,6 +1551,25 @@ wuwei.menu = wuwei.menu || {};
     if (officeUrl) {
       return officeUrl;
     }
+
+    absoluteUrl = normaliseOpenHref(href);
+    if (!absoluteUrl) {
+      return '';
+    }
+
+    if (isHtmlDocumentReference(resource, absoluteUrl)) {
+      return absoluteUrl;
+    }
+
+    if (isTextDocumentReference(resource, absoluteUrl)) {
+      return getTextViewerOpenUrl(absoluteUrl);
+    }
+
+    return absoluteUrl;
+  };
+
+  function normaliseOpenHref(href) {
+    var base;
 
     href = String(href || '').trim();
     if (!href) {
@@ -1569,28 +1589,66 @@ wuwei.menu = wuwei.menu || {};
     // 相対URL・ルート相対URLを絶対URL化
     base = location.href.substr(0, location.href.lastIndexOf('/') + 1);
     return new URL(href, base).href;
-  };
+  }
 
   function getOfficePreviewOpenUrl(node, pageNumber) {
     var resource = getNodeResource(node);
     var previewUri;
 
-    if (!resource || !util.isLocalHost() || !isUploadedContent([node]) || !isOfficeResource(resource)) {
+    if (!resource || !util.isLocalHost() || !isOfficeResource(resource)) {
       return '';
+    }
+
+    /*
+     * On the local server, uploaded Office files cannot be displayed by
+     * Office Viewer because view.officeapps.live.com cannot fetch
+     * http://127.0.0.1/... or http://localhost/... .  Use the PDF created
+     * during the OpenOffice/LibreOffice thumbnail-preview process instead.
+     */
+    if (wuwei.util && typeof wuwei.util.getResourcePdfPreviewUri === 'function') {
+      previewUri = wuwei.util.getResourcePdfPreviewUri(node);
+      if (previewUri) {
+        return appendPdfPageForOpen(previewUri, pageNumber);
+      }
     }
     if (wuwei.contents && typeof wuwei.contents.getContentTargetViewerUrl === 'function') {
       previewUri = wuwei.contents.getContentTargetViewerUrl(node, pageNumber || 1);
-      if (previewUri && /\.pdf(?:#|$|\?)/i.test(previewUri)) {
+      if (isPdfLikeOpenUri(previewUri)) {
         return previewUri;
       }
     }
     if (wuwei.util && typeof wuwei.util.getResourcePreviewUri === 'function') {
       previewUri = wuwei.util.getResourcePreviewUri(node);
-      if (previewUri && /\.pdf(?:[?#].*)?$/i.test(String(previewUri).split('?path=').pop() || previewUri)) {
-        return previewUri;
+      if (isPdfLikeOpenUri(previewUri)) {
+        return appendPdfPageForOpen(previewUri, pageNumber);
       }
     }
     return '';
+  }
+
+  function isPdfLikeOpenUri(uri) {
+    var text = String(uri || '');
+    var parsed, path;
+    if (!text) { return false; }
+    if (/\.pdf(?:[?#].*)?$/i.test(text)) { return true; }
+    try {
+      parsed = new URL(text, window.location.href);
+      path = parsed.searchParams.get('path') || parsed.pathname || '';
+      try { path = decodeURIComponent(path); } catch (e) { /* keep path */ }
+      return /\.pdf$/i.test(String(path || '').split(/[?#]/)[0]);
+    }
+    catch (e2) {
+      return false;
+    }
+  }
+
+  function appendPdfPageForOpen(uri, pageNumber) {
+    var page = Number(pageNumber || 0);
+    var text = String(uri || '');
+    if (!text || !Number.isFinite(page) || page < 1 || /#page=/i.test(text) || !isPdfLikeOpenUri(text)) {
+      return text;
+    }
+    return text.replace(/#.*$/, '') + '#page=' + encodeURIComponent(Math.floor(page));
   }
 
   function getOfficeViewerOpenUrl(node) {
@@ -1614,6 +1672,113 @@ wuwei.menu = wuwei.menu || {};
     return 'https://view.officeapps.live.com/op/embed.aspx?src=' + encodeURIComponent(fetchUrl);
   }
 
+  function getTextOriginalHref(node, resource) {
+    var uploadPath, uid, file;
+
+    if (wuwei.util && typeof wuwei.util.getResourceOriginalUri === 'function') {
+      uploadPath = wuwei.util.getResourceOriginalUri(node);
+      if (uploadPath) {
+        return uploadPath;
+      }
+    }
+    if (resource && String(resource.kind || '').toLowerCase() === 'upload' && resource.id && resource.date) {
+      file = String(resource.file || resource.filename || '').replace(/\\/g, '/').split('/').pop();
+      if (file) {
+        uid = getResourceOwnerIdForOpen(node);
+        return wuwei.util.toPublicResourceUri('upload', String(resource.date).replace(/^\/+|\/+$/g, '') + '/' + resource.id + '/' + file, uid);
+      }
+    }
+    return '';
+  }
+
+  function isTextDocumentReference(resource, href) {
+    var mime = String((resource && resource.mimeType) || '').toLowerCase();
+    var media = (resource && resource.media && 'object' === typeof resource.media) ? resource.media : {};
+    var contents = (resource && resource.contents && 'object' === typeof resource.contents) ? resource.contents : {};
+    var text = String(href || '').split('#')[0].split('?')[0].toLowerCase();
+    var hrefFile = basenameFromDownloadPath(href).toLowerCase();
+    var file = String((resource && (resource.file || resource.filename)) || '').toLowerCase();
+    var kind = String((resource && (resource.kind || resource.type)) || contents.type || media.type || '').toLowerCase();
+
+    if (isHtmlDocumentReference(resource, href)) {
+      return false;
+    }
+
+    return mime.indexOf('text/plain') === 0 ||
+      mime === 'text/markdown' ||
+      mime === 'text/csv' ||
+      kind === 'text' ||
+      kind === 'plain-text' ||
+      /\.(txt|text|md|markdown|csv|tsv|log|adoc|asciidoc)$/i.test(text) ||
+      /\.(txt|text|md|markdown|csv|tsv|log|adoc|asciidoc)$/i.test(hrefFile) ||
+      /\.(txt|text|md|markdown|csv|tsv|log|adoc|asciidoc)$/i.test(file);
+  }
+
+  function isPdfDocumentReference(resource, href) {
+    var mime = String((resource && resource.mimeType) || '').toLowerCase();
+    var text = String(href || '').split('#')[0].split('?')[0].toLowerCase();
+    var hrefFile = basenameFromDownloadPath(href).toLowerCase();
+    var file = String((resource && (resource.file || resource.filename)) || '').toLowerCase();
+
+    return mime === 'application/pdf' ||
+      /\.pdf$/i.test(text) ||
+      /\.pdf$/i.test(hrefFile) ||
+      /\.pdf$/i.test(file);
+  }
+
+  function isHtmlDocumentReference(resource, href) {
+    var mime = String((resource && resource.mimeType) || '').toLowerCase();
+    var media = (resource && resource.media && 'object' === typeof resource.media) ? resource.media : {};
+    var contents = (resource && resource.contents && 'object' === typeof resource.contents) ? resource.contents : {};
+    var text = String(href || '').split('#')[0].split('?')[0].toLowerCase();
+    var hrefFile = basenameFromDownloadPath(href).toLowerCase();
+    var file = String((resource && (resource.file || resource.filename)) || '').toLowerCase();
+    var kind = String((resource && (resource.kind || resource.type)) || contents.type || media.type || '').toLowerCase();
+
+    return mime.indexOf('text/html') === 0 ||
+      mime.indexOf('application/xhtml+xml') === 0 ||
+      kind === 'html' ||
+      kind === 'web' ||
+      /\.(html?|xhtml)$/i.test(text) ||
+      /\.(html?|xhtml)$/i.test(hrefFile) ||
+      /\.(html?|xhtml)$/i.test(file);
+  }
+
+  function isDocumentLikeOpenTarget(node) {
+    var resource = getNodeResource(node);
+    var href;
+
+    if (!node || node.type !== 'Content') {
+      return false;
+    }
+
+    href = getTextOriginalHref(node, resource) ||
+      getOfficeOriginalHref(node, resource) ||
+      getDownloadUrl(node) ||
+      (resource && (resource.canonicalUri || resource.uri)) ||
+      '';
+
+    return isPdfDocumentReference(resource, href) ||
+      isOfficeDocumentReference(resource, href) ||
+      isHtmlDocumentReference(resource, href) ||
+      isTextDocumentReference(resource, href);
+  }
+
+  function getTextViewerOpenUrl(href) {
+    var url = normaliseOpenHref(href);
+    var viewerBase;
+
+    if (!url) {
+      return '';
+    }
+    if (/\/app2\/viewer\/text-viewer\.html(?:[?#]|$)/i.test(url)) {
+      return url;
+    }
+
+    viewerBase = getAppBasePathForOpen() + 'app2/viewer/text-viewer.html';
+    return new URL(viewerBase + '?file=' + encodeURIComponent(url), window.location.origin).href;
+  }
+
   function getOfficeOriginalHref(node, resource) {
     var uploadPath, uid, file;
     if (wuwei.util && typeof wuwei.util.getResourceOriginalUri === 'function') {
@@ -1635,10 +1800,12 @@ wuwei.menu = wuwei.menu || {};
   function isOfficeDocumentReference(resource, href) {
     var mime = String((resource && resource.mimeType) || '').toLowerCase();
     var text = String(href || '').split('#')[0].split('?')[0].toLowerCase();
+    var hrefFile = basenameFromDownloadPath(href).toLowerCase();
     var file = String((resource && (resource.file || resource.filename)) || '').toLowerCase();
 
     return /(?:msword|ms-excel|ms-powerpoint|officedocument)/.test(mime) ||
       /\.(doc|docx|xls|xlsx|ppt|pptx)$/i.test(text) ||
+      /\.(doc|docx|xls|xlsx|ppt|pptx)$/i.test(hrefFile) ||
       /\.(doc|docx|xls|xlsx|ppt|pptx)$/i.test(file);
   }
 
@@ -2549,10 +2716,23 @@ wuwei.menu = wuwei.menu || {};
       }
       return;
     }
+    else if ('copyContentsTarget' === method) {
+      node = resolveContextTargetRecord(state.hoveredNode);
+      if (!node || !wuwei.contents || typeof wuwei.contents.copyTarget !== 'function') { return; }
+      wuwei.log.savePrevious();
+      if (wuwei.contents.copyTarget(node)) {
+        wuwei.log.storeLog({ operation: 'copy' });
+      }
+      closeContextMenu();
+      return;
+    }
     else if ('deleteContentsTarget' === method) {
       node = resolveContextTargetRecord(state.hoveredNode);
       if (!node || !wuwei.contents || typeof wuwei.contents.deleteTarget !== 'function') { return; }
-      wuwei.contents.deleteTarget(node);
+      wuwei.log.savePrevious();
+      if (wuwei.contents.deleteTarget(node)) {
+        wuwei.log.storeLog({ operation: 'delete' });
+      }
       closeContextMenu();
       return;
     }
@@ -3746,6 +3926,8 @@ wuwei.menu = wuwei.menu || {};
         'deleteTimelineSegment',
         'createContentsAxis',
         'addContentsEntry',
+        'copyContentsTarget',
+        'deleteContentsTarget',
         'horizontal',
         'vertical',
         'addContent',
@@ -3760,6 +3942,7 @@ wuwei.menu = wuwei.menu || {};
         'editTimelineAxisProps',
         'addTimelineSegmentFromPlayer',
         'addContentsEntry',
+        'copyContentsTarget',
         'deleteContentsTarget',
         'reverse',
         'normal',
@@ -4040,9 +4223,20 @@ wuwei.menu = wuwei.menu || {};
     );
   }
 
+  function isContextDocumentLikeContent(allNodes) {
+    var target = getContextTarget(allNodes);
+    return !!(
+      target &&
+      target.type === 'Content' &&
+      !getContextTimelineSpec(allNodes) &&
+      !getContextContentsSpec(allNodes) &&
+      isDocumentLikeOpenTarget(target)
+    );
+  }
+
   function isContextOpenableTarget(allNodes) {
     return (
-      isContextRegularContent(allNodes) ||
+      isContextDocumentLikeContent(allNodes) ||
       isContextTimelinePlayable(allNodes) ||
       isContextContentsPage(allNodes)
     );
@@ -4080,6 +4274,16 @@ wuwei.menu = wuwei.menu || {};
   function isContextContentsPage(allNodes) {
     var spec = getContextContentsSpec(allNodes);
     return !!(spec && spec.point);
+  }
+
+  function isContextContentsRepresentative(allNodes) {
+    var target = getContextTarget(allNodes);
+    return !!(
+      target &&
+      wuwei.contents &&
+      typeof wuwei.contents.isContentsRepresentativeNode === 'function' &&
+      wuwei.contents.isContentsRepresentativeNode(target)
+    );
   }
 
   function isContextContentsAxis(allNodes) {
@@ -4133,8 +4337,14 @@ wuwei.menu = wuwei.menu || {};
         if (state.Selecting || state.Connecting) {
           return false;
         }
-        return isContextOpenableTarget(allNodes) &&
-          !isOfficeUploaded(allNodes);
+
+        /*
+         * PDF / Office / HTML documents are openable regardless of whether
+         * they are uploaded resources or network resources.  getOpenUrl()
+         * resolves the appropriate direct URL, uploaded preview PDF, or
+         * Office Online viewer URL as needed.
+         */
+        return isContextOpenableTarget(allNodes);
       },
       null,
       'fas fa-external-link-alt fa-lg fa-fw'
@@ -4168,8 +4378,12 @@ wuwei.menu = wuwei.menu || {};
         if (state.Selecting || state.Connecting) {
           return false;
         }
-        return isContextOpenableTarget(allNodes) &&
-          !isOfficeUploaded(allNodes);
+
+        /*
+         * Match OpenWindow: uploaded and network PDF / Office / HTML
+         * documents must be available from the INFO context menu.
+         */
+        return isContextOpenableTarget(allNodes);
       },
       null,
       'fas fa-external-link-alt fa-lg fa-fw'
@@ -4436,6 +4650,9 @@ wuwei.menu = wuwei.menu || {};
         if (util.isEmpty(node)) {
           return false;
         }
+        if (isContextContentsTarget(allNodes)) {
+          return false;
+        }
         return true;
       },
       null,
@@ -4601,6 +4818,14 @@ wuwei.menu = wuwei.menu || {};
       function (allNodes) {
         var node = getContextTarget(allNodes);
         if (util.isEmpty(node) || node.copying) {
+          return false;
+        }
+        /*
+         * Contents representative / axis / PageMarker targets have their own
+         * managed Delete command.  Suppress the generic group Delete here so
+         * the representative context menu does not show two Delete entries.
+         */
+        if (isContextContentsTarget(allNodes)) {
           return false;
         }
         return isWholeGroupEraseTarget(node);
@@ -4850,6 +5075,16 @@ wuwei.menu = wuwei.menu || {};
       },
       null,
       'fas fa-plus-circle fa-lg fa-fw'
+    ],
+
+    'copyContentsTarget': ['Copy',
+      function (allNodes) {
+        return !state.Selecting &&
+          !state.Connecting &&
+          (isContextContentsPage(allNodes) || isContextContentsRepresentative(allNodes));
+      },
+      null,
+      'fa fa-clone fa-lg fa-fw'
     ],
 
     'deleteContentsTarget': ['Delete',
@@ -5258,6 +5493,7 @@ wuwei.menu = wuwei.menu || {};
 
   /** context menu */
   ns.OperationsList = OperationsList;
+  ns.getTextViewerOpenUrl = getTextViewerOpenUrl;
   ns.openContextMenu = openContextMenu;
   ns.closeContextMenu = closeContextMenu;
   ns.closeContext = closeContext;

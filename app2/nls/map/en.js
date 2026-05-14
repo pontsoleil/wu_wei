@@ -581,4 +581,16 @@ wuwei.nls.EN = {
   'Corrected to minimum page number': 'Corrected to minimum page number',
   'Corrected to maximum page number': 'Corrected to maximum page number',
 
+  'Label position': 'Label position',
+  'Label align': 'Label align',
+  'Label width': 'Label width',
+  'Label lines': 'Label lines',
+  'Label offset X': 'Label offset X',
+  'Label offset Y': 'Label offset Y',
+  'Select label position': 'Select label position',
+
+  'PageMarkers': 'PageMarkers',
+  'Anchor href': 'Anchor href',
+  'Description': 'Description',
+
 };
