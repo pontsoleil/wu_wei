@@ -103,7 +103,6 @@ wuwei.menu = wuwei.menu || {};
     pageClicked,
     closePageClicked,
     refreshPagenation,
-    restartCurrentDraw,
     checkPage,
     /** new */
     newClicked,
@@ -145,11 +144,13 @@ wuwei.menu = wuwei.menu || {};
 
   isImageLikeNode = function (node) {
     const resource = getNodeResource(node);
-    return !!util.isDocumentKindByExtension(node, resource, '', 'image');
+    return !!(util.isDocumentKindByExtension(node, resource, '', 'image'));
   };
 
   function getCurrentOwnerId() {
-    return common.getCurrentOwnerId();
+    return common.getCurrentOwnerId() ||
+      (state && state.currentUser && state.currentUser.user_id) ||
+      '';
   }
 
   function assertNoLegacyRuntimeFields(record, kind) {
@@ -259,15 +260,14 @@ wuwei.menu = wuwei.menu || {};
   function isLocalTemporaryUser() {
     var ownerId = '';
 
-    if (!common.isLocalHost()) {
+    if (!(common.isLocalHost())) {
       return false;
     }
 
-    ownerId = util.getCurrentUserId() || common.getCurrentOwnerId();
+    ownerId = util.getCurrentUserId() || cmon.getCurrentOwnerId();
 
-    return !state.loggedIn || (
-      common.isTemporaryOwnerId(ownerId)
-    );
+    return !state.loggedIn ||
+      common.isTemporaryOwnerId(ownerId);
   }
 
   function getResourceFiles(resource) {
@@ -329,7 +329,7 @@ wuwei.menu = wuwei.menu || {};
 
   function isOfficeResource(resource) {
     var ref = getResourceOriginalPath(resource);
-    return !!util.isDocumentKindByExtension(null, resource, ref, 'office');
+    return !!(util.isDocumentKindByExtension(null, resource, ref, 'office'));
   }
 
   function isUploadedContent(allNodes) {
@@ -383,21 +383,9 @@ wuwei.menu = wuwei.menu || {};
     d3.select('#Hovered').attr('opacity', 0).attr('class', '');
     d3.select('#Selected').attr('opacity', 0);
     d3.select('#Pointer').style('opacity', 0);
-    if (graph.mode === 'simulation') {
-      draw.restart();
-    }
-    else {
-      draw.reRender();
-    }
-  }
 
-  restartCurrentDraw = function () {
-    if (graph.mode === 'simulation') {
-      draw.restart();
-      return;
-    }
-    draw.refresh();
-  };
+    draw.redraw();
+  }
 
   closeContextMenu = function () {
     var menuEl = document.getElementById('ContextMenu');
@@ -424,7 +412,10 @@ wuwei.menu = wuwei.menu || {};
     if (!node) {
       return false;
     }
-    return !!wuwei.menu.timeline.isTimelinePoint(node);
+
+    return !!wuwei.menu.timeline.isTimelinePoint(node) ||
+      ('Segment' === node.type) ||
+      ('Topic' === node.type && 'timeline-point' === node.topicKind);
   }
 
   function isTimelineInfoTarget(node, link) {
@@ -452,7 +443,7 @@ wuwei.menu = wuwei.menu || {};
       return null;
     }
 
-    mediaNode = util.clone(spec.mediaNode);
+    mediaNode = util.clone ? util.clone(spec.mediaNode) : Object.assign({}, spec.mediaNode);
     mediaNode.timeRange = Object.assign({}, mediaNode.timeRange || {});
     mediaNode.timeRange.start = Number(spec.startAt || 0);
 
@@ -497,7 +488,8 @@ wuwei.menu = wuwei.menu || {};
     }
     mediaNode = spec.mediaNode;
     resource = (mediaNode.resource && typeof mediaNode.resource === 'object') ? mediaNode.resource : {};
-    rawUrl = wuwei.video.getVideoSource(mediaNode);
+    rawUrl = wuwei.video.getVideoSource(mediaNode) ||
+      String(resource.canonicalUri || resource.uri || '');
     startAt = Math.max(0, Number(spec.startAt || 0));
     endAt = (spec.endAt != null && isFinite(spec.endAt)) ? Math.max(startAt, Number(spec.endAt)) : null;
     if (!rawUrl) {
@@ -950,7 +942,7 @@ wuwei.menu = wuwei.menu || {};
                       if (newLink) {
                         log.storeLog({ operation: 'connect' });
                       }
-                      draw.reRender();
+                      draw.redraw();
                     }
                   }
                   state.Connecting = false;
@@ -977,7 +969,7 @@ wuwei.menu = wuwei.menu || {};
                     y: Number((anchor && anchor.y) || (node && node.y) || (link && link.y) || (d3event && d3event.y) || 0)
                   };
                 }
-                restartCurrentDraw();
+                draw.redraw();
               }
               else {
                 const d3node = d3.select('g.node#' + targetNode.id);
@@ -1071,7 +1063,7 @@ wuwei.menu = wuwei.menu || {};
 
         if (!state.Connecting && !state.Selecting) {
           var infoTarget = node || link;
-          var infoOperations = infoTarget ? Operations.getSupported([infoTarget], 'INFO') : [];
+          var infoOperations = infoTarget && Operations.getSupported([infoTarget], 'INFO') || [];
           if (infoOperations.length > 0) {
             info
               .text('\uf05a')
@@ -1113,7 +1105,7 @@ wuwei.menu = wuwei.menu || {};
 
   function isImageNode(node) {
     const resource = getNodeResource(node);
-    return !!util.isDocumentKindByExtension(node, resource, '', 'image');
+    return !!(util.isDocumentKindByExtension(node, resource, '', 'image'));
   }
 
 
@@ -1125,7 +1117,9 @@ wuwei.menu = wuwei.menu || {};
     if (graph.mode === 'view' || state.viewOnly || state.published) {
       return false;
     }
-    const node = wuwei.model.getCurrent().nodes.find(n => n.id === nodeId);
+    const node = wuwei.model.getCurrent
+      ? wuwei.model.getCurrent().nodes.find(n => n.id === nodeId)
+      : null;
 
     const url = getDownloadUrl(node);
     if (!url) {
@@ -1337,7 +1331,17 @@ wuwei.menu = wuwei.menu || {};
         }
         else if (!iconHtml) {
           try {
-            iconHtml = wuwei.note.buildPageThumbnail(page);
+            iconHtml = wuwei.note.buildPageThumbnail(page) ||
+              util.buildMiniatureSvgString({
+                width: 200,
+                height: 200,
+                useDataOnly: true,
+                showViewFrame: true,
+                backgroundFill: '#ffffff',
+                page: page,
+                nodes: page.nodes || [],
+                links: (util.getMiniatureLinks ? util.getMiniatureLinks(page) : (page.links || []))
+              });
             page.thumbnail = iconHtml;
           } catch (e) {
             console.log(e);
@@ -1445,7 +1449,7 @@ wuwei.menu = wuwei.menu || {};
         if (!opened) {
           return;
         }
-        restartCurrentDraw();
+        draw.redraw();
 
         checkPage();
 
@@ -1606,6 +1610,7 @@ wuwei.menu = wuwei.menu || {};
     if (uploadPath) {
       return uploadPath;
     }
+
     if (resource && String(resource.kind || '').toLowerCase() === 'upload' && resource.id && resource.date) {
       file = String(resource.file || resource.filename || '').replace(/\\/g, '/').split('/').pop();
       if (file) {
@@ -1618,6 +1623,10 @@ wuwei.menu = wuwei.menu || {};
 
   function isTextDocumentReference(resource, href) {
     return !isHtmlDocumentReference(resource, href) && !!util.isDocumentKindByExtension(null, resource, href, 'text');
+  }
+
+  function isPdfDocumentReference(resource, href) {
+    return !!util.isDocumentKindByExtension(null, resource, href, 'pdf');
   }
 
   function isHtmlDocumentReference(resource, href) {
@@ -1903,7 +1912,7 @@ wuwei.menu = wuwei.menu || {};
     if (!group) {
       return null;
     }
-    reps = model.getGroupRepresentativeNodes(group);
+    reps = model.getGroupRepresentativeNodes(group) || [];
     return (reps && reps.length) ? reps[0] : null;
   }
 
@@ -1950,7 +1959,7 @@ wuwei.menu = wuwei.menu || {};
   }
 
   function groupSpineDefaults(type, visible) {
-    var defaults = model.groupStyleDefaults(type);
+    var defaults = model.groupStyleDefaults(type) || {};
     return {
       kind: defaults.kind,
       visible: visible,
@@ -1983,6 +1992,7 @@ wuwei.menu = wuwei.menu || {};
 
     (model.findGroupNodes(group.id) || []).forEach(add);
     (model.getGroupRepresentativeNodes(group) || []).forEach(add);
+
     return nodes;
   }
 
@@ -2266,7 +2276,7 @@ wuwei.menu = wuwei.menu || {};
       if (!g) {
         return;
       }
-      var groupMembers = model.getGroupMembers(g);
+      var groupMembers = model.getGroupMembers ? model.getGroupMembers(g) : ((g && g.members) || []);
       groupMembers.forEach(function (member) {
         var nodeId = member && member.nodeId;
         if (nodeId && !existingItemByNodeId[nodeId]) {
@@ -2373,7 +2383,7 @@ wuwei.menu = wuwei.menu || {};
     model.setGraphFromCurrentPage();
     clearSelectionState();
     closeContextMenu();
-    draw.reRender();
+    draw.redraw();
     return group;
   }
 
@@ -2448,7 +2458,8 @@ wuwei.menu = wuwei.menu || {};
         return;
       }
 
-      if (node.groupRef && model.findGroupById(node.groupRef)) {
+      if (node.groupRef && model && typeof model.findGroupById === 'function' &&
+        model.findGroupById(node.groupRef)) {
         wuwei.edit.open(node, { editor: false, citation: false, cc: false });
       }
       else if (util.isNode(node)) {
@@ -2494,7 +2505,7 @@ wuwei.menu = wuwei.menu || {};
     }
     else if ('createContentsAxis' === method) {
       node = resolveContextTargetRecord(state.hoveredNode);
-      if (!node) { return; }
+      if (!node || !wuwei.contents || typeof wuwei.contents.createAxisGroup !== 'function') { return; }
 
       wuwei.contents.createAxisGroup('horizontal', node, { silent: false });
 
@@ -2506,7 +2517,9 @@ wuwei.menu = wuwei.menu || {};
       if (!node) { return; }
 
       var axisSpec = wuwei.menu.timeline.getTimelineTargetSpec(node);
-      if (!axisSpec || !axisSpec.group) {
+      if ((!axisSpec || !axisSpec.group) &&
+        wuwei.contents &&
+        typeof wuwei.contents.getContentTargetSpec === 'function') {
         axisSpec = wuwei.contents.getContentTargetSpec(node);
       }
       if (!axisSpec || !axisSpec.group) {
@@ -2514,7 +2527,9 @@ wuwei.menu = wuwei.menu || {};
         return;
       }
 
-      if (axisSpec.group.type === 'contents') {
+      if (axisSpec.group.type === 'contents' &&
+        wuwei.edit.contents &&
+        typeof wuwei.edit.contents.openAxisProperties === 'function') {
         wuwei.edit.contents.openAxisProperties(axisSpec.group);
       }
       else {
@@ -2527,17 +2542,17 @@ wuwei.menu = wuwei.menu || {};
     else if ('addContentsEntry' === method) {
       var entryDraft;
       node = resolveContextTargetRecord(state.hoveredNode);
-      if (!node) { return; }
+      if (!node || !wuwei.contents || typeof wuwei.contents.createEntryDraft !== 'function') { return; }
       entryDraft = wuwei.contents.createEntryDraft(node);
       closeContextMenu();
-      if (entryDraft) {
+      if (entryDraft && wuwei.edit && typeof wuwei.edit.open === 'function') {
         wuwei.edit.open(entryDraft, { pendingContentsEntry: true });
       }
       return;
     }
     else if ('copyContentsTarget' === method) {
       node = resolveContextTargetRecord(state.hoveredNode);
-      if (!node) { return; }
+      if (!node || !wuwei.contents || typeof wuwei.contents.copyTarget !== 'function') { return; }
       wuwei.log.savePrevious();
       if (wuwei.contents.copyTarget(node)) {
         wuwei.log.storeLog({ operation: 'copy' });
@@ -2548,7 +2563,7 @@ wuwei.menu = wuwei.menu || {};
 
     else if ('distributeContentsPageMarkers' === method) {
       node = resolveContextTargetRecord(state.hoveredNode);
-      if (!node) { return; }
+      if (!node || !wuwei.contents || typeof wuwei.contents.distributePageMarkers !== 'function') { return; }
       wuwei.log.savePrevious();
       if (wuwei.contents.distributePageMarkers(node)) {
         wuwei.log.storeLog({ operation: 'distributeContentsPageMarkers' });
@@ -2558,7 +2573,7 @@ wuwei.menu = wuwei.menu || {};
     }
     else if ('deleteContentsTarget' === method) {
       node = resolveContextTargetRecord(state.hoveredNode);
-      if (!node) { return; }
+      if (!node || !wuwei.contents || typeof wuwei.contents.deleteTarget !== 'function') { return; }
       wuwei.log.savePrevious();
       if (wuwei.contents.deleteTarget(node)) {
         wuwei.log.storeLog({ operation: 'delete' });
@@ -2579,24 +2594,26 @@ wuwei.menu = wuwei.menu || {};
       isContextGroup([resolveContextTargetRecord(state.hoveredNode)])) {
       node = resolveContextTargetRecord(state.hoveredNode);
       if (!node) { return; }
-      wuwei.log.savePrevious();
-      var copiedGroupLog = model.copyGroup(node);
-      if (copiedGroupLog) {
-        wuwei.log.storeLog({ operation: 'copy' });
-        draw.reRender();
+      if (model && typeof model.copyGroup === 'function') {
+        wuwei.log.savePrevious();
+        var copiedGroupLog = model.copyGroup(node);
+        if (copiedGroupLog) {
+          wuwei.log.storeLog({ operation: 'copy' });
+          draw.redraw();
+        }
+        closeContextMenu();
+        return;
       }
-      closeContextMenu();
-      return;
     }
     else if ('erase' === method) {
       node = resolveContextTargetRecord(state.hoveredNode);
       if (!node) { return; }
 
-      if (isWholeGroupEraseTarget(node)) {
+      if (isWholeGroupEraseTarget(node) && model && typeof model.eraseGroup === 'function') {
         wuwei.log.savePrevious();
         if (model.eraseGroup(node)) {
           wuwei.log.storeLog({ operation: 'erase' });
-          draw.reRender();
+          draw.redraw();
         }
         closeContextMenu();
         return;
@@ -2617,30 +2634,36 @@ wuwei.menu = wuwei.menu || {};
           return;
         }
         wuwei.log.savePrevious();
-        if (wuwei.timeline.deleteAxisGroup(eraseTimelineSpec.group)) {
+        if (wuwei.timeline && typeof wuwei.timeline.deleteAxisGroup === 'function' &&
+          wuwei.timeline.deleteAxisGroup(eraseTimelineSpec.group)) {
           wuwei.log.storeLog({ operation: 'erase' });
         }
         closeContextMenu();
         return;
       }
 
-      var eraseContentsSpec = wuwei.contents.getContentTargetSpec(node);
-      if (eraseContentsSpec && eraseContentsSpec.group) {
+      if (wuwei.contents && typeof wuwei.contents.getContentTargetSpec === 'function' &&
+        typeof wuwei.contents.deleteTarget === 'function') {
+        var eraseContentsSpec = wuwei.contents.getContentTargetSpec(node);
+        if (eraseContentsSpec && eraseContentsSpec.group) {
+          wuwei.log.savePrevious();
+          if (wuwei.contents.deleteTarget(node)) {
+            wuwei.log.storeLog({ operation: 'erase' });
+          }
+          closeContextMenu();
+          return;
+        }
+      }
+
+      if (model && typeof model.erase === 'function') {
         wuwei.log.savePrevious();
-        if (wuwei.contents.deleteTarget(node)) {
+        if (model.erase([node])) {
           wuwei.log.storeLog({ operation: 'erase' });
+          draw.redraw();
         }
         closeContextMenu();
         return;
       }
-
-      wuwei.log.savePrevious();
-      if (model.erase([node])) {
-        wuwei.log.storeLog({ operation: 'erase' });
-        draw.reRender();
-      }
-      closeContextMenu();
-      return;
     }
     else if ('addTimelineSegmentFromPlayer' === method) {
       node = resolveContextTargetRecord(state.hoveredNode);
@@ -2718,7 +2741,9 @@ wuwei.menu = wuwei.menu || {};
     else if ('info' === method) {
       node = resolveContextTargetRecord(state.hoveredNode);
       if (!node || !node.id) { return; }
-      if (wuwei.contents.isContentsPageNode(node)) {
+      if (wuwei.contents &&
+        typeof wuwei.contents.isContentsPageNode === 'function' &&
+        wuwei.contents.isContentsPageNode(node)) {
         wuwei.menu.contents.openContentTargetInInfo(node);
         closeContextMenu();
         return;
@@ -2746,12 +2771,17 @@ wuwei.menu = wuwei.menu || {};
       node = resolveContextTargetRecord(state.hoveredNode);
       if (!node || !node.id) { return; }
 
-      var contentsSpecForInfo = wuwei.contents.getContentTargetSpec(node);
+      var contentsSpecForInfo = wuwei.contents && typeof wuwei.contents.getContentTargetSpec === 'function'
+        ? wuwei.contents.getContentTargetSpec(node)
+        : null;
       if (contentsSpecForInfo) {
-        if (contentsSpecForInfo.point) {
+        if (contentsSpecForInfo.point &&
+          wuwei.menu && wuwei.menu.contents &&
+          typeof wuwei.menu.contents.openContentTargetInInfo === 'function') {
           wuwei.menu.contents.openContentTargetInInfo(contentsSpecForInfo.point);
         }
-        else if (contentsSpecForInfo.group) {
+        else if (contentsSpecForInfo.group &&
+          wuwei.info && wuwei.info.contents && typeof wuwei.info.contents.openAxis === 'function') {
           wuwei.info.contents.openAxis(contentsSpecForInfo.group);
         }
         closeContextMenu();
@@ -2763,10 +2793,15 @@ wuwei.menu = wuwei.menu || {};
       if (!node || !node.id) { return; }
 
       function openPlayerError(message) {
-        wuwei.menu.snackbar.open({
-          type: 'error',
-          message: message || 'Video player is not available.'
-        });
+        if (wuwei.menu && wuwei.menu.snackbar && typeof wuwei.menu.snackbar.open === 'function') {
+          wuwei.menu.snackbar.open({
+            type: 'error',
+            message: message || 'Video player is not available.'
+          });
+        }
+        else {
+          window.alert(message || 'Video player is not available.');
+        }
       }
 
       var timelineSpec = wuwei.menu.timeline.getTimelineTargetSpec(node);
@@ -2782,12 +2817,23 @@ wuwei.menu = wuwei.menu || {};
           return;
         }
 
-        opened = wuwei.menu.video.open(node, {});
-        if (opened === false) {
-          openPlayerError('Video player could not be opened.');
+        if (window.wuwei && wuwei.menu && wuwei.menu.video && typeof wuwei.menu.video.open === 'function') {
+          opened = wuwei.menu.video.open(node, {});
+          if (opened === false) {
+            openPlayerError('Video player could not be opened.');
+          }
+          closeContextMenu();
+          return;
         }
-        closeContextMenu();
-        return;
+
+        if (window.wuwei && wuwei.info && wuwei.info.video && typeof wuwei.info.video.openModal === 'function') {
+          opened = wuwei.info.video.openModal(node, {});
+          if (opened === false) {
+            openPlayerError('Video player could not be opened.');
+          }
+          closeContextMenu();
+          return;
+        }
       }
       catch (e) {
         console.error(e);
@@ -2805,7 +2851,7 @@ wuwei.menu = wuwei.menu || {};
       if (!node || !node.id) { return; }
 
       var contentsSpecForWindow = wuwei.contents.getContentTargetSpec(node);
-      if (contentsSpecForWindow && contentsSpecForWindow.point) {
+      if (contentsSpecForWindow && contentsSpecForWindow.point && wuwei.contents) {
         var contentsWindowUrl = wuwei.menu.contents.getContentTargetOpenUrl(contentsSpecForWindow.point);
         if (contentsWindowUrl) {
           wuwei.info.openWindow(contentsWindowUrl, null, 'width=900,height=680,noopener,resizable=yes,scrollbars=yes');
@@ -2840,7 +2886,7 @@ wuwei.menu = wuwei.menu || {};
       if (!node || !node.id) { return; }
 
       var contentsSpecForTab = wuwei.contents.getContentTargetSpec(node);
-      if (contentsSpecForTab && contentsSpecForTab.point) {
+      if (contentsSpecForTab && contentsSpecForTab.point && wuwei.contents) {
         var contentsTabUrl = wuwei.menu.contents.getContentTargetOpenUrl(contentsSpecForTab.point);
         if (contentsTabUrl) {
           wuwei.info.openNewTab(contentsTabUrl);
@@ -2892,7 +2938,8 @@ wuwei.menu = wuwei.menu || {};
       if (!node) { return; }
 
       var contentsHorizontalSpec = wuwei.contents.getContentTargetSpec(node);
-      if (contentsHorizontalSpec && contentsHorizontalSpec.group) {
+      if (contentsHorizontalSpec && contentsHorizontalSpec.group && wuwei.contents &&
+        typeof wuwei.contents.updateAxisGroup === 'function') {
         wuwei.contents.updateAxisGroup(contentsHorizontalSpec.group, {
           orientation: 'horizontal'
         });
@@ -2914,7 +2961,8 @@ wuwei.menu = wuwei.menu || {};
       if (!node) { return; }
 
       var contentsVerticalSpec = wuwei.contents.getContentTargetSpec(node);
-      if (contentsVerticalSpec && contentsVerticalSpec.group) {
+      if (contentsVerticalSpec && contentsVerticalSpec.group && wuwei.contents &&
+        typeof wuwei.contents.updateAxisGroup === 'function') {
         wuwei.contents.updateAxisGroup(contentsVerticalSpec.group, {
           orientation: 'vertical'
         });
@@ -3025,19 +3073,21 @@ wuwei.menu = wuwei.menu || {};
               if (!g || selectedGroupIds.indexOf(g.id) >= 0) {
                 return;
               }
-              groupMembers = model.getGroupMembers(g);
+              groupMembers = model.getGroupMembers ? model.getGroupMembers(g) : (g.members || []);
               g.members = groupMembers.filter(function (member) {
                 var nodeId = member && member.nodeId;
                 return nodeId && selectedIds.indexOf(nodeId) < 0;
               });
             });
           }
-          model.pruneGroups();
+          if (model && typeof model.pruneGroups === 'function') {
+            model.pruneGroups();
+          }
         }
         model.setGraphFromCurrentPage();
         clearSelectionState();
         closeContextMenu();
-        draw.reRender();
+        draw.redraw();
         logData = { command: method, param: { node: allNodes } };
       }
       else if ('deleteSelectedGroups' === method) {
@@ -3108,7 +3158,7 @@ wuwei.menu = wuwei.menu || {};
       log.storeLog({ operation: method });
 
       state.hoveredNode = undefined;
-      draw.reRender();
+      draw.redraw();
 
       if (['defineSimpleGroup', 'defineHorizontalGroup', 'defineVerticalGroup', 'ungroup'].includes(method)) {
         closeContextMenu();
@@ -3157,22 +3207,26 @@ wuwei.menu = wuwei.menu || {};
       return;
     }
 
-    if (['namePage', 'copyPage', 'newPage', 'listPage'].includes(method)) {
+    if (note && typeof note[method] === 'function') {
       if ('namePage' === method) {
         note.namePage();
       }
       else if ('copyPage' === method) {
         note.copyPage();
         updateResetview('reset');
-        draw.reRender();
-        note.updatePageThumbnail();
+        draw.redraw();
+        if (note && typeof note.updatePageThumbnail === 'function') {
+          note.updatePageThumbnail();
+        }
         refreshPagenation();
       }
       else if ('newPage' === method) {
         note.newPage();
         updateResetview('reset');
-        draw.reRender();
-        note.updatePageThumbnail();
+        draw.redraw();
+        if (note && typeof note.updatePageThumbnail === 'function') {
+          note.updatePageThumbnail();
+        }
         refreshPagenation();
       }
       else if ('listPage' === method) {
@@ -3238,7 +3292,7 @@ wuwei.menu = wuwei.menu || {};
             }
           }
 
-          draw.reRender();
+          draw.redraw();
           state.hoveredNode = undefined;
           closeContextMenu();
           updateUndoRedoButton();
@@ -3287,7 +3341,7 @@ wuwei.menu = wuwei.menu || {};
       i, len = pulldown.length;
     state.hoveredNode = null;
 
-    draw.reRender();
+    draw.redraw();
 
     for (i = 0; i < len; i++) {
       pulldown[i].style.display = 'none';
@@ -3458,7 +3512,7 @@ wuwei.menu = wuwei.menu || {};
     var menu = document.getElementById('flockMenu');
     menu.style.display = 'none';
     closeContextMenu();
-    draw.reRender();
+    draw.redraw();
     return false;
   };
 
@@ -3627,7 +3681,7 @@ wuwei.menu = wuwei.menu || {};
     }
 
     log.undoState();
-    draw.reRender();
+    draw.redraw();
 
     undo_div.classList.add('active');
     updateUndoRedoButton();
@@ -3650,7 +3704,7 @@ wuwei.menu = wuwei.menu || {};
     }
 
     log.redoState();
-    draw.reRender();
+    draw.redraw();
 
     redo_div.classList.add('active');
     updateUndoRedoButton();
@@ -3911,6 +3965,7 @@ wuwei.menu = wuwei.menu || {};
     if (util.isEmpty(target)) {
       return null;
     }
+
     return wuwei.contents.getContentTargetSpec(target);
   }
 
@@ -3973,7 +4028,7 @@ wuwei.menu = wuwei.menu || {};
     if (model.eraseGroup(target)) {
       clearSelectionState();
       wuwei.log.storeLog({ operation: 'erase' });
-      draw.reRender();
+      draw.redraw();
       return true;
     }
     return false;
@@ -3991,7 +4046,7 @@ wuwei.menu = wuwei.menu || {};
 
     wuwei.log.savePrevious();
     selectedGroupIds.forEach(function (groupId) {
-      var group = model.findGroupById(groupId);
+      var group = model.findGroupById ? model.findGroupById(groupId) : null;
       if (group && model.eraseGroup(group)) {
         deletedIds.push({ id: groupId, type: 'Group' });
       }
@@ -4004,7 +4059,7 @@ wuwei.menu = wuwei.menu || {};
 
     clearSelectionState();
     closeContextMenu();
-    draw.reRender();
+    draw.redraw();
     return true;
   }
 
@@ -4045,13 +4100,10 @@ wuwei.menu = wuwei.menu || {};
       '';
 
     return !!(
-      util.isDocumentKindByExtension(null, resource, href, 'pdf') ||
-      util.isDocumentKindByExtension(null, resource, href, 'office') ||
-      util.isDocumentKindByExtension(null, resource, href, 'html') ||
-      (
-        !util.isDocumentKindByExtension(null, resource, href, 'html') &&
-        util.isDocumentKindByExtension(null, resource, href, 'text')
-      )
+      isPdfDocumentReference(resource, href) ||
+      isOfficeDocumentReference(resource, href) ||
+      isHtmlDocumentReference(resource, href) ||
+      isTextDocumentReference(resource, href)
     );
   }
 
@@ -4082,6 +4134,13 @@ wuwei.menu = wuwei.menu || {};
     return !!(
       target &&
       wuwei.timeline.hasAttachedTimelineGroup(target)
+    );
+  }
+
+  function hasAttachedContentsGroup(target) {
+    return !!(
+      target &&
+      wuwei.contents.hasAttachedContentsGroup(target)
     );
   }
 
@@ -5181,7 +5240,6 @@ wuwei.menu = wuwei.menu || {};
         heading_menu.classList.add('active');
         searchIcon.classList.remove('simulation');
         settinIgcon.style.display = 'none';
-        // shareIcon.style.display = 'block';
         wuwei.menu.setting.close();
         draw.refresh();
         break;
@@ -5190,7 +5248,6 @@ wuwei.menu = wuwei.menu || {};
         heading_menu.classList.remove('active');
         searchIcon.classList.remove('simulation');
         settinIgcon.style.display = 'none';
-        // shareIcon.style.display = 'none';
         draw.refresh();
         break;
       case 'simulation':
@@ -5198,7 +5255,6 @@ wuwei.menu = wuwei.menu || {};
         heading_menu.classList.add('active');
         searchIcon.classList.add('simulation');
         settinIgcon.style.display = 'block';
-        // shareIcon.style.display = 'none';
         draw.restart();
         break;
     }
@@ -5312,7 +5368,7 @@ wuwei.menu = wuwei.menu || {};
       refreshPagenation();
 
       closeNoteMenu();
-      draw.reRender();
+      draw.redraw();
     });
     registerClick('.pulldown.note .operators .operator.Open', () => {
       wuwei.menu.note.list();
@@ -5388,7 +5444,7 @@ wuwei.menu = wuwei.menu || {};
       });
       common.state.selectedGroupIds = [];
       common.state.selectedGroupMarks = {};
-      draw.reRender();
+      draw.redraw();
     });
     registerClick('.pulldown.flock .operators .operator.AlignTop', () => {
       ContextOperate('alignTop');
@@ -5449,16 +5505,36 @@ wuwei.menu = wuwei.menu || {};
     // // share_mode
     // registerClick('#share_mode', shareClicked);
 
-    wuwei.menu.login.initModule();
-    wuwei.menu.modal.initModule();
-    wuwei.menu.note.initModule();
-    wuwei.menu.page.initModule();
-    wuwei.menu.pagination.initModule();
-    wuwei.menu.setting.initModule();
-    wuwei.menu.timeline.initModule();
-    wuwei.menu.contents.initModule();
-    wuwei.menu.upload.initModule();
-    wuwei.menu.video.initModule();
+    if (wuwei.menu.login && typeof wuwei.menu.login.initModule === 'function') {
+      wuwei.menu.login.initModule();
+    }
+    if (wuwei.menu.modal && typeof wuwei.menu.modal.initModule === 'function') {
+      wuwei.menu.modal.initModule();
+    }
+    if (wuwei.menu.note && typeof wuwei.menu.note.initModule === 'function') {
+      wuwei.menu.note.initModule();
+    }
+    if (wuwei.menu.page && typeof wuwei.menu.page.initModule === 'function') {
+      wuwei.menu.page.initModule();
+    }
+    if (wuwei.menu.pagination && typeof wuwei.menu.pagination.initModule === 'function') {
+      wuwei.menu.pagination.initModule();
+    }
+    if (wuwei.menu.setting && typeof wuwei.menu.setting.initModule === 'function') {
+      wuwei.menu.setting.initModule();
+    }
+    if (wuwei.menu.timeline && typeof wuwei.menu.timeline.initModule === 'function') {
+      wuwei.menu.timeline.initModule();
+    }
+    if (wuwei.menu.contents && typeof wuwei.menu.contents.initModule === 'function') {
+      wuwei.menu.contents.initModule();
+    }
+    if (wuwei.menu.upload && typeof wuwei.menu.upload.initModule === 'function') {
+      wuwei.menu.upload.initModule();
+    }
+    if (wuwei.menu.video && typeof wuwei.menu.video.initModule === 'function') {
+      wuwei.menu.video.initModule();
+    }
   };
 
   /** context menu */

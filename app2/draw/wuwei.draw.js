@@ -120,9 +120,9 @@ wuwei.draw = wuwei.draw || {};
 
     initModule;
 
-  function reRender() {
-    redraw();
-  }
+  // function reRender() {
+  //   redraw();
+  // }
 
   function clearGraphLayer() {
     const canvasSel = d3.select('g#' + state.canvasId);
@@ -1032,19 +1032,17 @@ wuwei.draw = wuwei.draw || {};
 
     /** Node */
     for (let node of graph.nodes) {
-      if (util.isShown(node) /*&& !node.filterout*/) {
+      if (util.isShown(node)) {
         model.renderNode(node);
       }
     }
+
     /** Link */
     const links = graph.links.slice();
     for (let link of links) {
-      // console.log(`refresh link.visible=${link.visible} link.filterout=${link.filterout}`);
-      if (util.isShown(link) /*&& ! link.filterout*/) {
-        // console.log(`refresh render link id=${link.id}`);
+      if (util.isShown(link)) {
         renderGraphLink(link);
       } else {
-        // console.log(`refresh remove link id=${link.id}`);
         d3.select('g.link#' + link.id).remove();
       }
     }
@@ -1060,10 +1058,12 @@ wuwei.draw = wuwei.draw || {};
       model.setGraphFromCurrentPage();
     }
     clearGraphLayer();
+    
     if ('simulation' === graph.mode) {
       restart();
       return;
     }
+
     refresh();
   };
 
@@ -1525,7 +1525,7 @@ wuwei.draw = wuwei.draw || {};
   ns.restart = restart;
   ns.ticked = ticked;
   ns.refresh = refresh;
-  ns.reRender = reRender;
+  // ns.reRender = reRender;
   ns.toggleSelectedNode = toggleSelectedNode;
   ns.toggleSelectedGroup = toggleSelectedGroup;
   // init: init,

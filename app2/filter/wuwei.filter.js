@@ -12,7 +12,7 @@ wuwei.filter = (function () {
     return common && common.current ? common.current.page || null : null;
   }
 
-  function refresh() {
+  function filterRender() {
     if (!draw) { return; }
     if (graph && graph.mode === 'simulation' && typeof draw.restart === 'function') {
       draw.restart();
@@ -20,8 +20,8 @@ wuwei.filter = (function () {
     else if (typeof draw.refresh === 'function') {
       draw.refresh();
     }
-    else if (typeof draw.reRender === 'function') {
-      draw.reRender();
+    else if (typeof draw.redraw === 'function') {
+      draw.redraw();
     }
   }
 
@@ -140,7 +140,7 @@ wuwei.filter = (function () {
     showMatching: showMatching,
     hideMatching: hideMatching,
     hideAll: hideAll,
-    filterRender: refresh,
+    filterRender: filterRender,
     initModule: initModule
   };
 })();

@@ -1476,7 +1476,7 @@ wuwei.contents = wuwei.contents || {};
       normalizeAllAxisGroups(page);
     }
     model.setGraphFromCurrentPage();
-    wuwei.draw.reRender();
+    wuwei.draw.redraw();
   }
 
   function getDragBounds(group, pageNode) {

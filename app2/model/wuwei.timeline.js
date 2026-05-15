@@ -40,7 +40,6 @@ wuwei.timeline = wuwei.timeline || {};
       : ('_' + Date.now() + '_' + Math.random().toString(16).slice(2)));
   }
 
-
   function makeStablePseudoId(holder, key) {
     if (!holder) {
       return makeUuid();
@@ -51,19 +50,9 @@ wuwei.timeline = wuwei.timeline || {};
     return holder[key];
   }
 
-  // function reRender() {
-  //   if ('simulation' === graph.mode) {
-  //     draw.restart();
-  //   }
-  //   else {
-  //     draw.refresh();
-  //   }
-  // }
-
   function getCurrentPage() {
     return common && common.current ? common.current.page || null : null;
   }
-
 
   function isGenericGroup(group) {
     return !!(group && (
@@ -1279,7 +1268,7 @@ wuwei.timeline = wuwei.timeline || {};
       normalizeAllAxisGroups(page);
     }
     model.setGraphFromCurrentPage();
-    wuwei.draw.reRender();
+    wuwei.draw.redraw();
   }
 
   function resolveSegmentRecord(pointOrId) {
@@ -2170,7 +2159,6 @@ wuwei.timeline = wuwei.timeline || {};
   ns.getCurrentPage = getCurrentPage;
   ns.ensurePageCollections = ensurePageCollections;
   ns.syncRealNodesFromGraph = syncRealNodesFromGraph;
-  // ns.reRender = reRender;
   ns.formatTime = formatTime;
   ns.isAxisGroup = isAxisGroup;
   ns.getAttachedTimelineGroupsForNode = getAttachedTimelineGroupsForNode;
