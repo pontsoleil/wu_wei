@@ -989,6 +989,9 @@ wuwei.model = (function () {
       origin: param.origin ? util.clone(param.origin) : undefined,
       mediaRef: param.mediaRef || (timeline && timeline.mediaRef) || '',
       documentRef: param.documentRef || '',
+      targetNodeId: param.targetNodeId || param.mediaRef || param.documentRef || (timeline && timeline.mediaRef) || '',
+      parentGroupId: param.parentGroupId || '',
+      hierarchical: !!param.hierarchical,
       representativeNodeId: param.representativeNodeId || '',
       pageCount: Number.isFinite(Number(param.pageCount)) ? Number(param.pageCount) : undefined,
       defaultPlayDuration: Number.isFinite(Number(param.defaultPlayDuration))
@@ -1408,6 +1411,7 @@ wuwei.model = (function () {
       state.dragMoveIds = getDragMoveIds(page, d);
       state.dragMoveAnchor = { x: d.x, y: d.y };
       state.dragMoveOrigin = buildDragMoveOrigin(state.dragMoveIds);
+      state.attachedSemanticGroupOrigin = buildAttachedSemanticGroupDragOrigins(state.dragMoveIds);
       state.dragMoveConstraint = getDragMoveConstraint(d);
 
       (state.dragMoveIds || []).forEach(function (id) {
@@ -1431,6 +1435,7 @@ wuwei.model = (function () {
       state.dragMoveIds = [d.id];
       state.dragMoveAnchor = { x: d.x, y: d.y };
       state.dragMoveOrigin = buildDragMoveOrigin(state.dragMoveIds);
+      state.attachedSemanticGroupOrigin = buildAttachedSemanticGroupDragOrigins(state.dragMoveIds);
       state.dragMoveConstraint = null;
     }
   };
@@ -1634,6 +1639,8 @@ wuwei.model = (function () {
         movedNode.changed = true;
       });
 
+      applyAttachedSemanticGroupTranslate(state.attachedSemanticGroupOrigin, deltaX, deltaY);
+
       if (wuwei.draw && typeof wuwei.draw.refresh === 'function') {
         wuwei.draw.refresh();
       }
@@ -1683,6 +1690,7 @@ wuwei.model = (function () {
       state.dragMoveOrigin = null;
       state.dragMoveAnchor = null;
       state.dragMoveConstraint = null;
+      state.attachedSemanticGroupOrigin = null;
       rerenderByGraphMode();
       log.storeLog({ operation: 'drag' });
       return;
@@ -1727,6 +1735,7 @@ wuwei.model = (function () {
     state.dragMoveOrigin = null;
     state.dragMoveAnchor = null;
     state.dragMoveConstraint = null;
+    state.attachedSemanticGroupOrigin = null;
     log.storeLog({ operation: 'drag' });
   };
 
@@ -2176,6 +2185,8 @@ wuwei.model = (function () {
     if (!id) {
       return linkids;
     }
+
+    removeAttachedSemanticGroupsByNodeId(id);
 
     /** remove from current page nodes */
     if (page && Array.isArray(page.nodes)) {
@@ -3651,14 +3662,21 @@ wuwei.model = (function () {
       value = response.value || {},
       file = value.file || '';
 
-    const lcFormat = (format || '').toLowerCase();
-    const lcUri = (uri || '').toLowerCase();
+    const typeProbeResource = Object.assign({}, resourceDef || {}, {
+      file: (resourceDef && resourceDef.file) || value.file || response.file || response.filename || response.name || '',
+      filename: (resourceDef && resourceDef.filename) || response.filename || response.name || '',
+      uri: (resourceDef && resourceDef.uri) || response.uri || response.url || '',
+      canonicalUri: (resourceDef && resourceDef.canonicalUri) || response.download_url || response.url || response.uri || ''
+    });
+    const typeProbeHref = response.download_url || response.url || response.uri || value.file || file || '';
+    const extensionKind = util.getDocumentKindByExtension
+      ? util.getDocumentKindByExtension(null, typeProbeResource, typeProbeHref)
+      : '';
     const duration = (value && null != value.duration) ? parseFloat(value.duration) : NaN;
 
     const isVideo =
-      (lcFormat && 0 === lcFormat.indexOf('video/')) ||
-      isHostedVideoUrl(uri || response.url || '') ||
-      /\.(mp4|webm|ogg|mov|m4v)(\?|#|$)/.test(lcUri);
+      extensionKind === 'video' ||
+      isHostedVideoUrl(uri || response.url || '');
 
     const videoMedia = isVideo
       ? { start: 0, end: (Number.isFinite(duration) ? duration : null) }
@@ -3669,8 +3687,8 @@ wuwei.model = (function () {
       thumbnail_size = value.thumbnail ? value.thumbnail.size : null,
       color;
 
-    const isTextPlain = 'text/plain' === lcFormat;
-    const isOffice = util.isOfficeDocument ? util.isOfficeDocument(format) : false;
+    const isTextPlain = extensionKind === 'text';
+    const isOffice = extensionKind === 'office';
     const isLocal = util.isLocalHost ? util.isLocalHost() : false;
 
     let nodeUrl = response.url || '';
@@ -3756,7 +3774,7 @@ wuwei.model = (function () {
     if (isOffice || isTextPlain) {
       if (isOffice) {
         if (!thumbnail) {
-          thumbnail = util.getOfficeIcon ? util.getOfficeIcon(format) : 'fa-file';
+          thumbnail = util.getOfficeIcon ? util.getOfficeIcon(typeProbeHref || typeProbeResource.file || '') : 'fa-file';
         }
       } else if (isTextPlain) {
         if (!thumbnail) {
@@ -4531,6 +4549,77 @@ wuwei.model = (function () {
   }
 
 
+  function isSemanticAttachedGroup(group) {
+    return !!(group && (group.type === 'timeline' || group.type === 'contents'));
+  }
+
+  function getSemanticGroupTargetNodeId(group) {
+    if (!group) { return ''; }
+    return group.targetNodeId || group.mediaRef || group.documentRef ||
+      (group.timeline && group.timeline.mediaRef) || '';
+  }
+
+  function findAttachedSemanticGroupsByNodeId(nodeId) {
+    var page = getCurrentPage();
+    if (!nodeId || !page || !Array.isArray(page.groups)) {
+      return [];
+    }
+    return page.groups.filter(function (group) {
+      return isSemanticAttachedGroup(group) && getSemanticGroupTargetNodeId(group) === nodeId;
+    });
+  }
+
+  function buildAttachedSemanticGroupDragOrigins(nodeIds, excludeGroupId) {
+    var out = {};
+    var seen = {};
+
+    (nodeIds || []).forEach(function (nodeId) {
+      findAttachedSemanticGroupsByNodeId(nodeId).forEach(function (group) {
+        if (!group || !group.id || group.id === excludeGroupId || seen[group.id]) {
+          return;
+        }
+        seen[group.id] = true;
+        out[group.id] = {
+          groupId: group.id,
+          origin: buildGroupDragOrigin(group)
+        };
+      });
+    });
+
+    return out;
+  }
+
+  function hasAttachedSemanticGroupDragOrigins(snapshotMap) {
+    return !!(snapshotMap && Object.keys(snapshotMap).length);
+  }
+
+  function applyAttachedSemanticGroupTranslate(snapshotMap, dx, dy) {
+    if (!hasAttachedSemanticGroupDragOrigins(snapshotMap)) {
+      return false;
+    }
+    Object.keys(snapshotMap).forEach(function (groupId) {
+      var item = snapshotMap[groupId];
+      var group = findGroupById(groupId);
+      if (!group || !item || !item.origin) {
+        return;
+      }
+      applyGroupTranslate(group, item.origin, dx, dy);
+      group.changed = true;
+    });
+    return true;
+  }
+
+  function removeAttachedSemanticGroupsByNodeId(nodeId) {
+    var groups = findAttachedSemanticGroupsByNodeId(nodeId).slice();
+    groups.forEach(function (group) {
+      if (group) {
+        eraseGroup(group);
+      }
+    });
+    return groups.length;
+  }
+
+
   function isAxisLayoutGroup(group) {
     return !!(group && ('timeline' === group.type || 'contents' === group.type));
   }
@@ -4660,6 +4749,9 @@ wuwei.model = (function () {
       y: finiteOr(point.y, 0)
     };
     state.groupDragOrigin = buildGroupDragOrigin(group);
+    state.groupAttachedSemanticGroupOrigin = isAxisLayoutGroup(group)
+      ? null
+      : buildAttachedSemanticGroupDragOrigins(getGroupNodeIds(group), group.id);
     state.dragging = true;
     state.hoverLockUntil = Date.now() + 250;
 
@@ -4675,6 +4767,7 @@ wuwei.model = (function () {
     state.groupDragGroupId = null;
     state.groupDragAnchor = null;
     state.groupDragOrigin = null;
+    state.groupAttachedSemanticGroupOrigin = null;
     state.dragging = false;
     state.hoverLockUntil = Date.now() + 150;
 
@@ -5528,6 +5621,9 @@ wuwei.model = (function () {
       y: finiteOr(point.y, 0)
     };
     state.groupDragOrigin = buildGroupDragOrigin(group);
+    state.groupAttachedSemanticGroupOrigin = isAxisLayoutGroup(group)
+      ? null
+      : buildAttachedSemanticGroupDragOrigins(getGroupNodeIds(group), group.id);
     state.dragging = true;
     state.hoverLockUntil = Date.now() + 250;
 
@@ -5565,6 +5661,7 @@ wuwei.model = (function () {
      * - セグメント相対配置も変えない
      */
     applyGroupTranslate(group, state.groupDragOrigin, dx, dy);
+    applyAttachedSemanticGroupTranslate(state.groupAttachedSemanticGroupOrigin, dx, dy);
 
     isAxisGroup = isAxisLayoutGroup(group);
 
@@ -5594,6 +5691,7 @@ wuwei.model = (function () {
     state.groupDragGroupId = null;
     state.groupDragAnchor = null;
     state.groupDragOrigin = null;
+    state.groupAttachedSemanticGroupOrigin = null;
     state.dragging = false;
     state.hoverLockUntil = Date.now() + 150;
 
@@ -10300,6 +10398,7 @@ wuwei.model = (function () {
     findGroupByTarget: findGroupByTarget,
     findGroupNodes: findGroupNodes,
     findGroupsByNodeId: findGroupsByNodeId,
+    findAttachedSemanticGroupsByNodeId: findAttachedSemanticGroupsByNodeId,
     copyGroup: copyGroup,
     eraseGroup: eraseGroup,
     reflowGroupMembers: reflowGroupMembers,

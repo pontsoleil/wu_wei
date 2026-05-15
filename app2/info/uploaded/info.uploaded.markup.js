@@ -172,15 +172,13 @@ wuwei.info.uploaded.markup = ( function () {
 
   function resolveInfoUri(node) {
     var resource = (node && node.resource && 'object' === typeof node.resource) ? node.resource : {};
-    var media = (resource.media && 'object' === typeof resource.media) ? resource.media : {};
-    var mimeType = String(resource.mimeType || media.mimeType || (node && (node.contenttype || node.contentType)) || '').toLowerCase();
     var viewer = (resource.viewer && 'object' === typeof resource.viewer) ? resource.viewer : {};
     var embed = (viewer.embed && 'object' === typeof viewer.embed) ? viewer.embed : {};
     var snapshotSources = (resource.snapshotSources && 'object' === typeof resource.snapshotSources) ? resource.snapshotSources : {};
-    if (isOfficeResource(resource, mimeType)) {
+    if (isOfficeResource(node, resource)) {
       return resolveOfficeInfoUri(node, resource, viewer, embed, snapshotSources);
     }
-    if (isHtmlResource(node, resource, mimeType)) {
+    if (isHtmlResource(node, resource)) {
       return resolveHtmlInfoUri(node, resource, embed, snapshotSources);
     }
     var previewUri = getOfficePreviewUri(node, resource, viewer, embed, snapshotSources);
@@ -188,8 +186,7 @@ wuwei.info.uploaded.markup = ( function () {
       return previewUri;
     }
     if (wuwei.util && typeof wuwei.util.getResourceOriginalUri === 'function' &&
-      (isPdfResource(node, resource, mimeType) ||
-        isInlineMediaMime(mimeType))) {
+      (isPdfResource(node, resource) || isInlineMediaByExtension(node, resource))) {
       return wuwei.util.getResourceOriginalUri(node) || '';
     }
     if (wuwei.util && typeof wuwei.util.getResourceUri === 'function') {
@@ -206,41 +203,12 @@ wuwei.info.uploaded.markup = ( function () {
   }
 
   function resolveFrameUri(node, uri) {
-    var resource = (node && node.resource && 'object' === typeof node.resource) ? node.resource : {};
-    var media = (resource.media && 'object' === typeof resource.media) ? resource.media : {};
-    var mimeType = String(resource.mimeType || media.mimeType || (node && (node.contenttype || node.contentType)) || '').toLowerCase();
-    if (isOfficeResource(resource, mimeType)) {
-      return uri;
-    }
     return uri;
   }
 
-  function isHtmlResource(node, resource, mimeType) {
-    var media = (resource && resource.media && 'object' === typeof resource.media) ? resource.media : {};
-    var contents = (resource && resource.contents && 'object' === typeof resource.contents) ? resource.contents : {};
-    var viewer = (resource && resource.viewer && 'object' === typeof resource.viewer) ? resource.viewer : {};
-    var embed = (viewer.embed && 'object' === typeof viewer.embed) ? viewer.embed : {};
-    var text = [
-      mimeType,
-      resource && resource.kind,
-      resource && resource.type,
-      contents.type,
-      media.type,
-      resource && resource.file,
-      resource && resource.filename,
-      resource && resource.uri,
-      resource && resource.canonicalUri,
-      embed.uri,
-      node && node.contenttype,
-      node && node.contentType,
-      node && node.label
-    ].join(' ').toLowerCase();
-
-    return String(mimeType || '').indexOf('text/html') === 0 ||
-      String(mimeType || '').indexOf('application/xhtml+xml') === 0 ||
-      /(?:^|\s)(?:html|web)(?:\s|$)/.test(String(resource && (resource.kind || resource.type) || '').toLowerCase()) ||
-      /(?:^|\s)(?:html|web)(?:\s|$)/.test(String(contents.type || media.type || '').toLowerCase()) ||
-      /\.(?:html?|xhtml)(?:[?#]|$)/i.test(text);
+  function isHtmlResource(node, resource) {
+    return !!(wuwei.util && typeof wuwei.util.isDocumentKindByExtension === 'function' &&
+      wuwei.util.isDocumentKindByExtension(node, resource, '', 'html'));
   }
 
   function resolveHtmlInfoUri(node, resource, embed, snapshotSources) {
@@ -336,56 +304,27 @@ wuwei.info.uploaded.markup = ( function () {
     return '';
   }
 
-  function isOfficeResource(resource, mimeType) {
-    var text = String(mimeType || '').toLowerCase();
-    var uriText = [
-      resource && resource.uri,
-      resource && resource.canonicalUri,
-      resource && resource.name,
-      resource && resource.label
-    ].join(' ').toLowerCase();
-    if (wuwei.util && typeof wuwei.util.isOfficeDocument === 'function' &&
-      wuwei.util.isOfficeDocument(text)) {
-      return true;
-    }
-    return /(?:msword|ms-excel|ms-powerpoint|officedocument|\.docx?\b|\.xlsx?\b|\.pptx?\b)/.test(text + ' ' + uriText);
+  function isOfficeResource(node, resource) {
+    return !!(wuwei.util && typeof wuwei.util.isDocumentKindByExtension === 'function' &&
+      wuwei.util.isDocumentKindByExtension(node, resource, '', 'office'));
   }
 
-  function isInlineMediaMime(mimeType) {
-    var text = String(mimeType || '').toLowerCase();
-    return text.indexOf('image/') === 0 ||
-      text.indexOf('video/') === 0 ||
-      text.indexOf('audio/') === 0;
+  function isInlineMediaByExtension(node, resource) {
+    var kind = wuwei.util && typeof wuwei.util.getDocumentKindByExtension === 'function'
+      ? wuwei.util.getDocumentKindByExtension(node, resource, '')
+      : '';
+    return kind === 'image' || kind === 'video' || kind === 'audio';
   }
 
-  function isPdfResource(node, resource, mimeType) {
-    var original = '';
-    var text;
-    if (String(mimeType || '').toLowerCase().indexOf('application/pdf') === 0) {
-      return true;
-    }
-    if (wuwei.util && typeof wuwei.util.getResourceOriginalUri === 'function') {
-      original = wuwei.util.getResourceOriginalUri(node) || '';
-    }
-    text = [
-      original,
-      resource && resource.uri,
-      resource && resource.canonicalUri,
-      resource && resource.name,
-      resource && resource.label,
-      resource && resource.title,
-      node && node.uri,
-      node && node.label,
-      node && node.name
-    ].join(' ');
-    return isPdfLikeUri(text);
+  function isPdfResource(node, resource) {
+    return !!(wuwei.util && typeof wuwei.util.isDocumentKindByExtension === 'function' &&
+      wuwei.util.isDocumentKindByExtension(node, resource, '', 'pdf'));
   }
 
   function isPdfLikeUri(uri) {
     var text = String(uri || '');
     var parsed;
-    if (/\.pdf(?:[?#].*)?$/i.test(text) ||
-      /[?&](?:mimeType|content_type)=application%2Fpdf/i.test(text)) {
+    if (/\.pdf(?:[?#].*)?$/i.test(text)) {
       return true;
     }
     try {

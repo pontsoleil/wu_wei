@@ -357,6 +357,7 @@ wuwei.nls.JA = {
   'Hide Names': '作成者名非表示',
   'Horizontal Axis': '水平軸作成',
   'Horizontal Equal': '左右に整列',
+  'Distribute PageMarkers': 'PageMarkerを均等間隔に並べる',
   'In case you cannot load iframe contents': 'iframeの内容を表示できないときには',
   'Introduction': '説明',
   'item(s) listed below': 'トピック（コンテンツ）(下に示します)',

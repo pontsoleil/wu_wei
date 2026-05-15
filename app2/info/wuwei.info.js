@@ -95,21 +95,19 @@ wuwei.info = wuwei.info || {};
   }
 
   function isHostedVideoNode(node) {
-    var fmt, uri, kind;
+    var uri, kind, resource;
 
     if (!node) {
       return false;
     }
 
-    var resource = util.getResource(node);
-    fmt = String((resource && resource.mimeType) || '').toLowerCase();
+    resource = util.getResource(node);
     uri = String(util.getResourceUri(node) || '').toLowerCase();
     kind = String((resource && resource.kind) || '').toLowerCase();
 
     return (
       kind === 'video' ||
-      fmt.indexOf('video/') === 0 ||
-      /\.(mp4|webm|ogg|mov|m4v)(\?|#|$)/.test(uri) ||
+      (util.isDocumentKindByExtension && util.isDocumentKindByExtension(node, resource, uri, 'video')) ||
       isHostedYouTubeUrl(uri) ||
       isHostedVimeoUrl(uri)
     );
@@ -407,13 +405,11 @@ wuwei.info = wuwei.info || {};
   }
 
   function isVideoNode(node) {
-    var fmt = getNodeFormat(node);
+    var resource = util.getResource ? util.getResource(node) : (node && node.resource || {});
     var uri = getNodeUri(node).toLowerCase();
 
-    return (
-      0 === fmt.indexOf('video/') ||
-      /\.(mp4|webm|ogg|mov|m4v)$/.test(uri)
-    );
+    return !!(util.isDocumentKindByExtension &&
+      util.isDocumentKindByExtension(node, resource, uri, 'video'));
   }
 
   function isUploadedNode(node) {

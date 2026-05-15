@@ -45,6 +45,44 @@ wuwei.contents = wuwei.contents || {};
     return common && common.current ? common.current.page || null : null;
   }
 
+
+  function isGenericGroup(group) {
+    return !!(group && (
+      group.type === 'simple' ||
+      group.type === 'horizontal' ||
+      group.type === 'vertical'
+    ));
+  }
+
+  function getParentGenericGroupIdForNode(nodeId) {
+    var groups;
+    if (!nodeId || !model || typeof model.findGroupsByNodeId !== 'function') {
+      return '';
+    }
+    groups = model.findGroupsByNodeId(nodeId).filter(isGenericGroup);
+    return groups.length ? groups[0].id : '';
+  }
+
+  function getContentsGroupTargetNodeId(group) {
+    if (!group) { return ''; }
+    return group.targetNodeId || group.documentRef || group.mediaRef || '';
+  }
+
+  function getAttachedContentsGroupsForNode(nodeOrId) {
+    var nodeId = (typeof nodeOrId === 'string') ? nodeOrId : (nodeOrId && nodeOrId.id);
+    var page = getCurrentPage();
+    if (!nodeId || !page || !Array.isArray(page.groups)) {
+      return [];
+    }
+    return page.groups.filter(function (group) {
+      return isContentsGroup(group) && getContentsGroupTargetNodeId(group) === nodeId;
+    });
+  }
+
+  function hasAttachedContentsGroup(nodeOrId) {
+    return getAttachedContentsGroupsForNode(nodeOrId).length > 0;
+  }
+
   function ensurePageCollections(page) {
     if (!page) { return; }
     if (!Array.isArray(page.nodes)) { page.nodes = []; }
@@ -94,33 +132,9 @@ wuwei.contents = wuwei.contents || {};
 
   function isHtmlResourceNode(node) {
     var resource = (node && node.resource && typeof node.resource === 'object') ? node.resource : {};
-    var media = (resource.media && typeof resource.media === 'object') ? resource.media : {};
-    var contents = (resource.contents && typeof resource.contents === 'object') ? resource.contents : {};
-    var mime = String(resource.mimeType || media.mimeType || node && (node.contenttype || node.contentType) || '').toLowerCase();
-    var storageFiles = (resource.storage && Array.isArray(resource.storage.files)) ? resource.storage.files : [];
-    var originalFile = storageFiles.find(function (file) {
-      return file && String(file.role || '').toLowerCase() === 'original';
-    }) || {};
-    var previewFile = storageFiles.find(function (file) {
-      return file && String(file.role || '').toLowerCase() === 'preview';
-    }) || {};
-    var fileName = String(resource.file || resource.filename || originalFile.path || '').toLowerCase();
-    var previewName = String(previewFile.path || previewFile.file || '').toLowerCase();
-    var uri = String(
-      (util && typeof util.getResourceOriginalUri === 'function' ? util.getResourceOriginalUri(node) : '') ||
-      resource.canonicalUri ||
-      resource.uri ||
-      ''
-    ).toLowerCase();
-    var contentType = String(contents.type || resource.kind || resource.type || '').toLowerCase();
-    var fileText = [uri, fileName, previewName].join(' ');
-
-    return !!(node && node.type === 'Content' && (
-      mime.indexOf('text/html') === 0 ||
-      /\.(html?|xhtml)(?:[?#].*)?$/i.test(fileText) ||
-      contentType === 'html' ||
-      contentType === 'web'
-    ));
+    return !!(node && node.type === 'Content' && util &&
+      typeof util.isDocumentKindByExtension === 'function' &&
+      util.isDocumentKindByExtension(node, resource, '', 'html'));
   }
 
   function isHtmlContentsGroup(group) {
@@ -134,34 +148,24 @@ wuwei.contents = wuwei.contents || {};
     var resource = (node && node.resource && typeof node.resource === 'object') ? node.resource : {};
     var media = (resource.media && typeof resource.media === 'object') ? resource.media : {};
     var contents = (resource.contents && typeof resource.contents === 'object') ? resource.contents : {};
-    var mime = String(resource.mimeType || media.mimeType || node && (node.contenttype || node.contentType) || '').toLowerCase();
-    var storageFiles = (resource.storage && Array.isArray(resource.storage.files)) ? resource.storage.files : [];
-    var originalFile = storageFiles.find(function (file) {
-      return file && String(file.role || '').toLowerCase() === 'original';
-    }) || {};
-    var previewFile = storageFiles.find(function (file) {
-      return file && String(file.role || '').toLowerCase() === 'preview';
-    }) || {};
-    var fileName = String(resource.file || resource.filename || originalFile.path || '').toLowerCase();
-    var previewName = String(previewFile.path || previewFile.file || '').toLowerCase();
-    var uri = String(
-      (util && typeof util.getResourceOriginalUri === 'function' ? util.getResourceOriginalUri(node) : '') ||
-      resource.canonicalUri ||
-      resource.uri ||
-      ''
-    ).toLowerCase();
-    var contentType = String(contents.type || resource.kind || resource.type || '').toLowerCase();
     var pageCount = Number(contents.pageCount || media.pageCount || resource.pageCount || node && node.pageCount || 0);
-    var fileText = [uri, fileName, previewName].join(' ');
-    var isPdf = mime.indexOf('application/pdf') === 0 || /\.pdf(?:[?#].*)?$/i.test(fileText);
-    var isOffice = /(msword|officedocument|ms-excel|ms-powerpoint|vnd\.ms-|vnd\.openxmlformats)/i.test(mime) ||
-      /\.(docx?|xlsx?|pptx?|odt|ods|odp)(?:[?#].*)?$/i.test(fileText) ||
-      /(officeapps\.live\.com|sharepoint\.com|onedrive\.live\.com|docs\.google\.com)/i.test(uri);
-    var isHtml = mime.indexOf('text/html') === 0 || /\.(html?|xhtml)(?:[?#].*)?$/i.test(fileText) || contentType === 'html' || contentType === 'web';
-    var isPreviewable = isPdf || isOffice || isHtml || contentType === 'document' || contentType === 'office' || contentType === 'pdf' || contentType === 'contents' || contentType === 'content';
+    var kind = util && typeof util.getDocumentKindByExtension === 'function'
+      ? util.getDocumentKindByExtension(node, resource, '')
+      : '';
     var hasContentTargets = Number.isFinite(pageCount) && pageCount > 0;
 
-    return !!(node && node.type === 'Content' && (isPreviewable || hasContentTargets));
+    /*
+     * Contents target detection is based on file extension.  mimeType is
+     * retained only as reference information and is not used to decide whether
+     * a Content can have PageMarkers.
+     */
+    return !!(node && node.type === 'Content' && (
+      kind === 'pdf' ||
+      kind === 'office' ||
+      kind === 'html' ||
+      kind === 'text' ||
+      hasContentTargets
+    ));
   }
 
   function getDocumentPageCount(node) {
@@ -975,6 +979,56 @@ wuwei.contents = wuwei.contents || {};
     return true;
   }
 
+  function rescaleContentsMembersToAxisLength(group, previousLength, nextLength, anchor) {
+    var members;
+    var orientation;
+    var anchorPos;
+
+    if (!group) {
+      return false;
+    }
+
+    previousLength = Math.max(1, Number(previousLength || group.length || AXIS_LENGTH));
+    nextLength = Math.max(60, Number(nextLength || group.length || AXIS_LENGTH));
+    if (!Number.isFinite(previousLength) || !Number.isFinite(nextLength)) {
+      return false;
+    }
+
+    members = getMemberNodes(group);
+    if (!members.length) {
+      group.length = nextLength;
+      return false;
+    }
+
+    orientation = axisOrientation(group);
+    anchor = anchor || axisAnchor(group);
+    anchorPos = orientation === 'vertical' ? finiteNumber(anchor.y, 0) : finiteNumber(anchor.x, 0);
+
+    members.forEach(function (node, index) {
+      var currentPos = getAxisPos(group, node);
+      var ratio;
+
+      if (Number.isFinite(Number(currentPos)) && previousLength > 0) {
+        ratio = (Number(currentPos) - anchorPos) / previousLength;
+      }
+      else if (members.length > 1) {
+        ratio = index / (members.length - 1);
+      }
+      else {
+        ratio = 0;
+      }
+
+      if (!Number.isFinite(Number(ratio))) {
+        ratio = 0;
+      }
+      ratio = Math.max(0, Math.min(1, Number(ratio)));
+      setNodeOnAxis(group, node, anchorPos + (nextLength * ratio));
+    });
+
+    group.length = nextLength;
+    return true;
+  }
+
   function axisScalar(group, x, y) {
     return axisOrientation(group) === 'vertical' ? Number(y || 0) : Number(x || 0);
   }
@@ -1234,7 +1288,9 @@ wuwei.contents = wuwei.contents || {};
     }
     setAxisAnchor(group, anchor);
 
-    minLength = members.length > 1 ? 1 : Math.max(60, Number(group.minAxisLength || 60));
+    minLength = members.length > 1
+      ? 1
+      : Math.max(60, Number(group.length || group.minAxisLength || AXIS_LENGTH));
     group.length = Math.max(minLength, maxPos - minPos);
 
     if (startNode) {
@@ -1332,6 +1388,17 @@ wuwei.contents = wuwei.contents || {};
     ensurePageCollections(page);
     group.type = 'contents';
     group.groupType = 'axis';
+    group.targetNodeId = group.targetNodeId || group.documentRef || group.mediaRef || '';
+    if (!group.documentRef && group.targetNodeId) {
+      group.documentRef = group.targetNodeId;
+    }
+    if (!group.mediaRef && group.targetNodeId) {
+      group.mediaRef = group.targetNodeId;
+    }
+    if (!group.parentGroupId && group.targetNodeId) {
+      group.parentGroupId = getParentGenericGroupIdForNode(group.targetNodeId);
+    }
+    group.hierarchical = true;
     group.enabled = (false !== group.enabled);
     group.orientation = (group.orientation === 'vertical') ? 'vertical' : 'horizontal';
     group.spine = group.spine || {};
@@ -1375,7 +1442,10 @@ wuwei.contents = wuwei.contents || {};
     if (!group.documentRef) {
       var documentNode = findDocumentNodeForGroup(group, null);
       if (documentNode) {
+        group.targetNodeId = documentNode.id;
         group.documentRef = documentNode.id;
+        group.mediaRef = group.mediaRef || documentNode.id;
+        group.parentGroupId = group.parentGroupId || getParentGenericGroupIdForNode(documentNode.id);
       }
     }
     getMemberNodes(group).forEach(function (node, index) {
@@ -1502,7 +1572,7 @@ wuwei.contents = wuwei.contents || {};
   }
 
   function createAxisGroup(axis, documentCandidate, option) {
-    var page, documentNode, pageCount, pageOffset, firstPageNumber, displayEnd, origin, group, nodes, axisStartPos;
+    var page, documentNode, pageCount, pageOffset, firstPageNumber, displayEnd, origin, group, nodes, axisStartPos, parentGroupId;
     option = option || {};
     if (model && typeof model.syncPageFromGraph === 'function') {
       model.syncPageFromGraph();
@@ -1519,6 +1589,7 @@ wuwei.contents = wuwei.contents || {};
       }
       return null;
     }
+    parentGroupId = getParentGenericGroupIdForNode(documentNode.id);
     pageCount = getDocumentPageCount(documentNode);
     pageOffset = Number.isFinite(Number(option.pageOffset))
       ? Math.max(0, Math.floor(Number(option.pageOffset)))
@@ -1536,6 +1607,9 @@ wuwei.contents = wuwei.contents || {};
       type: 'contents',
       groupType: 'axis',
       orientation: axis === 'vertical' ? 'vertical' : 'horizontal',
+      targetNodeId: documentNode.id,
+      parentGroupId: parentGroupId,
+      hierarchical: true,
       documentRef: documentNode.id,
       pageCount: displayEnd,
       documentPageCount: pageCount || 0,
@@ -1552,6 +1626,9 @@ wuwei.contents = wuwei.contents || {};
       length: AXIS_LENGTH,
       members: []
     });
+    group.targetNodeId = documentNode.id;
+    group.parentGroupId = parentGroupId;
+    group.hierarchical = true;
     group.documentRef = documentNode.id;
     group.mediaRef = documentNode.id;
     group.pageCount = displayEnd;
@@ -1591,6 +1668,9 @@ wuwei.contents = wuwei.contents || {};
     var nextOrientation;
     var previousAnchor;
     var nextAnchor;
+    var previousLength;
+    var nextLength;
+    var lengthChanged;
     var orientationChanged;
 
     if (!group || !isContentsGroup(group)) { return false; }
@@ -1600,6 +1680,7 @@ wuwei.contents = wuwei.contents || {};
     normalizeAxisGroup(group);
     previousOrientation = axisOrientation(group);
     previousAnchor = axisAnchor(group);
+    previousLength = Math.max(60, Number(group.length || AXIS_LENGTH));
 
     props = props || {};
     nextOrientation = (props.orientation === 'vertical' || props.orientation === 'horizontal')
@@ -1607,6 +1688,10 @@ wuwei.contents = wuwei.contents || {};
       : previousOrientation;
     orientationChanged = previousOrientation !== nextOrientation;
     nextAnchor = orientationChanged ? representativeAxisAnchor(group) : axisAnchor(group);
+    nextLength = Number.isFinite(Number(props.length))
+      ? Math.max(60, Number(props.length))
+      : previousLength;
+    lengthChanged = Math.abs(nextLength - previousLength) > 0.0001;
 
     group.orientation = nextOrientation;
 
@@ -1632,9 +1717,7 @@ wuwei.contents = wuwei.contents || {};
       );
     }
 
-    if (Number.isFinite(Number(props.length))) {
-      group.length = Math.max(60, Number(props.length));
-    }
+    group.length = nextLength;
     if (Number.isFinite(Number(props.strokeWidth))) {
       group.spine = group.spine || {};
       group.spine.width = Math.max(1, Number(props.strokeWidth));
@@ -1658,6 +1741,10 @@ wuwei.contents = wuwei.contents || {};
        * first, then project the content targets to the new axis.
        */
       rotateContentsMembersToOrientation(group, previousOrientation, nextOrientation, nextAnchor, nextAnchor);
+    }
+
+    if (lengthChanged) {
+      rescaleContentsMembersToAxisLength(group, previousLength, nextLength, nextAnchor);
     }
 
     normalizeAxisGroup(group);
@@ -1715,6 +1802,61 @@ wuwei.contents = wuwei.contents || {};
     page.nodes.push(node);
     appendMember(group, node.id, 'member');
     normalizeAxisGroup(group);
+    rebuildGraphAndRefresh();
+    return true;
+  }
+
+
+  function distributePageMarkers(groupOrTarget) {
+    var spec = getContentTargetSpec(groupOrTarget);
+    var group = spec && spec.group;
+    var members;
+    var positions;
+    var anchor;
+    var minPos;
+    var maxPos;
+    var step;
+
+    if (!group || !isContentsGroup(group)) { return false; }
+
+    normalizeAxisGroup(group);
+    members = shouldKeepPageMarkerPageOrder(group)
+      ? orderedPageMembers(group)
+      : orderedAxisMembers(group);
+
+    if (members.length < 2) { return false; }
+
+    positions = members.map(function (node) {
+      return getAxisPos(group, node);
+    }).filter(function (value) {
+      return Number.isFinite(Number(value));
+    }).map(Number);
+
+    if (positions.length >= 2) {
+      minPos = Math.min.apply(null, positions);
+      maxPos = Math.max.apply(null, positions);
+    }
+    else {
+      anchor = axisAnchor(group);
+      minPos = axisOrientation(group) === 'vertical' ? anchor.y : anchor.x;
+      maxPos = minPos + Math.max(60, Number(group.length || AXIS_LENGTH));
+    }
+
+    if (!Number.isFinite(Number(minPos)) || !Number.isFinite(Number(maxPos))) {
+      return false;
+    }
+
+    if (minPos === maxPos) {
+      maxPos = minPos + Math.max(60, Number(group.length || AXIS_LENGTH));
+    }
+
+    step = (maxPos - minPos) / (members.length - 1);
+    members.forEach(function (node, index) {
+      setNodeOnAxis(group, node, minPos + (step * index));
+    });
+    setMemberIds(group, members.map(function (node) { return node.id; }));
+    updateAxisBoundsFromPositions(group);
+    ensureContentsRepresentativeEntryLink(group);
     rebuildGraphAndRefresh();
     return true;
   }
@@ -2081,32 +2223,8 @@ wuwei.contents = wuwei.contents || {};
 
   function isHtmlDocumentNode(documentNode) {
     var resource = (documentNode && documentNode.resource && 'object' === typeof documentNode.resource) ? documentNode.resource : {};
-    var media = (resource.media && 'object' === typeof resource.media) ? resource.media : {};
-    var contents = (resource.contents && 'object' === typeof resource.contents) ? resource.contents : {};
-    var viewer = (resource.viewer && 'object' === typeof resource.viewer) ? resource.viewer : {};
-    var embed = (viewer.embed && 'object' === typeof viewer.embed) ? viewer.embed : {};
-    var mime = String(resource.mimeType || media.mimeType || '').toLowerCase();
-    var text = [
-      mime,
-      resource.kind,
-      resource.type,
-      contents.type,
-      media.type,
-      resource.file,
-      resource.filename,
-      resource.uri,
-      resource.canonicalUri,
-      embed.uri,
-      documentNode && documentNode.contenttype,
-      documentNode && documentNode.contentType,
-      documentNode && documentNode.label
-    ].join(' ').toLowerCase();
-
-    return mime.indexOf('text/html') === 0 ||
-      mime.indexOf('application/xhtml+xml') === 0 ||
-      /(?:^|\s)(?:html|web)(?:\s|$)/.test(String(resource.kind || resource.type || '').toLowerCase()) ||
-      /(?:^|\s)(?:html|web)(?:\s|$)/.test(String(contents.type || media.type || '').toLowerCase()) ||
-      /\.(?:html?|xhtml)(?:[?#]|$)/i.test(text);
+    return !!(util && typeof util.isDocumentKindByExtension === 'function' &&
+      util.isDocumentKindByExtension(documentNode, resource, '', 'html'));
   }
 
   function getHtmlDocumentViewerUrl(documentNode) {
@@ -2135,21 +2253,8 @@ wuwei.contents = wuwei.contents || {};
 
   function isOfficeDocumentNode(documentNode) {
     var resource = (documentNode && documentNode.resource && 'object' === typeof documentNode.resource) ? documentNode.resource : {};
-    var media = (resource.media && 'object' === typeof resource.media) ? resource.media : {};
-    var mime = String(resource.mimeType || media.mimeType || '').toLowerCase();
-    var text = [
-      mime,
-      resource.kind,
-      resource.type,
-      resource.file,
-      resource.filename,
-      resource.uri,
-      resource.canonicalUri,
-      documentNode && documentNode.label
-    ].join(' ').toLowerCase();
-
-    return (util && typeof util.isOfficeDocument === 'function' && util.isOfficeDocument(mime)) ||
-      /(?:office|msword|ms-excel|ms-powerpoint|officedocument|\.docx?\b|\.xlsx?\b|\.pptx?\b)/i.test(text);
+    return !!(util && typeof util.isDocumentKindByExtension === 'function' &&
+      util.isDocumentKindByExtension(documentNode, resource, '', 'office'));
   }
 
   function isPageMarkerContentTarget(contentTarget) {
@@ -2244,6 +2349,8 @@ wuwei.contents = wuwei.contents || {};
   ns.isContentsRepresentativeNode = isContentsRepresentativeNode;
   ns.isContentsAxisLink = isContentsAxisLink;
   ns.isContentTargetResourceNode = isContentTargetResourceNode;
+  ns.getAttachedContentsGroupsForNode = getAttachedContentsGroupsForNode;
+  ns.hasAttachedContentsGroup = hasAttachedContentsGroup;
   ns.isHtmlResourceNode = isHtmlResourceNode;
   ns.getDocumentPageCount = getDocumentPageCount;
   ns.hasKnownDocumentPages = hasKnownDocumentPages;
@@ -2259,6 +2366,7 @@ wuwei.contents = wuwei.contents || {};
   ns.addTableOfContents = addTableOfContents;
   ns.updateAxisGroup = updateAxisGroup;
   ns.addEntry = addEntry;
+  ns.distributePageMarkers = distributePageMarkers;
   ns.createEntryDraft = createEntryDraft;
   ns.commitEntryDraft = commitEntryDraft;
   ns.updateEntryFromNode = updateEntryFromNode;

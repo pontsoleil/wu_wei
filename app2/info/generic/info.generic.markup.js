@@ -187,33 +187,9 @@ wuwei.info.generic.markup = (function () {
   }
 
   function isHtmlLikeResource(node, resource, uri) {
-    var media = (resource && resource.media && 'object' === typeof resource.media) ? resource.media : {};
-    var contents = (resource && resource.contents && 'object' === typeof resource.contents) ? resource.contents : {};
-    var viewer = (resource && resource.viewer && 'object' === typeof resource.viewer) ? resource.viewer : {};
-    var embed = (viewer.embed && 'object' === typeof viewer.embed) ? viewer.embed : {};
-    var mime = String((resource && resource.mimeType) || media.mimeType || '').toLowerCase();
-    var text = [
-      uri,
-      mime,
-      resource && resource.kind,
-      resource && resource.type,
-      contents.type,
-      media.type,
-      resource && resource.file,
-      resource && resource.filename,
-      resource && resource.uri,
-      resource && resource.canonicalUri,
-      embed.uri,
-      node && node.contenttype,
-      node && node.contentType,
-      node && node.label
-    ].join(' ').toLowerCase();
-
-    return mime.indexOf('text/html') === 0 ||
-      mime.indexOf('application/xhtml+xml') === 0 ||
-      /(?:^|\s)(?:html|web)(?:\s|$)/.test(String(resource && (resource.kind || resource.type) || '').toLowerCase()) ||
-      /(?:^|\s)(?:html|web)(?:\s|$)/.test(String(contents.type || media.type || '').toLowerCase()) ||
-      /\.(?:html?|xhtml)(?:[?#]|$)/i.test(text);
+    var util = wuwei.util || {};
+    return !!(util.isDocumentKindByExtension &&
+      util.isDocumentKindByExtension(node, resource, uri, 'html'));
   }
 
   function resolveHtmlInfoUri(node, resource, embed) {
@@ -240,21 +216,8 @@ wuwei.info.generic.markup = (function () {
 
   function isOfficeLikeResource(node, resource) {
     var util = wuwei.util || {};
-    var media = (resource && resource.media && 'object' === typeof resource.media) ? resource.media : {};
-    var mime = String((resource && resource.mimeType) || media.mimeType || '').toLowerCase();
-    var text = [
-      mime,
-      resource && resource.kind,
-      resource && resource.type,
-      resource && resource.file,
-      resource && resource.filename,
-      resource && resource.uri,
-      resource && resource.canonicalUri,
-      node && node.label
-    ].join(' ').toLowerCase();
-
-    return (util.isOfficeDocument && util.isOfficeDocument(mime)) ||
-      /(?:office|msword|ms-excel|ms-powerpoint|officedocument|\.docx?\b|\.xlsx?\b|\.pptx?\b)/i.test(text);
+    return !!(util.isDocumentKindByExtension &&
+      util.isDocumentKindByExtension(node, resource, '', 'office'));
   }
 
   function resolveOfficeInfoUri(node, resource) {
@@ -360,15 +323,8 @@ wuwei.info.generic.markup = (function () {
   function isTextLikeResource(node, uri) {
     var util = wuwei.util || {};
     var resource = util.getResource && util.getResource(node);
-    var mime = String((resource && resource.mimeType) || '').toLowerCase();
-    var file = String((resource && (resource.file || resource.filename)) || '').toLowerCase();
-    var text = String(uri || '').split('#')[0].split('?')[0].toLowerCase();
-
-    return mime.indexOf('text/plain') === 0 ||
-      mime === 'text/markdown' ||
-      mime === 'text/csv' ||
-      /\.(txt|text|md|markdown|csv|tsv|log|adoc|asciidoc)$/i.test(text) ||
-      /\.(txt|text|md|markdown|csv|tsv|log|adoc|asciidoc)$/i.test(file);
+    return !!(util.isDocumentKindByExtension &&
+      util.isDocumentKindByExtension(node, resource || {}, uri, 'text'));
   }
 
   function getTextViewerUri(uri) {
@@ -447,7 +403,7 @@ wuwei.info.generic.markup = (function () {
     var text = String(uri || '');
     var decoded = text;
     try { decoded = decodeURIComponent(text); } catch (e) { decoded = text; }
-    return /\.pdf(?:[?#].*)?$/i.test(decoded) || /[?&](?:mimeType|content_type)=application%2Fpdf/i.test(text);
+    return /\.pdf(?:[?#].*)?$/i.test(decoded);
   }
 
   return {

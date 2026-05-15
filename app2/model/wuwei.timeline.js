@@ -64,6 +64,44 @@ wuwei.timeline = wuwei.timeline || {};
     return common && common.current ? common.current.page || null : null;
   }
 
+
+  function isGenericGroup(group) {
+    return !!(group && (
+      group.type === 'simple' ||
+      group.type === 'horizontal' ||
+      group.type === 'vertical'
+    ));
+  }
+
+  function getParentGenericGroupIdForNode(nodeId) {
+    var groups;
+    if (!nodeId || !model || typeof model.findGroupsByNodeId !== 'function') {
+      return '';
+    }
+    groups = model.findGroupsByNodeId(nodeId).filter(isGenericGroup);
+    return groups.length ? groups[0].id : '';
+  }
+
+  function getTimelineGroupTargetNodeId(group) {
+    if (!group) { return ''; }
+    return group.targetNodeId || group.mediaRef || (group.timeline && group.timeline.mediaRef) || '';
+  }
+
+  function getAttachedTimelineGroupsForNode(nodeOrId) {
+    var nodeId = (typeof nodeOrId === 'string') ? nodeOrId : (nodeOrId && nodeOrId.id);
+    var page = getCurrentPage();
+    if (!nodeId || !page || !Array.isArray(page.groups)) {
+      return [];
+    }
+    return page.groups.filter(function (group) {
+      return group && group.type === 'timeline' && getTimelineGroupTargetNodeId(group) === nodeId;
+    });
+  }
+
+  function hasAttachedTimelineGroup(nodeOrId) {
+    return getAttachedTimelineGroupsForNode(nodeOrId).length > 0;
+  }
+
   function syncRealNodesFromGraph() {
     if (model && typeof model.syncPageFromGraph === 'function') {
       model.syncPageFromGraph();
@@ -86,7 +124,6 @@ wuwei.timeline = wuwei.timeline || {};
 
   function isVideoContent(node) {
     var resource;
-    var format;
     var uri;
     var subtype;
     if (!node || node.type !== 'Content') {
@@ -96,12 +133,11 @@ wuwei.timeline = wuwei.timeline || {};
     if (resource.kind === 'video') {
       return true;
     }
-    format = String(resource.mimeType || '').toLowerCase();
     uri = getMediaSourceUrl(node).toLowerCase();
     subtype = String(resource.subtype || '').toLowerCase();
     return (
-      format.indexOf('video/') === 0 ||
-      /\.(mp4|webm|ogg|mov|m4v)(\?|#|$)/.test(uri) ||
+      (util && typeof util.isDocumentKindByExtension === 'function' &&
+        util.isDocumentKindByExtension(node, resource, uri, 'video')) ||
       subtype === 'youtube' ||
       subtype === 'vimeo' ||
       isHostedVideoUrl(uri)
@@ -381,7 +417,6 @@ wuwei.timeline = wuwei.timeline || {};
     var source;
     var url = getMediaSourceUrl(videoNode);
     var subtype = String(resource.subtype || '').toLowerCase();
-    var format = String(resource.mimeType || '').toLowerCase();
     var vimeo;
 
     if (wuwei.video && typeof wuwei.video.detectSource === 'function') {
@@ -397,7 +432,8 @@ wuwei.timeline = wuwei.timeline || {};
       vimeo = extractVimeoInfo(url);
       return { provider: 'vimeo', id: vimeo.id, h: vimeo.h, url: vimeo.url };
     }
-    if (format.indexOf('video/') === 0 || /\.(mp4|webm|ogg|mov|m4v)(\?|#|$)/i.test(url)) {
+    if (util && typeof util.isDocumentKindByExtension === 'function' &&
+      util.isDocumentKindByExtension(videoNode, resource, url, 'video')) {
       return { provider: 'html5', src: toAbsUrl(url), url: url };
     }
     return { provider: 'unknown', url: url };
@@ -1098,6 +1134,14 @@ wuwei.timeline = wuwei.timeline || {};
     ensurePageCollections(page);
     group.type = 'timeline';
     group.groupType = 'axis';
+    group.targetNodeId = group.targetNodeId || group.mediaRef || (group.timeline && group.timeline.mediaRef) || '';
+    if (!group.mediaRef && group.targetNodeId) {
+      group.mediaRef = group.targetNodeId;
+    }
+    if (!group.parentGroupId && group.targetNodeId) {
+      group.parentGroupId = getParentGenericGroupIdForNode(group.targetNodeId);
+    }
+    group.hierarchical = true;
     if (!group.mediaRef && page && Array.isArray(page.links)) {
       sourceLink = page.links.find(function (link) {
         return link &&
@@ -1109,6 +1153,10 @@ wuwei.timeline = wuwei.timeline || {};
           ? sourceLink.source.id
           : sourceLink.source;
       }
+    }
+    group.targetNodeId = group.targetNodeId || group.mediaRef || '';
+    if (!group.parentGroupId && group.targetNodeId) {
+      group.parentGroupId = getParentGenericGroupIdForNode(group.targetNodeId);
     }
     group.enabled = (false !== group.enabled);
     group.orientation = (group.orientation === 'vertical') ? 'vertical' : 'horizontal';
@@ -1506,7 +1554,7 @@ wuwei.timeline = wuwei.timeline || {};
   function createAxisGroup(axis, videoCandidate, option) {
     syncRealNodesFromGraph();
     var page = getCurrentPage();
-    var videoNode, duration, origin, group, startNode, endNode;
+    var videoNode, duration, origin, group, startNode, endNode, parentGroupId;
     option = option || {};
     if (!page) {
       return null;
@@ -1523,6 +1571,7 @@ wuwei.timeline = wuwei.timeline || {};
       return null;
     }
 
+    parentGroupId = getParentGenericGroupIdForNode(videoNode.id);
     duration = getMediaDuration(videoNode);
     origin = defaultAxisOrigin(videoNode);//, axis === 'vertical' ? 'vertical' : 'horizontal');
     group = model.createGroup({
@@ -1531,6 +1580,9 @@ wuwei.timeline = wuwei.timeline || {};
       type: 'timeline',
       groupType: 'axis',
       orientation: axis === 'vertical' ? 'vertical' : 'horizontal',
+      targetNodeId: videoNode.id,
+      parentGroupId: parentGroupId,
+      hierarchical: true,
       mediaRef: videoNode.id,
       defaultPlayDuration: 15,
       spine: { visible: true, color: '#888888', width: 4, padding: 12 },
@@ -2121,6 +2173,8 @@ wuwei.timeline = wuwei.timeline || {};
   // ns.reRender = reRender;
   ns.formatTime = formatTime;
   ns.isAxisGroup = isAxisGroup;
+  ns.getAttachedTimelineGroupsForNode = getAttachedTimelineGroupsForNode;
+  ns.hasAttachedTimelineGroup = hasAttachedTimelineGroup;
   ns.isTimelinePoint = isTimelinePoint;
   ns.isTimelineAxisLink = isTimelineAxisLink;
   ns.getSelectedItems = getSelectedItems;

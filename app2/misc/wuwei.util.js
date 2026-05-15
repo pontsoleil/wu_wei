@@ -3047,6 +3047,170 @@ wuwei.util = (function () {
     return null;
   }
 
+  function safeDecodePathPart(value) {
+    try {
+      return decodeURIComponent(String(value || ''));
+    }
+    catch (e) {
+      return String(value || '');
+    }
+  }
+
+  function normalisePathForExtension(value) {
+    return safeDecodePathPart(value)
+      .replace(/\\/g, '/')
+      .replace(/[?#].*$/, '')
+      .replace(/\/+$/, '')
+      .toLowerCase();
+  }
+
+  function getKnownExtension(value) {
+    var text = String(value || '').trim();
+    var parsed;
+    var params;
+    var i;
+    var part;
+    var match;
+
+    if (!text) {
+      return '';
+    }
+
+    /*
+     * Extension-based resource typing is intentionally independent from
+     * mimeType.  Server-side processing, especially local upload paths, may
+     * not be able to provide reliable MIME metadata.  For wrapper URLs such
+     * as Office Viewer, PDF.js, text-viewer, and load-file.cgi, inspect the
+     * embedded file/path/src parameter before the wrapper page itself.
+     */
+    try {
+      parsed = new URL(text, window.location && window.location.href ? window.location.href : undefined);
+      params = ['file', 'src', 'url', 'uri', 'href', 'path', 'download', 'target'];
+      for (i = 0; i < params.length; i += 1) {
+        part = parsed.searchParams.get(params[i]);
+        if (part) {
+          match = getKnownExtension(part);
+          if (match) {
+            return match;
+          }
+        }
+      }
+      text = parsed.pathname || text;
+    }
+    catch (e) {
+      // Keep relative paths and raw file names as-is.
+    }
+
+    text = normalisePathForExtension(text);
+    match = text.match(/\.([a-z0-9]{1,12})$/i);
+    return match ? ('.' + match[1].toLowerCase()) : '';
+  }
+
+  function documentKindFromExtension(ext) {
+    ext = String(ext || '').toLowerCase();
+    if (/^\.(doc|docx|xls|xlsx|ppt|pptx|odt|ods|odp)$/.test(ext)) { return 'office'; }
+    if (ext === '.pdf') { return 'pdf'; }
+    if (/^\.(html|htm|xhtml)$/.test(ext)) { return 'html'; }
+    if (/^\.(txt|text|md|markdown|csv|tsv|log|adoc|asciidoc)$/.test(ext)) { return 'text'; }
+    if (/^\.(png|jpe?g|gif|webp|svg|tif|tiff|ico)$/.test(ext)) { return 'image'; }
+    if (/^\.(mp4|webm|ogg|ogv|mov|m4v|mpeg|mpg)$/.test(ext)) { return 'video'; }
+    if (/^\.(mp3|wav|m4a|aac|oga|flac)$/.test(ext)) { return 'audio'; }
+    return '';
+  }
+
+  function pushResourceExtensionCandidates(candidates, node, resource, href) {
+    var viewer;
+    var embed;
+    var media;
+    var contents;
+    var identity;
+    var snapshotSources;
+    var storage;
+    var files;
+    var file;
+    var i;
+
+    function push(value) {
+      if (value) {
+        candidates.push(value);
+      }
+    }
+
+    resource = resource || getResource(node);
+    viewer = (resource && resource.viewer && 'object' === typeof resource.viewer) ? resource.viewer : {};
+    embed = (viewer.embed && 'object' === typeof viewer.embed) ? viewer.embed : {};
+    media = (resource && resource.media && 'object' === typeof resource.media) ? resource.media : {};
+    contents = (resource && resource.contents && 'object' === typeof resource.contents) ? resource.contents : {};
+    identity = (resource && resource.identity && 'object' === typeof resource.identity) ? resource.identity : {};
+    snapshotSources = (resource && resource.snapshotSources && 'object' === typeof resource.snapshotSources) ? resource.snapshotSources : {};
+    storage = (resource && resource.storage && 'object' === typeof resource.storage) ? resource.storage : {};
+    files = Array.isArray(storage.files) ? storage.files : [];
+
+    push(href);
+
+    /* Original paths must be tested before preview paths, because Office
+     * uploads often have a converted PDF preview next to the original docx. */
+    for (i = 0; i < files.length; i += 1) {
+      file = files[i] || {};
+      if (String(file.role || '').toLowerCase() === 'original') {
+        push(file.path); push(file.sourcePath); push(file.uri); push(file.url);
+        push(file.file); push(file.filename); push(file.name);
+      }
+    }
+
+    push(resource && resource.file);
+    push(resource && resource.filename);
+    push(resource && resource.originalName);
+    push(resource && resource.name);
+    push(resource && resource.downloadUrl);
+    push(resource && resource.download_url);
+    push(resource && resource.canonicalUri);
+    push(resource && resource.uri);
+    push(identity && identity.uri);
+    push(identity && identity.originalUri);
+    push(media && media.uri);
+    push(contents && contents.uri);
+    push(embed && embed.uri);
+    push(snapshotSources && snapshotSources.originalUri);
+    push(snapshotSources && snapshotSources.previewUri);
+
+    if (node) {
+      push(node.file); push(node.filename); push(node.url); push(node.uri);
+      push(node.href); push(node.downloadUrl); push(node.download_url);
+      push(node.canonicalUri); push(node.label); push(node.title); push(node.name);
+    }
+
+    for (i = 0; i < files.length; i += 1) {
+      file = files[i] || {};
+      if (String(file.role || '').toLowerCase() !== 'original') {
+        push(file.path); push(file.sourcePath); push(file.uri); push(file.url);
+        push(file.file); push(file.filename); push(file.name);
+      }
+    }
+  }
+
+  function getResourceExtension(node, resource, href) {
+    var candidates = [];
+    var i;
+    var ext;
+    pushResourceExtensionCandidates(candidates, node, resource, href);
+    for (i = 0; i < candidates.length; i += 1) {
+      ext = getKnownExtension(candidates[i]);
+      if (ext) {
+        return ext;
+      }
+    }
+    return '';
+  }
+
+  function getDocumentKindByExtension(node, resource, href) {
+    return documentKindFromExtension(getResourceExtension(node, resource, href));
+  }
+
+  function isDocumentKindByExtension(node, resource, href, kind) {
+    return getDocumentKindByExtension(node, resource, href) === String(kind || '').toLowerCase();
+  }
+
 
   pushUniqueItem = function (list, item) {
     if (!list.includes(item)) {
@@ -3137,41 +3301,21 @@ wuwei.util = (function () {
   };
 
 
-  isOfficeDocument = function (format) {
-    const fmt = (format || '').toLowerCase();
-    return (
-      fmt.indexOf('application/vnd.openxmlformats-officedocument.wordprocessingml') === 0 ||
-      fmt.indexOf('application/vnd.openxmlformats-officedocument.spreadsheetml') === 0 ||
-      fmt.indexOf('application/vnd.openxmlformats-officedocument.presentationml') === 0 ||
-      fmt.indexOf('application/msword') === 0 ||
-      fmt.indexOf('application/vnd.ms-excel') === 0 ||
-      fmt.indexOf('application/vnd.ms-powerpoint') === 0
-    );
+  isOfficeDocument = function (value) {
+    return documentKindFromExtension(getKnownExtension(value)) === 'office';
   };
 
 
   getOfficeIcon = function (format) {
-    const fmt = (format || '').toLowerCase();
+    const ext = getKnownExtension(format);
 
-    if (
-      fmt.indexOf('presentationml') >= 0 ||
-      fmt.indexOf('ms-powerpoint') >= 0 ||
-      fmt.indexOf('powerpoint') >= 0
-    ) {
+    if (/^\.pptx?$/.test(ext)) {
       return 'fa-file-powerpoint';
     }
-    if (
-      fmt.indexOf('spreadsheetml') >= 0 ||
-      fmt.indexOf('ms-excel') >= 0 ||
-      fmt.indexOf('excel') >= 0
-    ) {
+    if (/^\.xlsx?$/.test(ext)) {
       return 'fa-file-excel';
     }
-    if (
-      fmt.indexOf('wordprocessingml') >= 0 ||
-      fmt.indexOf('application/msword') === 0 ||
-      fmt.indexOf('word') >= 0
-    ) {
+    if (/^\.docx?$/.test(ext)) {
       return 'fa-file-word';
     }
     return 'fa-file';
@@ -4020,22 +4164,7 @@ wuwei.util = (function () {
   }
 
   function isOfficeResourceObject(resource) {
-    var media = (resource && resource.media && 'object' === typeof resource.media) ? resource.media : {};
-    var mime = String((resource && resource.mimeType) || media.mimeType || '').toLowerCase();
-    var text = [
-      mime,
-      resource && resource.kind,
-      resource && resource.type,
-      resource && resource.file,
-      resource && resource.filename,
-      resource && resource.uri,
-      resource && resource.canonicalUri,
-      resource && resource.title,
-      resource && resource.label
-    ].join(' ').toLowerCase();
-
-    return isOfficeDocument(mime) ||
-      /(?:office|msword|ms-excel|ms-powerpoint|officedocument|\.docx?\b|\.xlsx?\b|\.pptx?\b)/i.test(text);
+    return getDocumentKindByExtension(null, resource, '') === 'office';
   }
 
   function makeResourceFileUri(resource, file, role, node) {
@@ -4113,7 +4242,7 @@ wuwei.util = (function () {
     var storage = (resource && resource.storage && 'object' === typeof resource.storage) ? resource.storage : {};
     var files = Array.isArray(storage.files) ? storage.files : [];
     var candidates = [];
-    var i, file, role, mime;
+    var i, file, role;
 
     function push(value) {
       if (value) { candidates.push(value); }
@@ -4122,10 +4251,9 @@ wuwei.util = (function () {
     for (i = 0; i < files.length; i += 1) {
       file = files[i] || {};
       role = String(file.role || '').toLowerCase();
-      mime = String(file.mimeType || file.contentType || '').toLowerCase();
       if (role === 'preview' || role === 'pdf' || role === 'converted' ||
         role === 'convertedpdf' || role === 'officepdf' || role === 'pdfpreview' ||
-        mime.indexOf('application/pdf') === 0 || isPdfPreviewUri(chooseResourceFilePathValue(file))) {
+        isPdfPreviewUri(chooseResourceFilePathValue(file))) {
         push(makeResourceFileUri(resource, file, role || 'preview', node));
       }
     }
@@ -4176,12 +4304,6 @@ wuwei.util = (function () {
     var snapshotSources = (resource && resource.snapshotSources && 'object' === typeof resource.snapshotSources) ? resource.snapshotSources : {};
     var uid = getResourceOwnerUserId(resource, node);
     var originalFile = getResourceFile(resource, 'original');
-    var originalMime = String(
-      originalFile && originalFile.mimeType ||
-      resource && resource.mimeType ||
-      resource && resource.media && resource.media.mimeType ||
-      ''
-    ).toLowerCase();
     var originalUri;
     function legacyUploadUri(filename) {
       var date = String(resource && resource.date || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
@@ -4212,7 +4334,7 @@ wuwei.util = (function () {
         return originalUri;
       }
     }
-    if (originalMime.indexOf('application/pdf') === 0) {
+    if (getDocumentKindByExtension(node, resource, getResourceFileUri(resource, 'original', node)) === 'pdf') {
       originalUri = getResourceFileUri(resource, 'original', node) || legacyUploadUri();
       if (originalUri) {
         return originalUri;
@@ -4438,6 +4560,10 @@ wuwei.util = (function () {
     checkOffice: checkOffice,
     checkMP3: checkMP3,
     checkMOV: checkMOV,
+    getKnownExtension: getKnownExtension,
+    getResourceExtension: getResourceExtension,
+    getDocumentKindByExtension: getDocumentKindByExtension,
+    isDocumentKindByExtension: isDocumentKindByExtension,
 
     pushUniqueItem: pushUniqueItem,
 

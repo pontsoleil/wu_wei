@@ -108,15 +108,13 @@ wuwei.info.video = wuwei.info.video || {};
   };
 
   detectProvider = function (resource) {
-    var fmt, uri, title, kind;
+    var uri, kind;
 
     if (!resource) {
       return '';
     }
 
-    fmt = String(resource.mimeType || '').toLowerCase();
     uri = getResourceUrl(resource).toLowerCase();
-    title = String(resource.title || '').toLowerCase();
     kind = String(resource.kind || '').toLowerCase();
 
     if (isHostedYouTube(uri)) {
@@ -127,9 +125,8 @@ wuwei.info.video = wuwei.info.video || {};
     }
     if (
       kind === 'video' ||
-      fmt.indexOf('video/') === 0 ||
-      /\.(mp4|webm|ogg|mov|m4v)(\?|#|$)/.test(uri) ||
-      /\.(mp4|webm|ogg|mov|m4v)(\?|#|$)/.test(title)
+      (wuwei.util && wuwei.util.isDocumentKindByExtension &&
+        wuwei.util.isDocumentKindByExtension(null, resource, uri, 'video'))
     ) {
       return 'html5';
     }

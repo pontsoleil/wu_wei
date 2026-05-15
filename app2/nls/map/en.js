@@ -351,6 +351,7 @@ wuwei.nls.EN = {
   'Hide Names': 'Hide Names',
   'Horizontal Axis': 'Horizontal Axis',
   'Horizontal Equal': 'Horizontal Equal',
+  'Distribute PageMarkers': 'Distribute PageMarkers',
   'In case you cannot load iframe contents': 'In case you cannot load iframe contents',
   'Introduction': 'Introduction',
   'item(s) listed below': 'item(s) listed below',

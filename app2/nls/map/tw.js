@@ -351,6 +351,7 @@ wuwei.nls.TW = {
   'Hide Names': '隱藏作者名稱',
   'Horizontal Axis': '建立水平軸',
   'Horizontal Equal': '橫向平等',
+  'Distribute PageMarkers': '均勻分布 PageMarker',
   'In case you cannot load iframe contents': '如果無法載入 iframe 內容',
   'Introduction': '介紹',
   'item(s) listed below': '下面列出的項目',

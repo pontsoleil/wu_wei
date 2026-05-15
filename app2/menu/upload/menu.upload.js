@@ -116,10 +116,7 @@ wuwei.menu.upload = wuwei.menu.upload || {};
 
     if (f) {
       const name = (f.name || '').toLowerCase();
-      const type = (f.type || '').toLowerCase();
-      const isVideo =
-        type.startsWith('video/') ||
-        /\.(mp4|webm|ogg|mov|m4v)$/.test(name);
+      const isVideo = /\.(mp4|webm|ogg|mov|m4v)$/.test(name);
 
       scriptName = isVideo ? 'upload-video' : 'upload';
     }

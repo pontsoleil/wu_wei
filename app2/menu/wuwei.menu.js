@@ -145,15 +145,8 @@ wuwei.menu = wuwei.menu || {};
 
   isImageLikeNode = function (node) {
     const resource = getNodeResource(node);
-    const fmt = String((resource && resource.mimeType) || '').toLowerCase();
-    const ref = String(
-      (resource && (resource.canonicalUri || resource.uri)) || ''
-    ).toLowerCase();
-
-    return (
-      fmt.indexOf('image/') === 0 ||
-      /\.(png|jpe?g|gif|webp|svg)(\?|#|$)/.test(ref)
-    );
+    return !!(util && typeof util.isDocumentKindByExtension === 'function' &&
+      util.isDocumentKindByExtension(node, resource, '', 'image'));
   };
 
   function getCurrentOwnerId() {
@@ -248,19 +241,23 @@ wuwei.menu = wuwei.menu || {};
 
   function isPlayableVideoNode(node) {
     var resource;
+    var uri;
+    var kind;
+    var subtype;
     if (!node || node.type !== 'Content') {
       return false;
     }
     resource = getNodeResource(node);
-
-    var fmt = String(resource.mimeType || '').toLowerCase();
-    var uri = String(resource.canonicalUri || resource.uri || '').toLowerCase();
-    var kind = String(resource.kind || '').toLowerCase();
+    uri = String(resource.canonicalUri || resource.uri || '').toLowerCase();
+    kind = String(resource.kind || '').toLowerCase();
+    subtype = String(resource.subtype || '').toLowerCase();
 
     return (
       kind === 'video' ||
-      fmt.indexOf('video/') === 0 ||
-      /\.(mp4|webm|ogg|mov|m4v)(\?|#|$)/.test(uri) ||
+      subtype === 'youtube' ||
+      subtype === 'vimeo' ||
+      (util && typeof util.isDocumentKindByExtension === 'function' &&
+        util.isDocumentKindByExtension(node, resource, uri, 'video')) ||
       isHostedVideoUrl(uri)
     );
   }
@@ -344,15 +341,9 @@ wuwei.menu = wuwei.menu || {};
   }
 
   function isOfficeResource(resource) {
-    var fmt = String((resource && resource.mimeType) || '').toLowerCase();
-    var kind = String((resource && resource.kind) || '').toLowerCase();
-    var ref = getResourceOriginalPath(resource).toLowerCase();
-
-    return (
-      kind === 'office' ||
-      (util && typeof util.isOfficeDocument === 'function' && util.isOfficeDocument(fmt)) ||
-      /\.(doc|docx|xls|xlsx|ppt|pptx)(\?|#|$)/.test(ref)
-    );
+    var ref = getResourceOriginalPath(resource);
+    return !!(util && typeof util.isDocumentKindByExtension === 'function' &&
+      util.isDocumentKindByExtension(null, resource, ref, 'office'));
   }
 
   function isUploadedContent(allNodes) {
@@ -1162,12 +1153,8 @@ wuwei.menu = wuwei.menu || {};
 
   function isImageNode(node) {
     const resource = getNodeResource(node);
-    const fmt = String((resource && resource.mimeType) || '').toLowerCase();
-    const uri = String((resource && (resource.canonicalUri || resource.uri)) || '').toLowerCase();
-    return (
-      fmt.indexOf('image/') === 0 ||
-      /\.(png|jpe?g|gif|webp|svg)(\?|#|$)/.test(uri)
-    );
+    return !!(util && typeof util.isDocumentKindByExtension === 'function' &&
+      util.isDocumentKindByExtension(node, resource, '', 'image'));
   }
 
 
@@ -1692,56 +1679,20 @@ wuwei.menu = wuwei.menu || {};
   }
 
   function isTextDocumentReference(resource, href) {
-    var mime = String((resource && resource.mimeType) || '').toLowerCase();
-    var media = (resource && resource.media && 'object' === typeof resource.media) ? resource.media : {};
-    var contents = (resource && resource.contents && 'object' === typeof resource.contents) ? resource.contents : {};
-    var text = String(href || '').split('#')[0].split('?')[0].toLowerCase();
-    var hrefFile = basenameFromDownloadPath(href).toLowerCase();
-    var file = String((resource && (resource.file || resource.filename)) || '').toLowerCase();
-    var kind = String((resource && (resource.kind || resource.type)) || contents.type || media.type || '').toLowerCase();
-
-    if (isHtmlDocumentReference(resource, href)) {
-      return false;
-    }
-
-    return mime.indexOf('text/plain') === 0 ||
-      mime === 'text/markdown' ||
-      mime === 'text/csv' ||
-      kind === 'text' ||
-      kind === 'plain-text' ||
-      /\.(txt|text|md|markdown|csv|tsv|log|adoc|asciidoc)$/i.test(text) ||
-      /\.(txt|text|md|markdown|csv|tsv|log|adoc|asciidoc)$/i.test(hrefFile) ||
-      /\.(txt|text|md|markdown|csv|tsv|log|adoc|asciidoc)$/i.test(file);
+    return !isHtmlDocumentReference(resource, href) && !!(
+      util && typeof util.isDocumentKindByExtension === 'function' &&
+      util.isDocumentKindByExtension(null, resource, href, 'text')
+    );
   }
 
   function isPdfDocumentReference(resource, href) {
-    var mime = String((resource && resource.mimeType) || '').toLowerCase();
-    var text = String(href || '').split('#')[0].split('?')[0].toLowerCase();
-    var hrefFile = basenameFromDownloadPath(href).toLowerCase();
-    var file = String((resource && (resource.file || resource.filename)) || '').toLowerCase();
-
-    return mime === 'application/pdf' ||
-      /\.pdf$/i.test(text) ||
-      /\.pdf$/i.test(hrefFile) ||
-      /\.pdf$/i.test(file);
+    return !!(util && typeof util.isDocumentKindByExtension === 'function' &&
+      util.isDocumentKindByExtension(null, resource, href, 'pdf'));
   }
 
   function isHtmlDocumentReference(resource, href) {
-    var mime = String((resource && resource.mimeType) || '').toLowerCase();
-    var media = (resource && resource.media && 'object' === typeof resource.media) ? resource.media : {};
-    var contents = (resource && resource.contents && 'object' === typeof resource.contents) ? resource.contents : {};
-    var text = String(href || '').split('#')[0].split('?')[0].toLowerCase();
-    var hrefFile = basenameFromDownloadPath(href).toLowerCase();
-    var file = String((resource && (resource.file || resource.filename)) || '').toLowerCase();
-    var kind = String((resource && (resource.kind || resource.type)) || contents.type || media.type || '').toLowerCase();
-
-    return mime.indexOf('text/html') === 0 ||
-      mime.indexOf('application/xhtml+xml') === 0 ||
-      kind === 'html' ||
-      kind === 'web' ||
-      /\.(html?|xhtml)$/i.test(text) ||
-      /\.(html?|xhtml)$/i.test(hrefFile) ||
-      /\.(html?|xhtml)$/i.test(file);
+    return !!(util && typeof util.isDocumentKindByExtension === 'function' &&
+      util.isDocumentKindByExtension(null, resource, href, 'html'));
   }
 
   function isDocumentLikeOpenTarget(node) {
@@ -1798,15 +1749,8 @@ wuwei.menu = wuwei.menu || {};
   }
 
   function isOfficeDocumentReference(resource, href) {
-    var mime = String((resource && resource.mimeType) || '').toLowerCase();
-    var text = String(href || '').split('#')[0].split('?')[0].toLowerCase();
-    var hrefFile = basenameFromDownloadPath(href).toLowerCase();
-    var file = String((resource && (resource.file || resource.filename)) || '').toLowerCase();
-
-    return /(?:msword|ms-excel|ms-powerpoint|officedocument)/.test(mime) ||
-      /\.(doc|docx|xls|xlsx|ppt|pptx)$/i.test(text) ||
-      /\.(doc|docx|xls|xlsx|ppt|pptx)$/i.test(hrefFile) ||
-      /\.(doc|docx|xls|xlsx|ppt|pptx)$/i.test(file);
+    return !!(util && typeof util.isDocumentKindByExtension === 'function' &&
+      util.isDocumentKindByExtension(null, resource, href, 'office'));
   }
 
   function canOfficeViewerFetch(href) {
@@ -1905,21 +1849,6 @@ wuwei.menu = wuwei.menu || {};
     return /\.[A-Za-z0-9]{1,12}$/.test(String(name || ''));
   }
 
-  function extensionFromMimeType(mimeType) {
-    var mime = String(mimeType || '').toLowerCase();
-    if (mime === 'application/pdf') { return '.pdf'; }
-    if (mime.indexOf('wordprocessingml.document') >= 0) { return '.docx'; }
-    if (mime.indexOf('spreadsheetml.sheet') >= 0) { return '.xlsx'; }
-    if (mime.indexOf('presentationml.presentation') >= 0) { return '.pptx'; }
-    if (mime === 'application/msword') { return '.doc'; }
-    if (mime === 'application/vnd.ms-excel') { return '.xls'; }
-    if (mime === 'application/vnd.ms-powerpoint') { return '.ppt'; }
-    if (mime.indexOf('image/jpeg') === 0) { return '.jpg'; }
-    if (mime.indexOf('image/png') === 0) { return '.png'; }
-    if (mime.indexOf('text/plain') === 0) { return '.txt'; }
-    return '';
-  }
-
   function getDownloadFilename(node, href) {
     var resource = node ? getNodeResource(node) : null;
     var file = null;
@@ -1952,8 +1881,7 @@ wuwei.menu = wuwei.menu || {};
     }
 
     fallback = fallback || String((resource && resource.title) || identity.title || (node && node.label) || 'download');
-    ext = extensionFromMimeType((file && file.mimeType) || (resource && resource.mimeType) || '');
-    return hasFileExtension(fallback) ? fallback : fallback + ext;
+    return fallback;
   }
 
   getDownloadUrl = function (node) {
@@ -2722,6 +2650,17 @@ wuwei.menu = wuwei.menu || {};
       wuwei.log.savePrevious();
       if (wuwei.contents.copyTarget(node)) {
         wuwei.log.storeLog({ operation: 'copy' });
+      }
+      closeContextMenu();
+      return;
+    }
+
+    else if ('distributeContentsPageMarkers' === method) {
+      node = resolveContextTargetRecord(state.hoveredNode);
+      if (!node || !wuwei.contents || typeof wuwei.contents.distributePageMarkers !== 'function') { return; }
+      wuwei.log.savePrevious();
+      if (wuwei.contents.distributePageMarkers(node)) {
+        wuwei.log.storeLog({ operation: 'distributeContentsPageMarkers' });
       }
       closeContextMenu();
       return;
@@ -3903,6 +3842,12 @@ wuwei.menu = wuwei.menu || {};
 
   Operations = {
     // operations are defined as 'method', 'display name', 'optional rule', 'style', 'icon'
+    //
+    // Context menus are intentionally grouped by target role.  Generic node/link
+    // menus no longer carry Timeline / Contents / group-specific commands.
+    // The actual visibility of each command is still decided by OperationsList
+    // validators, but this first-level classification keeps unrelated commands
+    // out of the wrong menu bucket.
     type: {
       'Node': [
         'bloom',
@@ -3915,91 +3860,122 @@ wuwei.menu = wuwei.menu || {};
       'Link': [
         'hide'
       ],
+
       'EditNode': [
         'edit',
-        'editRepresentativeStyle',
         'createTimelineAxis',
-        'editTimelineAxisProps',
-        'addTimelineSegmentFromPlayer',
-        'editTimelineSegmentProps',
-        'editTimelineSegmentFromPlayer',
-        'deleteTimelineSegment',
         'createContentsAxis',
-        'addContentsEntry',
-        'copyContentsTarget',
-        'deleteContentsTarget',
-        'horizontal',
-        'vertical',
         'addContent',
         'addTopic',
         'addMemo',
         'copy',
-        'deleteGroup',
         'erase'
       ],
       'EditLink': [
         'edit',
-        'editTimelineAxisProps',
-        'addTimelineSegmentFromPlayer',
-        'addContentsEntry',
-        'copyContentsTarget',
-        'deleteContentsTarget',
         'reverse',
         'normal',
         'horizontal',
         'vertical',
         'horizontal2',
         'vertical2',
-        'deleteGroup',
         'erase'
       ],
       'EditGroup': [
         'edit',
         'editRepresentativeStyle',
+        'editTimelineAxisProps',
+        'addTimelineSegmentFromPlayer',
+        'addContentsEntry',
+        'deleteContentsTarget',
+        'horizontal',
+        'vertical',
         'copy',
-        'deleteGroup'
+        'deleteGroup',
+        'erase'
       ],
+      'EditGroupMember': [
+        'edit',
+        'createTimelineAxis',
+        'createContentsAxis',
+        'editTimelineSegmentProps',
+        'editTimelineSegmentFromPlayer',
+        'deleteTimelineSegment',
+        'copyContentsTarget',
+        'deleteContentsTarget',
+        'addContent',
+        'addTopic',
+        'addMemo',
+        'copy',
+        'erase'
+      ],
+      'EditGroupRepresentative': [
+        'edit',
+        'editRepresentativeStyle',
+        'editTimelineAxisProps',
+        'addTimelineSegmentFromPlayer',
+        'addContentsEntry',
+        'copyContentsTarget',
+        'distributeContentsPageMarkers',
+        'deleteContentsTarget',
+        'horizontal',
+        'vertical',
+        'copy',
+        'deleteGroup',
+        'erase'
+      ],
+
       'InfoNode': [
         'info',
-        'infoTimelineSegment',
         'download',
         'openNewTab',
         'openWindow',
         'openPlayer'
       ],
       'InfoLink': [
+        'info'
+      ],
+      'InfoGroup': [
         'infoTimelineSegment',
-        'infoContentsTarget'
+        'infoContentsTarget',
+        'info'
+      ],
+      'InfoGroupMember': [
+        'infoTimelineSegment',
+        'infoContentsTarget',
+        'info',
+        'download',
+        'openNewTab',
+        'openWindow',
+        'openPlayer'
+      ],
+      'InfoGroupRepresentative': [
+        'infoContentsTarget',
+        'infoTimelineSegment',
+        'info',
+        'openNewTab',
+        'openWindow',
+        'openPlayer'
       ]
     },
     isSupported: function (operation, nodes, context) {
-      var operations;
+      var operations, profile, i;
       if (util.isEmpty(nodes)) { return false; }
-      if ('EDIT' === context && isContextContentsTarget(nodes)) {
-        return util.contains(this.type.EditNode, operation);
-      }
-      for (var i = 0; i < nodes.length; i += 1) {
-        if (util.notEmpty(nodes[i])) {
-          // INFO operations are read-only; allow them even if not the owner.
-          if ('INFO' !== context && !isOwnedByCurrentUser(nodes[i])) { return false; }
-          var type = '';
-          if ('INFO' === context) {
-            if ('Link' === nodes[i].type) { type = 'InfoLink'; }
-            else { type = 'InfoNode'; }
-          }
-          else if ('EDIT' === context) {
-            if (isContextGroup([nodes[i]])) { type = 'EditGroup'; }
-            else if ('Link' === nodes[i].type) { type = 'EditLink'; }
-            else { type = 'EditNode'; }
-          }
-          else {
-            if ('Link' === nodes[i].type) { type = 'Link'; }
-            else { type = 'Node'; }
-          }
-          operations = this.type[type];
-          if (util.isEmpty(operations) || !util.contains(operations, operation)) {
-            return false;
-          }
+
+      for (i = 0; i < nodes.length; i += 1) {
+        if (util.isEmpty(nodes[i])) {
+          continue;
+        }
+
+        // INFO operations are read-only; allow them even if not the owner.
+        if ('INFO' !== context && !isOwnedByCurrentUser(nodes[i])) {
+          return false;
+        }
+
+        profile = resolveMenuContext([nodes[i]], context);
+        operations = this.type[profile.menuType];
+        if (util.isEmpty(operations) || !util.contains(operations, operation)) {
+          return false;
         }
       }
       return true;
@@ -4007,25 +3983,10 @@ wuwei.menu = wuwei.menu || {};
     getSupported: function (allNodes, context) {
       var
         self = this,
-        hoveredNode = allNodes[0],
         supportedOperations = [],
-        i, len, operation;
-      var operations;
-
-      if ('CMND' === context) {
-        if ('Link' === hoveredNode.type) { operations = self.type.Link; }
-        else { operations = self.type.Node; }
-      }
-      else if ('EDIT' === context) {
-        if (isContextGroup(allNodes)) { operations = self.type.EditGroup; }
-        else if (isContextContentsTarget(allNodes)) { operations = self.type.EditLink; }
-        else if ('Link' === hoveredNode.type) { operations = self.type.EditLink; }
-        else { operations = self.type.EditNode; }
-      }
-      else if ('INFO' === context) {
-        if ('Link' === hoveredNode.type) { operations = self.type.InfoLink; }
-        else { operations = self.type.InfoNode; }
-      }
+        profile = resolveMenuContext(allNodes, context),
+        operations = self.type[profile.menuType],
+        i, len, operation, operationDef, operationList, validator;
 
       if (util.isEmpty(operations)) {
         return supportedOperations;
@@ -4034,16 +3995,16 @@ wuwei.menu = wuwei.menu || {};
       len = operations.length;
       for (i = 0; i < len; i++) {
         operation = operations[i];
-        var _operation = OperationsList[operation];
-        if (_operation) {
-          var operationList = [];
+        operationDef = OperationsList[operation];
+        if (operationDef) {
+          operationList = [];
           operationList[0] = operation;
-          operationList[1] = _operation[0];
-          operationList[2] = _operation[1];
-          operationList[3] = _operation[2] || null;
-          operationList[4] = _operation[3] || null;
+          operationList[1] = operationDef[0];
+          operationList[2] = operationDef[1];
+          operationList[3] = operationDef[2] || null;
+          operationList[4] = operationDef[3] || null;
           if (self.isSupported(operation, allNodes, context)) {
-            var validator = operationList[2];
+            validator = operationList[2];
             if (validator) {
               if (validator(allNodes)) {
                 supportedOperations.push(operationList);
@@ -4055,14 +4016,13 @@ wuwei.menu = wuwei.menu || {};
           }
         }
       }
-      // console.log(supportedOperations);
       return supportedOperations;
     }
   };
 
   /**
    * Operations
-   * key, label, isSupporetdFunc(), style('danger' or null), icon
+   * key, label, isSupportedFunc(), style('danger' or null), icon
    */
   function resolveContextTargetRecord(target) {
     if (!target) {
@@ -4257,6 +4217,24 @@ wuwei.menu = wuwei.menu || {};
     return !!(spec && isTimelineMidSegmentSpec(spec));
   }
 
+  function hasAttachedTimelineGroup(target) {
+    return !!(
+      target &&
+      wuwei.timeline &&
+      typeof wuwei.timeline.hasAttachedTimelineGroup === 'function' &&
+      wuwei.timeline.hasAttachedTimelineGroup(target)
+    );
+  }
+
+  function hasAttachedContentsGroup(target) {
+    return !!(
+      target &&
+      wuwei.contents &&
+      typeof wuwei.contents.hasAttachedContentsGroup === 'function' &&
+      wuwei.contents.hasAttachedContentsGroup(target)
+    );
+  }
+
   function isContextVideoContent(allNodes) {
     var target = getContextTarget(allNodes);
     return !!(
@@ -4265,6 +4243,11 @@ wuwei.menu = wuwei.menu || {};
       isPlayableVideoNode(target) &&
       !getContextTimelineSpec(allNodes)
     );
+  }
+
+  function isContextTimelineCreatableContent(allNodes) {
+    var target = getContextTarget(allNodes);
+    return isContextVideoContent(allNodes) && !hasAttachedTimelineGroup(target);
   }
 
   function isContextTimelinePlayable(allNodes) {
@@ -4297,15 +4280,198 @@ wuwei.menu = wuwei.menu || {};
 
   function isContextContentTargetContent(allNodes) {
     var target = getContextTarget(allNodes);
-    return !!(
-      target &&
-      target.type === 'Content' &&
+    var isContentTarget;
+
+    if (!target || target.type !== 'Content') {
+      return false;
+    }
+
+    /*
+     * Contents can be attached to a document Content even when the Content is
+     * already a member of a generic simple / horizontal / vertical group.
+     * Document kind is resolved from the original file extension, not from
+     * MIME metadata, because local upload processing may not provide mimeType.
+     */
+    isContentTarget = !!(
       wuwei.contents &&
       typeof wuwei.contents.isContentTargetResourceNode === 'function' &&
-      wuwei.contents.isContentTargetResourceNode(target) &&
+      wuwei.contents.isContentTargetResourceNode(target)
+    ) || isDocumentLikeOpenTarget(target);
+
+    return !!(
+      isContentTarget &&
       !getContextTimelineSpec(allNodes) &&
-      !getContextContentsSpec(allNodes)
+      !getContextContentsSpec(allNodes) &&
+      !hasAttachedContentsGroup(target)
     );
+  }
+
+  function getContextGroupFromTarget(target, timelineSpec, contentsSpec) {
+    var group;
+
+    if (contentsSpec && contentsSpec.group) {
+      return contentsSpec.group;
+    }
+    if (timelineSpec && timelineSpec.group) {
+      return timelineSpec.group;
+    }
+    if (!target) {
+      return null;
+    }
+    if (target.type === 'Group' && target.groupRef) {
+      return model.findGroupById(target.groupRef) || target;
+    }
+    if (target.groupRef && model && typeof model.findGroupById === 'function') {
+      group = model.findGroupById(target.groupRef);
+      if (group) {
+        return group;
+      }
+    }
+    if (target.id && model && typeof model.findGroupsByNodeId === 'function') {
+      group = model.findGroupsByNodeId(target.id)[0];
+      if (group) {
+        return group;
+      }
+    }
+    return null;
+  }
+
+  function getContextGroupKind(group, timelineSpec, contentsSpec) {
+    if (contentsSpec || (group && group.type === 'contents')) {
+      return 'contents';
+    }
+    if (timelineSpec || (group && group.type === 'timeline')) {
+      return 'timeline';
+    }
+    if (group) {
+      return 'generic';
+    }
+    return null;
+  }
+
+  function getContextGroupShape(group) {
+    if (!group) {
+      return null;
+    }
+    if (group.type === 'simple' || group.type === 'horizontal' || group.type === 'vertical') {
+      return group.type;
+    }
+    if (group.shape === 'simple' || group.shape === 'horizontal' || group.shape === 'vertical') {
+      return group.shape;
+    }
+    if (group.orientation === 'horizontal' || group.orientation === 'vertical') {
+      return group.orientation;
+    }
+    return null;
+  }
+
+  function isContextGroupAxisTarget(target, timelineSpec, contentsSpec) {
+    return !!(
+      target &&
+      util.isLink(target) &&
+      target.groupRef &&
+      (
+        (timelineSpec && timelineSpec.group && !timelineSpec.point) ||
+        (contentsSpec && contentsSpec.group && !contentsSpec.point) ||
+        target.groupType === 'timelineAxis' ||
+        target.groupType === 'contentsAxis' ||
+        target.linkType === 'timeline-axis' ||
+        target.linkType === 'contents-axis' ||
+        target.groupType === 'horizontal' ||
+        target.groupType === 'vertical' ||
+        target.pseudo
+      )
+    );
+  }
+
+  function resolveMenuContext(allNodes, context) {
+    var target = getContextTarget(allNodes);
+    var timelineSpec = target ? getContextTimelineSpec([target]) : null;
+    var contentsSpec = target ? getContextContentsSpec([target]) : null;
+    var group = getContextGroupFromTarget(target, timelineSpec, contentsSpec);
+    var profile = {
+      context: context || '',
+      target: target || null,
+      targetType: 'none',
+      role: 'normal',
+      group: group || null,
+      groupKind: getContextGroupKind(group, timelineSpec, contentsSpec),
+      groupShape: getContextGroupShape(group),
+      timelineSpec: timelineSpec || null,
+      contentsSpec: contentsSpec || null,
+      menuType: ''
+    };
+
+    if (target) {
+      if (util.isLink(target)) {
+        profile.targetType = 'link';
+      }
+      else if (util.isNode(target)) {
+        profile.targetType = 'node';
+      }
+      else if (target.type === 'Group') {
+        profile.targetType = 'group';
+      }
+    }
+
+    if (contentsSpec && contentsSpec.point) {
+      profile.role = 'groupMember';
+    }
+    else if (timelineSpec && timelineSpec.point) {
+      profile.role = 'groupMember';
+    }
+    else if (isContextContentsRepresentative([target]) || isRepresentativeTopic(target)) {
+      profile.role = 'groupRepresentative';
+    }
+    else if ((contentsSpec && contentsSpec.group && !contentsSpec.point) ||
+      (timelineSpec && timelineSpec.group && !timelineSpec.point) ||
+      isContextGroupAxisTarget(target, timelineSpec, contentsSpec) ||
+      isContextGroup([target])) {
+      profile.role = 'group';
+    }
+    else if (group && target && util.isNode(target)) {
+      profile.role = 'groupMember';
+    }
+
+    if (context === 'CMND') {
+      profile.menuType = (profile.targetType === 'link') ? 'Link' : 'Node';
+    }
+    else if (context === 'EDIT') {
+      if (profile.role === 'groupRepresentative') {
+        profile.menuType = 'EditGroupRepresentative';
+      }
+      else if (profile.role === 'groupMember') {
+        profile.menuType = 'EditGroupMember';
+      }
+      else if (profile.role === 'group') {
+        profile.menuType = 'EditGroup';
+      }
+      else if (profile.targetType === 'link') {
+        profile.menuType = 'EditLink';
+      }
+      else {
+        profile.menuType = 'EditNode';
+      }
+    }
+    else if (context === 'INFO') {
+      if (profile.role === 'groupRepresentative') {
+        profile.menuType = 'InfoGroupRepresentative';
+      }
+      else if (profile.role === 'groupMember') {
+        profile.menuType = 'InfoGroupMember';
+      }
+      else if (profile.role === 'group') {
+        profile.menuType = 'InfoGroup';
+      }
+      else if (profile.targetType === 'link') {
+        profile.menuType = 'InfoLink';
+      }
+      else {
+        profile.menuType = 'InfoNode';
+      }
+    }
+
+    return profile;
   }
 
   function hasContextDownloadUrl(allNodes) {
@@ -4392,7 +4558,7 @@ wuwei.menu = wuwei.menu || {};
     'download': ['Download',
       function (allNodes) {
         var node = getContextTarget(allNodes);
-        var fmt, ref, isImageOrPdf, isOffice;
+        var ref, isImageOrPdf, isOffice;
 
         if (graph.mode === 'view' || state.viewOnly || state.published) {
           return false;
@@ -4413,21 +4579,15 @@ wuwei.menu = wuwei.menu || {};
         }
 
         var resource = getNodeResource(node);
-        fmt = String(resource.mimeType || '').toLowerCase();
         ref = String(getDownloadUrl(node) || resource.canonicalUri || resource.uri || '').toLowerCase();
 
-        isImageOrPdf =
-          0 === fmt.indexOf('image/') ||
-          /\.(png|jpe?g|gif|webp|svg|tiff|pdf)(\?|#|$)/.test(ref);
+        isImageOrPdf = !!(util && typeof util.isDocumentKindByExtension === 'function' && (
+          util.isDocumentKindByExtension(node, resource, ref, 'image') ||
+          util.isDocumentKindByExtension(node, resource, ref, 'pdf')
+        ));
 
-        isOffice =
-          0 === fmt.indexOf('application/vnd.openxmlformats-officedocument.wordprocessingml') ||
-          0 === fmt.indexOf('application/vnd.openxmlformats-officedocument.spreadsheetml') ||
-          0 === fmt.indexOf('application/vnd.openxmlformats-officedocument.presentationml') ||
-          0 === fmt.indexOf('application/msword') ||
-          0 === fmt.indexOf('application/vnd.ms-excel') ||
-          0 === fmt.indexOf('application/vnd.ms-powerpoint') ||
-          /\.(doc|docx|xls|xlsx|ppt|pptx)(\?|#|$)/.test(ref);
+        isOffice = !!(util && typeof util.isDocumentKindByExtension === 'function' &&
+          util.isDocumentKindByExtension(node, resource, ref, 'office'));
 
         return isUploadedContent(allNodes) || isImageOrPdf || isOffice;
       },
@@ -4484,7 +4644,9 @@ wuwei.menu = wuwei.menu || {};
         if (!state.Selecting &&
           !state.Connecting &&
           !util.isEmpty(node) &&
-          !isContextTimelineAxis(allNodes)) {
+          !isContextTimelineAxis(allNodes) &&
+          !isContextTimelineSegment(allNodes) &&
+          !isContextContentsTarget(allNodes)) {
           return true;
         }
         return false;
@@ -4499,7 +4661,9 @@ wuwei.menu = wuwei.menu || {};
         if (!state.Selecting &&
           !state.Connecting &&
           !util.isEmpty(node) &&
-          !isContextTimelineAxis(allNodes)) {
+          !isContextTimelineAxis(allNodes) &&
+          !isContextTimelineSegment(allNodes) &&
+          !isContextContentsTarget(allNodes)) {
           return true;
         }
         return false;
@@ -4514,7 +4678,9 @@ wuwei.menu = wuwei.menu || {};
         if (!state.Selecting &&
           !state.Connecting &&
           !util.isEmpty(node) &&
-          !isContextTimelineAxis(allNodes)) {
+          !isContextTimelineAxis(allNodes) &&
+          !isContextTimelineSegment(allNodes) &&
+          !isContextContentsTarget(allNodes)) {
           return true;
         }
         return false;
@@ -5051,7 +5217,7 @@ wuwei.menu = wuwei.menu || {};
       function (allNodes) {
         return !state.Selecting &&
           !state.Connecting &&
-          isContextVideoContent(allNodes);
+          isContextTimelineCreatableContent(allNodes);
       },
       null,
       'fas fa-stream fa-lg fa-fw'
@@ -5085,6 +5251,17 @@ wuwei.menu = wuwei.menu || {};
       },
       null,
       'fa fa-clone fa-lg fa-fw'
+    ],
+
+
+    'distributeContentsPageMarkers': ['Distribute PageMarkers',
+      function (allNodes) {
+        return !state.Selecting &&
+          !state.Connecting &&
+          isContextContentsRepresentative(allNodes);
+      },
+      null,
+      'fas fa-arrows-alt-h fa-lg fa-fw'
     ],
 
     'deleteContentsTarget': ['Delete',
@@ -5503,6 +5680,7 @@ wuwei.menu = wuwei.menu || {};
   ns.ContextINFO = ContextINFO;
   ns.ContextOperate = ContextOperate;
   ns.contextUpdatePosition = contextUpdatePosition;
+  ns.resolveMenuContext = resolveMenuContext;
   ns.isContextGroup = isContextGroup;
   /** note */
   ns.noteClicked = noteClicked;

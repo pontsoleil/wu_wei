@@ -351,6 +351,7 @@ wuwei.nls.KR = {
   'Hide Names': '작성자명 감추기',
   'Horizontal Axis': '수평축 만들기',
   'Horizontal Equal': '좌우로 정렬',
+  'Distribute PageMarkers': 'PageMarker 균등 배치',
   'In case you cannot load iframe contents': 'iframe의 내용을 표시할 수 없을 때에는',
   'Introduction': '설명',
   'item(s) listed below': '토픽(컨텐츠)(아래에 보입니다)',

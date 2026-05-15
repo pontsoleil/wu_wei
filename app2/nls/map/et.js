@@ -351,6 +351,7 @@ wuwei.nls.ET = {
   'Hide Names': 'Hide Names',
   'Horizontal Axis': 'Horizontal Axis',
   'Horizontal Equal': 'Horizontal Equal',
+  'Distribute PageMarkers': 'Jaota PageMarkerid ühtlaselt',
   'In case you cannot load iframe contents': 'In case you cannot load iframe contents',
   'Introduction': 'Tutvustus',
   'item(s) listed below': 'item(s) listed below',

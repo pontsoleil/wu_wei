@@ -269,14 +269,12 @@ wuwei.note = (function () {
     var src = resource || {};
     var kind = String(src.kind || '').toLowerCase();
     var subtype = String(src.subtype || (src.media && src.media.subtype) || '').toLowerCase();
-    var mimeType = String(src.mimeType || (src.media && src.media.mimeType) || '').toLowerCase();
     var text = String(uri || src.canonicalUri || src.uri || src.url || '').toLowerCase();
     return kind === 'video' ||
       subtype === 'youtube' ||
       subtype === 'vimeo' ||
-      /^video\//i.test(mimeType) ||
-      /(^|\/\/)(www\.)?(youtube\.com|youtu\.be|vimeo\.com)\//i.test(text) ||
-      /\.(mp4|m4v|webm|ogv|ogg)(\?|#|$)/i.test(text);
+      (util.getDocumentKindByExtension && util.getDocumentKindByExtension(null, src, text) === 'video') ||
+      /(^|\/\/)(www\.)?(youtube\.com|youtu\.be|vimeo\.com)\//i.test(text);
   }
 
   function normalizeUrlVideoResource(resource, node, uri) {
@@ -349,16 +347,16 @@ wuwei.note = (function () {
       var uploadMedia = src.media && typeof src.media === 'object' ? util.clone(src.media) : {};
       var uploadContents = src.contents && typeof src.contents === 'object' ? util.clone(src.contents) : null;
       var uploadMimeType = String(uploadMedia.mimeType || src.mimeType || '');
-      if (!uploadMimeType && /\.pdf$/i.test(uploadOriginalFile)) {
-        uploadMimeType = 'application/pdf';
-      }
-      if (!uploadMedia.kind && /^application\/pdf/i.test(uploadMimeType)) {
+      var uploadExtensionKind = util.getDocumentKindByExtension
+        ? util.getDocumentKindByExtension(node, src, uploadOriginalFile || uploadOriginal)
+        : '';
+      if (!uploadMedia.kind && /^(pdf|office|html|text)$/.test(uploadExtensionKind)) {
         uploadMedia.kind = 'document';
       }
       if (!uploadMedia.mimeType) {
         uploadMedia.mimeType = uploadMimeType;
       }
-      if (!uploadMedia.downloadable && /^application\/pdf/i.test(uploadMimeType)) {
+      if (!uploadMedia.downloadable && /^(pdf|office|html|text)$/.test(uploadExtensionKind)) {
         uploadMedia.downloadable = true;
       }
       var uploadViewerUri = uploadPreview || uploadOriginal;
@@ -406,7 +404,7 @@ wuwei.note = (function () {
     }
     return {
       id: String(src.id || ''),
-      kind: src.kind || (src.mimeType && /^image\//i.test(src.mimeType) ? 'image' : (src.mimeType && /^video\//i.test(src.mimeType) ? 'video' : ((util.isOfficeDocument && util.isOfficeDocument(src.uri || '')) ? 'office' : 'general'))),
+      kind: src.kind || resourceKindFromExtension(src, uri, node),
       uri: uri,
       canonicalUri: String(src.canonicalUri || uri || ''),
       mimeType: String(src.mimeType || src.format || ''),
@@ -435,7 +433,7 @@ wuwei.note = (function () {
     var thumbnail = src.snapshotSources.thumbnailUri || viewer.thumbnailUri || embed.thumbnailUri || '';
     return {
       id: src.id,
-      kind: src.media.kind || resourceKindFromMime(src.media.mimeType, uri),
+      kind: src.media.kind || resourceKindFromExtension(src, uri, node),
       uri: String(uri || ''),
       canonicalUri: String(src.identity.canonicalUri || uri || ''),
       mimeType: String(src.media.mimeType || ''),
@@ -990,16 +988,15 @@ wuwei.note = (function () {
     });
   }
 
-  function resourceKindFromMime(mimeType, uri) {
-    mimeType = String(mimeType || '').toLowerCase();
-    uri = String(uri || '').toLowerCase();
-    if (/^image\//.test(mimeType)) { return 'image'; }
-    if (/^video\//.test(mimeType)) { return 'video'; }
-    if (/^audio\//.test(mimeType)) { return 'audio'; }
-    if (/pdf|word|excel|powerpoint|officedocument|text\//.test(mimeType)) { return 'document'; }
-    if (/\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|csv|adoc|md)$/.test(uri)) { return 'document'; }
-    if (/\.(jpg|jpeg|png|gif|webp|svg)$/.test(uri)) { return 'image'; }
-    if (/\.(mp4|webm|ogg|mov|m4v)$/.test(uri)) { return 'video'; }
+  function resourceKindFromExtension(src, uri, node) {
+    var extKind = util.getDocumentKindByExtension
+      ? util.getDocumentKindByExtension(node, src || {}, uri)
+      : '';
+    uri = String(uri || (src && (src.uri || src.canonicalUri)) || '').toLowerCase();
+    if (extKind === 'image') { return 'image'; }
+    if (extKind === 'video') { return 'video'; }
+    if (extKind === 'audio') { return 'audio'; }
+    if (/^(pdf|office|html|text)$/.test(extKind)) { return 'document'; }
     if (/^https?:\/\//.test(uri)) { return 'webpage'; }
     return 'general';
   }
@@ -1020,7 +1017,7 @@ wuwei.note = (function () {
     var src = node.resource || {};
     var uri = String(src.uri || node.uri || '');
     var mimeType = String(src.mimeType || src.format || node.format || 'text/plain');
-    var kind = String(src.kind || resourceKindFromMime(mimeType, uri));
+    var kind = String(src.kind || resourceKindFromExtension(src, uri, node));
     var isManaged = !/^https?:\/\//i.test(uri) && !!uri;
     var snapshotSources = src.snapshotSources || {};
     if (src.canonicalUri && !snapshotSources.originalUri) {
@@ -1148,8 +1145,11 @@ wuwei.note = (function () {
         uploadRef.storage = util.clone(src.storage);
         if (Array.isArray(uploadRef.storage.files)) {
           uploadRef.storage.files = uploadRef.storage.files.filter(function (file) {
+            var originalKind = util.getDocumentKindByExtension
+              ? util.getDocumentKindByExtension(null, { file: uploadRef.file }, uploadRef.file)
+              : '';
             return file && file.path && !(/\/preview\.pdf$/i.test(String(file.path || '')) &&
-              String(uploadRef.mimeType || '').toLowerCase().indexOf('application/pdf') === 0);
+              originalKind === 'pdf');
           }).map(function (file) {
             var copy = util.clone(file);
             if (copy.role === 'original' && (!copy.mimeType || copy.mimeType === 'application/octet-stream') && uploadRef.mimeType) {
@@ -1178,7 +1178,7 @@ wuwei.note = (function () {
     }
     if (uri) {
       return {
-        kind: String(src.kind || resourceKindFromMime(src.mimeType || node.format || '', uri)),
+        kind: String(src.kind || resourceKindFromExtension(src, uri, node)),
         uri: uri,
         title: String(src.title || node.label || ''),
         mimeType: String(src.mimeType || node.format || '')

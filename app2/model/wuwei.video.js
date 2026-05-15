@@ -170,7 +170,6 @@
     var url = getVideoSource(node);
     var subtype = String(resource.subtype || '').toLowerCase();
     var kind = String(resource.kind || '').toLowerCase();
-    var mime = String(resource.mimeType || '').toLowerCase();
     if (subtype === 'youtube' || isHostedYouTube(url)) {
       return { provider: 'youtube', id: extractYouTubeId(url), url: url };
     }
@@ -178,7 +177,8 @@
       var vimeo = extractVimeoInfo(url);
       return { provider: 'vimeo', id: vimeo.id, h: vimeo.h, url: vimeo.url };
     }
-    if (kind === 'video' || mime.indexOf('video/') === 0 || /\.(mp4|webm|ogg|mov|m4v)(\?|#|$)/i.test(url)) {
+    if (kind === 'video' || (wuwei.util && wuwei.util.isDocumentKindByExtension &&
+      wuwei.util.isDocumentKindByExtension(node, resource, url, 'video'))) {
       return { provider: 'html5', src: toAbsUrl(url), url: url };
     }
     return { provider: 'unknown', url: url };
