@@ -145,14 +145,11 @@ wuwei.menu = wuwei.menu || {};
 
   isImageLikeNode = function (node) {
     const resource = getNodeResource(node);
-    return !!(util && typeof util.isDocumentKindByExtension === 'function' &&
-      util.isDocumentKindByExtension(node, resource, '', 'image'));
+    return !!util.isDocumentKindByExtension(node, resource, '', 'image');
   };
 
   function getCurrentOwnerId() {
-    return (common && typeof common.getCurrentOwnerId === 'function')
-      ? common.getCurrentOwnerId()
-      : ((state && state.currentUser && state.currentUser.user_id) || '');
+    return common.getCurrentOwnerId();
   }
 
   function assertNoLegacyRuntimeFields(record, kind) {
@@ -205,9 +202,7 @@ wuwei.menu = wuwei.menu || {};
     if (ownerId === currentOwnerId) {
       return true;
     }
-    if (common &&
-      typeof common.isTemporaryOwnerId === 'function' &&
-      common.isTemporaryOwnerId(ownerId) &&
+    if (common.isTemporaryOwnerId(ownerId) &&
       common.isTemporaryOwnerId(currentOwnerId)) {
       return true;
     }
@@ -256,8 +251,7 @@ wuwei.menu = wuwei.menu || {};
       kind === 'video' ||
       subtype === 'youtube' ||
       subtype === 'vimeo' ||
-      (util && typeof util.isDocumentKindByExtension === 'function' &&
-        util.isDocumentKindByExtension(node, resource, uri, 'video')) ||
+      util.isDocumentKindByExtension(node, resource, uri, 'video') ||
       isHostedVideoUrl(uri)
     );
   }
@@ -265,20 +259,13 @@ wuwei.menu = wuwei.menu || {};
   function isLocalTemporaryUser() {
     var ownerId = '';
 
-    if (!(common && typeof common.isLocalHost === 'function' && common.isLocalHost())) {
+    if (!common.isLocalHost()) {
       return false;
     }
 
-    if (util && typeof util.getCurrentUserId === 'function') {
-      ownerId = util.getCurrentUserId();
-    }
-    if (!ownerId && common && typeof common.getCurrentOwnerId === 'function') {
-      ownerId = common.getCurrentOwnerId();
-    }
+    ownerId = util.getCurrentUserId() || common.getCurrentOwnerId();
 
     return !state.loggedIn || (
-      common &&
-      typeof common.isTemporaryOwnerId === 'function' &&
       common.isTemporaryOwnerId(ownerId)
     );
   }
@@ -342,8 +329,7 @@ wuwei.menu = wuwei.menu || {};
 
   function isOfficeResource(resource) {
     var ref = getResourceOriginalPath(resource);
-    return !!(util && typeof util.isDocumentKindByExtension === 'function' &&
-      util.isDocumentKindByExtension(null, resource, ref, 'office'));
+    return !!util.isDocumentKindByExtension(null, resource, ref, 'office');
   }
 
   function isUploadedContent(allNodes) {
@@ -397,29 +383,20 @@ wuwei.menu = wuwei.menu || {};
     d3.select('#Hovered').attr('opacity', 0).attr('class', '');
     d3.select('#Selected').attr('opacity', 0);
     d3.select('#Pointer').style('opacity', 0);
-    if (graph.mode === 'simulation' && draw && typeof draw.restart === 'function') {
+    if (graph.mode === 'simulation') {
       draw.restart();
     }
-    else if (draw && typeof draw.reRender === 'function') {
+    else {
       draw.reRender();
-    }
-    else if (draw && typeof draw.refresh === 'function') {
-      draw.refresh();
     }
   }
 
   restartCurrentDraw = function () {
-    if (draw && graph.mode === 'simulation' && typeof draw.restart === 'function') {
+    if (graph.mode === 'simulation') {
       draw.restart();
       return;
     }
-    if (draw && typeof draw.refresh === 'function') {
-      draw.refresh();
-      return;
-    }
-    if (draw && typeof draw.reRender === 'function') {
-      draw.reRender();
-    }
+    draw.refresh();
   };
 
   closeContextMenu = function () {
@@ -447,10 +424,7 @@ wuwei.menu = wuwei.menu || {};
     if (!node) {
       return false;
     }
-    if (wuwei.menu.timeline && typeof wuwei.menu.timeline.isTimelinePoint === 'function') {
-      return !!wuwei.menu.timeline.isTimelinePoint(node);
-    }
-    return ('Segment' === node.type) || ('Topic' === node.type && 'timeline-point' === node.topicKind);
+    return !!wuwei.menu.timeline.isTimelinePoint(node);
   }
 
   function isTimelineInfoTarget(node, link) {
@@ -478,7 +452,7 @@ wuwei.menu = wuwei.menu || {};
       return null;
     }
 
-    mediaNode = util.clone ? util.clone(spec.mediaNode) : Object.assign({}, spec.mediaNode);
+    mediaNode = util.clone(spec.mediaNode);
     mediaNode.timeRange = Object.assign({}, mediaNode.timeRange || {});
     mediaNode.timeRange.start = Number(spec.startAt || 0);
 
@@ -507,23 +481,13 @@ wuwei.menu = wuwei.menu || {};
     };
 
     try {
-      if (window.wuwei && wuwei.menu && wuwei.menu.video && typeof wuwei.menu.video.open === 'function') {
-        opened = wuwei.menu.video.open(mediaNode, option);
-        return opened !== false;
-      }
-
-      if (window.wuwei && wuwei.info && wuwei.info.video && typeof wuwei.info.video.openModal === 'function') {
-        opened = wuwei.info.video.openModal(mediaNode, option);
-        return opened !== false;
-      }
+      opened = wuwei.menu.video.open(mediaNode, option);
+      return opened !== false;
     }
     catch (e) {
       console.error(e);
       return false;
     }
-
-    console.warn('Video player is not available');
-    return false;
   }
 
   function buildTimelineOpenUrl(spec) {
@@ -533,9 +497,7 @@ wuwei.menu = wuwei.menu || {};
     }
     mediaNode = spec.mediaNode;
     resource = (mediaNode.resource && typeof mediaNode.resource === 'object') ? mediaNode.resource : {};
-    rawUrl = (wuwei.video && typeof wuwei.video.getVideoSource === 'function')
-      ? wuwei.video.getVideoSource(mediaNode)
-      : String(resource.canonicalUri || resource.uri || '');
+    rawUrl = wuwei.video.getVideoSource(mediaNode);
     startAt = Math.max(0, Number(spec.startAt || 0));
     endAt = (spec.endAt != null && isFinite(spec.endAt)) ? Math.max(startAt, Number(spec.endAt)) : null;
     if (!rawUrl) {
@@ -1109,9 +1071,7 @@ wuwei.menu = wuwei.menu || {};
 
         if (!state.Connecting && !state.Selecting) {
           var infoTarget = node || link;
-          var infoOperations = (infoTarget && Operations && typeof Operations.getSupported === 'function')
-            ? Operations.getSupported([infoTarget], 'INFO')
-            : [];
+          var infoOperations = infoTarget ? Operations.getSupported([infoTarget], 'INFO') : [];
           if (infoOperations.length > 0) {
             info
               .text('\uf05a')
@@ -1153,8 +1113,7 @@ wuwei.menu = wuwei.menu || {};
 
   function isImageNode(node) {
     const resource = getNodeResource(node);
-    return !!(util && typeof util.isDocumentKindByExtension === 'function' &&
-      util.isDocumentKindByExtension(node, resource, '', 'image'));
+    return !!util.isDocumentKindByExtension(node, resource, '', 'image');
   }
 
 
@@ -1166,9 +1125,7 @@ wuwei.menu = wuwei.menu || {};
     if (graph.mode === 'view' || state.viewOnly || state.published) {
       return false;
     }
-    const node = wuwei.model.getCurrent
-      ? wuwei.model.getCurrent().nodes.find(n => n.id === nodeId)
-      : null;
+    const node = wuwei.model.getCurrent().nodes.find(n => n.id === nodeId);
 
     const url = getDownloadUrl(node);
     if (!url) {
@@ -1380,18 +1337,7 @@ wuwei.menu = wuwei.menu || {};
         }
         else if (!iconHtml) {
           try {
-            iconHtml = (wuwei.note && typeof wuwei.note.buildPageThumbnail === 'function')
-              ? wuwei.note.buildPageThumbnail(page)
-              : util.buildMiniatureSvgString({
-                width: 200,
-                height: 200,
-                useDataOnly: true,
-                showViewFrame: true,
-                backgroundFill: '#ffffff',
-                page: page,
-                nodes: page.nodes || [],
-                links: (util.getMiniatureLinks ? util.getMiniatureLinks(page) : (page.links || []))
-              });
+            iconHtml = wuwei.note.buildPageThumbnail(page);
             page.thumbnail = iconHtml;
           } catch (e) {
             console.log(e);
@@ -1592,23 +1538,17 @@ wuwei.menu = wuwei.menu || {};
      * http://127.0.0.1/... or http://localhost/... .  Use the PDF created
      * during the OpenOffice/LibreOffice thumbnail-preview process instead.
      */
-    if (wuwei.util && typeof wuwei.util.getResourcePdfPreviewUri === 'function') {
-      previewUri = wuwei.util.getResourcePdfPreviewUri(node);
-      if (previewUri) {
-        return appendPdfPageForOpen(previewUri, pageNumber);
-      }
+    previewUri = wuwei.util.getResourcePdfPreviewUri(node);
+    if (previewUri) {
+      return appendPdfPageForOpen(previewUri, pageNumber);
     }
-    if (wuwei.contents && typeof wuwei.contents.getContentTargetViewerUrl === 'function') {
-      previewUri = wuwei.contents.getContentTargetViewerUrl(node, pageNumber || 1);
-      if (isPdfLikeOpenUri(previewUri)) {
-        return previewUri;
-      }
+    previewUri = wuwei.contents.getContentTargetViewerUrl(node, pageNumber || 1);
+    if (isPdfLikeOpenUri(previewUri)) {
+      return previewUri;
     }
-    if (wuwei.util && typeof wuwei.util.getResourcePreviewUri === 'function') {
-      previewUri = wuwei.util.getResourcePreviewUri(node);
-      if (isPdfLikeOpenUri(previewUri)) {
-        return appendPdfPageForOpen(previewUri, pageNumber);
-      }
+    previewUri = wuwei.util.getResourcePreviewUri(node);
+    if (isPdfLikeOpenUri(previewUri)) {
+      return appendPdfPageForOpen(previewUri, pageNumber);
     }
     return '';
   }
@@ -1662,11 +1602,9 @@ wuwei.menu = wuwei.menu || {};
   function getTextOriginalHref(node, resource) {
     var uploadPath, uid, file;
 
-    if (wuwei.util && typeof wuwei.util.getResourceOriginalUri === 'function') {
-      uploadPath = wuwei.util.getResourceOriginalUri(node);
-      if (uploadPath) {
-        return uploadPath;
-      }
+    uploadPath = wuwei.util.getResourceOriginalUri(node);
+    if (uploadPath) {
+      return uploadPath;
     }
     if (resource && String(resource.kind || '').toLowerCase() === 'upload' && resource.id && resource.date) {
       file = String(resource.file || resource.filename || '').replace(/\\/g, '/').split('/').pop();
@@ -1679,40 +1617,11 @@ wuwei.menu = wuwei.menu || {};
   }
 
   function isTextDocumentReference(resource, href) {
-    return !isHtmlDocumentReference(resource, href) && !!(
-      util && typeof util.isDocumentKindByExtension === 'function' &&
-      util.isDocumentKindByExtension(null, resource, href, 'text')
-    );
-  }
-
-  function isPdfDocumentReference(resource, href) {
-    return !!(util && typeof util.isDocumentKindByExtension === 'function' &&
-      util.isDocumentKindByExtension(null, resource, href, 'pdf'));
+    return !isHtmlDocumentReference(resource, href) && !!util.isDocumentKindByExtension(null, resource, href, 'text');
   }
 
   function isHtmlDocumentReference(resource, href) {
-    return !!(util && typeof util.isDocumentKindByExtension === 'function' &&
-      util.isDocumentKindByExtension(null, resource, href, 'html'));
-  }
-
-  function isDocumentLikeOpenTarget(node) {
-    var resource = getNodeResource(node);
-    var href;
-
-    if (!node || node.type !== 'Content') {
-      return false;
-    }
-
-    href = getTextOriginalHref(node, resource) ||
-      getOfficeOriginalHref(node, resource) ||
-      getDownloadUrl(node) ||
-      (resource && (resource.canonicalUri || resource.uri)) ||
-      '';
-
-    return isPdfDocumentReference(resource, href) ||
-      isOfficeDocumentReference(resource, href) ||
-      isHtmlDocumentReference(resource, href) ||
-      isTextDocumentReference(resource, href);
+    return !!util.isDocumentKindByExtension(null, resource, href, 'html');
   }
 
   function getTextViewerOpenUrl(href) {
@@ -1732,11 +1641,9 @@ wuwei.menu = wuwei.menu || {};
 
   function getOfficeOriginalHref(node, resource) {
     var uploadPath, uid, file;
-    if (wuwei.util && typeof wuwei.util.getResourceOriginalUri === 'function') {
-      uploadPath = wuwei.util.getResourceOriginalUri(node);
-      if (uploadPath) {
-        return uploadPath;
-      }
+    uploadPath = wuwei.util.getResourceOriginalUri(node);
+    if (uploadPath) {
+      return uploadPath;
     }
     if (resource && String(resource.kind || '').toLowerCase() === 'upload' && resource.id && resource.date) {
       file = String(resource.file || resource.filename || '').replace(/\\/g, '/').split('/').pop();
@@ -1749,8 +1656,7 @@ wuwei.menu = wuwei.menu || {};
   }
 
   function isOfficeDocumentReference(resource, href) {
-    return !!(util && typeof util.isDocumentKindByExtension === 'function' &&
-      util.isDocumentKindByExtension(null, resource, href, 'office'));
+    return !!util.isDocumentKindByExtension(null, resource, href, 'office');
   }
 
   function canOfficeViewerFetch(href) {
@@ -1820,7 +1726,7 @@ wuwei.menu = wuwei.menu || {};
       rights.owner ||
       nodeAudit.owner ||
       nodeAudit.createdBy ||
-      (wuwei.util && typeof wuwei.util.getCurrentUserId === 'function' ? wuwei.util.getCurrentUserId() : '') ||
+      wuwei.util.getCurrentUserId() ||
       ''
     ).trim();
   }
@@ -1857,7 +1763,7 @@ wuwei.menu = wuwei.menu || {};
     var fallback = '';
     var ext = '';
 
-    if (resource && wuwei.util && typeof wuwei.util.getResourceFile === 'function') {
+    if (resource) {
       file = wuwei.util.getResourceFile(resource, 'original');
     }
     if (file) {
@@ -1889,7 +1795,7 @@ wuwei.menu = wuwei.menu || {};
     var href = '';
     var base;
 
-    if (resource && wuwei.util && typeof wuwei.util.getResourceFileUri === 'function') {
+    if (resource) {
       href = wuwei.util.getResourceFileUri(resource, 'original', node);
     }
     if (!href) {
@@ -1997,9 +1903,7 @@ wuwei.menu = wuwei.menu || {};
     if (!group) {
       return null;
     }
-    reps = (model && typeof model.getGroupRepresentativeNodes === 'function')
-      ? model.getGroupRepresentativeNodes(group)
-      : [];
+    reps = model.getGroupRepresentativeNodes(group);
     return (reps && reps.length) ? reps[0] : null;
   }
 
@@ -2046,9 +1950,7 @@ wuwei.menu = wuwei.menu || {};
   }
 
   function groupSpineDefaults(type, visible) {
-    var defaults = (model && typeof model.groupStyleDefaults === 'function')
-      ? model.groupStyleDefaults(type)
-      : {};
+    var defaults = model.groupStyleDefaults(type);
     return {
       kind: defaults.kind,
       visible: visible,
@@ -2079,12 +1981,8 @@ wuwei.menu = wuwei.menu || {};
       nodes.push(node);
     }
 
-    if (typeof model.findGroupNodes === 'function') {
-      (model.findGroupNodes(group.id) || []).forEach(add);
-    }
-    if (typeof model.getGroupRepresentativeNodes === 'function') {
-      (model.getGroupRepresentativeNodes(group) || []).forEach(add);
-    }
+    (model.findGroupNodes(group.id) || []).forEach(add);
+    (model.getGroupRepresentativeNodes(group) || []).forEach(add);
     return nodes;
   }
 
@@ -2207,7 +2105,7 @@ wuwei.menu = wuwei.menu || {};
       return;
     }
 
-    if ('group' === target.kind && target.group && model && typeof model.translateGroupBy === 'function') {
+    if ('group' === target.kind && target.group) {
       model.translateGroupBy(target.group, dx, dy);
       return;
     }
@@ -2368,7 +2266,7 @@ wuwei.menu = wuwei.menu || {};
       if (!g) {
         return;
       }
-      var groupMembers = model.getGroupMembers ? model.getGroupMembers(g) : ((g && g.members) || []);
+      var groupMembers = model.getGroupMembers(g);
       groupMembers.forEach(function (member) {
         var nodeId = member && member.nodeId;
         if (nodeId && !existingItemByNodeId[nodeId]) {
@@ -2470,11 +2368,9 @@ wuwei.menu = wuwei.menu || {};
 
     page.groups.push(group);
     model.setGraphFromCurrentPage();
-    if (model && typeof model.placeGroupRepresentative === 'function') {
-      model.placeGroupRepresentative(group, { preserveAxisAnchor: false });
-      model.reflowGroupMembers(group, newType, preserveMetaGroup ? preserveMetaGroup.type : '');
-      model.setGraphFromCurrentPage();
-    }
+    model.placeGroupRepresentative(group, { preserveAxisAnchor: false });
+    model.reflowGroupMembers(group, newType, preserveMetaGroup ? preserveMetaGroup.type : '');
+    model.setGraphFromCurrentPage();
     clearSelectionState();
     closeContextMenu();
     draw.reRender();
@@ -2552,8 +2448,7 @@ wuwei.menu = wuwei.menu || {};
         return;
       }
 
-      if (node.groupRef && model && typeof model.findGroupById === 'function' &&
-        model.findGroupById(node.groupRef)) {
+      if (node.groupRef && model.findGroupById(node.groupRef)) {
         wuwei.edit.open(node, { editor: false, citation: false, cc: false });
       }
       else if (util.isNode(node)) {
@@ -2599,7 +2494,7 @@ wuwei.menu = wuwei.menu || {};
     }
     else if ('createContentsAxis' === method) {
       node = resolveContextTargetRecord(state.hoveredNode);
-      if (!node || !wuwei.contents || typeof wuwei.contents.createAxisGroup !== 'function') { return; }
+      if (!node) { return; }
 
       wuwei.contents.createAxisGroup('horizontal', node, { silent: false });
 
@@ -2611,9 +2506,7 @@ wuwei.menu = wuwei.menu || {};
       if (!node) { return; }
 
       var axisSpec = wuwei.menu.timeline.getTimelineTargetSpec(node);
-      if ((!axisSpec || !axisSpec.group) &&
-        wuwei.contents &&
-        typeof wuwei.contents.getContentTargetSpec === 'function') {
+      if (!axisSpec || !axisSpec.group) {
         axisSpec = wuwei.contents.getContentTargetSpec(node);
       }
       if (!axisSpec || !axisSpec.group) {
@@ -2621,9 +2514,7 @@ wuwei.menu = wuwei.menu || {};
         return;
       }
 
-      if (axisSpec.group.type === 'contents' &&
-        wuwei.edit.contents &&
-        typeof wuwei.edit.contents.openAxisProperties === 'function') {
+      if (axisSpec.group.type === 'contents') {
         wuwei.edit.contents.openAxisProperties(axisSpec.group);
       }
       else {
@@ -2636,17 +2527,17 @@ wuwei.menu = wuwei.menu || {};
     else if ('addContentsEntry' === method) {
       var entryDraft;
       node = resolveContextTargetRecord(state.hoveredNode);
-      if (!node || !wuwei.contents || typeof wuwei.contents.createEntryDraft !== 'function') { return; }
+      if (!node) { return; }
       entryDraft = wuwei.contents.createEntryDraft(node);
       closeContextMenu();
-      if (entryDraft && wuwei.edit && typeof wuwei.edit.open === 'function') {
+      if (entryDraft) {
         wuwei.edit.open(entryDraft, { pendingContentsEntry: true });
       }
       return;
     }
     else if ('copyContentsTarget' === method) {
       node = resolveContextTargetRecord(state.hoveredNode);
-      if (!node || !wuwei.contents || typeof wuwei.contents.copyTarget !== 'function') { return; }
+      if (!node) { return; }
       wuwei.log.savePrevious();
       if (wuwei.contents.copyTarget(node)) {
         wuwei.log.storeLog({ operation: 'copy' });
@@ -2657,7 +2548,7 @@ wuwei.menu = wuwei.menu || {};
 
     else if ('distributeContentsPageMarkers' === method) {
       node = resolveContextTargetRecord(state.hoveredNode);
-      if (!node || !wuwei.contents || typeof wuwei.contents.distributePageMarkers !== 'function') { return; }
+      if (!node) { return; }
       wuwei.log.savePrevious();
       if (wuwei.contents.distributePageMarkers(node)) {
         wuwei.log.storeLog({ operation: 'distributeContentsPageMarkers' });
@@ -2667,7 +2558,7 @@ wuwei.menu = wuwei.menu || {};
     }
     else if ('deleteContentsTarget' === method) {
       node = resolveContextTargetRecord(state.hoveredNode);
-      if (!node || !wuwei.contents || typeof wuwei.contents.deleteTarget !== 'function') { return; }
+      if (!node) { return; }
       wuwei.log.savePrevious();
       if (wuwei.contents.deleteTarget(node)) {
         wuwei.log.storeLog({ operation: 'delete' });
@@ -2688,22 +2579,20 @@ wuwei.menu = wuwei.menu || {};
       isContextGroup([resolveContextTargetRecord(state.hoveredNode)])) {
       node = resolveContextTargetRecord(state.hoveredNode);
       if (!node) { return; }
-      if (model && typeof model.copyGroup === 'function') {
-        wuwei.log.savePrevious();
-        var copiedGroupLog = model.copyGroup(node);
-        if (copiedGroupLog) {
-          wuwei.log.storeLog({ operation: 'copy' });
-          draw.reRender();
-        }
-        closeContextMenu();
-        return;
+      wuwei.log.savePrevious();
+      var copiedGroupLog = model.copyGroup(node);
+      if (copiedGroupLog) {
+        wuwei.log.storeLog({ operation: 'copy' });
+        draw.reRender();
       }
+      closeContextMenu();
+      return;
     }
     else if ('erase' === method) {
       node = resolveContextTargetRecord(state.hoveredNode);
       if (!node) { return; }
 
-      if (isWholeGroupEraseTarget(node) && model && typeof model.eraseGroup === 'function') {
+      if (isWholeGroupEraseTarget(node)) {
         wuwei.log.savePrevious();
         if (model.eraseGroup(node)) {
           wuwei.log.storeLog({ operation: 'erase' });
@@ -2728,36 +2617,30 @@ wuwei.menu = wuwei.menu || {};
           return;
         }
         wuwei.log.savePrevious();
-        if (wuwei.timeline && typeof wuwei.timeline.deleteAxisGroup === 'function' &&
-          wuwei.timeline.deleteAxisGroup(eraseTimelineSpec.group)) {
+        if (wuwei.timeline.deleteAxisGroup(eraseTimelineSpec.group)) {
           wuwei.log.storeLog({ operation: 'erase' });
         }
         closeContextMenu();
         return;
       }
 
-      if (wuwei.contents && typeof wuwei.contents.getContentTargetSpec === 'function' &&
-        typeof wuwei.contents.deleteTarget === 'function') {
-        var eraseContentsSpec = wuwei.contents.getContentTargetSpec(node);
-        if (eraseContentsSpec && eraseContentsSpec.group) {
-          wuwei.log.savePrevious();
-          if (wuwei.contents.deleteTarget(node)) {
-            wuwei.log.storeLog({ operation: 'erase' });
-          }
-          closeContextMenu();
-          return;
-        }
-      }
-
-      if (model && typeof model.erase === 'function') {
+      var eraseContentsSpec = wuwei.contents.getContentTargetSpec(node);
+      if (eraseContentsSpec && eraseContentsSpec.group) {
         wuwei.log.savePrevious();
-        if (model.erase([node])) {
+        if (wuwei.contents.deleteTarget(node)) {
           wuwei.log.storeLog({ operation: 'erase' });
-          draw.reRender();
         }
         closeContextMenu();
         return;
       }
+
+      wuwei.log.savePrevious();
+      if (model.erase([node])) {
+        wuwei.log.storeLog({ operation: 'erase' });
+        draw.reRender();
+      }
+      closeContextMenu();
+      return;
     }
     else if ('addTimelineSegmentFromPlayer' === method) {
       node = resolveContextTargetRecord(state.hoveredNode);
@@ -2835,9 +2718,7 @@ wuwei.menu = wuwei.menu || {};
     else if ('info' === method) {
       node = resolveContextTargetRecord(state.hoveredNode);
       if (!node || !node.id) { return; }
-      if (wuwei.contents &&
-        typeof wuwei.contents.isContentsPageNode === 'function' &&
-        wuwei.contents.isContentsPageNode(node)) {
+      if (wuwei.contents.isContentsPageNode(node)) {
         wuwei.menu.contents.openContentTargetInInfo(node);
         closeContextMenu();
         return;
@@ -2865,17 +2746,12 @@ wuwei.menu = wuwei.menu || {};
       node = resolveContextTargetRecord(state.hoveredNode);
       if (!node || !node.id) { return; }
 
-      var contentsSpecForInfo = wuwei.contents && typeof wuwei.contents.getContentTargetSpec === 'function'
-        ? wuwei.contents.getContentTargetSpec(node)
-        : null;
+      var contentsSpecForInfo = wuwei.contents.getContentTargetSpec(node);
       if (contentsSpecForInfo) {
-        if (contentsSpecForInfo.point &&
-          wuwei.menu && wuwei.menu.contents &&
-          typeof wuwei.menu.contents.openContentTargetInInfo === 'function') {
+        if (contentsSpecForInfo.point) {
           wuwei.menu.contents.openContentTargetInInfo(contentsSpecForInfo.point);
         }
-        else if (contentsSpecForInfo.group &&
-          wuwei.info && wuwei.info.contents && typeof wuwei.info.contents.openAxis === 'function') {
+        else if (contentsSpecForInfo.group) {
           wuwei.info.contents.openAxis(contentsSpecForInfo.group);
         }
         closeContextMenu();
@@ -2887,15 +2763,10 @@ wuwei.menu = wuwei.menu || {};
       if (!node || !node.id) { return; }
 
       function openPlayerError(message) {
-        if (wuwei.menu && wuwei.menu.snackbar && typeof wuwei.menu.snackbar.open === 'function') {
-          wuwei.menu.snackbar.open({
-            type: 'error',
-            message: message || 'Video player is not available.'
-          });
-        }
-        else {
-          window.alert(message || 'Video player is not available.');
-        }
+        wuwei.menu.snackbar.open({
+          type: 'error',
+          message: message || 'Video player is not available.'
+        });
       }
 
       var timelineSpec = wuwei.menu.timeline.getTimelineTargetSpec(node);
@@ -2911,23 +2782,12 @@ wuwei.menu = wuwei.menu || {};
           return;
         }
 
-        if (window.wuwei && wuwei.menu && wuwei.menu.video && typeof wuwei.menu.video.open === 'function') {
-          opened = wuwei.menu.video.open(node, {});
-          if (opened === false) {
-            openPlayerError('Video player could not be opened.');
-          }
-          closeContextMenu();
-          return;
+        opened = wuwei.menu.video.open(node, {});
+        if (opened === false) {
+          openPlayerError('Video player could not be opened.');
         }
-
-        if (window.wuwei && wuwei.info && wuwei.info.video && typeof wuwei.info.video.openModal === 'function') {
-          opened = wuwei.info.video.openModal(node, {});
-          if (opened === false) {
-            openPlayerError('Video player could not be opened.');
-          }
-          closeContextMenu();
-          return;
-        }
+        closeContextMenu();
+        return;
       }
       catch (e) {
         console.error(e);
@@ -2945,7 +2805,7 @@ wuwei.menu = wuwei.menu || {};
       if (!node || !node.id) { return; }
 
       var contentsSpecForWindow = wuwei.contents.getContentTargetSpec(node);
-      if (contentsSpecForWindow && contentsSpecForWindow.point && wuwei.contents) {
+      if (contentsSpecForWindow && contentsSpecForWindow.point) {
         var contentsWindowUrl = wuwei.menu.contents.getContentTargetOpenUrl(contentsSpecForWindow.point);
         if (contentsWindowUrl) {
           wuwei.info.openWindow(contentsWindowUrl, null, 'width=900,height=680,noopener,resizable=yes,scrollbars=yes');
@@ -2980,7 +2840,7 @@ wuwei.menu = wuwei.menu || {};
       if (!node || !node.id) { return; }
 
       var contentsSpecForTab = wuwei.contents.getContentTargetSpec(node);
-      if (contentsSpecForTab && contentsSpecForTab.point && wuwei.contents) {
+      if (contentsSpecForTab && contentsSpecForTab.point) {
         var contentsTabUrl = wuwei.menu.contents.getContentTargetOpenUrl(contentsSpecForTab.point);
         if (contentsTabUrl) {
           wuwei.info.openNewTab(contentsTabUrl);
@@ -3032,8 +2892,7 @@ wuwei.menu = wuwei.menu || {};
       if (!node) { return; }
 
       var contentsHorizontalSpec = wuwei.contents.getContentTargetSpec(node);
-      if (contentsHorizontalSpec && contentsHorizontalSpec.group && wuwei.contents &&
-        typeof wuwei.contents.updateAxisGroup === 'function') {
+      if (contentsHorizontalSpec && contentsHorizontalSpec.group) {
         wuwei.contents.updateAxisGroup(contentsHorizontalSpec.group, {
           orientation: 'horizontal'
         });
@@ -3055,8 +2914,7 @@ wuwei.menu = wuwei.menu || {};
       if (!node) { return; }
 
       var contentsVerticalSpec = wuwei.contents.getContentTargetSpec(node);
-      if (contentsVerticalSpec && contentsVerticalSpec.group && wuwei.contents &&
-        typeof wuwei.contents.updateAxisGroup === 'function') {
+      if (contentsVerticalSpec && contentsVerticalSpec.group) {
         wuwei.contents.updateAxisGroup(contentsVerticalSpec.group, {
           orientation: 'vertical'
         });
@@ -3167,16 +3025,14 @@ wuwei.menu = wuwei.menu || {};
               if (!g || selectedGroupIds.indexOf(g.id) >= 0) {
                 return;
               }
-              groupMembers = model.getGroupMembers ? model.getGroupMembers(g) : (g.members || []);
+              groupMembers = model.getGroupMembers(g);
               g.members = groupMembers.filter(function (member) {
                 var nodeId = member && member.nodeId;
                 return nodeId && selectedIds.indexOf(nodeId) < 0;
               });
             });
           }
-          if (model && typeof model.pruneGroups === 'function') {
-            model.pruneGroups();
-          }
+          model.pruneGroups();
         }
         model.setGraphFromCurrentPage();
         clearSelectionState();
@@ -3301,7 +3157,7 @@ wuwei.menu = wuwei.menu || {};
       return;
     }
 
-    if (note && typeof note[method] === 'function') {
+    if (['namePage', 'copyPage', 'newPage', 'listPage'].includes(method)) {
       if ('namePage' === method) {
         note.namePage();
       }
@@ -3309,18 +3165,14 @@ wuwei.menu = wuwei.menu || {};
         note.copyPage();
         updateResetview('reset');
         draw.reRender();
-        if (note && typeof note.updatePageThumbnail === 'function') {
-          note.updatePageThumbnail();
-        }
+        note.updatePageThumbnail();
         refreshPagenation();
       }
       else if ('newPage' === method) {
         note.newPage();
         updateResetview('reset');
         draw.reRender();
-        if (note && typeof note.updatePageThumbnail === 'function') {
-          note.updatePageThumbnail();
-        }
+        note.updatePageThumbnail();
         refreshPagenation();
       }
       else if ('listPage' === method) {
@@ -3449,9 +3301,7 @@ wuwei.menu = wuwei.menu || {};
       if (keepSelecting) {
         common.state.Selecting = true;
         document.getElementById('wuwei').classList.add('flock-operation');
-        if (draw && typeof draw.renderSelectionMarks === 'function') {
-          draw.renderSelectionMarks();
-        }
+        draw.renderSelectionMarks();
       }
       else {
         common.state.Selecting = false;
@@ -4061,14 +3911,11 @@ wuwei.menu = wuwei.menu || {};
     if (util.isEmpty(target)) {
       return null;
     }
-    if (!wuwei.contents || typeof wuwei.contents.getContentTargetSpec !== 'function') {
-      return null;
-    }
     return wuwei.contents.getContentTargetSpec(target);
   }
 
   function isRepresentativeTopic(node) {
-    return !!(node && model && typeof model.isRepresentativeTopic === 'function' && model.isRepresentativeTopic(node));
+    return !!(node && model.isRepresentativeTopic(node));
   }
 
   function isContextGroup(allNodes) {
@@ -4082,8 +3929,6 @@ wuwei.menu = wuwei.menu || {};
   function isRepresentativeGroupEraseTarget(target) {
     return !!(
       target &&
-      model &&
-      typeof model.isRepresentativeTopic === 'function' &&
       model.isRepresentativeTopic(target) &&
       target.groupRef
     );
@@ -4120,7 +3965,7 @@ wuwei.menu = wuwei.menu || {};
   }
 
   function deleteGroupTarget(target) {
-    if (!target || !isWholeGroupEraseTarget(target) || !model || typeof model.eraseGroup !== 'function') {
+    if (!target || !isWholeGroupEraseTarget(target)) {
       return false;
     }
 
@@ -4139,14 +3984,14 @@ wuwei.menu = wuwei.menu || {};
     var selectedGroupIds = getEffectiveSelectedGroupIds(page);
     var deletedIds = [];
 
-    if (!selectedGroupIds.length || !model || typeof model.eraseGroup !== 'function') {
+    if (!selectedGroupIds.length) {
       state.deletedGroupIds = [];
       return false;
     }
 
     wuwei.log.savePrevious();
     selectedGroupIds.forEach(function (groupId) {
-      var group = model.findGroupById ? model.findGroupById(groupId) : null;
+      var group = model.findGroupById(groupId);
       if (group && model.eraseGroup(group)) {
         deletedIds.push({ id: groupId, type: 'Group' });
       }
@@ -4185,12 +4030,28 @@ wuwei.menu = wuwei.menu || {};
 
   function isContextDocumentLikeContent(allNodes) {
     var target = getContextTarget(allNodes);
+    var resource;
+    var href;
+
+    if (!target || target.type !== 'Content' || getContextTimelineSpec(allNodes)) {
+      return false;
+    }
+
+    resource = getNodeResource(target);
+    href = getTextOriginalHref(target, resource) ||
+      getOfficeOriginalHref(target, resource) ||
+      getDownloadUrl(target) ||
+      (resource && (resource.canonicalUri || resource.uri)) ||
+      '';
+
     return !!(
-      target &&
-      target.type === 'Content' &&
-      !getContextTimelineSpec(allNodes) &&
-      !getContextContentsSpec(allNodes) &&
-      isDocumentLikeOpenTarget(target)
+      util.isDocumentKindByExtension(null, resource, href, 'pdf') ||
+      util.isDocumentKindByExtension(null, resource, href, 'office') ||
+      util.isDocumentKindByExtension(null, resource, href, 'html') ||
+      (
+        !util.isDocumentKindByExtension(null, resource, href, 'html') &&
+        util.isDocumentKindByExtension(null, resource, href, 'text')
+      )
     );
   }
 
@@ -4220,18 +4081,7 @@ wuwei.menu = wuwei.menu || {};
   function hasAttachedTimelineGroup(target) {
     return !!(
       target &&
-      wuwei.timeline &&
-      typeof wuwei.timeline.hasAttachedTimelineGroup === 'function' &&
       wuwei.timeline.hasAttachedTimelineGroup(target)
-    );
-  }
-
-  function hasAttachedContentsGroup(target) {
-    return !!(
-      target &&
-      wuwei.contents &&
-      typeof wuwei.contents.hasAttachedContentsGroup === 'function' &&
-      wuwei.contents.hasAttachedContentsGroup(target)
     );
   }
 
@@ -4263,8 +4113,6 @@ wuwei.menu = wuwei.menu || {};
     var target = getContextTarget(allNodes);
     return !!(
       target &&
-      wuwei.contents &&
-      typeof wuwei.contents.isContentsRepresentativeNode === 'function' &&
       wuwei.contents.isContentsRepresentativeNode(target)
     );
   }
@@ -4276,34 +4124,6 @@ wuwei.menu = wuwei.menu || {};
 
   function isContextContentsTarget(allNodes) {
     return !!getContextContentsSpec(allNodes);
-  }
-
-  function isContextContentTargetContent(allNodes) {
-    var target = getContextTarget(allNodes);
-    var isContentTarget;
-
-    if (!target || target.type !== 'Content') {
-      return false;
-    }
-
-    /*
-     * Contents can be attached to a document Content even when the Content is
-     * already a member of a generic simple / horizontal / vertical group.
-     * Document kind is resolved from the original file extension, not from
-     * MIME metadata, because local upload processing may not provide mimeType.
-     */
-    isContentTarget = !!(
-      wuwei.contents &&
-      typeof wuwei.contents.isContentTargetResourceNode === 'function' &&
-      wuwei.contents.isContentTargetResourceNode(target)
-    ) || isDocumentLikeOpenTarget(target);
-
-    return !!(
-      isContentTarget &&
-      !getContextTimelineSpec(allNodes) &&
-      !getContextContentsSpec(allNodes) &&
-      !hasAttachedContentsGroup(target)
-    );
   }
 
   function getContextGroupFromTarget(target, timelineSpec, contentsSpec) {
@@ -4321,13 +4141,13 @@ wuwei.menu = wuwei.menu || {};
     if (target.type === 'Group' && target.groupRef) {
       return model.findGroupById(target.groupRef) || target;
     }
-    if (target.groupRef && model && typeof model.findGroupById === 'function') {
+    if (target.groupRef) {
       group = model.findGroupById(target.groupRef);
       if (group) {
         return group;
       }
     }
-    if (target.id && model && typeof model.findGroupsByNodeId === 'function') {
+    if (target.id) {
       group = model.findGroupsByNodeId(target.id)[0];
       if (group) {
         return group;
@@ -4581,13 +4401,12 @@ wuwei.menu = wuwei.menu || {};
         var resource = getNodeResource(node);
         ref = String(getDownloadUrl(node) || resource.canonicalUri || resource.uri || '').toLowerCase();
 
-        isImageOrPdf = !!(util && typeof util.isDocumentKindByExtension === 'function' && (
+        isImageOrPdf = !!(
           util.isDocumentKindByExtension(node, resource, ref, 'image') ||
           util.isDocumentKindByExtension(node, resource, ref, 'pdf')
-        ));
+        );
 
-        isOffice = !!(util && typeof util.isDocumentKindByExtension === 'function' &&
-          util.isDocumentKindByExtension(node, resource, ref, 'office'));
+        isOffice = !!util.isDocumentKindByExtension(node, resource, ref, 'office');
 
         return isUploadedContent(allNodes) || isImageOrPdf || isOffice;
       },
@@ -5227,7 +5046,7 @@ wuwei.menu = wuwei.menu || {};
       function (allNodes) {
         return !state.Selecting &&
           !state.Connecting &&
-          isContextContentTargetContent(allNodes);
+          isContextDocumentLikeContent(allNodes);
       },
       null,
       'fa fa-comment fa-lg fa-fw'
@@ -5364,9 +5183,7 @@ wuwei.menu = wuwei.menu || {};
         settinIgcon.style.display = 'none';
         // shareIcon.style.display = 'block';
         wuwei.menu.setting.close();
-        if (draw && typeof draw.refresh === 'function') {
-          draw.refresh();
-        }
+        draw.refresh();
         break;
       case 'view':
         drawIcon.setAttribute('class', 'far fa-square');
@@ -5374,9 +5191,7 @@ wuwei.menu = wuwei.menu || {};
         searchIcon.classList.remove('simulation');
         settinIgcon.style.display = 'none';
         // shareIcon.style.display = 'none';
-        if (draw && typeof draw.refresh === 'function') {
-          draw.refresh();
-        }
+        draw.refresh();
         break;
       case 'simulation':
         drawIcon.setAttribute('class', 'fas fa-expand-arrows-alt');
@@ -5384,9 +5199,7 @@ wuwei.menu = wuwei.menu || {};
         searchIcon.classList.add('simulation');
         settinIgcon.style.display = 'block';
         // shareIcon.style.display = 'none';
-        if (draw && typeof draw.restart === 'function') {
-          draw.restart();
-        }
+        draw.restart();
         break;
     }
   }
@@ -5636,36 +5449,16 @@ wuwei.menu = wuwei.menu || {};
     // // share_mode
     // registerClick('#share_mode', shareClicked);
 
-    if (wuwei.menu.login && typeof wuwei.menu.login.initModule === 'function') {
-      wuwei.menu.login.initModule();
-    }
-    if (wuwei.menu.modal && typeof wuwei.menu.modal.initModule === 'function') {
-      wuwei.menu.modal.initModule();
-    }
-    if (wuwei.menu.note && typeof wuwei.menu.note.initModule === 'function') {
-      wuwei.menu.note.initModule();
-    }
-    if (wuwei.menu.page && typeof wuwei.menu.page.initModule === 'function') {
-      wuwei.menu.page.initModule();
-    }
-    if (wuwei.menu.pagination && typeof wuwei.menu.pagination.initModule === 'function') {
-      wuwei.menu.pagination.initModule();
-    }
-    if (wuwei.menu.setting && typeof wuwei.menu.setting.initModule === 'function') {
-      wuwei.menu.setting.initModule();
-    }
-    if (wuwei.menu.timeline && typeof wuwei.menu.timeline.initModule === 'function') {
-      wuwei.menu.timeline.initModule();
-    }
-    if (wuwei.menu.contents && typeof wuwei.menu.contents.initModule === 'function') {
-      wuwei.menu.contents.initModule();
-    }
-    if (wuwei.menu.upload && typeof wuwei.menu.upload.initModule === 'function') {
-      wuwei.menu.upload.initModule();
-    }
-    if (wuwei.menu.video && typeof wuwei.menu.video.initModule === 'function') {
-      wuwei.menu.video.initModule();
-    }
+    wuwei.menu.login.initModule();
+    wuwei.menu.modal.initModule();
+    wuwei.menu.note.initModule();
+    wuwei.menu.page.initModule();
+    wuwei.menu.pagination.initModule();
+    wuwei.menu.setting.initModule();
+    wuwei.menu.timeline.initModule();
+    wuwei.menu.contents.initModule();
+    wuwei.menu.upload.initModule();
+    wuwei.menu.video.initModule();
   };
 
   /** context menu */
