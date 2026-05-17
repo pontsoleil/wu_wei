@@ -1,13 +1,9 @@
-#edit {
-  height: 100%;
-}
-
 #edit-generic {
   padding: 8px;
 }
 
 #edit-generic .edit {
-  margin-top: 50px;
+  margin-top: 8px;
 }
 
 #edit-generic .edit .frame img {

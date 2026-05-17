@@ -74,7 +74,7 @@ wuwei.edit.group.markup = (function () {
     return `
 <form id="editform" class="group form-group content">
   <div class="w3-row">
-    <textarea id="description_body" name="description.body" class="w3-col s12 edit-value" rows="4" placeholder="${t('Description')}">${esc(description.body)}</textarea>
+    <textarea id="description_body" name="description.body" class="w3-col s12 edit-value" rows="1" placeholder="${t('Description')}">${esc(description.body)}</textarea>
   </div>
   <div class="w3-row">
     <label class="w3-col s6"><input type="checkbox" id="visible" name="visible" class="edit-value"${checked(group && group.visible)}> ${t('Visible')}</label>

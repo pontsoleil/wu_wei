@@ -54,7 +54,7 @@
 }
 
 .edit-field textarea {
-  min-height: 96px;
+  min-height: 2.2em;
   resize: vertical;
 }
 
@@ -165,7 +165,7 @@
 }
 
 #edit-timeline-point .edit-field>textarea {
-  min-height: 6em;
+  min-height: 2.2em;
 }
 
 /* preview 行は縦のままにする */

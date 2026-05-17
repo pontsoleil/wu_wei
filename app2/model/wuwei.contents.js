@@ -45,7 +45,6 @@ wuwei.contents = wuwei.contents || {};
     return common && common.current ? common.current.page || null : null;
   }
 
-
   function isGenericGroup(group) {
     return !!(group && (
       group.type === 'simple' ||
@@ -132,9 +131,25 @@ wuwei.contents = wuwei.contents || {};
 
   function isHtmlResourceNode(node) {
     var resource = (node && node.resource && typeof node.resource === 'object') ? node.resource : {};
-    return !!(node && node.type === 'Content' && util &&
-      typeof util.isDocumentKindByExtension === 'function' &&
-      util.isDocumentKindByExtension(node, resource, '', 'html'));
+    var media = (resource.media && typeof resource.media === 'object') ? resource.media : {};
+    var kind = String(resource.kind || resource.type || '').toLowerCase();
+    var subtype = String(resource.subtype || '').toLowerCase();
+    var mediaKind = String(media.kind || '').toLowerCase();
+
+    return !!(node && node.type === 'Content' && (
+      (util && typeof util.isDocumentKindByExtension === 'function' &&
+        util.isDocumentKindByExtension(node, resource, '', 'html')) ||
+      kind === 'html' ||
+      kind === 'web' ||
+      kind === 'webpage' ||
+      kind === 'website' ||
+      subtype === 'html' ||
+      subtype === 'web' ||
+      subtype === 'webpage' ||
+      mediaKind === 'html' ||
+      mediaKind === 'web' ||
+      mediaKind === 'webpage'
+    ));
   }
 
   function isHtmlContentsGroup(group) {
@@ -157,13 +172,15 @@ wuwei.contents = wuwei.contents || {};
     /*
      * Contents target detection is based on file extension.  mimeType is
      * retained only as reference information and is not used to decide whether
-     * a Content can have PageMarkers.
+     * a Content can have PageMarkers.  Extensionless web-page resources are
+     * allowed when their resource kind explicitly identifies them as HTML/web.
      */
     return !!(node && node.type === 'Content' && (
       kind === 'pdf' ||
       kind === 'office' ||
       kind === 'html' ||
       kind === 'text' ||
+      isHtmlResourceNode(node) ||
       hasContentTargets
     ));
   }
@@ -248,6 +265,7 @@ wuwei.contents = wuwei.contents || {};
     if (!Number.isFinite(value)) { value = 1; }
     return Math.max(1, value + getPageNumberOffset(group));
   }
+
   function isAutomaticPageMarkerLabel(label, oldPageNumber) {
     var value = String(label || '').trim();
     if (!value) { return true; }
@@ -517,7 +535,6 @@ wuwei.contents = wuwei.contents || {};
     }
     return representative || null;
   }
-
 
   function getLinkSourceId(link) {
     if (!link) { return ''; }
@@ -807,7 +824,6 @@ wuwei.contents = wuwei.contents || {};
     var n = Number(value);
     return Number.isFinite(n) ? n : fallback;
   }
-
 
   function normalizeNodeShapeForContents(value, fallback) {
     var shape = String(value || fallback || '').toUpperCase();
@@ -1476,7 +1492,7 @@ wuwei.contents = wuwei.contents || {};
       normalizeAllAxisGroups(page);
     }
     model.setGraphFromCurrentPage();
-    wuwei.draw.redraw();
+    wuwei.draw.reRender();
   }
 
   function getDragBounds(group, pageNode) {
@@ -2382,5 +2398,4 @@ wuwei.contents = wuwei.contents || {};
   ns.getContentTargetViewerUrl = getDocumentViewerUrl;
   ns.getDocumentViewerUrl = getDocumentViewerUrl;
 })(wuwei.contents);
-// wuwei.contents.js
 // wuwei.contents.js last modified 2026-05-11

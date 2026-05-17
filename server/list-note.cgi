@@ -404,6 +404,7 @@ fi
       printf '"user_id":"%s",' "$(printf '%s' "$note_user_id" | json_escape)"
       printf '"note_name":"%s",' "$(printf '%s' "$note_name" | json_escape)"
       printf '"dir":"%s",' "$(printf '%s' "$dir" | json_escape)"
+      printf '"note_key":"%s",' "$(printf '%s' "$dir" | json_escape)"
       printf '"size":%s,' "${size:-0}"
       printf '"timestamp":"%s",' "$(printf '%s' "$timestamp" | json_escape)"
       printf '"file":"%s",' "$(printf '%s' "$file" | json_escape)"

@@ -313,20 +313,20 @@ wuwei.edit.uploaded.markup = ( function () {
   </div>
   ${node.label || 'PageMarker' === node.type || 'Segment' === node.type || 'Topic' === node.type || 'Content' === node.type
     ? `<div class="w3-row" id="style_label_width-row">
-        <label for="style_label_width" class="w3-col s4">${t('Label width')}</label>  
-        <input type="number" id="style_label_width" name="style.label.width" value="${labelStyleWidth}" class="w3-col s8 edit-value" min="1" step="1">
+        <label for="style_label_width" class="w3-col s6">${t('Label width')}</label>  
+        <input type="number" id="style_label_width" name="style.label.width" value="${labelStyleWidth}" class="w3-col s6 edit-value" min="1" step="1">
       </div>
       <div class="w3-row" id="style_label_lines-row">
-        <label for="style_label_lines" class="w3-col s4">${t('Label lines')}</label>  
-        <input type="number" id="style_label_lines" name="style.label.lines" value="${labelStyleLines}" class="w3-col s8 edit-value" min="1" step="1">
+        <label for="style_label_lines" class="w3-col s6">${t('Label lines')}</label>  
+        <input type="number" id="style_label_lines" name="style.label.lines" value="${labelStyleLines}" class="w3-col s6 edit-value" min="1" step="1">
       </div>
       <div class="w3-row" id="style_label_offset_x-row">
-        <label for="style_label_offset_x" class="w3-col s4">${t('Label offset X')}</label>  
-        <input type="number" id="style_label_offset_x" name="style.label.offset.x" value="${labelOffsetX}" class="w3-col s8 edit-value" step="1">
+        <label for="style_label_offset_x" class="w3-col s6">${t('Label offset X')}</label>  
+        <input type="number" id="style_label_offset_x" name="style.label.offset.x" value="${labelOffsetX}" class="w3-col s6 edit-value" step="1">
       </div>
       <div class="w3-row" id="style_label_offset_y-row">
-        <label for="style_label_offset_y" class="w3-col s4">${t('Label offset Y')}</label>  
-        <input type="number" id="style_label_offset_y" name="style.label.offset.y" value="${labelOffsetY}" class="w3-col s8 edit-value" step="1">
+        <label for="style_label_offset_y" class="w3-col s6">${t('Label offset Y')}</label>  
+        <input type="number" id="style_label_offset_y" name="style.label.offset.y" value="${labelOffsetY}" class="w3-col s6 edit-value" step="1">
       </div>`
     : ''
   }

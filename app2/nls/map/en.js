@@ -79,7 +79,7 @@ wuwei.nls.EN = {
   'Segment properties': 'Segment properties',
   'Edit segment from player': 'Edit segment from player',
   'Delete segment': 'Delete segment',
-  'Info Timeline Segment': 'Timeline info',
+  'Info Timeline': 'Timeline info',
   'SelectAll': 'Select all',
   'Show All Memo': 'Show all memos',
   'Hide All Memo': 'Hide all memos',

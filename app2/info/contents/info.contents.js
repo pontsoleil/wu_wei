@@ -302,7 +302,10 @@ wuwei.info.contents = wuwei.info.contents || {};
       point: spec.point,
       axisName: spec.group ? (spec.group.name || spec.group.id) : '',
       documentName: getDocumentName(spec),
-      pageNumber: spec.pageNumber
+      pageNumber: spec.pageNumber,
+      viewerUri: spec.documentNode && contents && typeof contents.getContentTargetViewerUrl === 'function'
+        ? contents.getContentTargetViewerUrl(spec.documentNode, spec.pageNumber, spec.point)
+        : ''
     });
     pane.style.display = 'block';
     return true;

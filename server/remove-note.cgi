@@ -98,28 +98,61 @@ valid_simple_id() {
   esac
 }
 
+valid_note_key() {
+  case "$1" in
+    ''|/*|*..*|*//*|ERROR*) return 1 ;;
+    *[!A-Za-z0-9._/-]*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
 find_note_target() {
   root=$1
   nid=$2
+  note_key=${3:-}
+  found=
+  count=
 
+  # Preferred path: delete the exact note directory selected in the list.
+  # list-note.cgi returns this as "note_key" (for example: YYYY/MM/DD/{note_id}).
+  # "dir" is accepted only for backward compatibility.
+  if [ -n "$note_key" ]; then
+    case "$note_key" in
+      */note.json) note_key=${note_key%/note.json} ;;
+    esac
+    key_base=$(basename "$note_key")
+    if [ -n "$nid" ] && [ "$key_base" != "$nid" ]; then
+      return 1
+    fi
+    if [ -d "$root/$note_key" ] && [ -f "$root/$note_key/note.json" ]; then
+      printf '%s\n' "$root/$note_key"
+      return 0
+    fi
+    return 1
+  fi
+
+  # Backward-compatible fallback for old callers that send only id.
   if [ -d "$root/$nid" ] || [ -f "$root/$nid" ]; then
     printf '%s\n' "$root/$nid"
     return 0
   fi
 
-  found=$(find "$root" \( -type d -o -type f \) -name "$nid" -print 2>/dev/null | head -n 1)
-  if [ -n "$found" ]; then
-    printf '%s\n' "$found"
-    return 0
-  fi
+  found=$(find "$root" -type d -name "$nid" -exec test -f '{}/note.json' \; -print 2>/dev/null || true)
+  count=$(printf '%s\n' "$found" | sed '/^$/d' | wc -l | tr -d '[:space:]')
 
-  found=$(find "$root" -type f -name note.json -path "*/$nid/note.json" -print 2>/dev/null | head -n 1)
-  if [ -n "$found" ]; then
-    dirname "$found"
-    return 0
-  fi
-
-  return 1
+  case "$count" in
+    0)
+      return 1
+      ;;
+    1)
+      printf '%s\n' "$found"
+      return 0
+      ;;
+    *)
+      # Ambiguous id/name.  Do not guess with head -n 1.
+      return 2
+      ;;
+  esac
 }
 
 read_request_params
@@ -137,13 +170,31 @@ note_id=$(nameread id "$CGIVARS" | strip_quotes || true)
 [ -n "${note_id:-}" ] || note_id=$(raw_param id)
 valid_simple_id "$note_id" || error_response 'ERROR INVALID NOTE'
 
+note_key=$(nameread note_key "$CGIVARS" | strip_quotes || true)
+[ -n "${note_key:-}" ] || note_key=$(nameread dir "$CGIVARS" | strip_quotes || true)
+[ -n "${note_key:-}" ] || note_key=$(nameread path "$CGIVARS" | strip_quotes || true)
+[ -n "${note_key:-}" ] || note_key=$(raw_param note_key)
+[ -n "${note_key:-}" ] || note_key=$(raw_param dir)
+[ -n "${note_key:-}" ] || note_key=$(raw_param path)
+if [ -n "${note_key:-}" ]; then
+  valid_note_key "$note_key" || error_response 'ERROR INVALID NOTE KEY'
+fi
+
 note_dir=$(resolve_env_path note "$user_id" || true)
 trash_base=$(resolve_env_path trash "$user_id" || true)
 [ -n "${note_dir:-}" ] || error_response 'ERROR NOTE DIRECTORY NOT DEFINED'
 [ -n "${trash_base:-}" ] || error_response 'ERROR TRASH DIRECTORY NOT DEFINED'
 [ -d "$note_dir" ] || error_response 'ERROR NOTE DIRECTORY NOT FOUND'
 
-note=$(find_note_target "$note_dir" "$note_id" || true)
+set +e
+note=$(find_note_target "$note_dir" "$note_id" "$note_key")
+rc=$?
+set -e
+case "$rc" in
+  0) ;;
+  2) error_response 'ERROR NOTE ID NOT UNIQUE' ;;
+  *) error_response 'ERROR NOTE NOT FOUND' ;;
+esac
 [ -n "${note:-}" ] && [ -e "$note" ] || error_response 'ERROR NOTE NOT FOUND'
 
 case "$note" in

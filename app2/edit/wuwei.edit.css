@@ -1,11 +1,13 @@
+/* 
 #edit {
   position: fixed;
-  top: 0;
-  right: 0;
-  width: 280px;
-  height: 100%;
+  top: 8px;
+  right: 8px;
+  width: 320px;
+  height: auto;
+  max-height: calc(100vh - 16px);
   padding: 4px;
-  margin: 4px;
+  margin: 0;
   background: #fcfdfe;
           box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
   -webkit-box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
@@ -15,9 +17,90 @@
   cursor: default;
   z-index: 20;
 }
+
 #edit.widen {
   width: 420px;
 }
+
+#edit>header {
+  position: sticky;
+  top: 0;
+  right: auto;
+  width: auto;
+  min-height: 76px;
+  margin: -4px -4px 0 -4px;
+  color: #808080;
+  background-image: linear-gradient(to bottom right,#efefef , #fcfdfe);
+  z-index: 1;
+}
+
+#edit.widen>header {
+  width: auto;
+}
+*/
+
+#edit {
+  position: fixed;
+  top: 8px;
+  right: 8px;
+  bottom: auto;
+  left: auto;
+
+  width: 280px;
+  height: auto;
+  max-height: calc(100vh - 16px);
+
+  padding: 4px;
+  margin: 0;
+  background: #fcfdfe;
+  box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+  -webkit-box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+  -moz-box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+  -ms-box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
+
+  overflow: hidden;
+  cursor: default;
+  z-index: 20;
+  box-sizing: border-box;
+}
+
+#edit.widen {
+  width: 420px;
+}
+
+#edit > header {
+  position: sticky;
+  top: 0;
+  right: auto;
+  width: 100%;
+  box-sizing: border-box;
+  color: #808080;
+  background-image: linear-gradient(to bottom right, #efefef, #fcfdfe);
+
+  z-index: 1;
+}
+
+#edit.widen > header {
+  width: 100%;
+}
+
+#edit-generic,
+#edit-group,
+#edit-link,
+#edit-uploaded,
+#edit-video,
+#edit-contents,
+#edit-timeline {
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+}
+
+#edit .content {
+  margin-top: 8px;
+}
+
+
+
 #edit * {
   /* disable selection */
   -webkit-touch-callout: none;
@@ -27,47 +110,44 @@
   -ms-user-select: none;
   user-select: none;
 }
+
 #editWiden {
   position: absolute;
   top: 44px;
   left: 29px;
 }
+
 #editDismiss {
   position: absolute;
   top: 16px;
   right: 12px;
 }
+
 #infoOpen {
   position: absolute;
   top: 16px;
   right: 32px;
 }
-#edit>header {
-  position: fixed;
-  top: 4px;
-  right: 4px;
-  width: 280px;
-  /* background: #f2f3f4; */
-  color: #808080;
-  background-image: linear-gradient(to bottom right,#efefef , #fcfdfe);
-  z-index: 1;
-}
-#edit.widen>header {
-  width: 420px;
-}
+
+
+
 #edit-generic,
 #edit-group {
   padding: 8px;
 }
+
 #edit header h2:hover #editIcon {
   display: none;
 }
+
 #edit header h2 #editSave {
   display: none;
 }
+
 #edit header h2:hover #editSave {
   display: inline-block;
 }
+
 #editOpen {
   position: absolute;
   top: 16px;
@@ -83,6 +163,7 @@
   -webkit-transition: all 0.3s ease-in;
   transition: all 0.3s ease-in;
 }
+
 #edit .fa:hover,
 #edit .fas:hover,
 #edit .fab:hover,
@@ -94,7 +175,7 @@
 }
 
 #edit .content {
-  margin-top: 50px;
+  margin-top: 8px;
 }
 
 #edit input,

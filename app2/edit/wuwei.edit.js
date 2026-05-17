@@ -564,7 +564,6 @@ wuwei.edit = wuwei.edit || {};
     syncNodeRuntimeMirrors(node, path, value);
   }
 
-
   function sanitizeContentPageRange(node) {
     var contents, min, max;
     if (!node || node.type !== 'Content' || !node.resource || !node.resource.contents) {
@@ -1052,7 +1051,6 @@ wuwei.edit = wuwei.edit || {};
     root.addEventListener('click', handleEditPaneClickEvent, false);
   }
 
-
   function getRenderedNodeCenter(node) {
     var el, transform, matrix, match;
     if (!node || !node.id) {
@@ -1106,24 +1104,27 @@ wuwei.edit = wuwei.edit || {};
     handleEditPaneValueEvent(event);
   }
 
-
-  // see https://gomakethings.com/automatically-expand-a-textarea-as-the-user-types-using-vanilla-javascript/
   function autoExpand(field) {
-    if (!field || !field.style) {
+    var text;
+    var rows;
+    var minRows;
+    var maxRows;
+
+    if (!field) {
       return;
     }
-    // Reset field height
-    field.style.height = 'inherit';
-    // Get the computed styles for the element
-    var computed = window.getComputedStyle(field);
-    // Calculate the height
-    var height = parseInt(computed.getPropertyValue('border-top-width'), 10)
-      + parseInt(computed.getPropertyValue('padding-top'), 10)
-      + field.scrollHeight
-      + parseInt(computed.getPropertyValue('padding-bottom'), 10)
-      + parseInt(computed.getPropertyValue('border-bottom-width'), 10);
-    field.style.height = height + 'px';
-  };
+
+    text = String(field.value || '');
+    minRows = Number(field.getAttribute('data-min-rows') || 1);
+    maxRows = Number(field.getAttribute('data-max-rows') || 16);
+
+    rows = text.split(/\r\n|\r|\n/).length;
+    rows = Math.max(minRows, rows);
+    rows = Math.min(maxRows, rows);
+
+    field.rows = rows;
+    field.style.height = null;
+  }
 
   function refreshTemplate(param) {
     return new Promise((resolve, reject) => {
@@ -1131,7 +1132,7 @@ wuwei.edit = wuwei.edit || {};
       // open
       var editPane = document.getElementById('edit');
       editPane.innerHTML = wuwei.edit.markup.template();
-    bindEditPaneValueEvents(editPane);
+      bindEditPaneValueEvents(editPane);
       editPane.style.display = 'block';
       hideEdits();
 
@@ -1157,20 +1158,27 @@ wuwei.edit = wuwei.edit || {};
       else if (param.link && param.link.id) {
         resolve(wuwei.edit.link.open(param));
       }
-      else if (param.node && param.node.topicKind === 'contents-page' &&
-        wuwei.edit.contents && typeof wuwei.edit.contents.openPageMarker === 'function') {
-        resolve(wuwei.edit.contents.openPageMarker(param));
-      }
+
       else if (param.node && ['Topic', 'Memo'].includes(param.node.type)) {
         resolve(wuwei.edit.generic.open(param));
       }
-      else if (isUploadedContentNode(param.node)) {
-        resolve(wuwei.edit.uploaded.open(param));
+      else if (param.node && param.node.topicKind === 'contents-page') {
+        resolve(wuwei.edit.contents.openPageMarker(param));
       }
-      else if ('video' === param.node.option ||
-        (wuwei.video && typeof wuwei.video.isVideoNode === 'function' && wuwei.video.isVideoNode(param.node))) {
+      else if (param.node && (
+        'video' === param.node.option ||
+        (param.node.resource.media  && param.node.resource.media.kind && 'video' == param.node.resource.media.kind) ||
+        wuwei.video.isVideoNode(param.node)
+      )) {
         param.node.option = 'video';
         resolve(wuwei.edit.video.open(param));
+      }
+      // else if(param.node && param.node.resource  && param.node.resource.media  && param.node.resource.media.kind && 
+      //   'document' == param.node.resource.media.kind) {
+      //   resolve(wuwei.edit.contents.open(param))
+      // }
+      else if (isUploadedContentNode(param.node)) {
+        resolve(wuwei.edit.uploaded.open(param));
       }
       else {
         resolve(wuwei.edit.generic.open(param));
@@ -1286,7 +1294,7 @@ wuwei.edit = wuwei.edit || {};
     }
     if (editPane && wuwei.edit.markup && typeof wuwei.edit.markup.template === 'function') {
       editPane.innerHTML = wuwei.edit.markup.template();
-    bindEditPaneValueEvents(editPane);
+      bindEditPaneValueEvents(editPane);
       editPane.style.display = 'block';
     }
     if (openControls) {
@@ -1305,16 +1313,11 @@ wuwei.edit = wuwei.edit || {};
 
   function open(node, option, cb) {
     if (node && node.id) {
-      if (util.isLink(node) && model && typeof model.findLinkById === 'function') {
+      if (util.isLink(node)) {
         node = model.findLinkById(node.id) || node;
       }
-      else if (model) {
-        if (typeof model.findNodeById === 'function') {
-          node = model.findNodeById(node.id) || node;
-        }
-        else if (typeof model.findLinkById === 'function') {
-          node = model.findLinkById(node.id) || node;
-        }
+      else {
+        node = model.findNodeById(node.id) || node;
       }
     }
 
@@ -1328,29 +1331,24 @@ wuwei.edit = wuwei.edit || {};
       close();
     }
 
-    if (wuwei.info && typeof wuwei.info.close === 'function') {
-      var currentInfoPane = document.getElementById('info');
-      if (currentInfoPane && currentInfoPane.style.display !== 'none') {
-        wuwei.info.close();
-      }
-    }
-    else {
-      var fallbackInfoPane = document.getElementById('info');
-      if (fallbackInfoPane) { fallbackInfoPane.style.display = 'none'; }
+    var currentInfoPane = document.getElementById('info');
+    if (currentInfoPane && currentInfoPane.style.display !== 'none') {
+      wuwei.info.close();
     }
 
     /** open */
     var editPane = document.getElementById('edit');
     editPane.innerHTML = wuwei.edit.markup.template();
+
     bindEditPaneValueEvents(editPane);
     common.state.Editing = true;
     document.getElementById('open_controls').style.display = 'none';
     if (cb) {
       callback = cb;
     }
+
     hideEdits();
     hideControls();
-
     beginEditSession();
 
     let link;
@@ -1371,6 +1369,8 @@ wuwei.edit = wuwei.edit || {};
       }
     }
 
+    var canvasEl = document.getElementById(state.canvasId);
+    var editingCircle = document.getElementById('Editing');
     var forceNodeEdit = !!(option && (option.forceNode || option.editTarget === 'node' || option.representativeStyle));
     var editableGroup = forceNodeEdit ? null : resolveEditableGroup(node);
     if (editableGroup) {
@@ -1395,34 +1395,42 @@ wuwei.edit = wuwei.edit || {};
       if (!option && !state.Selecting) {
         option = (node && node.option) || null;
       }
+      // editing circle
+      if (!state.Selecting && model.findNodeById(stateMap.node.id)) {
+        editingCircle.dataset.node_id = stateMap.node.id;
+        editingCircle.setAttribute('cx', '' + stateMap.node.x);
+        editingCircle.setAttribute('cy', '' + stateMap.node.y);
+        editingCircle.style.opacity = '1';
+        canvasEl.appendChild(editingCircle);
+      }
     }
     else if (util.isLink(node)) {
       stateMap.link = node;
       stateMap.group = null;
+      // editing circle
+      editingCircle.dataset.link_id = stateMap.link.id;
+      editingCircle.setAttribute('cx', '' + stateMap.link.x);
+      editingCircle.setAttribute('cy', '' + stateMap.link.y);
+      editingCircle.style.opacity = '1';
+      canvasEl.appendChild(editingCircle);
     }
 
     if (isContentsAxisTarget(node)) {
-      if (wuwei.edit.contents && typeof wuwei.edit.contents.openAxisProperties === 'function') {
-        editPane.style.display = 'block';
-        return wuwei.edit.contents.openAxisProperties(node, option || {});
-      }
-      return false;
+      editPane.style.display = 'block';
+      return wuwei.edit.contents.openAxisProperties(node, option || {});
     }
+
     if (isTimelinePointNode(node)) {
-      if (wuwei.edit.timeline && typeof wuwei.edit.timeline.open === 'function') {
-        editPane.style.display = 'block';
-        return wuwei.edit.timeline.open(node, option || {});
-      }
-      return false;
+      editPane.style.display = 'block';
+      return wuwei.edit.timeline.open(node, option || {});
     }
+
     if (isTimelineAxisLink(node)) {
-      if (wuwei.edit.timeline && typeof wuwei.edit.timeline.open === 'function') {
-        editPane.style.display = 'block';
-        return wuwei.edit.timeline.open(node, option || {});
-      }
-      return false;
+      editPane.style.display = 'block';
+      return wuwei.edit.timeline.open(node, option || {});
     }
-    if (wuwei.edit.timeline && typeof wuwei.edit.timeline.canOpen === 'function' && wuwei.edit.timeline.canOpen(node)) {
+
+    if (wuwei.edit.timeline.canOpen(node)) {
       editPane.style.display = 'block';
       return wuwei.edit.timeline.open(node, option || {});
     }
@@ -1437,9 +1445,6 @@ wuwei.edit = wuwei.edit || {};
       }
     }
 
-    var canvasEl = document.getElementById(state.canvasId);
-    var editingCircle = document.getElementById('Editing');
-
     if (state.Selecting || util.isNode(node)) {
       if (!state.Selecting && !node) {
         stateMap.node = model.findNodeById(node.id);
@@ -1447,17 +1452,12 @@ wuwei.edit = wuwei.edit || {};
       else {
         stateMap.node = node;
       }
+
       syncNodePositionFromRenderedElement(stateMap.node);
       stateMap.link = null;
       stateMap.link = null;
-      // editing circle
-      if (!state.Selecting && model.findNodeById(stateMap.node.id)) {
-        editingCircle.dataset.node_id = stateMap.node.id;
-        editingCircle.setAttribute('cx', '' + stateMap.node.x);
-        editingCircle.setAttribute('cy', '' + stateMap.node.y);
-        editingCircle.style.opacity = '1';
-        canvasEl.appendChild(editingCircle);
-      }
+
+
       if (!option) {
         option = {};
       }
@@ -1471,6 +1471,7 @@ wuwei.edit = wuwei.edit || {};
         option: stateMap.option || {}
       };
       stateMap.param = param
+
       refreshTemplate(param)
         .then(() => {
           normalizeEditFieldPaths(document.getElementById('editform'));
@@ -1533,15 +1534,9 @@ wuwei.edit = wuwei.edit || {};
       stateMap.node = null;
       var editPane = document.getElementById('edit');
       editPane.innerHTML = wuwei.edit.markup.template();
-    bindEditPaneValueEvents(editPane);
+      bindEditPaneValueEvents(editPane);
       editPane.style.display = 'block';
       stateMap.link = link;
-      // editing circle
-      editingCircle.dataset.link_id = stateMap.link.id;
-      editingCircle.setAttribute('cx', '' + stateMap.link.x);
-      editingCircle.setAttribute('cy', '' + stateMap.link.y);
-      editingCircle.style.opacity = '1';
-      canvasEl.appendChild(editingCircle);
 
       if (!option) {
         option = {
@@ -1566,7 +1561,6 @@ wuwei.edit = wuwei.edit || {};
   function close() {
     state.Editing = false;
     snapshotTaken = false;
-    d3.select('#edit').style('height', '100%');
     document.getElementById('Editing').style.opacity = '0';
 
     closeEdit();
@@ -1574,10 +1568,6 @@ wuwei.edit = wuwei.edit || {};
     var editingCircle = document.getElementById('Editing');
     editingCircle.style.opacity = '0';
     document.getElementById('open_controls').style.display = 'block';
-
-    // if (wuwei.model && typeof wuwei.model.setGraphFromCurrentPage === 'function') {
-    //   wuwei.model.setGraphFromCurrentPage();
-    // }
 
     if (state.previousEdit) {
       let _node = state.previousEdit.node;

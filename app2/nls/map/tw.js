@@ -79,7 +79,7 @@ wuwei.nls.TW = {
   'Segment properties': '片段屬性',
   'Edit segment from player': '從播放器編輯片段',
   'Delete segment': '刪除片段',
-  'Info Timeline Segment': '時間軸資訊',
+  'Info Timeline': '時間軸資訊',
   'SelectAll': '全選',
   'Show All Memo': '顯示全部便箋',
   'Hide All Memo': '隱藏全部便箋',

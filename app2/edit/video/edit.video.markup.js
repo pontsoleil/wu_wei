@@ -16,12 +16,15 @@ wuwei.edit.video.markup = (function () {
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
+  
   function rowcount(str) {
     return wuwei.edit.markup.rowcount(str || '');
   }
+
   function t(str) {
     return wuwei.nls.translate(str)
   }
+
   function labelAlignIcons(value, size) {
     value = String(value || 'center').toLowerCase();
     return [

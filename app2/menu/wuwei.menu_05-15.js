@@ -103,6 +103,7 @@ wuwei.menu = wuwei.menu || {};
     pageClicked,
     closePageClicked,
     refreshPagenation,
+    restartCurrentDraw,
     checkPage,
     /** new */
     newClicked,
@@ -144,13 +145,14 @@ wuwei.menu = wuwei.menu || {};
 
   isImageLikeNode = function (node) {
     const resource = getNodeResource(node);
-    return !!(util.isDocumentKindByExtension(node, resource, '', 'image'));
+    return !!(util && typeof util.isDocumentKindByExtension === 'function' &&
+      util.isDocumentKindByExtension(node, resource, '', 'image'));
   };
 
   function getCurrentOwnerId() {
-    return common.getCurrentOwnerId() ||
-      (state && state.currentUser && state.currentUser.user_id) ||
-      '';
+    return (common && typeof common.getCurrentOwnerId === 'function')
+      ? common.getCurrentOwnerId()
+      : ((state && state.currentUser && state.currentUser.user_id) || '');
   }
 
   function assertNoLegacyRuntimeFields(record, kind) {
@@ -203,7 +205,9 @@ wuwei.menu = wuwei.menu || {};
     if (ownerId === currentOwnerId) {
       return true;
     }
-    if (common.isTemporaryOwnerId(ownerId) &&
+    if (common &&
+      typeof common.isTemporaryOwnerId === 'function' &&
+      common.isTemporaryOwnerId(ownerId) &&
       common.isTemporaryOwnerId(currentOwnerId)) {
       return true;
     }
@@ -252,7 +256,8 @@ wuwei.menu = wuwei.menu || {};
       kind === 'video' ||
       subtype === 'youtube' ||
       subtype === 'vimeo' ||
-      util.isDocumentKindByExtension(node, resource, uri, 'video') ||
+      (util && typeof util.isDocumentKindByExtension === 'function' &&
+        util.isDocumentKindByExtension(node, resource, uri, 'video')) ||
       isHostedVideoUrl(uri)
     );
   }
@@ -260,14 +265,22 @@ wuwei.menu = wuwei.menu || {};
   function isLocalTemporaryUser() {
     var ownerId = '';
 
-    if (!(common.isLocalHost())) {
+    if (!(common && typeof common.isLocalHost === 'function' && common.isLocalHost())) {
       return false;
     }
 
-    ownerId = util.getCurrentUserId() || cmon.getCurrentOwnerId();
+    if (util && typeof util.getCurrentUserId === 'function') {
+      ownerId = util.getCurrentUserId();
+    }
+    if (!ownerId && common && typeof common.getCurrentOwnerId === 'function') {
+      ownerId = common.getCurrentOwnerId();
+    }
 
-    return !state.loggedIn ||
-      common.isTemporaryOwnerId(ownerId);
+    return !state.loggedIn || (
+      common &&
+      typeof common.isTemporaryOwnerId === 'function' &&
+      common.isTemporaryOwnerId(ownerId)
+    );
   }
 
   function getResourceFiles(resource) {
@@ -329,7 +342,8 @@ wuwei.menu = wuwei.menu || {};
 
   function isOfficeResource(resource) {
     var ref = getResourceOriginalPath(resource);
-    return !!(util.isDocumentKindByExtension(null, resource, ref, 'office'));
+    return !!(util && typeof util.isDocumentKindByExtension === 'function' &&
+      util.isDocumentKindByExtension(null, resource, ref, 'office'));
   }
 
   function isUploadedContent(allNodes) {
@@ -383,9 +397,30 @@ wuwei.menu = wuwei.menu || {};
     d3.select('#Hovered').attr('opacity', 0).attr('class', '');
     d3.select('#Selected').attr('opacity', 0);
     d3.select('#Pointer').style('opacity', 0);
-
-    draw.redraw();
+    if (graph.mode === 'simulation' && draw && typeof draw.restart === 'function') {
+      draw.restart();
+    }
+    else if (draw && typeof draw.redraw === 'function') {
+      draw.redraw();
+    }
+    else if (draw && typeof draw.refresh === 'function') {
+      draw.refresh();
+    }
   }
+
+  restartCurrentDraw = function () {
+    if (draw && graph.mode === 'simulation' && typeof draw.restart === 'function') {
+      draw.restart();
+      return;
+    }
+    if (draw && typeof draw.refresh === 'function') {
+      draw.refresh();
+      return;
+    }
+    if (draw && typeof draw.redraw === 'function') {
+      draw.redraw();
+    }
+  };
 
   closeContextMenu = function () {
     var menuEl = document.getElementById('ContextMenu');
@@ -412,10 +447,10 @@ wuwei.menu = wuwei.menu || {};
     if (!node) {
       return false;
     }
-
-    return !!wuwei.menu.timeline.isTimelinePoint(node) ||
-      ('Segment' === node.type) ||
-      ('Topic' === node.type && 'timeline-point' === node.topicKind);
+    if (wuwei.menu.timeline && typeof wuwei.menu.timeline.isTimelinePoint === 'function') {
+      return !!wuwei.menu.timeline.isTimelinePoint(node);
+    }
+    return ('Segment' === node.type) || ('Topic' === node.type && 'timeline-point' === node.topicKind);
   }
 
   function isTimelineInfoTarget(node, link) {
@@ -472,13 +507,23 @@ wuwei.menu = wuwei.menu || {};
     };
 
     try {
-      opened = wuwei.menu.video.open(mediaNode, option);
-      return opened !== false;
+      if (window.wuwei && wuwei.menu && wuwei.menu.video && typeof wuwei.menu.video.open === 'function') {
+        opened = wuwei.menu.video.open(mediaNode, option);
+        return opened !== false;
+      }
+
+      if (window.wuwei && wuwei.info && wuwei.info.video && typeof wuwei.info.video.openModal === 'function') {
+        opened = wuwei.info.video.openModal(mediaNode, option);
+        return opened !== false;
+      }
     }
     catch (e) {
       console.error(e);
       return false;
     }
+
+    console.warn('Video player is not available');
+    return false;
   }
 
   function buildTimelineOpenUrl(spec) {
@@ -488,8 +533,9 @@ wuwei.menu = wuwei.menu || {};
     }
     mediaNode = spec.mediaNode;
     resource = (mediaNode.resource && typeof mediaNode.resource === 'object') ? mediaNode.resource : {};
-    rawUrl = wuwei.video.getVideoSource(mediaNode) ||
-      String(resource.canonicalUri || resource.uri || '');
+    rawUrl = (wuwei.video && typeof wuwei.video.getVideoSource === 'function')
+      ? wuwei.video.getVideoSource(mediaNode)
+      : String(resource.canonicalUri || resource.uri || '');
     startAt = Math.max(0, Number(spec.startAt || 0));
     endAt = (spec.endAt != null && isFinite(spec.endAt)) ? Math.max(startAt, Number(spec.endAt)) : null;
     if (!rawUrl) {
@@ -969,7 +1015,7 @@ wuwei.menu = wuwei.menu || {};
                     y: Number((anchor && anchor.y) || (node && node.y) || (link && link.y) || (d3event && d3event.y) || 0)
                   };
                 }
-                draw.redraw();
+                restartCurrentDraw();
               }
               else {
                 const d3node = d3.select('g.node#' + targetNode.id);
@@ -1063,7 +1109,9 @@ wuwei.menu = wuwei.menu || {};
 
         if (!state.Connecting && !state.Selecting) {
           var infoTarget = node || link;
-          var infoOperations = infoTarget && Operations.getSupported([infoTarget], 'INFO') || [];
+          var infoOperations = (infoTarget && Operations && typeof Operations.getSupported === 'function')
+            ? Operations.getSupported([infoTarget], 'INFO')
+            : [];
           if (infoOperations.length > 0) {
             info
               .text('\uf05a')
@@ -1105,7 +1153,8 @@ wuwei.menu = wuwei.menu || {};
 
   function isImageNode(node) {
     const resource = getNodeResource(node);
-    return !!(util.isDocumentKindByExtension(node, resource, '', 'image'));
+    return !!(util && typeof util.isDocumentKindByExtension === 'function' &&
+      util.isDocumentKindByExtension(node, resource, '', 'image'));
   }
 
 
@@ -1251,7 +1300,6 @@ wuwei.menu = wuwei.menu || {};
       return null;
     }
     clearTimeout(state.menuTimer); // cancel #ContextMenu close timer
-
     state.hoveredNode = resolveContextTargetRecord(_hoveredNode);
     state.modal = true;
     closeContext();
@@ -1332,8 +1380,9 @@ wuwei.menu = wuwei.menu || {};
         }
         else if (!iconHtml) {
           try {
-            iconHtml = wuwei.note.buildPageThumbnail(page) ||
-              util.buildMiniatureSvgString({
+            iconHtml = (wuwei.note && typeof wuwei.note.buildPageThumbnail === 'function')
+              ? wuwei.note.buildPageThumbnail(page)
+              : util.buildMiniatureSvgString({
                 width: 200,
                 height: 200,
                 useDataOnly: true,
@@ -1450,7 +1499,7 @@ wuwei.menu = wuwei.menu || {};
         if (!opened) {
           return;
         }
-        draw.redraw();
+        restartCurrentDraw();
 
         checkPage();
 
@@ -1543,17 +1592,23 @@ wuwei.menu = wuwei.menu || {};
      * http://127.0.0.1/... or http://localhost/... .  Use the PDF created
      * during the OpenOffice/LibreOffice thumbnail-preview process instead.
      */
-    previewUri = wuwei.util.getResourcePdfPreviewUri(node);
-    if (previewUri) {
-      return appendPdfPageForOpen(previewUri, pageNumber);
+    if (wuwei.util && typeof wuwei.util.getResourcePdfPreviewUri === 'function') {
+      previewUri = wuwei.util.getResourcePdfPreviewUri(node);
+      if (previewUri) {
+        return appendPdfPageForOpen(previewUri, pageNumber);
+      }
     }
-    previewUri = wuwei.contents.getContentTargetViewerUrl(node, pageNumber || 1);
-    if (isPdfLikeOpenUri(previewUri)) {
-      return previewUri;
+    if (wuwei.contents && typeof wuwei.contents.getContentTargetViewerUrl === 'function') {
+      previewUri = wuwei.contents.getContentTargetViewerUrl(node, pageNumber || 1);
+      if (isPdfLikeOpenUri(previewUri)) {
+        return previewUri;
+      }
     }
-    previewUri = wuwei.util.getResourcePreviewUri(node);
-    if (isPdfLikeOpenUri(previewUri)) {
-      return appendPdfPageForOpen(previewUri, pageNumber);
+    if (wuwei.util && typeof wuwei.util.getResourcePreviewUri === 'function') {
+      previewUri = wuwei.util.getResourcePreviewUri(node);
+      if (isPdfLikeOpenUri(previewUri)) {
+        return appendPdfPageForOpen(previewUri, pageNumber);
+      }
     }
     return '';
   }
@@ -1607,11 +1662,12 @@ wuwei.menu = wuwei.menu || {};
   function getTextOriginalHref(node, resource) {
     var uploadPath, uid, file;
 
-    uploadPath = wuwei.util.getResourceOriginalUri(node);
-    if (uploadPath) {
-      return uploadPath;
+    if (wuwei.util && typeof wuwei.util.getResourceOriginalUri === 'function') {
+      uploadPath = wuwei.util.getResourceOriginalUri(node);
+      if (uploadPath) {
+        return uploadPath;
+      }
     }
-
     if (resource && String(resource.kind || '').toLowerCase() === 'upload' && resource.id && resource.date) {
       file = String(resource.file || resource.filename || '').replace(/\\/g, '/').split('/').pop();
       if (file) {
@@ -1623,32 +1679,20 @@ wuwei.menu = wuwei.menu || {};
   }
 
   function isTextDocumentReference(resource, href) {
-    return !isHtmlDocumentReference(resource, href) && !!util.isDocumentKindByExtension(null, resource, href, 'text');
+    return !isHtmlDocumentReference(resource, href) && !!(
+      util && typeof util.isDocumentKindByExtension === 'function' &&
+      util.isDocumentKindByExtension(null, resource, href, 'text')
+    );
   }
 
   function isPdfDocumentReference(resource, href) {
-    return !!util.isDocumentKindByExtension(null, resource, href, 'pdf');
+    return !!(util && typeof util.isDocumentKindByExtension === 'function' &&
+      util.isDocumentKindByExtension(null, resource, href, 'pdf'));
   }
 
   function isHtmlDocumentReference(resource, href) {
-    var media = (resource && resource.media && typeof resource.media === 'object') ? resource.media : {};
-    var kind = String(resource && (resource.kind || resource.type || '') || '').toLowerCase();
-    var subtype = String(resource && resource.subtype || '').toLowerCase();
-    var mediaKind = String(media.kind || '').toLowerCase();
-
-    return !!(
-      util.isDocumentKindByExtension(null, resource, href, 'html') ||
-      kind === 'html' ||
-      kind === 'web' ||
-      kind === 'webpage' ||
-      kind === 'website' ||
-      subtype === 'html' ||
-      subtype === 'web' ||
-      subtype === 'webpage' ||
-      mediaKind === 'html' ||
-      mediaKind === 'web' ||
-      mediaKind === 'webpage'
-    );
+    return !!(util && typeof util.isDocumentKindByExtension === 'function' &&
+      util.isDocumentKindByExtension(null, resource, href, 'html'));
   }
 
   function getTextViewerOpenUrl(href) {
@@ -1668,9 +1712,11 @@ wuwei.menu = wuwei.menu || {};
 
   function getOfficeOriginalHref(node, resource) {
     var uploadPath, uid, file;
-    uploadPath = wuwei.util.getResourceOriginalUri(node);
-    if (uploadPath) {
-      return uploadPath;
+    if (wuwei.util && typeof wuwei.util.getResourceOriginalUri === 'function') {
+      uploadPath = wuwei.util.getResourceOriginalUri(node);
+      if (uploadPath) {
+        return uploadPath;
+      }
     }
     if (resource && String(resource.kind || '').toLowerCase() === 'upload' && resource.id && resource.date) {
       file = String(resource.file || resource.filename || '').replace(/\\/g, '/').split('/').pop();
@@ -1683,7 +1729,8 @@ wuwei.menu = wuwei.menu || {};
   }
 
   function isOfficeDocumentReference(resource, href) {
-    return !!util.isDocumentKindByExtension(null, resource, href, 'office');
+    return !!(util && typeof util.isDocumentKindByExtension === 'function' &&
+      util.isDocumentKindByExtension(null, resource, href, 'office'));
   }
 
   function canOfficeViewerFetch(href) {
@@ -1753,7 +1800,7 @@ wuwei.menu = wuwei.menu || {};
       rights.owner ||
       nodeAudit.owner ||
       nodeAudit.createdBy ||
-      wuwei.util.getCurrentUserId() ||
+      (wuwei.util && typeof wuwei.util.getCurrentUserId === 'function' ? wuwei.util.getCurrentUserId() : '') ||
       ''
     ).trim();
   }
@@ -1790,7 +1837,7 @@ wuwei.menu = wuwei.menu || {};
     var fallback = '';
     var ext = '';
 
-    if (resource) {
+    if (resource && wuwei.util && typeof wuwei.util.getResourceFile === 'function') {
       file = wuwei.util.getResourceFile(resource, 'original');
     }
     if (file) {
@@ -1822,7 +1869,7 @@ wuwei.menu = wuwei.menu || {};
     var href = '';
     var base;
 
-    if (resource) {
+    if (resource && wuwei.util && typeof wuwei.util.getResourceFileUri === 'function') {
       href = wuwei.util.getResourceFileUri(resource, 'original', node);
     }
     if (!href) {
@@ -1930,7 +1977,9 @@ wuwei.menu = wuwei.menu || {};
     if (!group) {
       return null;
     }
-    reps = model.getGroupRepresentativeNodes(group) || [];
+    reps = (model && typeof model.getGroupRepresentativeNodes === 'function')
+      ? model.getGroupRepresentativeNodes(group)
+      : [];
     return (reps && reps.length) ? reps[0] : null;
   }
 
@@ -1977,7 +2026,9 @@ wuwei.menu = wuwei.menu || {};
   }
 
   function groupSpineDefaults(type, visible) {
-    var defaults = model.groupStyleDefaults(type) || {};
+    var defaults = (model && typeof model.groupStyleDefaults === 'function')
+      ? model.groupStyleDefaults(type)
+      : {};
     return {
       kind: defaults.kind,
       visible: visible,
@@ -2008,9 +2059,12 @@ wuwei.menu = wuwei.menu || {};
       nodes.push(node);
     }
 
-    (model.findGroupNodes(group.id) || []).forEach(add);
-    (model.getGroupRepresentativeNodes(group) || []).forEach(add);
-
+    if (typeof model.findGroupNodes === 'function') {
+      (model.findGroupNodes(group.id) || []).forEach(add);
+    }
+    if (typeof model.getGroupRepresentativeNodes === 'function') {
+      (model.getGroupRepresentativeNodes(group) || []).forEach(add);
+    }
     return nodes;
   }
 
@@ -2133,7 +2187,7 @@ wuwei.menu = wuwei.menu || {};
       return;
     }
 
-    if ('group' === target.kind && target.group) {
+    if ('group' === target.kind && target.group && model && typeof model.translateGroupBy === 'function') {
       model.translateGroupBy(target.group, dx, dy);
       return;
     }
@@ -2396,9 +2450,11 @@ wuwei.menu = wuwei.menu || {};
 
     page.groups.push(group);
     model.setGraphFromCurrentPage();
-    model.placeGroupRepresentative(group, { preserveAxisAnchor: false });
-    model.reflowGroupMembers(group, newType, preserveMetaGroup ? preserveMetaGroup.type : '');
-    model.setGraphFromCurrentPage();
+    if (model && typeof model.placeGroupRepresentative === 'function') {
+      model.placeGroupRepresentative(group, { preserveAxisAnchor: false });
+      model.reflowGroupMembers(group, newType, preserveMetaGroup ? preserveMetaGroup.type : '');
+      model.setGraphFromCurrentPage();
+    }
     clearSelectionState();
     closeContextMenu();
     draw.redraw();
@@ -2476,7 +2532,8 @@ wuwei.menu = wuwei.menu || {};
         return;
       }
 
-      if (node.groupRef && model.findGroupById(node.groupRef)) {
+      if (node.groupRef && model && typeof model.findGroupById === 'function' &&
+        model.findGroupById(node.groupRef)) {
         wuwei.edit.open(node, { editor: false, citation: false, cc: false });
       }
       else if (util.isNode(node)) {
@@ -2769,7 +2826,7 @@ wuwei.menu = wuwei.menu || {};
       closeContextMenu();
       return;
     }
-    else if ('infoTimelineTarget' === method) {
+    else if ('infoTimelineSegment' === method) {
       node = resolveContextTargetRecord(state.hoveredNode);
       if (!node || !node.id) { return; }
       var timelineSpecForInfo = wuwei.menu.timeline.getTimelineTargetSpec(node);
@@ -2868,9 +2925,8 @@ wuwei.menu = wuwei.menu || {};
       if (!node || !node.id) { return; }
 
       var contentsSpecForWindow = wuwei.contents.getContentTargetSpec(node);
-      if (contentsSpecForWindow && contentsSpecForWindow.group && wuwei.contents) {
-        var contentsWindowTarget = contentsSpecForWindow.point || node;
-        var contentsWindowUrl = wuwei.menu.contents.getContentTargetOpenUrl(contentsWindowTarget);
+      if (contentsSpecForWindow && contentsSpecForWindow.point && wuwei.contents) {
+        var contentsWindowUrl = wuwei.menu.contents.getContentTargetOpenUrl(contentsSpecForWindow.point);
         if (contentsWindowUrl) {
           wuwei.info.openWindow(contentsWindowUrl, null, 'width=900,height=680,noopener,resizable=yes,scrollbars=yes');
         }
@@ -2904,9 +2960,8 @@ wuwei.menu = wuwei.menu || {};
       if (!node || !node.id) { return; }
 
       var contentsSpecForTab = wuwei.contents.getContentTargetSpec(node);
-      if (contentsSpecForTab && contentsSpecForTab.group && wuwei.contents) {
-        var contentsTabTarget = contentsSpecForTab.point || node;
-        var contentsTabUrl = wuwei.menu.contents.getContentTargetOpenUrl(contentsTabTarget);
+      if (contentsSpecForTab && contentsSpecForTab.point && wuwei.contents) {
+        var contentsTabUrl = wuwei.menu.contents.getContentTargetOpenUrl(contentsSpecForTab.point);
         if (contentsTabUrl) {
           wuwei.info.openNewTab(contentsTabUrl);
         }
@@ -3374,7 +3429,9 @@ wuwei.menu = wuwei.menu || {};
       if (keepSelecting) {
         common.state.Selecting = true;
         document.getElementById('wuwei').classList.add('flock-operation');
-        draw.renderSelectionMarks();
+        if (draw && typeof draw.renderSelectionMarks === 'function') {
+          draw.renderSelectionMarks();
+        }
       }
       else {
         common.state.Selecting = false;
@@ -3780,7 +3837,6 @@ wuwei.menu = wuwei.menu || {};
         'backward',
         'hide'
       ],
-
       'Link': [
         'hide'
       ],
@@ -3795,7 +3851,6 @@ wuwei.menu = wuwei.menu || {};
         'copy',
         'erase'
       ],
-
       'EditLink': [
         'edit',
         'reverse',
@@ -3806,7 +3861,6 @@ wuwei.menu = wuwei.menu || {};
         'vertical2',
         'erase'
       ],
-
       'EditGroup': [
         'edit',
         'editRepresentativeStyle',
@@ -3820,7 +3874,6 @@ wuwei.menu = wuwei.menu || {};
         'deleteGroup',
         'erase'
       ],
-
       'EditGroupMember': [
         'edit',
         'createTimelineAxis',
@@ -3836,7 +3889,6 @@ wuwei.menu = wuwei.menu || {};
         'copy',
         'erase'
       ],
-
       'EditGroupRepresentative': [
         'edit',
         'editRepresentativeStyle',
@@ -3860,35 +3912,32 @@ wuwei.menu = wuwei.menu || {};
         'openWindow',
         'openPlayer'
       ],
-
       'InfoLink': [
         'info'
       ],
-
       'InfoGroup': [
-        'infoTimelineTarget',
+        'infoTimelineSegment',
         'infoContentsTarget',
         'info'
       ],
-
       'InfoGroupMember': [
-        'infoTimelineTarget',
+        'infoTimelineSegment',
         'infoContentsTarget',
+        'info',
         'download',
         'openNewTab',
         'openWindow',
         'openPlayer'
       ],
-
       'InfoGroupRepresentative': [
         'infoContentsTarget',
-        'infoTimelineTarget',
+        'infoTimelineSegment',
+        'info',
         'openNewTab',
         'openWindow',
         'openPlayer'
       ]
     },
-
     isSupported: function (operation, nodes, context) {
       var operations, profile, i;
       if (util.isEmpty(nodes)) { return false; }
@@ -3911,7 +3960,6 @@ wuwei.menu = wuwei.menu || {};
       }
       return true;
     },
-    
     getSupported: function (allNodes, context) {
       var
         self = this,
@@ -3963,9 +4011,9 @@ wuwei.menu = wuwei.menu || {};
 
     if (target.id) {
       if (util.isLink(target)) {
-        return model.findLinkById(target.id);
+        return model.findLinkById(target.id) || target;
       }
-      else if (util.isNode(target)) {
+      if (util.isNode(target)) {
         return model.findNodeById(target.id) || target;
       }
     }
@@ -3993,12 +4041,14 @@ wuwei.menu = wuwei.menu || {};
     if (util.isEmpty(target)) {
       return null;
     }
-
+    if (!wuwei.contents || typeof wuwei.contents.getContentTargetSpec !== 'function') {
+      return null;
+    }
     return wuwei.contents.getContentTargetSpec(target);
   }
 
   function isRepresentativeTopic(node) {
-    return !!(node && model.isRepresentativeTopic(node));
+    return !!(node && model && typeof model.isRepresentativeTopic === 'function' && model.isRepresentativeTopic(node));
   }
 
   function isContextGroup(allNodes) {
@@ -4012,6 +4062,8 @@ wuwei.menu = wuwei.menu || {};
   function isRepresentativeGroupEraseTarget(target) {
     return !!(
       target &&
+      model &&
+      typeof model.isRepresentativeTopic === 'function' &&
       model.isRepresentativeTopic(target) &&
       target.groupRef
     );
@@ -4048,7 +4100,7 @@ wuwei.menu = wuwei.menu || {};
   }
 
   function deleteGroupTarget(target) {
-    if (!target || !isWholeGroupEraseTarget(target)) {
+    if (!target || !isWholeGroupEraseTarget(target) || !model || typeof model.eraseGroup !== 'function') {
       return false;
     }
 
@@ -4067,7 +4119,7 @@ wuwei.menu = wuwei.menu || {};
     var selectedGroupIds = getEffectiveSelectedGroupIds(page);
     var deletedIds = [];
 
-    if (!selectedGroupIds.length) {
+    if (!selectedGroupIds.length || !model || typeof model.eraseGroup !== 'function') {
       state.deletedGroupIds = [];
       return false;
     }
@@ -4116,8 +4168,7 @@ wuwei.menu = wuwei.menu || {};
     var resource;
     var href;
 
-    if (!target || target.type !== 'Content' || getContextTimelineSpec(allNodes) ||
-      isPlayableVideoNode(target)) {
+    if (!target || target.type !== 'Content' || getContextTimelineSpec(allNodes)) {
       return false;
     }
 
@@ -4140,8 +4191,7 @@ wuwei.menu = wuwei.menu || {};
     return (
       isContextDocumentLikeContent(allNodes) ||
       isContextTimelinePlayable(allNodes) ||
-      isContextContentsPage(allNodes) ||
-      isContextContentsRepresentative(allNodes)
+      isContextContentsPage(allNodes)
     );
   }
 
@@ -4163,6 +4213,8 @@ wuwei.menu = wuwei.menu || {};
   function hasAttachedTimelineGroup(target) {
     return !!(
       target &&
+      wuwei.timeline &&
+      typeof wuwei.timeline.hasAttachedTimelineGroup === 'function' &&
       wuwei.timeline.hasAttachedTimelineGroup(target)
     );
   }
@@ -4170,6 +4222,8 @@ wuwei.menu = wuwei.menu || {};
   function hasAttachedContentsGroup(target) {
     return !!(
       target &&
+      wuwei.contents &&
+      typeof wuwei.contents.hasAttachedContentsGroup === 'function' &&
       wuwei.contents.hasAttachedContentsGroup(target)
     );
   }
@@ -4202,6 +4256,8 @@ wuwei.menu = wuwei.menu || {};
     var target = getContextTarget(allNodes);
     return !!(
       target &&
+      wuwei.contents &&
+      typeof wuwei.contents.isContentsRepresentativeNode === 'function' &&
       wuwei.contents.isContentsRepresentativeNode(target)
     );
   }
@@ -4230,13 +4286,13 @@ wuwei.menu = wuwei.menu || {};
     if (target.type === 'Group' && target.groupRef) {
       return model.findGroupById(target.groupRef) || target;
     }
-    if (target.groupRef) {
+    if (target.groupRef && model && typeof model.findGroupById === 'function') {
       group = model.findGroupById(target.groupRef);
       if (group) {
         return group;
       }
     }
-    if (target.id) {
+    if (target.id && model && typeof model.findGroupsByNodeId === 'function') {
       group = model.findGroupsByNodeId(target.id)[0];
       if (group) {
         return group;
@@ -4490,12 +4546,13 @@ wuwei.menu = wuwei.menu || {};
         var resource = getNodeResource(node);
         ref = String(getDownloadUrl(node) || resource.canonicalUri || resource.uri || '').toLowerCase();
 
-        isImageOrPdf = !!(
+        isImageOrPdf = !!(util && typeof util.isDocumentKindByExtension === 'function' && (
           util.isDocumentKindByExtension(node, resource, ref, 'image') ||
           util.isDocumentKindByExtension(node, resource, ref, 'pdf')
-        );
+        ));
 
-        isOffice = !!util.isDocumentKindByExtension(node, resource, ref, 'office');
+        isOffice = !!(util && typeof util.isDocumentKindByExtension === 'function' &&
+          util.isDocumentKindByExtension(node, resource, ref, 'office'));
 
         return isUploadedContent(allNodes) || isImageOrPdf || isOffice;
       },
@@ -4503,7 +4560,7 @@ wuwei.menu = wuwei.menu || {};
       'fas fa-download fa-lg fa-fw'
     ],
 
-    'editRepresentativeStyle': ['Edit style',
+    'editRepresentativeStyle': ['Edit Style',
       function (allNodes) {
         var node = getContextTarget(allNodes);
         return !!(node && isRepresentativeTopic(node) &&
@@ -5121,7 +5178,7 @@ wuwei.menu = wuwei.menu || {};
       null, null
     ],
 
-    'createTimelineAxis': ['Add Axis',
+    'createTimelineAxis': ['Create timeline axis',
       function (allNodes) {
         return !state.Selecting &&
           !state.Connecting &&
@@ -5131,7 +5188,7 @@ wuwei.menu = wuwei.menu || {};
       'fas fa-stream fa-lg fa-fw'
     ],
 
-    'createContentsAxis': ['Add Axis',
+    'createContentsAxis': ['Create contents axis',
       function (allNodes) {
         return !state.Selecting &&
           !state.Connecting &&
@@ -5141,7 +5198,7 @@ wuwei.menu = wuwei.menu || {};
       'fa fa-comment fa-lg fa-fw'
     ],
 
-    'addContentsEntry': ['Add Entry',
+    'addContentsEntry': ['Add entry',
       function (allNodes) {
         return !state.Selecting &&
           !state.Connecting &&
@@ -5192,7 +5249,7 @@ wuwei.menu = wuwei.menu || {};
       'fas fa-ruler-horizontal fa-lg fa-fw'
     ],
 
-    'addTimelineSegmentFromPlayer': ['Add Segment',
+    'addTimelineSegmentFromPlayer': ['Add segment from player',
       function (allNodes) {
         return !state.Selecting &&
           !state.Connecting &&
@@ -5202,7 +5259,7 @@ wuwei.menu = wuwei.menu || {};
       'fas fa-plus-circle fa-lg fa-fw'
     ],
 
-    'editTimelineSegmentProps': ['Edit properties',
+    'editTimelineSegmentProps': ['Segment properties',
       function (allNodes) {
         return !state.Selecting &&
           !state.Connecting &&
@@ -5212,7 +5269,7 @@ wuwei.menu = wuwei.menu || {};
       'fas fa-map-marker-alt fa-lg fa-fw'
     ],
 
-    'editTimelineSegmentFromPlayer': ['Edit',
+    'editTimelineSegmentFromPlayer': ['Edit segment from player',
       function (allNodes) {
         return !state.Selecting &&
           !state.Connecting &&
@@ -5222,7 +5279,7 @@ wuwei.menu = wuwei.menu || {};
       'fas fa-play-circle fa-lg fa-fw'
     ],
 
-    'deleteTimelineSegment': ['Delete',
+    'deleteTimelineSegment': ['Delete segment',
       function (allNodes) {
         return !state.Selecting &&
           !state.Connecting &&
@@ -5232,7 +5289,7 @@ wuwei.menu = wuwei.menu || {};
       'far fa-trash-alt fa-lg fa-fw'
     ],
 
-    'infoTimelineTarget': ['Info',
+    'infoTimelineSegment': ['Info Timeline Segment',
       function (allNodes) {
         return !state.Selecting &&
           !state.Connecting && (
@@ -5243,7 +5300,7 @@ wuwei.menu = wuwei.menu || {};
       'fas fa-info fa-lg fa-fw'
     ],
 
-    'infoContentsTarget': ['Info',
+    'infoContentsTarget': ['Info Contents',
       function (allNodes) {
         return !state.Selecting &&
           !state.Connecting &&
@@ -5270,22 +5327,31 @@ wuwei.menu = wuwei.menu || {};
         heading_menu.classList.add('active');
         searchIcon.classList.remove('simulation');
         settinIgcon.style.display = 'none';
+        // shareIcon.style.display = 'block';
         wuwei.menu.setting.close();
-        draw.refresh();
+        if (draw && typeof draw.refresh === 'function') {
+          draw.refresh();
+        }
         break;
       case 'view':
         drawIcon.setAttribute('class', 'far fa-square');
         heading_menu.classList.remove('active');
         searchIcon.classList.remove('simulation');
         settinIgcon.style.display = 'none';
-        draw.refresh();
+        // shareIcon.style.display = 'none';
+        if (draw && typeof draw.refresh === 'function') {
+          draw.refresh();
+        }
         break;
       case 'simulation':
         drawIcon.setAttribute('class', 'fas fa-expand-arrows-alt');
         heading_menu.classList.add('active');
         searchIcon.classList.add('simulation');
         settinIgcon.style.display = 'block';
-        draw.restart();
+        // shareIcon.style.display = 'none';
+        if (draw && typeof draw.restart === 'function') {
+          draw.restart();
+        }
         break;
     }
   }

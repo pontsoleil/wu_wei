@@ -131,34 +131,25 @@ wuwei.edit.markup = (function () {
     return html.join('');
   }
 
+  function rowcount(text, minRows, maxRows) {
+    text = String(text || '');
+    minRows = Number(minRows || 1);
+    maxRows = Number(maxRows || 16);
 
+    var rows = text.split(/\r\n|\r|\n/).length;
 
-  function rowcount(text) {
-    function getByteCount(str) {
-      const encoder = new TextEncoder();
-      const encoded = encoder.encode(str);
-      return encoded.length;
+    if (rows < minRows) {
+      rows = minRows;
     }
-    let countRows = 0;
-    const ROW_NUM = 28;
-    const lines = text.split('\n');
-    for (let line of lines) {
-      let lineBytes = getByteCount(line);
-      countRows += Math.ceil(lineBytes / ROW_NUM);
+    if (rows > maxRows) {
+      rows = maxRows;
     }
-    if (countRows < 5) {
-      countRows = 5;
-    } else if (countRows > 16) {
-      countRows = 16;
-    }
-    return countRows;
+    return rows;
   }
-
 
   function translate(str) {
     return wuwei.nls.translate(str);
   }
-
 
   return {
     selectOptions: selectOptions,

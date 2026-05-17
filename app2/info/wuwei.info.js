@@ -557,9 +557,9 @@ wuwei.info = wuwei.info || {};
 
     /*
      * A PageMarker represents a page/anchor inside its source Content.
-     * Opening Info for the marker should therefore open the source document
-     * at the specified page in the info pane.  The marker's own metadata is
-     * edited in the Contents edit panel, not shown as a standalone Info view.
+     * Open it through the Contents info pane, not through the generic/uploaded
+     * resource pane, so the marker label, source document label and preview
+     * are presented as one PageMarker view.
      */
     if (isContentTargetMarker(resolvedNode) &&
       !(stateMap.option && stateMap.option.contentTargetView) &&
@@ -639,10 +639,9 @@ wuwei.info = wuwei.info || {};
     }
 
     /*
-     * PageMarker information opened through menu.contents.openContentTargetInInfo() is
-     * primarily a content preview request. Do not open the contents marker
-     * pane afterwards, because it can hide the generic iframe/viewer and the
-     * selected content target is no longer visible.
+     * PageMarker information is handled by info.contents.  For other cases
+     * where a displayedContentTarget is attached to a normal content preview,
+     * optionally open the related Contents details.
      */
     if (stateMap.displayedContentTarget &&
       !(stateMap.option && (stateMap.option.contentTargetView || stateMap.option.contentsPage))) {

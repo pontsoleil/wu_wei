@@ -79,7 +79,7 @@ wuwei.nls.CN = {
   'Segment properties': '片段属性',
   'Edit segment from player': '从播放器编辑片段',
   'Delete segment': '删除片段',
-  'Info Timeline Segment': '时间轴信息',
+  'Info Timeline': '时间轴信息',
   'SelectAll': '全选',
   'Show All Memo': '显示全部便笺',
   'Hide All Memo': '隐藏全部便笺',

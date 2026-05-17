@@ -79,7 +79,7 @@ wuwei.nls.FI = {
   'Segment properties': 'Jakson ominaisuudet',
   'Edit segment from player': 'Muokkaa jaksoa soittimesta',
   'Delete segment': 'Poista jakso',
-  'Info Timeline Segment': 'Aikajanan tiedot',
+  'Info Timeline': 'Aikajanan tiedot',
   'SelectAll': 'Valitse kaikki',
   'Show All Memo': 'Näytä kaikki muistiot',
   'Hide All Memo': 'Piilota kaikki muistiot',

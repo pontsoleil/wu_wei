@@ -8,11 +8,21 @@
   box-sizing: border-box;
 }
 
-#info-uploaded #infoFrame,
+/* #info-uploaded #infoFrame,
 #info-uploaded .info iframe {
   display: block;
   width: 100%;
   min-height: 480px;
+  border: none;
+  box-sizing: border-box;
+} */
+
+#info-uploaded #infoFrame,
+#info-uploaded .info iframe {
+  display: block;
+  width: 100%;
+  min-height: 320px;
+  max-height: calc(100vh - 120px);
   border: none;
   box-sizing: border-box;
 }

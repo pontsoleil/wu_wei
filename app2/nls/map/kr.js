@@ -79,7 +79,7 @@ wuwei.nls.KR = {
   'Segment properties': '세그먼트 속성',
   'Edit segment from player': '플레이어에서 세그먼트 편집',
   'Delete segment': '세그먼트 삭제',
-  'Info Timeline Segment': '타임라인 정보',
+  'Info Timeline': '타임라인 정보',
   'SelectAll': '모두 선택',
   'Show All Memo': '모든 메모 표시',
   'Hide All Memo': '모든 메모 숨기기',

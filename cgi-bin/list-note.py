@@ -24,6 +24,7 @@ from cgi_common import (
     script_error,
 )
 
+
 def truthy(value: object) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
 
@@ -41,6 +42,32 @@ def note_date_from_path(root: Path, path: Path) -> str:
     if len(parts) >= 3 and re.match(r"^\d{4}$", parts[0]) and re.match(r"^\d{2}$", parts[1]) and re.match(r"^\d{2}$", parts[2]):
         return f"{parts[0]}-{parts[1]}-{parts[2]}"
     return ""
+
+
+def note_key_from_path(root: Path, path: Path) -> str:
+    """Return the note directory key used to identify a selected list row."""
+    note_dir = path.parent if path.name == "note.json" else path
+    try:
+        rel = note_dir.relative_to(root)
+    except ValueError:
+        return ""
+    return "/".join(rel.parts)
+
+
+def add_note_key(root: Path, path: Path) -> dict:
+    """Add stable row identity to collect_note_record()."""
+    record = collect_note_record(root, path)
+    if not isinstance(record, dict):
+        record = {}
+
+    note_key = note_key_from_path(root, path)
+    if note_key:
+        # dir is kept for backward compatibility with the CGI version and UI code.
+        record["dir"] = note_key
+        # note_key is the clearer name for new code.
+        record["note_key"] = note_key
+
+    return record
 
 
 def note_matches(path: Path, term: str) -> bool:
@@ -89,7 +116,7 @@ def main():
     debug("main() start")
     params = merge_query_and_body_params()
     debug_kv(params=params)
-    
+
     debug_kv(env_file=str(ENV_FILE), raw_note=read_named_value(ENV_FILE, "note"))
 
     session_user_id = get_session_user_id()
@@ -150,7 +177,7 @@ def main():
         for p in selected:
             debug(f"selected file={p}")
 
-    notes = [collect_note_record(root, p) for p in selected]
+    notes = [add_note_key(root, p) for p in selected]
     debug_kv(notes_built=len(notes))
 
     json_response(

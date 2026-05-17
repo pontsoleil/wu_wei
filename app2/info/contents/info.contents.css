@@ -130,3 +130,29 @@
   font-family: inherit;
   font-size: 0.9rem;
 }
+
+#info-contents .contents-viewer-wrap {
+  margin-top: 10px;
+}
+
+#info-contents .contents-viewer-frame {
+  display: block;
+  width: 100%;
+  min-height: 320px;
+  max-height: calc(100vh - 160px);
+  border: none;
+  overflow: auto;
+  box-sizing: border-box;
+}
+
+#info-contents .contents-open-window {
+  display: block;
+  margin-top: 4px;
+  color: #555;
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+#info-contents .contents-open-window i {
+  margin-left: 0.25em;
+}

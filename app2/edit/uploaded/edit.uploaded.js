@@ -48,7 +48,6 @@ wuwei.edit.uploaded = wuwei.edit.uploaded || {};
     if ('undefined' == param.option) {
       param.option = {};
     }
-    //    param = param || {};
     return new Promise((resolve, reject) => {
       const el = document.getElementById('edit-uploaded');
       if (el) {

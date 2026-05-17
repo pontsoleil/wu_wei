@@ -100,7 +100,7 @@ wuwei.edit.timeline.markup = (function () {
         '</div>',
         '<div class="edit-field">',
           '<label for="editTimelinePointValue">' + t('info') + '</label>',
-          '<textarea id="editTimelinePointValue" rows="4"></textarea>',
+          '<textarea id="editTimelinePointValue" rows="1"></textarea>',
         '</div>',
 
         '<div class="edit-field">',

@@ -26,20 +26,15 @@ wuwei.menu.contents = wuwei.menu.contents || {};
 
   function openContentTargetInInfo(target) {
     var spec = getContentTargetSpec(target);
-    if (!spec || !spec.documentNode || !wuwei.info || typeof wuwei.info.open !== 'function') {
+    var point;
+
+    if (!spec || !spec.point || !wuwei.info || !wuwei.info.contents ||
+      typeof wuwei.info.contents.openContentTargetInInfo !== 'function') {
       return false;
     }
-    wuwei.info.open(spec.documentNode, {
-      page: spec.pageNumber,
-      contentTargetView: true,
-      contentTarget: spec.point || target,
-      contentTargetPoint: spec.point || target,
-      displayedContentTarget: spec.point || target,
-      editTarget: spec.point || target,
-      contentViewerUri: contents.getContentTargetViewerUrl(spec.documentNode, spec.pageNumber, spec.point),
-      pdfjsUri: contents.getContentTargetViewerUrl(spec.documentNode, spec.pageNumber, spec.point)
-    });
-    return true;
+
+    point = spec.point || target;
+    return wuwei.info.contents.openContentTargetInInfo(point);
   }
 
 

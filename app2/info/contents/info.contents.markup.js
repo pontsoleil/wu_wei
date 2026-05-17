@@ -21,9 +21,15 @@ wuwei.info.contents.markup = (function () {
   }
 
   function block(label, value, klass) {
+    if (!!label) {
+      return '' +
+        '<div class="contents-field ' + (klass || '') + '">' +
+          '<div class="contents-label">' + esc(label) + '</div>' +
+          '<div class="contents-value">' + esc(value) + '</div>' +
+        '</div>';
+    }
     return '' +
       '<div class="contents-field ' + (klass || '') + '">' +
-        '<div class="contents-label">' + esc(label) + '</div>' +
         '<div class="contents-value">' + esc(value) + '</div>' +
       '</div>';
   }
@@ -34,22 +40,22 @@ wuwei.info.contents.markup = (function () {
 
     return '' +
       '<div class="contents-marker-list-wrap">' +
-        '<h4 class="contents-subheading">' + esc(t('PageMarkers')) + '</h4>' +
-        '<div class="contents-marker-list">' +
-          markers.map(function (marker) {
-            var hasAnchor = !!marker.anchorHref;
-            var refLabel = hasAnchor ? t('Anchor href') : t('Page number');
-            var refValue = hasAnchor ? marker.anchorHref : marker.pageNumber;
-            return '' +
-              '<div class="contents-marker-row">' +
-                '<div class="contents-marker-title">' + esc(marker.label || t('PageMarker')) + '</div>' +
-                '<div class="contents-marker-ref"><span>' + esc(refLabel) + ':</span> ' + esc(refValue) + '</div>' +
-                (marker.description
-                  ? '<pre class="contents-marker-description">' + esc(marker.description) + '</pre>'
-                  : '') +
-              '</div>';
-          }).join('') +
-        '</div>' +
+      '<h4 class="contents-subheading">' + esc(t('PageMarkers')) + '</h4>' +
+      '<div class="contents-marker-list">' +
+      markers.map(function (marker) {
+        var hasAnchor = !!marker.anchorHref;
+        var refLabel = hasAnchor ? t('Anchor href') : t('Page number');
+        var refValue = hasAnchor ? marker.anchorHref : marker.pageNumber;
+        return '' +
+          '<div class="contents-marker-row">' +
+          '<div class="contents-marker-title">' + esc(marker.label || t('PageMarker')) + '</div>' +
+          '<div class="contents-marker-ref"><span>' + esc(refLabel) + ':</span> ' + esc(refValue) + '</div>' +
+          (marker.description
+            ? '<pre class="contents-marker-description">' + esc(marker.description) + '</pre>'
+            : '') +
+          '</div>';
+      }).join('') +
+      '</div>' +
       '</div>';
   }
 
@@ -63,41 +69,57 @@ wuwei.info.contents.markup = (function () {
 
     return '' +
       '<section class="contents-info contents-axis-info">' +
-        '<div class="contents-heading-wrap">' +
-          '<h3 class="contents-heading">' + esc(group.name || t('Contents')) + '</h3>' +
-        '</div>' +
-        '<div class="contents-grid">' +
-          block(t('Axis'), group.orientation || '', 'axis') +
-          block(t('Unit'), (group.axis && group.axis.unit) || 'page', 'unit') +
-          (showPageOffset ? block(t('Page offset'), pageOffset, 'page-offset') : '') +
-          block(t('Markers'), (param && param.markerCount) || 0, 'markers') +
-          block(t('Document'), (param && param.documentName) || '', 'document') +
-        '</div>' +
-        markerListTemplate(markers) +
+      '<div class="contents-heading-wrap">' +
+      '<h3 class="contents-heading">' + esc(group.name || t('Contents')) + '</h3>' +
+      '</div>' +
+      '<div class="contents-grid">' +
+      block(t('Axis'), group.orientation || '', 'axis') +
+      block(t('Unit'), (group.axis && group.axis.unit) || 'page', 'unit') +
+      (showPageOffset ? block(t('Page offset'), pageOffset, 'page-offset') : '') +
+      block(t('Markers'), (param && param.markerCount) || 0, 'markers') +
+      block(t('Document'), (param && param.documentName) || '', 'document') +
+      '</div>' +
+      markerListTemplate(markers) +
       '</section>';
   }
 
   function markerTemplate(param) {
     var point = (param && param.point) || {};
+    var pageNumber = (param && param.pageNumber) || point.pageNumber || 1;
+    var documentName = (param && param.documentName) || '';
+    var markerLabel = point.label || ('p.' + pageNumber);
+    var viewerUri = String((param && param.viewerUri) || '');
     var description = (point.description && 'object' === typeof point.description)
       ? point.description.body
       : (point.value || '');
+
     return '' +
       '<section class="contents-info contents-marker-info">' +
-        '<div class="contents-heading-wrap">' +
-          '<h3 class="contents-heading">' + esc(point.label || t('PageMarker')) + '</h3>' +
-        '</div>' +
-        '<div class="contents-grid">' +
-          block(t('Page'), (param && param.pageNumber) || point.pageNumber || 1, 'page') +
-          block(t('Axis'), (param && param.axisName) || '', 'axis') +
-          block(t('Document'), (param && param.documentName) || '', 'document') +
-        '</div>' +
-        (description
-          ? '<div class="contents-memo-wrap">' +
-              '<div class="contents-label">' + esc(t('Comment')) + '</div>' +
-              '<pre class="contents-memo">' + esc(description) + '</pre>' +
-            '</div>'
-          : '') +
+      '<div class="contents-heading-wrap">' +
+      '<h3 class="contents-heading">' + esc(documentName || t('Contents')) + '</h3>' +
+      '</div>' +
+      '<div class="contents-grid">' +
+      block(null, markerLabel, 'marker-label') +
+      block(t('Page number'), pageNumber, 'page') +
+      // block(t('Axis'), (param && param.axisName) || '', 'axis') +
+      // block(t('Document'), documentName, 'document') +
+      '</div>' +
+      (viewerUri
+        ? '<div class="contents-viewer-wrap">' +
+        '<iframe id="infoContentsFrame" class="contents-viewer-frame" src="' + esc(viewerUri) + '" ' +
+        'onerror="wuwei.info.iframeError()"></iframe>' +
+        '<span class="contents-open-window" data-open-uri="' + esc(viewerUri) + '" ' +
+        'onclick="wuwei.info.openWindow(this.getAttribute(\'data-open-uri\'), null, \'width=600,height=400,resizable=yes,scrollbars=yes\')">' +
+        esc(t('Click to open window')) + '<i class="fas fa-external-link-alt"></i>' +
+        '</span>' +
+        '</div>'
+        : '') +
+      (description
+        ? '<div class="contents-memo-wrap">' +
+        '<div class="contents-label">' + esc(t('Comment')) + '</div>' +
+        '<pre class="contents-memo">' + esc(description) + '</pre>' +
+        '</div>'
+        : '') +
       '</section>';
   }
 

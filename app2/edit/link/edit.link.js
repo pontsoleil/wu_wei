@@ -150,7 +150,6 @@ wuwei.edit.link = wuwei.edit.link || {};
   }
 
   function close() {
-    d3.select('#edit').style('height', '100%');
     const el = document.getElementById('edit-link');
     if (el) {
       el.innerHTML = '';

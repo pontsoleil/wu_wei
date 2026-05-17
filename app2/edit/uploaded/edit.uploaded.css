@@ -1,12 +1,11 @@
-#edit {
-  height: 100%;
-}
 #edit-uploaded {
   padding: 8px;
 }
+
 #edit-uploaded .edit {
-  margin-top: 50px;
+  margin-top: 8px;
 }
+
 #edit-uploaded .edit .frame img {
   width: 100%;
   height: auto;

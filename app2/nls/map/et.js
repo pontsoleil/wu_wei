@@ -79,7 +79,7 @@ wuwei.nls.ET = {
   'Segment properties': 'Lõigu omadused',
   'Edit segment from player': 'Muuda lõiku mängijast',
   'Delete segment': 'Kustuta lõik',
-  'Info Timeline Segment': 'Ajatelje teave',
+  'Info Timeline': 'Ajatelje teave',
   'SelectAll': 'Vali kõik',
   'Show All Memo': 'Näita kõiki memosid',
   'Hide All Memo': 'Peida kõik memod',

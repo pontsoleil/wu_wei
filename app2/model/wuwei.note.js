@@ -1808,16 +1808,43 @@ wuwei.note = (function () {
   }
 
   /**
-   * 
-   * @param {*} note_id 
+   *
+   * Delete a note.
+   *
+   * Accepts either:
+   *   removeNote(noteId)
+   *   removeNote({ id: noteId, note_key: 'YYYY/MM/DD/noteId' })
+   *   removeNote(noteId, noteKey)
+   *
+   * note_key identifies the exact list row.  dir is also sent for backward
+   * compatibility with older handlers.
+   *
+   * @param {string|Object} noteRef
+   * @param {string=} noteKey
    */
-  function removeNote(note_id) {
+  function removeNote(noteRef, noteKey) {
     const cu = state.currentUser || {};
-    const action = util.getAction('remove-note')
-    return ajaxRequest(action, {
-      id: note_id,
-      user_id: cu.user_id
-    }, 'POST', 5000);
+    const action = util.getAction('remove-note');
+    const data = {
+      id: '',
+      user_id: cu.user_id,
+      note_key: ''
+    };
+
+    if (noteRef && typeof noteRef === 'object') {
+      data.id = String(noteRef.id || noteRef.note_id || '');
+      data.note_key = String(noteRef.note_key || noteRef.dir || noteRef.path || noteRef.notePath || '');
+    }
+    else {
+      data.id = String(noteRef || '');
+      data.note_key = String(noteKey || '');
+    }
+
+    if (data.note_key) {
+      data.dir = data.note_key;
+    }
+
+    return ajaxRequest(action, data, 'POST', 5000);
   }
 
   /** Page */
