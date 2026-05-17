@@ -456,6 +456,7 @@ def collect_note_record(note_root: Path, file_path: Path) -> Dict[str, object]:
         "note_name": meta.get("name", ""),
         "description": meta.get("description", ""),
         "dir": parent,
+        "note_key": parent,
         "size": file_path.stat().st_size,
         "timestamp": note_timestamp(file_path),
         "file": name,

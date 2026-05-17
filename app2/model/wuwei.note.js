@@ -1797,27 +1797,78 @@ wuwei.note = (function () {
     return ajaxRequest(action, data, 'POST', 30000);
   }
 
-  function loadNote(node_id) {
-    newNote();
-    const cu = state.currentUser || {};
-    const action = util.getAction('load-note')
-    return ajaxRequest(action, {
-      id: node_id,
-      user_id: cu.user_id
-    }, 'POST', 5000);
+  function noteRequestData(noteRef, noteKey) {
+    const data = {
+      id: '',
+      note_key: '',
+      key: '',
+      dir: ''
+    };
+
+    if (noteRef && typeof noteRef === 'object') {
+      data.id = String(noteRef.id || noteRef.note_id || '');
+      data.note_key = String(noteRef.note_key || noteRef.key || noteRef.dir || noteRef.path || noteRef.notePath || '');
+    }
+    else {
+      const refText = String(noteRef || '');
+      data.note_key = String(noteKey || '');
+      if (!data.note_key && refText.indexOf('/') >= 0) {
+        const parts = refText.replace(/\\/g, '/').split('/').filter(Boolean);
+        data.note_key = refText;
+        data.id = parts.length ? parts[parts.length - 1] : '';
+        if (data.id === 'note.json') {
+          data.id = parts.length >= 2 ? parts[parts.length - 2] : '';
+        }
+      }
+      else {
+        data.id = refText;
+      }
+    }
+
+    data.id = data.id.trim();
+    data.note_key = data.note_key.trim();
+
+    if (data.note_key) {
+      data.key = data.note_key;
+      data.dir = data.note_key;
+    }
+
+    return data;
   }
 
   /**
+   * Load a note.
    *
+   * Prefer note_key returned by list-note over id.  id can be duplicated when
+   * a note was copied or restored under a different dated directory.
+   *
+   * Accepts either:
+   *   loadNote(noteId)
+   *   loadNote({ id: noteId, note_key: 'YYYY/MM/DD/noteId' })
+   *   loadNote(noteId, noteKey)
+   *
+   * @param {string|Object} noteRef
+   * @param {string=} noteKey
+   */
+  function loadNote(noteRef, noteKey) {
+    newNote();
+    const cu = state.currentUser || {};
+    const action = util.getAction('load-note');
+    const data = noteRequestData(noteRef, noteKey);
+    data.user_id = cu.user_id;
+    return ajaxRequest(action, data, 'POST', 5000);
+  }
+
+  /**
    * Delete a note.
+   *
+   * Prefer note_key returned by list-note over id.  id can be duplicated when
+   * a note was copied or restored under a different dated directory.
    *
    * Accepts either:
    *   removeNote(noteId)
    *   removeNote({ id: noteId, note_key: 'YYYY/MM/DD/noteId' })
    *   removeNote(noteId, noteKey)
-   *
-   * note_key identifies the exact list row.  dir is also sent for backward
-   * compatibility with older handlers.
    *
    * @param {string|Object} noteRef
    * @param {string=} noteKey
@@ -1825,25 +1876,8 @@ wuwei.note = (function () {
   function removeNote(noteRef, noteKey) {
     const cu = state.currentUser || {};
     const action = util.getAction('remove-note');
-    const data = {
-      id: '',
-      user_id: cu.user_id,
-      note_key: ''
-    };
-
-    if (noteRef && typeof noteRef === 'object') {
-      data.id = String(noteRef.id || noteRef.note_id || '');
-      data.note_key = String(noteRef.note_key || noteRef.dir || noteRef.path || noteRef.notePath || '');
-    }
-    else {
-      data.id = String(noteRef || '');
-      data.note_key = String(noteKey || '');
-    }
-
-    if (data.note_key) {
-      data.dir = data.note_key;
-    }
-
+    const data = noteRequestData(noteRef, noteKey);
+    data.user_id = cu.user_id;
     return ajaxRequest(action, data, 'POST', 5000);
   }
 

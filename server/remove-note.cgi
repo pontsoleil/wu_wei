@@ -168,14 +168,29 @@ valid_simple_id "$user_id" || error_response 'ERROR INVALID USER'
 
 note_id=$(nameread id "$CGIVARS" | strip_quotes || true)
 [ -n "${note_id:-}" ] || note_id=$(raw_param id)
-valid_simple_id "$note_id" || error_response 'ERROR INVALID NOTE'
 
 note_key=$(nameread note_key "$CGIVARS" | strip_quotes || true)
+[ -n "${note_key:-}" ] || note_key=$(nameread key "$CGIVARS" | strip_quotes || true)
 [ -n "${note_key:-}" ] || note_key=$(nameread dir "$CGIVARS" | strip_quotes || true)
 [ -n "${note_key:-}" ] || note_key=$(nameread path "$CGIVARS" | strip_quotes || true)
 [ -n "${note_key:-}" ] || note_key=$(raw_param note_key)
+[ -n "${note_key:-}" ] || note_key=$(raw_param key)
 [ -n "${note_key:-}" ] || note_key=$(raw_param dir)
 [ -n "${note_key:-}" ] || note_key=$(raw_param path)
+
+# Backward compatibility: allow a dated path to arrive in id.
+case "${note_id:-}" in
+  */*)
+    [ -n "${note_key:-}" ] || note_key=$note_id
+    case "$note_id" in */note.json) note_id=${note_id%/note.json} ;; esac
+    note_id=$(basename "$note_id")
+    ;;
+esac
+
+[ -n "${note_id:-}${note_key:-}" ] || error_response 'ERROR NOTE NOT SPECIFIED'
+if [ -n "${note_id:-}" ]; then
+  valid_simple_id "$note_id" || error_response 'ERROR INVALID NOTE'
+fi
 if [ -n "${note_key:-}" ]; then
   valid_note_key "$note_key" || error_response 'ERROR INVALID NOTE KEY'
 fi
@@ -207,9 +222,10 @@ month=$(date '+%m')
 trash_dir="$trash_base/$year/$month"
 mkdir -p "$trash_dir" || error_response 'ERROR TRASH DIRECTORY CREATE FAILED'
 
-dest="$trash_dir/${note_id}"
+trash_name=${note_id:-$(basename "$note")}
+dest="$trash_dir/${trash_name}"
 if [ -e "$dest" ]; then
-  dest="$trash_dir/${note_id}.$(date '+%Y%m%d%H%M%S').$$"
+  dest="$trash_dir/${trash_name}.$(date '+%Y%m%d%H%M%S').$$"
 fi
 
 if mv "$note" "$dest"; then

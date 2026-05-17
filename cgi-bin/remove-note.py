@@ -140,9 +140,16 @@ def main():
     note_id = trim(params.get("id", ""))
     note_key = normalise_note_key(
         params.get("note_key", "") or
+        params.get("key", "") or
         params.get("dir", "") or
         params.get("path", "")
     )
+    if not note_key and "/" in note_id:
+        note_key = normalise_note_key(note_id)
+        parts = [part for part in note_key.split("/") if part]
+        note_id = parts[-1] if parts else ""
+        if note_id == "note.json" and len(parts) >= 2:
+            note_id = parts[-2]
 
     if not effective_user_id or not user_id or user_id.startswith("ERROR"):
         script_error("ERROR NOT LOGGED IN")

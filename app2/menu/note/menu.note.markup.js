@@ -71,32 +71,67 @@ wuwei.menu.note.markup = ( function () {
       };
     }
 
+    function escapeHtml(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function decodeDescription(value) {
+      if (!value) {
+        return '';
+      }
+      try {
+        return decodeURIComponent(value);
+      }
+      catch (e) {
+        return String(value || '');
+      }
+    }
+
+    function noteDomId(note, index) {
+      const key = String((note && (note.note_key || note.dir || note.key)) || (note && note.id) || index || '');
+      return 'note_' + encodeURIComponent(key).replace(/[^A-Za-z0-9_-]/g, '_');
+    }
+
     function noteGallery(notes) {
       if (!notes) {
         notes = [];
       }
-      const gallery = notes.map(note => {
+      const gallery = notes.map((note, index) => {
+        note = note || {};
+        const noteId = String(note.id || note.note_id || '');
+        const noteKey = String(note.note_key || note.key || note.dir || '');
         const datetime = parseTimestamp(note.timestamp);
         const date = datetime.date;
         const time = datetime.time;
         const size = wuwei.menu.markup.nFormatter(note.size, 1);
-        const description = note.description && decodeURIComponent(note.description) || '';
+        const description = decodeDescription(note.description);
+        const domId = noteDomId(note, index);
         return `
-        <div class="note" id="note_${note.id}"
-            data-id="${note.id}" onclick="wuwei.menu.note.load(this)">
-          <input type="hidden" class="note_id" value="${note.id}">
+        <div class="note" id="${escapeHtml(domId)}"
+            data-id="${escapeHtml(noteId)}"
+            data-note-key="${escapeHtml(noteKey)}"
+            data-key="${escapeHtml(noteKey)}"
+            onclick="wuwei.menu.note.load(this)">
+          <input type="hidden" class="note_id" value="${escapeHtml(noteId)}">
+          <input type="hidden" class="note_key" value="${escapeHtml(noteKey)}">
           <div class="flip-card">
             <div class="flip-card-inner">
               <div class="flip-card-front">
                 <div class="thumbnail"></div>
               </div>
-              <div class="flip-card-back" data-id="${note.id}">
+              <div class="flip-card-back">
                 <div class="desc">
-                  <p class="name">${note.note_name}</p>
-                  <p>${date} ${time} ${size}</p>
-                  <p>${description}</p>
+                  <p class="name">${escapeHtml(note.note_name || note.name || '')}</p>
+                  <p>${escapeHtml(date)} ${escapeHtml(time)} ${escapeHtml(size)}</p>
+                  <p>${escapeHtml(description)}</p>
                 </div>
-                <i data-id="${note.id}" onclick="wuwei.menu.note.remove(this, event); return false;"
+                <i data-id="${escapeHtml(noteId)}" data-note-key="${escapeHtml(noteKey)}"
+                    onclick="wuwei.menu.note.remove(this, event); return false;"
                     class="remove fas fa-trash w3-button w3-transparent w3-large"></i>
               </div>
             </div>

@@ -206,7 +206,8 @@ wuwei.menu.note = wuwei.menu.note || {};
           let thumbnail = decodeMaybe(data.thumbnail || '');
           if (!thumbnail || thumbnail[0] !== '<') thumbnail = '';
 
-          thumbnails[data.id] = thumbnail;
+          const noteKey = String(data.note_key || data.key || data.dir || data.id || '');
+          thumbnails[noteKey] = thumbnail;
 
           const description = decodeMaybe(data.description || '');
           let note_name = decodeMaybe(data.note_name || '').replace(/[\n]/g, '');
@@ -217,6 +218,7 @@ wuwei.menu.note = wuwei.menu.note || {};
             note_name,
             description,
             dir: data.dir,
+            note_key: data.note_key || data.key || data.dir || '',
             size: data.size,
             timestamp: data.timestamp,
             thumbnail
@@ -246,10 +248,10 @@ wuwei.menu.note = wuwei.menu.note || {};
 
         const elements = noteEl.querySelectorAll('div.note');
         elements.forEach(el => {
-          const note_id = el.querySelector('input.note_id')?.value;
+          const note_key = el.dataset.noteKey || el.dataset.key || el.querySelector('input.note_key')?.value || el.querySelector('input.note_id')?.value;
           const thumbEl = el.querySelector('div.thumbnail');
-          if (note_id && thumbEl && thumbnails[note_id]) {
-            thumbEl.innerHTML = thumbnails[note_id];
+          if (note_key && thumbEl && thumbnails[note_key]) {
+            thumbEl.innerHTML = thumbnails[note_key];
           }
         });
 
@@ -349,7 +351,8 @@ wuwei.menu.note = wuwei.menu.note || {};
           let thumbnail = decodeMaybe(data.thumbnail || '');
           if (!thumbnail || thumbnail[0] !== '<') thumbnail = '';
 
-          thumbnails[data.id] = thumbnail;
+          const noteKey = String(data.note_key || data.key || data.dir || data.id || '');
+          thumbnails[noteKey] = thumbnail;
 
           const description = decodeMaybe(data.description || '');
           let note_name = decodeMaybe(data.note_name || '').replace(/[\n]/g, '');
@@ -360,6 +363,7 @@ wuwei.menu.note = wuwei.menu.note || {};
             note_name,
             description,
             dir: data.dir,
+            note_key: data.note_key || data.key || data.dir || '',
             size: data.size,
             timestamp: data.timestamp,
             thumbnail
@@ -380,10 +384,10 @@ wuwei.menu.note = wuwei.menu.note || {};
 
         const elements = noteEl.querySelectorAll('div.note');
         elements.forEach(el => {
-          const note_id = el.querySelector('input.note_id')?.value;
+          const note_key = el.dataset.noteKey || el.dataset.key || el.querySelector('input.note_key')?.value || el.querySelector('input.note_id')?.value;
           const thumbEl = el.querySelector('div.thumbnail');
-          if (note_id && thumbEl && thumbnails[note_id]) {
-            thumbEl.innerHTML = thumbnails[note_id];
+          if (note_key && thumbEl && thumbnails[note_key]) {
+            thumbEl.innerHTML = thumbnails[note_key];
           }
         });
 
@@ -803,6 +807,15 @@ wuwei.menu.note = wuwei.menu.note || {};
     reader.readAsText(file, 'utf-8');
   }
 
+  function getNoteRef(el) {
+    const target = el && el.closest ? el.closest('.note') || el : el;
+    const dataset = (target && target.dataset) || {};
+    return {
+      id: String(dataset.id || dataset.noteId || ''),
+      note_key: String(dataset.noteKey || dataset.key || dataset.dir || '')
+    };
+  }
+
   /**
    * load note
    * @param {*} el 
@@ -816,9 +829,15 @@ wuwei.menu.note = wuwei.menu.note || {};
       timeout: 5000
     });
 
-    const note_id = el.dataset.id;
+    const noteRef = getNoteRef(el);
 
-    wuwei.note.loadNote(note_id)
+    if (!noteRef.note_key && !noteRef.id) {
+      wuwei.menu.snackbar.open({ type: 'error', message: 'ERROR NOTE KEY NOT SPECIFIED' });
+      wuwei.menu.modal.close();
+      return;
+    }
+
+    wuwei.note.loadNote(noteRef)
       .then(responseText => {
         // 念のため文字列化
         responseText = (responseText == null) ? '' : String(responseText);
@@ -912,13 +931,14 @@ wuwei.menu.note = wuwei.menu.note || {};
       ev.preventDefault();
       ev.stopPropagation(); // ★親の note.onclick(load) へ行かせない
     }
-    const target = el && el.closest ? el.closest('[data-id]') : el;
-    const note_id = (target && target.dataset && target.dataset.id) || '';
-    if (!note_id) {
-      console.warn('remove note: note id is missing');
+    const target = el && el.closest ? el.closest('.note') : el;
+    const noteRef = getNoteRef(target || el);
+    const note_id = noteRef.id;
+    if (!noteRef.note_key && !note_id) {
+      console.warn('remove note: note key is missing');
       return false;
     }
-    wuwei.note.removeNote(note_id)
+    wuwei.note.removeNote(noteRef)
       .then(responseText => {
         if (responseText.indexOf('#! /bin/sh') >= 0) {
           responseText = 'ERROR Cannnot execute bin/sh';
@@ -928,7 +948,9 @@ wuwei.menu.note = wuwei.menu.note || {};
           wuwei.menu.snackbar.open({ type: 'error', message: decodeMaybe(responseText).replace(/[\n]/g, '').trim() });
         }
         else {
-          const noteEl = document.getElementById('note_' + note_id);
+          const noteEl = target && target.classList && target.classList.contains('note')
+            ? target
+            : (target && target.closest ? target.closest('.note') : null);
           if (noteEl) {
             noteEl.remove();
           }
