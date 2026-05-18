@@ -246,7 +246,7 @@ wuwei.menu = wuwei.menu || {};
     resource = getNodeResource(node);
     uri = String(resource.canonicalUri || resource.uri || '').toLowerCase();
     kind = String(resource.kind || '').toLowerCase();
-    subtype = String(resource.subtype || '').toLowerCase();
+    subtype = String(resource.videoKind || '').toLowerCase();
 
     return (
       kind === 'video' ||
@@ -289,8 +289,7 @@ wuwei.menu = wuwei.menu || {};
     return String(
       (resource && (
         resource.canonicalUri ||
-        resource.uri ||
-        (resource.snapshotSources && resource.snapshotSources.originalUri)
+        resource.uri
       )) || ''
     ).trim();
   }
@@ -319,8 +318,7 @@ wuwei.menu = wuwei.menu || {};
     text = String(
       (resource && (
         resource.canonicalUri ||
-        resource.uri ||
-        (resource.snapshotSources && resource.snapshotSources.originalUri)
+        resource.uri
       )) || ''
     ).replace(/\\/g, '/');
     return /^(?:upload\/|\d{4}\/\d{2}\/\d{2}\/)/.test(text) ||
@@ -1605,21 +1603,25 @@ wuwei.menu = wuwei.menu || {};
   }
 
   function getTextOriginalHref(node, resource) {
-    var uploadPath, uid, file;
+    var uploadPath;
 
     uploadPath = wuwei.util.getResourceOriginalUri(node);
     if (uploadPath) {
       return uploadPath;
     }
 
-    if (resource && String(resource.kind || '').toLowerCase() === 'upload' && resource.id && resource.date) {
-      file = String(resource.file || resource.filename || '').replace(/\\/g, '/').split('/').pop();
-      if (file) {
-        uid = getResourceOwnerIdForOpen(node);
-        return wuwei.util.toPublicResourceUri('upload', String(resource.date).replace(/^\/+|\/+$/g, '') + '/' + resource.id + '/' + file, uid);
-      }
-    }
     return '';
+  }
+
+  function getOfficeOriginalHref(node, resource) {
+    var uploadPath;
+
+    uploadPath = wuwei.util.getResourceOriginalUri(node);
+    if (uploadPath) {
+      return uploadPath;
+    }
+
+    return String(resource && (resource.canonicalUri || resource.uri || resource.url) || '').trim();
   }
 
   function isTextDocumentReference(resource, href) {
@@ -1631,23 +1633,13 @@ wuwei.menu = wuwei.menu || {};
   }
 
   function isHtmlDocumentReference(resource, href) {
-    var media = (resource && resource.media && typeof resource.media === 'object') ? resource.media : {};
-    var kind = String(resource && (resource.kind || resource.type || '') || '').toLowerCase();
-    var subtype = String(resource && resource.subtype || '').toLowerCase();
-    var mediaKind = String(media.kind || '').toLowerCase();
+    var kind = String(resource && resource.kind || '').toLowerCase();
+    var documentKind = String(resource && resource.documentKind || '').toLowerCase();
 
     return !!(
       util.isDocumentKindByExtension(null, resource, href, 'html') ||
-      kind === 'html' ||
-      kind === 'web' ||
-      kind === 'webpage' ||
-      kind === 'website' ||
-      subtype === 'html' ||
-      subtype === 'web' ||
-      subtype === 'webpage' ||
-      mediaKind === 'html' ||
-      mediaKind === 'web' ||
-      mediaKind === 'webpage'
+      documentKind === 'html' ||
+      kind === 'webpage'
     );
   }
 
@@ -1664,22 +1656,6 @@ wuwei.menu = wuwei.menu || {};
 
     viewerBase = getAppBasePathForOpen() + 'app2/viewer/text-viewer.html';
     return new URL(viewerBase + '?file=' + encodeURIComponent(url), window.location.origin).href;
-  }
-
-  function getOfficeOriginalHref(node, resource) {
-    var uploadPath, uid, file;
-    uploadPath = wuwei.util.getResourceOriginalUri(node);
-    if (uploadPath) {
-      return uploadPath;
-    }
-    if (resource && String(resource.kind || '').toLowerCase() === 'upload' && resource.id && resource.date) {
-      file = String(resource.file || resource.filename || '').replace(/\\/g, '/').split('/').pop();
-      if (file) {
-        uid = getResourceOwnerIdForOpen(node);
-        return wuwei.util.toPublicResourceUri('upload', String(resource.date).replace(/^\/+|\/+$/g, '') + '/' + resource.id + '/' + file, uid);
-      }
-    }
-    return '';
   }
 
   function isOfficeDocumentReference(resource, href) {
@@ -1785,7 +1761,6 @@ wuwei.menu = wuwei.menu || {};
   function getDownloadFilename(node, href) {
     var resource = node ? getNodeResource(node) : null;
     var file = null;
-    var identity = (resource && resource.identity) || {};
     var candidates = [];
     var fallback = '';
     var ext = '';
@@ -3874,6 +3849,7 @@ wuwei.menu = wuwei.menu || {};
       'InfoGroupMember': [
         'infoTimelineTarget',
         'infoContentsTarget',
+        'info',
         'download',
         'openNewTab',
         'openWindow',
@@ -4396,8 +4372,10 @@ wuwei.menu = wuwei.menu || {};
           return false;
         }
 
-        // timeline segment(start / mid / end) では通常の「情報」は出さない
-        if (isContextTimelineSegment(allNodes)) {
+        // Timeline Segment and Contents PageMarker have specialised info panes.
+        // A Content node attached to / contained in a group is still a normal
+        // document node, so keep the generic [i] command for PDF/Office/HTML.
+        if (isContextTimelineSegment(allNodes) || isContextContentsPage(allNodes)) {
           return false;
         }
 
@@ -5598,6 +5576,7 @@ wuwei.menu = wuwei.menu || {};
   ns.refreshPagenation = refreshPagenation;
   ns.checkPage = checkPage;
   ns.registerPagebuttonEvent = registerPagebuttonEvent;
+  ns.registerPageButtonEvent = registerPagebuttonEvent;
   /** new */
   ns.newClicked = newClicked;
   ns.closeNewClicked = closeNewClicked;

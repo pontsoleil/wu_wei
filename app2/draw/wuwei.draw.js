@@ -124,6 +124,14 @@ wuwei.draw = wuwei.draw || {};
     redraw();
   }
 
+  function updateResetviewControl(zoom) {
+    var menuApi = menu || wuwei.menu;
+
+    if (menuApi && typeof menuApi.updateResetview === 'function') {
+      menuApi.updateResetview(zoom);
+    }
+  }
+
   function clearGraphLayer() {
     const canvasSel = d3.select('g#' + state.canvasId);
 
@@ -1108,7 +1116,7 @@ wuwei.draw = wuwei.draw || {};
       };
       if (common.current && common.current.page) { common.current.page.transform = graph.transform; }
       /** show scale on control button */
-      menu.updateResetview();
+      updateResetviewControl();
       /** draw miniature */
       util.drawMiniature();
     }

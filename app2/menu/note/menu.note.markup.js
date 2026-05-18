@@ -152,6 +152,18 @@ wuwei.menu.note.markup = ( function () {
       }).join('');
       return gallery;
     }
+    const previousVersionEnabled = !!(wuwei.common && wuwei.common.state &&
+      (wuwei.common.state.previousVersion || wuwei.common.state.previous_version));
+    const previousVersionFilters = previousVersionEnabled ? `
+        <label class="note-include-ver0" title="${translate('Include ver0 notes')}">
+          <input type="checkbox" id="note-include-ver0">
+          ${translate('ver0')}
+        </label>
+        <label class="note-include-ver1" title="${translate('Include ver1 notes')}">
+          <input type="checkbox" id="note-include-ver1">
+          ${translate('ver1')}
+        </label>` : '';
+
     return `
 <div class="list w3-modal-content w3-animate-zoom w3-card-4">
   <header class="w3-container">
@@ -162,14 +174,7 @@ wuwei.menu.note.markup = ( function () {
         <input type="text" id="search-text" class="note-search-text" placeholder="${translate('Keyword')}">
         <input type="date" id="note-date-start" title="${translate('Start date')}">
         <input type="date" id="note-date-end" title="${translate('End date')}">
-        <label class="note-include-ver0" title="${translate('Include ver0 notes')}">
-          <input type="checkbox" id="note-include-ver0">
-          ${translate('ver0')}
-        </label>
-        <label class="note-include-ver1" title="${translate('Include ver1 notes')}">
-          <input type="checkbox" id="note-include-ver1">
-          ${translate('ver1')}
-        </label>
+        ${previousVersionFilters}
         <button type="button" onclick="wuwei.menu.note.search(); return false;">${translate('Search')}</button>
         <button type="button" onclick="wuwei.menu.note.clearSearch(); return false;">${translate('Clear')}</button>
     </div>

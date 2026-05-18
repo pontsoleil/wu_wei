@@ -47,24 +47,17 @@ wuwei.edit.video.markup = (function () {
 
   function getFontAlign(node) {
     var align = node && node.style && node.style.font && node.style.font.align;
-    var anchor;
-    if (align) { return String(align).toLowerCase(); }
-    anchor = node && node.font && node.font['text-anchor'];
-    if ('start' === anchor) { return 'left'; }
-    if ('end' === anchor) { return 'right'; }
-    return 'center';
+    return align ? String(align).toLowerCase() : 'center';
   }
   function getMediaKindValue(resource) {
     const kind = String(resource && resource.kind || '').toLowerCase();
     const mimeType = String(resource && resource.mimeType || '').toLowerCase();
-    const media = resource && resource.media && typeof resource.media === 'object' ? resource.media : {};
-    const mediaKind = String(media.kind || '').toLowerCase();
-    if (mediaKind === 'video' || kind === 'video' || mimeType.indexOf('video/') === 0) { return 'video'; }
-    if (mediaKind === 'audio' || kind === 'audio' || mimeType.indexOf('audio/') === 0) { return 'audio'; }
-    if (mediaKind === 'image' || kind === 'image' || mimeType.indexOf('image/') === 0) { return 'image'; }
-    if (mediaKind === 'document' || kind === 'pdf' || kind === 'office' || kind === 'document') { return 'document'; }
-    if (mediaKind === 'webpage' || kind === 'web' || kind === 'webpage') { return 'webpage'; }
-    return kind || mediaKind || '';
+    if (kind === 'video' || mimeType.indexOf('video/') === 0) { return 'video'; }
+    if (kind === 'audio' || mimeType.indexOf('audio/') === 0) { return 'audio'; }
+    if (kind === 'image' || mimeType.indexOf('image/') === 0) { return 'image'; }
+    if (kind === 'document') { return 'document'; }
+    if (resource && resource.documentKind === 'html') { return 'webpage'; }
+    return kind || '';
   }
   const template = function (param) {
     let node = param.node;
@@ -141,7 +134,7 @@ wuwei.edit.video.markup = (function () {
       '</div>',
       '<div class="w3-row">',
         '<label for="style_fill" class="w3-col s4">' + t('Background') + '</label>',
-        '<input type="color" id="style_fill" name="style.fill" value="' + escapeHtml(style.fill || node.color) + '" class="w3-col s4 pointer edit-value">',
+        '<input type="color" id="style_fill" name="style.fill" value="' + escapeHtml(style.fill) + '" class="w3-col s4 pointer edit-value">',
         '<div id="style_fill_palette" name="style_fill_palette" class="w3-col s4 pointer"></div>',
       '</div>',
       '<div class="w3-row">',

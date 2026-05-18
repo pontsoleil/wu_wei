@@ -555,8 +555,8 @@ wuwei.model = (function () {
       return null;
     }
 
-    from = link.from || (link.source && link.source.id) || link.source;
-    to = link.to || (link.target && link.target.id) || link.target;
+    from = link.from;
+    to = link.to;
 
     if (!from || !to) {
       console.log('reverse NO from or to. link:', link);
@@ -566,12 +566,6 @@ wuwei.model = (function () {
     // 端点を反転
     link.from = to;
     link.to = from;
-    if (Object.prototype.hasOwnProperty.call(link, 'source')) {
-      link.source = to;
-    }
-    if (Object.prototype.hasOwnProperty.call(link, 'target')) {
-      link.target = from;
-    }
 
     // 矢印・接続位置定義があれば始点・終点を入れ替える
     routing = (link.routing && typeof link.routing === 'object') ? link.routing : null;
@@ -627,8 +621,6 @@ wuwei.model = (function () {
     }
     delete link.startPosition;
     delete link.endPosition;
-    delete link.sourcePosition;
-    delete link.targetPosition;
 
     if (link.audit && typeof link.audit === 'object') {
       link.audit.lastModifiedBy =
@@ -1151,7 +1143,7 @@ wuwei.model = (function () {
       self.resource.uri = self.resource.uri || '';
       self.resource.canonicalUri = self.resource.canonicalUri || '';
       self.resource.mimeType = self.resource.mimeType || 'text/plain';
-      contentResourceTitle = (self.resource.identity && self.resource.identity.title) || self.resource.title || self.label || '';
+      contentResourceTitle = self.resource.title || self.label || '';
       self.resource.title = contentResourceTitle;
       contentOriginalFile = self.resource.storage && Array.isArray(self.resource.storage.files)
         ? self.resource.storage.files.find(function (item) {
@@ -5140,36 +5132,7 @@ wuwei.model = (function () {
       labelStyle,
       shapeExtent,
       linkCountNode;
-    thumbnail = node.thumbnailUri || node.thumbnail || '';
-    if (util.getResourceThumbnailUri) {
-      let resourceThumbnail = util.getResourceThumbnailUri(node);
-      const staleResourceThumbnail = /[?&]area=resource(?:&|$)/.test(String(thumbnail || ''));
-      if (staleResourceThumbnail && (!resourceThumbnail || resourceThumbnail === thumbnail) &&
-        common.current && common.current.note_id === 'new_note' && util.toPublicResourceUri) {
-        const match = String(thumbnail || '').match(/[?&]path=([^&]+)/);
-        const oldPath = match ? decodeURIComponent(match[1]) : '';
-        const draftPath = oldPath.replace(
-          /^(\d{4}\/\d{2}\/\d{2}\/(_[0-9a-f-]+)\/thumbnail\.[A-Za-z0-9]+)$/i,
-          function (_all, _path, resourceId) {
-            return oldPath.replace(resourceId + '/', 'new_note/resource/' + resourceId + '/');
-          }
-        );
-        if (draftPath && draftPath !== oldPath) {
-          resourceThumbnail = util.toPublicResourceUri('note', draftPath, util.getCurrentUserId && util.getCurrentUserId());
-        }
-      }
-      if (resourceThumbnail && !/^fa-/.test(resourceThumbnail) &&
-        (!thumbnail || /^fa-/.test(thumbnail) || staleResourceThumbnail || resourceThumbnail !== thumbnail)) {
-        thumbnail = resourceThumbnail;
-        node.thumbnailUri = resourceThumbnail;
-        if (node.size && node.size.width <= 40 && node.size.height <= 60) {
-          node.size.width = 77;
-          node.size.height = 100;
-          width = node.size.width;
-          height = node.size.height;
-        }
-      }
-    }
+    thumbnail = (util.getResourceThumbnailUri ? util.getResourceThumbnailUri(node) : '') || '';
     resourceUri = (node.resource && node.resource.uri) || '';
 
     if (width < 0) {
@@ -5468,12 +5431,6 @@ wuwei.model = (function () {
         if (node.description && typeof node.description.body === 'string' && node.description.body) {
           source = node.description.body;
         }
-        else if (typeof node.value === 'string') {
-          source = node.value;
-        }
-        else if (node.value && typeof node.value.comment === 'string') {
-          source = node.value.comment;
-        }
       }
 
       if (!source || !source.trim()) {
@@ -5539,7 +5496,7 @@ wuwei.model = (function () {
 
       var _html;
       if ('Annotation' === type) {
-        _html = node.value.citation;
+        _html = node.description && typeof node.description.body === 'string' ? node.description.body : '';
       }
       else {
         _html = renderNodeAdocHtml(node, type);
@@ -6680,32 +6637,6 @@ wuwei.model = (function () {
       sCX1 = nearest(X1, sLX, sRX); sCX2 = nearest(X2, sLX, sRX);
       tCX1 = nearest(X1, tLX, tRX); tCX2 = nearest(X2, tLX, tRX);
       sCY = nearest(Y, sTY, sBY); tCY = nearest(Y, tTY, tBY);
-      // adjust position
-      const rgx = /^([TRBL])([-+]?\d+)$/;
-      if (link.source_position) {
-        let match = link.source_position.match(rgx);
-        if (match) {
-          value = +match[2];
-          switch (match[1]) {
-            case 'T': sX += GRID * value; break;
-            case 'B': sX += GRID * value; break;
-            case 'R': sY += GRID * value; break;
-            case 'L': sY += GRID * value; break;
-          }
-        }
-      }
-      if (link.target_position) {
-        let match = link.target_position.match(rgx);
-        if (match) {
-          value = +match[2];
-          switch (match[1]) {
-            case 'T': tX += GRID * value; break;
-            case 'B': tX += GRID * value; break;
-            case 'R': tY += GRID * value; break;
-            case 'L': tY += GRID * value; break;
-          }
-        }
-      }
       // update points
       if (sLX < X1 && X1 < sRX) {
         if (sTY < Y && Y < sBY) {
@@ -7145,8 +7076,6 @@ wuwei.model = (function () {
       delete routing.endPosition;
       delete link.startPosition;
       delete link.endPosition;
-      delete link.sourcePosition;
-      delete link.targetPosition;
     }
     var startPosition = routing.startPosition || '';
     var endPosition = routing.endPosition || '';
@@ -8284,8 +8213,8 @@ wuwei.model = (function () {
       return null;
     }
 
-    fromNode = findNodeById(link.from || link.source);
-    toNode = findNodeById(link.to || link.target);
+    fromNode = findNodeById(link.from);
+    toNode = findNodeById(link.to);
 
     group = getMemberVisibilityGroup(fromNode);
     if (group) {
@@ -9778,7 +9707,6 @@ wuwei.model = (function () {
       node.order = index + 1;
 
       if (!node.label) { node.label = formatTime(timeStart); }
-      delete node.name;
     });
   }
 

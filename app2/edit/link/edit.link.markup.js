@@ -46,14 +46,14 @@ wuwei.edit.link.markup = ( function () {
       option = param.option;
     const style = link.style || {};
     const line = style.line || {};
-    const font = style.font || link.font || {};
+    const font = style.font || {};
     const routing = (link.routing && 'object' === typeof link.routing) ? link.routing : {};
     const fontSizeValue = normalizeFontSizeValue(font && font.size);
     const label = link.label || '';
     const relation = link.relation || '';
     const shapeValue = link.shape || 'NORMAL';
     const lineKindValue = normalizeLineKind(line.kind);
-    const lineWidthValue = finiteOr(line.width, finiteOr(link.size, 2));
+    const lineWidthValue = finiteOr(line.width, 2);
     const lineColorValue = line.color || '#888888';
     const fontColorValue = font.color || '#000000';
     const startArrow = routing.startArrow || {};

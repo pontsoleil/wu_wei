@@ -113,25 +113,21 @@ wuwei.info.contents = wuwei.info.contents || {};
 
   function getDocumentName(spec) {
     var node = spec && spec.documentNode;
-    return node ? (node.label || node.name || node.id || '') : '';
+    return node ? (node.label || node.id || '') : '';
   }
 
   function getResourceTextForTypeCheck(node) {
     var resource = (node && node.resource && typeof node.resource === 'object') ? node.resource : {};
-    var media = (resource.media && typeof resource.media === 'object') ? resource.media : {};
     var contentsMeta = (resource.contents && typeof resource.contents === 'object') ? resource.contents : {};
     var storageFiles = (resource.storage && Array.isArray(resource.storage.files)) ? resource.storage.files : [];
     var textParts = [
       resource.mimeType,
-      media.mimeType,
       node && (node.contenttype || node.contentType),
       contentsMeta.type,
       resource.kind,
-      resource.type,
+      resource.documentKind,
       resource.canonicalUri,
-      resource.uri,
-      resource.file,
-      resource.filename
+      resource.uri
     ];
 
     storageFiles.forEach(function (file) {
@@ -190,7 +186,6 @@ wuwei.info.contents = wuwei.info.contents || {};
 
   function getPageMarkerAnchorHref(point) {
     var candidates = [
-      point && point.targetHref,
       point && point.href,
       point && point.htmlAnchorHref,
       point && point.anchorHref,

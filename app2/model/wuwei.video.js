@@ -113,7 +113,6 @@
     if (!node) {
       return null;
     }
-    node.option = 'video';
     resource = (node.resource && typeof node.resource === 'object') ? node.resource : {};
     owner = String(resource.owner || getCurrentUserId() || '');
     now = new Date().toISOString();
@@ -121,20 +120,14 @@
     mimeType = getVideoMimeType(text, resource.mimeType);
 
     resource.kind = 'video';
-    resource.subtype = subtype || resource.subtype || '';
+    resource.videoKind = subtype || resource.videoKind || '';
     resource.uri = text;
     resource.canonicalUri = text;
     resource.mimeType = mimeType;
     resource.title = resource.title || node.label || text || 'Video';
-    resource.thumbnailUri = resource.thumbnailUri || node.thumbnailUri || '';
     resource.owner = owner;
     resource.copyright = resource.copyright || '';
-    resource.media = (resource.media && typeof resource.media === 'object') ? resource.media : {};
-    resource.media.kind = 'video';
-    resource.media.subtype = subtype || resource.media.subtype || '';
-    resource.media.mimeType = mimeType;
     if (node.timeRange && Number.isFinite(Number(node.timeRange.end)) && Number(node.timeRange.end) > 0) {
-      resource.media.duration = Number(node.timeRange.end);
       resource.duration = Number(node.timeRange.end);
     }
     resource.rights = (resource.rights && typeof resource.rights === 'object') ? resource.rights : {};
@@ -148,18 +141,7 @@
     resource.audit.createdAt = resource.audit.createdAt || now;
     resource.audit.lastModifiedBy = owner;
     resource.audit.lastModifiedAt = now;
-    resource.viewer = (resource.viewer && typeof resource.viewer === 'object') ? resource.viewer : {};
-    resource.viewer.supportedModes = ['infoPane', 'newTab', 'newWindow', 'download'];
-    resource.viewer.defaultMode = resource.viewer.defaultMode || 'infoPane';
-    resource.viewer.embed = (resource.viewer.embed && typeof resource.viewer.embed === 'object') ? resource.viewer.embed : {};
-    resource.viewer.embed.enabled = !!text;
-    resource.viewer.embed.uri = text;
-    resource.viewer.embed.thumbnailUri = resource.thumbnailUri || '';
-    resource.viewer.thumbnailUri = resource.thumbnailUri || '';
-
     delete resource.storage;
-    delete resource.snapshotSources;
-    delete resource.identity;
 
     node.resource = resource;
     return resource;
@@ -168,7 +150,7 @@
   function detectSource(node) {
     var resource = getResource(node);
     var url = getVideoSource(node);
-    var subtype = String(resource.subtype || '').toLowerCase();
+    var subtype = String(resource.videoKind || '').toLowerCase();
     var kind = String(resource.kind || '').toLowerCase();
     if (subtype === 'youtube' || isHostedYouTube(url)) {
       return {

@@ -179,8 +179,6 @@ wuwei.edit.video = wuwei.edit.video || {};
       node.resource = resource;
     }
     resource.duration = value;
-    resource.media = (resource.media && typeof resource.media === 'object') ? resource.media : {};
-    resource.media.duration = value;
     if (node) {
       if (!node.timeRange || typeof node.timeRange !== 'object') {
         node.timeRange = {};

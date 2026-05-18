@@ -374,20 +374,7 @@ wuwei.edit.contents = wuwei.edit.contents || {};
       return !!wuwei.contents.isHtmlResourceNode(documentNode);
     }
 
-    // Fallback for a PageMarker without a resolvable source content.
-    // This is not used to override the source content decision above.
-    if (String(point.contentsKind || '').toLowerCase() === 'html-toc' ||
-      String(point.markerKind || '').toLowerCase() === 'html-toc') {
-      return true;
-    }
-
-    hrefText = String(point.href || point.targetHref || '');
-    hashIndex = hrefText.indexOf('#');
-    hashText = hashIndex >= 0 ? hrefText.slice(hashIndex) : '';
-    return !!(
-      point.anchorHref ||
-      (hashText && !/^#page=/i.test(hashText))
-    );
+    return !!(point.anchorHref || point.htmlAnchorHref);
   }
 
   function setRowVisible(id, visible) {
@@ -428,34 +415,14 @@ wuwei.edit.contents = wuwei.edit.contents || {};
   }
 
   function updateTargetHrefAnchor(point, anchorHref, rawHref) {
-    var targetHref;
-    var baseHref;
-
-    if (!point) {
-      return;
-    }
-
-    rawHref = String(rawHref || '').trim();
-    if (rawHref && isFullHref(rawHref)) {
-      point.targetHref = rawHref.replace(/#.*$/, '') + anchorHref;
-      return;
-    }
-
-    targetHref = String(point.targetHref || '').trim();
-    if (targetHref) {
-      point.targetHref = targetHref.replace(/#.*$/, '') + anchorHref;
-      return;
-    }
-
-    baseHref = getPageMarkerDocumentHref(point);
-    if (baseHref) {
-      point.targetHref = baseHref.replace(/#.*$/, '') + anchorHref;
-    }
+    if (!point) { return; }
+    point.anchorHref = normalizeAnchorHref(anchorHref || rawHref || point.anchorHref || '');
+    point.htmlAnchorHref = point.anchorHref;
   }
 
   function alignForContentTarget(point, font) {
     font = font || {};
-    return normalizeTextAlign(font.align || point.labelAlign || font['text-anchor']);
+    return normalizeTextAlign(font.align || 'center');
   }
 
   function normalizeFontSizeValue(value) {
@@ -701,10 +668,10 @@ wuwei.edit.contents = wuwei.edit.contents || {};
   function configureContentTarget(point) {
     var style = point.style || {};
     var line = style.line || {};
-    var font = style.font || point.font || {};
+    var font = style.font || {};
 
     var htmlMarker = isHtmlContentTarget(point);
-    var anchorHref = htmlMarker ? normalizeAnchorHref(point.anchorHref || point.href || point.targetHref || '') : '';
+    var anchorHref = htmlMarker ? normalizeAnchorHref(point.anchorHref || point.htmlAnchorHref || '') : '';
     $('editContentsPageMarkerId').value = point.id || '';
     $('label').value = point.label || '';
     $('description_body').value = getDescriptionBody(point);
@@ -717,13 +684,13 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     setRowVisible('documentPageMarkerFields', !htmlMarker);
     setRowVisible('htmlPageMarkerFields', htmlMarker);
     setShapeSizeControls('editContentsPageMarker', point.shape || 'CIRCLE', point.size, getDefaultPageMarkerSize());
-    $('style_fill').value = toHexColor(style.fill || point.color || '#ffffff', '#ffffff');
+    $('style_fill').value = toHexColor(style.fill || '#ffffff', '#ffffff');
     $('style_line_width').value = Number(
-      Number.isFinite(Number(line.width)) ? line.width : (point.outlineWidth || 1)
+      Number.isFinite(Number(line.width)) ? line.width : 1
     );
-    $('style_line_color').value = toHexColor(line.color || point.outline || '#4c6b8a', '#4c6b8a');
+    $('style_line_color').value = toHexColor(line.color || '#4c6b8a', '#4c6b8a');
     $('style_font_color').value = toHexColor(font.color || '#303030', '#303030');
-    $('style_font_size').value = normalizeFontSizeValue(font.size || point.fontSize || '12pt');
+    $('style_font_size').value = normalizeFontSizeValue(font.size || '12pt');
     var align = alignForContentTarget(point, font);
     if ($('style_font_align')) {
       $('style_font_align').value = align;
@@ -862,9 +829,6 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     }
     currentPoint.anchorHref = anchorHref;
     currentPoint.htmlAnchorHref = anchorHref;
-    currentPoint.href = anchorHref;
-    currentPoint.sectionId = anchorToSectionId(anchorHref);
-    currentPoint.contentsKind = 'html-toc';
     updateTargetHrefAnchor(currentPoint, anchorHref, rawHref);
     anchorHrefEl.value = anchorHref;
     currentPoint.changed = true;
@@ -899,15 +863,6 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     labelWasAutomatic = isAutoPageMarkerLabel(oldLabel, oldPageNumber);
     delete currentPoint.anchorHref;
     delete currentPoint.htmlAnchorHref;
-    delete currentPoint.href;
-    delete currentPoint.targetHref;
-    delete currentPoint.sectionId;
-    if (String(currentPoint.contentsKind || '').toLowerCase() === 'html-toc') {
-      delete currentPoint.contentsKind;
-    }
-    if (String(currentPoint.markerKind || '').toLowerCase() === 'html-toc') {
-      delete currentPoint.markerKind;
-    }
     newPageNumber = clampPageNumberForEdit(
       pageNumberEl.value || currentPoint.pageNumber || 1,
       currentGroup
@@ -1037,12 +992,13 @@ wuwei.edit.contents = wuwei.edit.contents || {};
       seen[node.id] = true;
       node.shape = sourcePoint.shape;
       node.size = clonePlain(sourcePoint.size || {});
-      node.color = sourcePoint.color;
-      node.outline = sourcePoint.outline;
-      node.outlineWidth = sourcePoint.outlineWidth;
       node.style = clonePlain(sourcePoint.style || {});
-      node.font = clonePlain(sourcePoint.font || {});
-      node.labelAlign = sourcePoint.labelAlign;
+      if (node.style && node.style.fill) { node.color = node.style.fill; }
+      if (node.style && node.style.line) {
+        node.outline = node.style.line.color;
+        node.outlineWidth = node.style.line.width;
+      }
+      if (node.style && node.style.font) { node.font = clonePlain(node.style.font); }
       node.changed = true;
     });
     if (wuwei.draw && typeof wuwei.draw.refresh === 'function') {

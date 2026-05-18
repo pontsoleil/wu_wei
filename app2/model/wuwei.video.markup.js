@@ -42,7 +42,7 @@
       return template.nativeVideo({
         src: source.src || source.url,
         mimeType: resource.mimeType || 'video/mp4',
-        poster: node && (node.smallThumbnail || node.thumbnail || ''),
+        poster: wuwei.util && typeof wuwei.util.getResourceThumbnailUri === 'function' ? wuwei.util.getResourceThumbnailUri(node) : '',
         className: nativeClass
       });
     }

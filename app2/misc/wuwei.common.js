@@ -253,6 +253,8 @@ wuwei.common = (function () {
   var state = {
     iOS: null,
     browser: 'unknown',
+    previousVersion: false,
+    previous_version: false,
     isOnline: false,
     win: null,
     doc: null,

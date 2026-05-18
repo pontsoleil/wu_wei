@@ -17,6 +17,16 @@ wuwei.menu.markup = (function () {
       current = common.current;
     var nls = common.nls;
     var Selecting = common.state.Selecting;
+    var previousVersionEnabled = !!(state && (state.previousVersion || state.previous_version));
+    var previousVersionNoteOperators = previousVersionEnabled ? `
+      <div class="operator OpenV0 loggedin">
+        <i class="fas fa-history fa-fw"></i>
+        <span>ノートを開く(v0)</span>
+      </div>
+      <div class="operator OpenV1 loggedin">
+        <i class="fas fa-book-reader fa-fw"></i>
+        <span>ノートを開く(v1)</span>
+      </div>` : '';
 
     var html = [];
 
@@ -155,14 +165,7 @@ wuwei.menu.markup = (function () {
         <i class="fas fa-ban fa-fw"></i>
         <span>${translate('Discard')}</span>
       </div>
-      <div class="operator OpenV0 loggedin">
-        <i class="fas fa-history fa-fw"></i>
-        <span>ノートを開く(v0)</span>
-      </div>
-      <div class="operator OpenV1 loggedin">
-        <i class="fas fa-book-reader fa-fw"></i>
-        <span>ノートを開く(v1)</span>
-      </div>
+      ${previousVersionNoteOperators}
       <div class="operator Open loggedin">
         <i class="fas fa-book-open fa-fw"></i>
         <span>ノートを開く</span>

@@ -18,7 +18,7 @@ wuwei.info.uploaded.markup = ( function () {
     const
       common = wuwei.common,
       lang = common.nls.LANG,
-      value = node.value,
+      value = (node.description && typeof node.description.body === 'string') ? node.description.body : '',
       creativeCommons = common.nls.creativeCommons[lang];
     let uri = resolveInfoUri(node);
     let label = (node && node.label) || "";
@@ -86,10 +86,10 @@ wuwei.info.uploaded.markup = ( function () {
       </span>`
     : ``
   }
-  ${node.value && 'string' === typeof node.value && node.value.length > 0
+  ${value && value.length > 0
     ? `<div class="w3-row">
-        <textarea id="description_body" name="description.body" class="w3-col s12" rows="${rowcount(node.value)}"
-            placeholder="${t('Comment')}" disabled>${toText(node.value)}</textarea>
+        <textarea id="description_body" name="description.body" class="w3-col s12" rows="${rowcount(value)}"
+            placeholder="${t('Comment')}" disabled>${toText(value)}</textarea>
       </div>`
     : ''
   }
@@ -174,7 +174,9 @@ wuwei.info.uploaded.markup = ( function () {
     var resource = (node && node.resource && 'object' === typeof node.resource) ? node.resource : {};
     var viewer = (resource.viewer && 'object' === typeof resource.viewer) ? resource.viewer : {};
     var embed = (viewer.embed && 'object' === typeof viewer.embed) ? viewer.embed : {};
-    var snapshotSources = (resource.snapshotSources && 'object' === typeof resource.snapshotSources) ? resource.snapshotSources : {};
+    var snapshotSources = (resource.snapshotSources && 'object' === typeof resource.snapshotSources)
+      ? resource.snapshotSources
+      : {};
     if (isOfficeResource(node, resource)) {
       return resolveOfficeInfoUri(node, resource, viewer, embed, snapshotSources);
     }
@@ -269,7 +271,6 @@ wuwei.info.uploaded.markup = ( function () {
       resource.pdfUrl,
       resource.uri,
       resource.canonicalUri,
-      resource.identity && resource.identity.uri,
       embed.previewPdfUri,
       embed.previewPdfUrl,
       embed.pdfUri,

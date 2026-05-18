@@ -26,11 +26,8 @@ wuwei.info.generic.markup = (function () {
     let fontSize = (node.style && node.style.font && node.style.font.size) || 14;
     let fontClass = 'font-size-M';
     let thumbnailUri = resolveThumbnailUri(node);
-    if ('string' === typeof node.value) {
-      value = node.value;
-    }
-    else if (node.value && 'object' === typeof node.value && 'string' === typeof node.value.comment) {
-      value = node.value.comment;
+    if (node.description && typeof node.description.body === 'string') {
+      value = node.description.body;
     }
     let width, height;
     if ('object' === typeof node.size && node.size.width) {
@@ -45,7 +42,7 @@ wuwei.info.generic.markup = (function () {
   <!--Card image-->
   ${'Memo' !== node.type && label
         ? `<div class="w3-row info-title-wrap">
-        <h5 id="rName" name="label" data-path="label" class="w3-col s12 info-title"></h5>
+        <h5 id="label" name="label" data-path="label" class="w3-col s12 info-title"></h5>
       </div>`
         : ''
       }
@@ -194,7 +191,6 @@ wuwei.info.generic.markup = (function () {
 
   function resolveHtmlInfoUri(node, resource, embed) {
     var util = wuwei.util || {};
-    var snapshotSources = (resource && resource.snapshotSources && 'object' === typeof resource.snapshotSources) ? resource.snapshotSources : {};
     var original = util.getResourceOriginalUri ? util.getResourceOriginalUri(node) : '';
     var fileOriginal = util.getResourceFileUri ? util.getResourceFileUri(resource, 'original', node) : '';
 
@@ -205,11 +201,9 @@ wuwei.info.generic.markup = (function () {
     return String(
       fileOriginal ||
       original ||
-      (embed && embed.uri) ||
       resource.canonicalUri ||
       resource.uri ||
-      snapshotSources.originalUri ||
-      snapshotSources.previewUri ||
+
       ''
     ).trim();
   }
@@ -354,9 +348,8 @@ wuwei.info.generic.markup = (function () {
 
   function resolveThumbnailUri(node) {
     var util = wuwei.util || {};
-    var resource = util.getResource && util.getResource(node);
-    if (resource && util.getResourceFileUri) {
-      return util.getResourceFileUri(resource, 'thumbnail', node) || '';
+    if (util.getResourceThumbnailUri) {
+      return util.getResourceThumbnailUri(node) || '';
     }
     return '';
   }

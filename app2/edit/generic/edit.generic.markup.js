@@ -14,14 +14,7 @@ wuwei.edit.generic = wuwei.edit.generic || {};
 wuwei.edit.generic.markup = ( function () {
   function getFontAlign(node) {
     var align = node && node.style && node.style.font && node.style.font.align;
-    var anchor;
-    if (align) {
-      return String(align).toLowerCase();
-    }
-    anchor = node && node.font && node.font['text-anchor'];
-    if ('start' === anchor) { return 'left'; }
-    if ('end' === anchor) { return 'right'; }
-    return 'center';
+    return align ? String(align).toLowerCase() : 'center';
   }
 
   function normalizeFontSizeValue(value) {
@@ -104,10 +97,10 @@ wuwei.edit.generic.markup = ( function () {
   }
 
   function getEditableThumbnailUri(node) {
-    var uri = (node && (node.thumbnailUri || node.thumbnail)) || '';
-    if (wuwei.util && typeof wuwei.util.getResourceFilePath === 'function' &&
+    var uri = String(node && node.resource && node.resource.thumbnailUri || '');
+    if (!uri && wuwei.util && typeof wuwei.util.getResourceFilePath === 'function' &&
       node && node.resource) {
-      uri = wuwei.util.getResourceFilePath(node.resource, 'thumbnail', node) || uri;
+      uri = wuwei.util.getResourceFilePath(node.resource, 'thumbnail', node) || '';
     }
     if (wuwei.util && typeof wuwei.util.toStorageRelativePath === 'function' &&
       (/^(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i.test(String(uri || '')) ||
@@ -158,8 +151,7 @@ wuwei.edit.generic.markup = ( function () {
 
     return !!(
       files.length ||
-      (resource && resource.origin && resource.origin.type === 'upload') ||
-      node && node.option === 'upload'
+      files.length
     );
   }
 
@@ -225,7 +217,7 @@ wuwei.edit.generic.markup = ( function () {
       shape = node.shape,
       label = node.label || '',
       style = node.style || {},
-      font = (node.style && node.style.font) || node.font || {},
+      font = (node.style && node.style.font) || {},
       value = ((node.description && typeof node.description.body === 'string')
         ? node.description.body
         : ''),
@@ -324,20 +316,20 @@ wuwei.edit.generic.markup = ( function () {
 
         '<div class="w3-row">',
         '  <label for="thumbnailUri" class="w3-col s5">' + t('THUMBNAIL') + '</label>',
-        '  <input type="text" id="thumbnailUri" name="thumbnailUri" class="w3-col s7 edit-value"',
+        '  <input type="text" id="thumbnailUri" name="resource.thumbnailUri" class="w3-col s7 edit-value"',
         storagePathAttrs + ' value="' + getEditableThumbnailUri(node) + '">',
         '</div>',
 
         '<div class="w3-row">',
         '  <label for="resource_rights_attribution" class="w3-col s5">' + t('Credit') + '</label>',
         '  <input type="text" id="resource_rights_attribution" name="resource.rights.attribution" class="w3-col s7 edit-value"',
-        ' value="' + ((node.resource && node.resource.rights && node.resource.rights.attribution) || (node.resource && node.resource.attribution) || '') + '">',
+        ' value="' + ((node.resource && node.resource.rights && node.resource.rights.attribution) || '') + '">',
         '</div>',
 
         '<div class="w3-row">',
         '  <label for="resource_rights_license" class="w3-col s5">' + t('License') + '</label>',
         '  <input type="text" id="resource_rights_license" name="resource.rights.license" class="w3-col s7 edit-value"',
-        ' value="' + ((node.resource && node.resource.rights && node.resource.rights.license) || (node.resource && node.resource.license) || '') + '">',
+        ' value="' + ((node.resource && node.resource.rights && node.resource.rights.license) || '') + '">',
         '</div>'
       );
     }

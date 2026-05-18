@@ -131,24 +131,14 @@ wuwei.contents = wuwei.contents || {};
 
   function isHtmlResourceNode(node) {
     var resource = (node && node.resource && typeof node.resource === 'object') ? node.resource : {};
-    var media = (resource.media && typeof resource.media === 'object') ? resource.media : {};
-    var kind = String(resource.kind || resource.type || '').toLowerCase();
-    var subtype = String(resource.subtype || '').toLowerCase();
-    var mediaKind = String(media.kind || '').toLowerCase();
+    var kind = String(resource.kind || '').toLowerCase();
+    var documentKind = String(resource.documentKind || '').toLowerCase();
 
     return !!(node && node.type === 'Content' && (
       (util && typeof util.isDocumentKindByExtension === 'function' &&
         util.isDocumentKindByExtension(node, resource, '', 'html')) ||
-      kind === 'html' ||
-      kind === 'web' ||
-      kind === 'webpage' ||
-      kind === 'website' ||
-      subtype === 'html' ||
-      subtype === 'web' ||
-      subtype === 'webpage' ||
-      mediaKind === 'html' ||
-      mediaKind === 'web' ||
-      mediaKind === 'webpage'
+      documentKind === 'html' ||
+      kind === 'webpage'
     ));
   }
 
@@ -161,9 +151,8 @@ wuwei.contents = wuwei.contents || {};
 
   function isContentTargetResourceNode(node) {
     var resource = (node && node.resource && typeof node.resource === 'object') ? node.resource : {};
-    var media = (resource.media && typeof resource.media === 'object') ? resource.media : {};
     var contents = (resource.contents && typeof resource.contents === 'object') ? resource.contents : {};
-    var pageCount = Number(contents.pageCount || media.pageCount || resource.pageCount || node && node.pageCount || 0);
+    var pageCount = Number(contents.pageCount || 0);
     var kind = util && typeof util.getDocumentKindByExtension === 'function'
       ? util.getDocumentKindByExtension(node, resource, '')
       : '';
@@ -187,15 +176,8 @@ wuwei.contents = wuwei.contents || {};
 
   function getDocumentPageCount(node) {
     var resource = (node && node.resource && typeof node.resource === 'object') ? node.resource : {};
-    var media = (resource.media && typeof resource.media === 'object') ? resource.media : {};
     var contents = (resource.contents && typeof resource.contents === 'object') ? resource.contents : {};
-    var n = Number(
-      contents.pageCount ||
-      media.pageCount ||
-      resource.pageCount ||
-      node && node.pageCount ||
-      0
-    );
+    var n = Number(contents.pageCount || 0);
     return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
   }
 
@@ -538,24 +520,18 @@ wuwei.contents = wuwei.contents || {};
 
   function getLinkSourceId(link) {
     if (!link) { return ''; }
-    if (link.from) { return (link.from && link.from.id) ? link.from.id : link.from; }
-    if (link.source) { return (link.source && link.source.id) ? link.source.id : link.source; }
-    return '';
+    return link.from ? ((link.from && link.from.id) ? link.from.id : link.from) : '';
   }
 
   function getLinkTargetId(link) {
     if (!link) { return ''; }
-    if (link.to) { return (link.to && link.to.id) ? link.to.id : link.to; }
-    if (link.target) { return (link.target && link.target.id) ? link.target.id : link.target; }
-    return '';
+    return link.to ? ((link.to && link.to.id) ? link.to.id : link.to) : '';
   }
 
   function setLinkTargetId(link, id) {
     if (!link || !id) { return; }
     link.to = id;
-    if (undefined !== link.target) {
-      link.target = id;
-    }
+
   }
 
   function ensureDocumentEntryLink(group) {
@@ -686,8 +662,6 @@ wuwei.contents = wuwei.contents || {};
     link.type = 'Link';
     link.from = representative.id;
     link.to = endNode.id;
-    delete link.source;
-    delete link.target;
     link.relation = 'contents';
     link.groupRef = group.id;
     link.linkRole = 'contents-first-entry';
@@ -1379,6 +1353,7 @@ wuwei.contents = wuwei.contents || {};
     var ids, nodes, found;
     if (!page || !group) { return null; }
     ids = [
+      group.targetNodeId,
       group.documentRef,
       group.mediaRef,
       point && point.documentRef
@@ -1436,18 +1411,6 @@ wuwei.contents = wuwei.contents || {};
     }
     group.origin = group.origin || { x: Number(group.axis.anchor.x || 0), y: Number(group.axis.anchor.y || 0) };
     if (!Array.isArray(group.members)) { group.members = []; }
-    group.entries = Array.isArray(group.entries) ? group.entries : [];
-    if (!group.members.length && group.entries.length) {
-      group.members = group.entries.map(function (entry, index) {
-        return {
-          nodeId: entry && (entry.nodeId || entry.id) || '',
-          order: Number(entry && entry.order || index + 1),
-          role: 'member'
-        };
-      }).filter(function (member) {
-        return !!member.nodeId;
-      });
-    }
     group.length = Math.max(60, Number(group.length || AXIS_LENGTH));
     if (model && typeof model.ensureGroupRepresentativeTopic === 'function') {
       model.ensureGroupRepresentativeTopic(group, {
@@ -1470,7 +1433,6 @@ wuwei.contents = wuwei.contents || {};
         node.documentRef = group.documentRef;
       }
     });
-    delete group.contents;
     ensureDocumentEntryLink(group);
     layoutAxisGroup(group);
     ensureContentsRepresentativeEntryLink(group);
@@ -2067,22 +2029,9 @@ wuwei.contents = wuwei.contents || {};
 
     if (!contentTarget) { return ''; }
 
-    /*
-     * HTML PageMarker anchors are saved by edit.contents.js as anchorHref
-     * and href, and targetHref may also contain the complete URL with #hash.
-     * Do not limit this lookup to the older anchor/fragment/contentAnchor
-     * fields, otherwise the specified HTML section is lost and the page
-     * opens at the top.
-     */
     candidates = [
-      contentTarget.targetHref,
-      contentTarget.href,
       contentTarget.anchorHref,
-      contentTarget.htmlAnchorHref,
-      contentTarget.anchor,
-      contentTarget.fragment,
-      contentTarget.contentAnchor,
-      contentTarget.sectionId
+      contentTarget.htmlAnchorHref
     ];
 
     for (i = 0; i < candidates.length; i++) {
@@ -2103,9 +2052,8 @@ wuwei.contents = wuwei.contents || {};
 
     if (!contentTarget) { return ''; }
     candidates = [
-      contentTarget.targetHref,
-      contentTarget.href,
-      contentTarget.htmlAnchorHref
+      contentTarget.htmlAnchorHref,
+      contentTarget.anchorHref
     ];
     for (i = 0; i < candidates.length; i++) {
       value = String(candidates[i] || '').trim();
@@ -2130,32 +2078,25 @@ wuwei.contents = wuwei.contents || {};
 
   function buildContentTargetViewerUrl(uri, pageNumber, contentTarget) {
     var base = String(uri || '').trim();
-    var targetHref = getContentTargetFullHref(contentTarget);
+    var fullHref = getContentTargetFullHref(contentTarget);
     var fragment = getContentTargetFragment(contentTarget);
 
-    if (!base && targetHref) {
-      base = targetHref;
+    if (!base && fullHref) {
+      base = fullHref;
     }
     if (!base) { return ''; }
     if (isPdfLikeUri(base)) {
       return appendPageFragment(base, pageNumber);
     }
 
-    /*
-     * For HTML Contents, prefer PageMarker.targetHref / href when it is a
-     * complete URL.  The source Content URL can be a canonical URL such as
-     * https://www.sambuichi.jp/?p=15487, while the marker may intentionally
-     * point to https://www.sambuichi.jp/?p=15487&lang=en#section.
-     * Using only the Content URL drops both the query tail and the #anchor.
-     */
-    if (targetHref && !isPdfLikeUri(targetHref)) {
-      if (extractNonPageFragment(targetHref)) {
-        return targetHref;
+    if (fullHref && !isPdfLikeUri(fullHref)) {
+      if (extractNonPageFragment(fullHref)) {
+        return fullHref;
       }
       if (fragment) {
-        return appendNonPageFragment(targetHref, fragment);
+        return appendNonPageFragment(fullHref, fragment);
       }
-      return targetHref;
+      return fullHref;
     }
 
     if (fragment) {
@@ -2245,9 +2186,6 @@ wuwei.contents = wuwei.contents || {};
 
   function getHtmlDocumentViewerUrl(documentNode) {
     var resource = (documentNode && documentNode.resource && 'object' === typeof documentNode.resource) ? documentNode.resource : {};
-    var viewer = (resource.viewer && 'object' === typeof resource.viewer) ? resource.viewer : {};
-    var embed = (viewer.embed && 'object' === typeof viewer.embed) ? viewer.embed : {};
-    var snapshotSources = (resource.snapshotSources && 'object' === typeof resource.snapshotSources) ? resource.snapshotSources : {};
     var originalUri = util && typeof util.getResourceOriginalUri === 'function'
       ? util.getResourceOriginalUri(documentNode)
       : '';
@@ -2258,11 +2196,8 @@ wuwei.contents = wuwei.contents || {};
     return String(
       fileOriginal ||
       originalUri ||
-      embed.uri ||
       resource.canonicalUri ||
       resource.uri ||
-      snapshotSources.originalUri ||
-      snapshotSources.previewUri ||
       ''
     ).trim();
   }

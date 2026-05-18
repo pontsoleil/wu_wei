@@ -365,12 +365,9 @@ wuwei.home = (function () {
     const description = getResourceDescription(file);
     const label = safeDecode(file.label || file.name || (resource && resource.label) || file.id || '');
     const resourceId = (resource && resource.id) || file.id;
-    const identity = resource && resource.identity && typeof resource.identity === 'object' ? resource.identity : {};
-    const media = resource && resource.media && typeof resource.media === 'object' ? resource.media : {};
-    const viewer = resource && resource.viewer && typeof resource.viewer === 'object' ? resource.viewer : {};
     const storage = resource && resource.storage && typeof resource.storage === 'object' ? resource.storage : {};
     const sourceUri = safeDecode(resource.uri || resource.canonicalUri || '');
-    const previewUri = safeDecode(file.preview_url || value.previewUri || file.url || viewer.uri || sourceUri || '');
+    const previewUri = safeDecode(file.preview_url || value.previewUri || file.url || sourceUri || '');
     const canonicalUri = safeDecode(resource.canonicalUri || resource.uri || '');
 
     if (resource) {
@@ -380,14 +377,6 @@ wuwei.home = (function () {
       resource.description = description;
       resource.uri = sourceUri;
       resource.canonicalUri = canonicalUri || sourceUri;
-      resource.identity = Object.assign({}, identity, {
-        title: identity.title || resource.title || label
-      });
-      resource.media = Object.assign({}, media, {
-        kind: media.kind || resource.kind || file.option || 'general',
-        mimeType: media.mimeType || resource.mimeType || file.contenttype || 'text/plain'
-      });
-      resource.viewer = viewer;
       resource.storage = storage;
     }
 
@@ -399,10 +388,9 @@ wuwei.home = (function () {
       label: label,
       name: label,
       option: file.option || '',
-      contenttype: file.contenttype || resource.mimeType || (media && media.mimeType) || 'text/plain',
+      contenttype: file.contenttype || (resource && resource.mimeType) || 'text/plain',
       uri: sourceUri || previewUri,
       url: previewUri || sourceUri,
-      download_url: file.download_url || canonicalUri || sourceUri || previewUri,
       preview_url: previewUri || sourceUri,
       value: value
     };
@@ -423,15 +411,13 @@ wuwei.home = (function () {
     const resource = file.resource && typeof file.resource === 'object' ? file.resource : null;
     if (!resource) { return reject('missing resource object'); }
 
-    const identity = resource.identity && typeof resource.identity === 'object' ? resource.identity : {};
-    const media = resource.media && typeof resource.media === 'object' ? resource.media : {};
     const storage = resource.storage && typeof resource.storage === 'object' ? resource.storage : {};
     const files = Array.isArray(storage.files) ? storage.files : [];
 
     const resourceId = resource.id || '';
-    const label = safeDecode(file.label || file.name || resource.label || resource.title || identity.title || '');
-    const mimeType = media.mimeType || resource.mimeType || file.contenttype || '';
-    const kind = media.kind || resource.kind || file.option || '';
+    const label = safeDecode(file.label || file.name || resource.label || resource.title || '');
+    const mimeType = resource.mimeType || file.contenttype || '';
+    const kind = resource.kind || file.option || '';
     const hasStorageFile = files.some(function (item) {
       return item && item.path && ['original', 'preview', 'thumbnail'].includes(String(item.role || '').toLowerCase());
     });
@@ -439,7 +425,6 @@ wuwei.home = (function () {
     const hasUploadStorage = !!(hasStorageFile || storage.managed || storage.copyPolicy || manifest.path);
     const hasResourceUri = !!safeDecode(resource.uri || resource.canonicalUri || '');
 
-    if (resource.type && resource.type !== 'Resource') { return reject('resource.type is not Resource'); }
     if (!resourceId) { return reject('missing resource.id'); }
     if (!label) { return reject('missing label/title'); }
     if (hasUploadStorage) {
@@ -501,7 +486,6 @@ wuwei.home = (function () {
   function getSearchText(file) {
     const value = file && file.value ? file.value : {};
     const resource = file && file.resource && typeof file.resource === 'object' ? file.resource : {};
-    const identity = resource.identity && typeof resource.identity === 'object' ? resource.identity : {};
     const storage = resource.storage && typeof resource.storage === 'object' ? resource.storage : {};
     const storageFiles = Array.isArray(storage.files) ? storage.files : [];
     const description = file && file.description
@@ -520,15 +504,15 @@ wuwei.home = (function () {
       safeDecode(file && file.name ? file.name : ''),
       safeDecode(value && value.label ? value.label : ''),
       safeDecode(descriptionBody),
-      safeDecode(resource.title || identity.title || ''),
+      safeDecode(resource.title || ''),
       storageFiles.map(function (item) {
         if (!item) {
           return '';
         }
         return [safeDecode(item.area || ''), safeDecode(item.path || '')].join(' ');
       }).join(' '),
-      safeDecode(resource.uri || identity.uri || ''),
-      safeDecode(resource.canonicalUri || identity.canonicalUri || ''),
+      safeDecode(resource.uri || ''),
+      safeDecode(resource.canonicalUri || ''),
       safeDecode(file && file.url ? file.url : ''),
       safeDecode(file && file.uri ? file.uri : '')
     ].join(' ').toLowerCase();
@@ -540,16 +524,15 @@ wuwei.home = (function () {
     }
 
     const resource = file && file.resource && typeof file.resource === 'object' ? file.resource : {};
-    const media = resource.media && typeof resource.media === 'object' ? resource.media : {};
-    const identity = resource.identity && typeof resource.identity === 'object' ? resource.identity : {};
-    const kind = String(media.kind || resource.kind || file.option || '').toLowerCase();
-    const mime = String(media.mimeType || resource.mimeType || file.contenttype || '').toLowerCase();
+    const kind = String(resource.kind || file.option || '').toLowerCase();
+    const mime = String(resource.mimeType || resource.contentType || resource.format || file.contenttype || '').toLowerCase();
     const uri = safeDecode(
-      file && (file.preview_url || file.download_url || file.url || file.uri) ||
+      file && (file.preview_url || file.url || file.uri) ||
+      resource.previewUri ||
+      resource.viewerUri ||
       resource.uri ||
       resource.canonicalUri ||
-      identity.uri ||
-      identity.canonicalUri ||
+      resource.url ||
       ''
     ).toLowerCase();
 
@@ -795,16 +778,9 @@ wuwei.home = (function () {
   function getThumbnailSrc(file) {
     var value = file && file.value ? file.value : {};
     var resource = file && file.resource && typeof file.resource === 'object' ? file.resource : {};
-    var viewer = resource.viewer && typeof resource.viewer === 'object' ? resource.viewer : {};
-    var embed = viewer.embed && typeof viewer.embed === 'object' ? viewer.embed : {};
-    var snapshotSources = resource.snapshotSources && typeof resource.snapshotSources === 'object' ? resource.snapshotSources : {};
-
     return toCurrentLocalOrigin(
       safeDecode(value.thumbnail && value.thumbnail.uri ? value.thumbnail.uri : '') ||
       safeDecode(file && file.thumbnail_url ? file.thumbnail_url : '') ||
-      safeDecode(viewer.thumbnailUri || '') ||
-      safeDecode(embed.thumbnailUri || '') ||
-      safeDecode(snapshotSources.thumbnailUri || '') ||
       ''
     );
   }
@@ -1987,8 +1963,7 @@ wuwei.home = (function () {
           return;
         }
         const resource = file.resource && typeof file.resource === 'object' ? file.resource : {};
-        const identity = resource.identity && typeof resource.identity === 'object' ? resource.identity : {};
-        const viewer = resource.viewer && typeof resource.viewer === 'object' ? resource.viewer : {};
+            const viewer = resource.viewer && typeof resource.viewer === 'object' ? resource.viewer : {};
         const value = file.value || {};
         let filterDate = response.date;
         let lastmodified = value.lastmodified;
@@ -2013,15 +1988,14 @@ wuwei.home = (function () {
         util.appendById(allFiles, {
           id: file.id,
           resource: file.resource,
-          label: file.label || resource.label || resource.title || identity.title || '',
+          label: file.label || resource.label || resource.title || '',
           description: file.description,
           option: file.option || resource.kind || '',
           contenttype: format || resource.mimeType || '',
-          name: safeDecode(file.name || file.label || resource.label || resource.title || identity.title || ''),
-          url: safeDecode(file.url || file.preview_url || viewer.uri || resource.uri || identity.uri || ''),
-          uri: safeDecode(file.uri || resource.uri || identity.uri || ''),
-          download_url: safeDecode(file.download_url || resource.canonicalUri || identity.canonicalUri || ''),
-          preview_url: safeDecode(file.preview_url || viewer.uri || file.url || resource.uri || identity.uri || ''),
+          name: safeDecode(file.name || file.label || resource.label || resource.title || ''),
+          url: safeDecode(file.url || file.preview_url || resource.uri || ''),
+          uri: safeDecode(file.uri || resource.uri || ''),
+          preview_url: safeDecode(file.preview_url || file.url || resource.uri || ''),
           value: value,
           type: type,
           thumbnail: value.thumbnail ? value.thumbnail.uri : ''

@@ -46,8 +46,8 @@ wuwei.filter = (function () {
   function setLinkVisibilityFromNodes(page) {
     if (!page) { return; }
     (page.links || []).forEach(function (link) {
-      var fromId = link.from || link.source && (link.source.id || link.source);
-      var toId = link.to || link.target && (link.target.id || link.target);
+      var fromId = link.from;
+      var toId = link.to;
       var fromNode = model && typeof model.findNodeById === 'function' ? model.findNodeById(fromId) : null;
       var toNode = model && typeof model.findNodeById === 'function' ? model.findNodeById(toId) : null;
       if (fromNode && fromNode.visible === false || toNode && toNode.visible === false) {

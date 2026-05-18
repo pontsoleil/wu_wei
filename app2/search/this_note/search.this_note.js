@@ -42,7 +42,6 @@ wuwei.search.this_note = (function (ns) {
 
   function getContentKind(node) {
     var resource = getResource(node);
-    var media = resource.media && typeof resource.media === 'object' ? resource.media : {};
     var contents = resource.contents && typeof resource.contents === 'object' ? resource.contents : {};
     var storage = resource.storage && typeof resource.storage === 'object' ? resource.storage : {};
     var files = Array.isArray(storage.files) ? storage.files : [];
@@ -55,15 +54,13 @@ wuwei.search.this_note = (function (ns) {
     var uri = String([
       resource.canonicalUri,
       resource.uri,
-      resource.file,
-      resource.filename,
       original.path,
       original.file,
       preview.path,
       preview.file
     ].filter(Boolean).join(' ')).toLowerCase();
-    var mime = String(resource.mimeType || media.mimeType || original.mimeType || preview.mimeType || '').toLowerCase();
-    var kind = normaliseContentKind(media.kind || contents.type || resource.type || resource.kind || node && node.option || '');
+    var mime = String(resource.mimeType || original.mimeType || preview.mimeType || '').toLowerCase();
+    var kind = normaliseContentKind(resource.documentKind || resource.kind || '');
 
     /*
      * resource.kind may be a storage/origin kind such as "upload".
@@ -182,13 +179,11 @@ wuwei.search.this_note = (function (ns) {
 
   function objectSearchText(obj) {
     var resource = getResource(obj);
-    var media = resource.media && typeof resource.media === 'object' ? resource.media : {};
     var contents = resource.contents && typeof resource.contents === 'object' ? resource.contents : {};
     var storage = resource.storage && typeof resource.storage === 'object' ? resource.storage : {};
     var files = Array.isArray(storage.files) ? storage.files : [];
     return [
       obj && obj.label,
-      obj && obj.name,
       obj && obj.title,
       obj && obj.description,
       obj && obj.role,
@@ -198,20 +193,11 @@ wuwei.search.this_note = (function (ns) {
       obj && obj.shape,
       obj && obj.pageNumber,
       obj && obj.anchorHref,
-      obj && obj.href,
-      resource.label,
       resource.title,
-      resource.name,
       resource.uri,
       resource.canonicalUri,
-      resource.download_url,
-      resource.filename,
-      resource.file,
       resource.mimeType,
       resource.description,
-      media.kind,
-      media.mimeType,
-      contents.type,
       contents.pageCount,
       files.map(function (file) {
         return [file.role, file.path, file.file, file.name, file.mimeType].map(asText).join(' ');

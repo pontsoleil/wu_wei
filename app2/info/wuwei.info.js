@@ -377,31 +377,11 @@ wuwei.info = wuwei.info || {};
   }
 
   function hasAsciiDocValue(node) {
-    if (!node) {
-      return false;
-    }
-
-    if (node.description &&
+    return !!(node && node.description &&
       'object' === typeof node.description &&
       'string' === typeof node.description.body &&
-      node.description.body.trim()) {
-      return true;
-    }
-
-    if ('string' !== typeof node.value) {
-      return false;
-    }
-    if (!node.value.trim()) {
-      return false;
-    }
-
-    // 明示指定があればそれを優先
-    if ('asciidoc' === node.valueFormat) {
-      return true;
-    }
-
-    // 現行設計: Memo / Content の value は AsciiDoc 本文
-    return ['Memo', 'Content'].includes(node.type);
+      node.description.body.trim() &&
+      String(node.description.format || '').toLowerCase().indexOf('asciidoc') >= 0);
   }
 
   function isVideoNode(node) {
@@ -413,34 +393,19 @@ wuwei.info = wuwei.info || {};
   }
 
   function isUploadedNode(node) {
-    var resource, origin, storage, files, uriText, kindText;
+    var resource, storage, files, uriText;
     if (!node) {
       return false;
-    }
-    if ('upload' === node.option) {
-      return true;
     }
     resource = util.getResource(node);
     if (!resource || 'object' !== typeof resource) {
       return false;
     }
-    origin = (resource.origin && 'object' === typeof resource.origin) ? resource.origin : {};
     storage = (resource.storage && 'object' === typeof resource.storage) ? resource.storage : {};
     files = Array.isArray(storage.files) ? storage.files : [];
-    uriText = [
-      resource.uri,
-      resource.canonicalUri,
-      resource.previewUri,
-      node.thumbnailUri
-    ].join(' ').replace(/\\/g, '/');
-    kindText = [
-      origin.type,
-      origin.subtype,
-      resource.kind,
-      resource.media && resource.media.kind
-    ].join(' ').toLowerCase();
+    uriText = [resource.uri, resource.canonicalUri].join(' ').replace(/\\/g, '/');
     return (
-      kindText.indexOf('upload') >= 0 ||
+      resource.source === 'upload' ||
       files.some(function (file) {
         return file && String(file.area || '').toLowerCase() === 'upload';
       }) ||

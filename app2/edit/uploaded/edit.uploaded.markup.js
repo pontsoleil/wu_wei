@@ -51,10 +51,10 @@ wuwei.edit.uploaded.markup = ( function () {
   }
 
   function getEditableThumbnailUri(node) {
-    var uri = (node && (node.thumbnailUri || node.thumbnail)) || '';
-    if (wuwei.util && typeof wuwei.util.getResourceFilePath === 'function' &&
+    var uri = String(node && node.resource && node.resource.thumbnailUri || '');
+    if (!uri && wuwei.util && typeof wuwei.util.getResourceFilePath === 'function' &&
       node && node.resource) {
-      uri = wuwei.util.getResourceFilePath(node.resource, 'thumbnail', node) || uri;
+      uri = wuwei.util.getResourceFilePath(node.resource, 'thumbnail', node) || '';
     }
     if (wuwei.util && typeof wuwei.util.toStorageRelativePath === 'function' &&
       (/^(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i.test(String(uri || '')) ||
@@ -163,7 +163,7 @@ wuwei.edit.uploaded.markup = ( function () {
       node = param.node,
       shape = node.shape,
       style = node.style || {},
-      font = (node.style && node.style.font) || node.font || {},
+      font = (node.style && node.style.font) || {},
       resourceUri = getEditableResourceUri(node),
       thumbnailUri = getEditableThumbnailUri(node),
       matchP,
@@ -259,7 +259,7 @@ wuwei.edit.uploaded.markup = ( function () {
 
   <div class="w3-row">
   <label for="thumbnailUri" class="w3-col s4">${t('THUMBNAIL')}</label>
-  <input type="text" id="thumbnailUri" name="thumbnailUri" class="w3-col s8 edit-value" readonly aria-readonly="true"
+  <input type="text" id="thumbnailUri" name="resource.thumbnailUri" class="w3-col s8 edit-value"
       value="${thumbnailUri || ''}">
   </div>
   <div class="w3-row">
@@ -321,7 +321,7 @@ wuwei.edit.uploaded.markup = ( function () {
   </div>
   <div class="w3-row">
     <label for="style_fill" class="w3-col s4">${t('Background')}</label>  
-    <input type="color" id="style_fill" name="style.fill" value="${style.fill || node.color}" class="w3-col s4 pointer edit-value">
+    <input type="color" id="style_fill" name="style.fill" value="${style.fill}" class="w3-col s4 pointer edit-value">
     <div id="style_fill_palette" name="style_fill_palette" class="w3-col s4 pointer"></div>
   </div>
   <div class="w3-row">

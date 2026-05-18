@@ -218,14 +218,15 @@ wuwei.home.markup = (function () {
     }
 
     const resource = file && file.resource && typeof file.resource === 'object' ? file.resource : {};
-    const media = resource.media && typeof resource.media === 'object' ? resource.media : {};
-    const identity = resource.identity && typeof resource.identity === 'object' ? resource.identity : {};
-    const kind = String(media.kind || file.option || '').toLowerCase();
-    const mime = String(media.mimeType || file.contenttype || '').toLowerCase();
+    const kind = String(resource.kind || file.option || '').toLowerCase();
+    const mime = String(resource.mimeType || resource.contentType || resource.format || file.contenttype || '').toLowerCase();
     const uri = safeDecode(
-      file && (file.preview_url || file.download_url || file.url || file.uri) ||
-      identity.uri ||
-      identity.canonicalUri ||
+      file && (file.preview_url || file.url || file.uri) ||
+      resource.previewUri ||
+      resource.viewerUri ||
+      resource.uri ||
+      resource.canonicalUri ||
+      resource.url ||
       ''
     ).toLowerCase();
 
@@ -291,10 +292,9 @@ wuwei.home.markup = (function () {
     }
     const value = file && file.value ? file.value : {};
     const resource = file && file.resource && typeof file.resource === 'object' ? file.resource : {};
-    const media = resource.media && typeof resource.media === 'object' ? resource.media : {};
     const viewerType = String(value.viewerType || '').toLowerCase();
     const format = String(file && file.contenttype || '').toLowerCase();
-    const kind = String(media.kind || resource.kind || file && file.option || '').toLowerCase();
+    const kind = String(resource.kind || file && file.option || '').toLowerCase();
     const url = safeDecode(file && (file.preview_url || file.url || file.uri) || resource.canonicalUri || resource.uri || '').toLowerCase();
     if (viewerType === 'youtube' || viewerType === 'vimeo' || viewerType === 'video' ||
       kind === 'video' || /^https?:\/\/(www\.)?(youtube\.com|m\.youtube\.com|youtu\.be|vimeo\.com|player\.vimeo\.com)\b/.test(url)) {

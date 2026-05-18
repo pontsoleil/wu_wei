@@ -2753,8 +2753,8 @@ wuwei.util = (function () {
       }
 
       return !!(
-        (endpointId(link.from) || endpointId(link.source)) &&
-        (endpointId(link.to) || endpointId(link.target))
+        endpointId(link.from) &&
+        endpointId(link.to)
       );
     });
 
@@ -3119,12 +3119,6 @@ wuwei.util = (function () {
   }
 
   function pushResourceExtensionCandidates(candidates, node, resource, href) {
-    var viewer;
-    var embed;
-    var media;
-    var contents;
-    var identity;
-    var snapshotSources;
     var storage;
     var files;
     var file;
@@ -3137,19 +3131,13 @@ wuwei.util = (function () {
     }
 
     resource = resource || getResource(node);
-    viewer = (resource && resource.viewer && 'object' === typeof resource.viewer) ? resource.viewer : {};
-    embed = (viewer.embed && 'object' === typeof viewer.embed) ? viewer.embed : {};
-    media = (resource && resource.media && 'object' === typeof resource.media) ? resource.media : {};
-    contents = (resource && resource.contents && 'object' === typeof resource.contents) ? resource.contents : {};
-    identity = (resource && resource.identity && 'object' === typeof resource.identity) ? resource.identity : {};
-    snapshotSources = (resource && resource.snapshotSources && 'object' === typeof resource.snapshotSources) ? resource.snapshotSources : {};
     storage = (resource && resource.storage && 'object' === typeof resource.storage) ? resource.storage : {};
     files = Array.isArray(storage.files) ? storage.files : [];
 
     push(href);
 
-    /* Original paths must be tested before preview paths, because Office
-     * uploads often have a converted PDF preview next to the original docx. */
+    /* Original paths are checked before preview paths because Office uploads
+     * often have a converted PDF preview next to the original document. */
     for (i = 0; i < files.length; i += 1) {
       file = files[i] || {};
       if (String(file.role || '').toLowerCase() === 'original') {
@@ -3158,27 +3146,9 @@ wuwei.util = (function () {
       }
     }
 
-    push(resource && resource.file);
-    push(resource && resource.filename);
-    push(resource && resource.originalName);
-    push(resource && resource.name);
-    push(resource && resource.downloadUrl);
-    push(resource && resource.download_url);
     push(resource && resource.canonicalUri);
     push(resource && resource.uri);
-    push(identity && identity.uri);
-    push(identity && identity.originalUri);
-    push(media && media.uri);
-    push(contents && contents.uri);
-    push(embed && embed.uri);
-    push(snapshotSources && snapshotSources.originalUri);
-    push(snapshotSources && snapshotSources.previewUri);
-
-    if (node) {
-      push(node.file); push(node.filename); push(node.url); push(node.uri);
-      push(node.href); push(node.downloadUrl); push(node.download_url);
-      push(node.canonicalUri); push(node.label); push(node.title); push(node.name);
-    }
+    push(resource && resource.title);
 
     for (i = 0; i < files.length; i += 1) {
       file = files[i] || {};
@@ -3188,6 +3158,7 @@ wuwei.util = (function () {
       }
     }
   }
+
 
   function getResourceExtension(node, resource, href) {
     var candidates = [];
@@ -3476,14 +3447,15 @@ wuwei.util = (function () {
   }
 
   function getNodeAsciiDocSource(node) {
-    if (!node) {
-      return '';
-    }
-    if (typeof node.value === 'string' && node.value.trim()) {
-      return node.value;
+    var description = node && node.description;
+    if (description && typeof description === 'object' &&
+      String(description.format || '').toLowerCase().indexOf('asciidoc') >= 0 &&
+      typeof description.body === 'string') {
+      return description.body;
     }
     return '';
   }
+
 
   function asciiDocToHtml(asciiDocText) {
     function asciiDoc_format(line) {
@@ -4234,11 +4206,6 @@ wuwei.util = (function () {
 
   getResourcePdfPreviewUri = function (node) {
     var resource = getResource(node);
-    var viewer = (resource && resource.viewer && 'object' === typeof resource.viewer) ? resource.viewer : {};
-    var embed = (viewer.embed && 'object' === typeof viewer.embed) ? viewer.embed : {};
-    var media = (resource && resource.media && 'object' === typeof resource.media) ? resource.media : {};
-    var identity = (resource && resource.identity && 'object' === typeof resource.identity) ? resource.identity : {};
-    var snapshotSources = (resource && resource.snapshotSources && 'object' === typeof resource.snapshotSources) ? resource.snapshotSources : {};
     var storage = (resource && resource.storage && 'object' === typeof resource.storage) ? resource.storage : {};
     var files = Array.isArray(storage.files) ? storage.files : [];
     var candidates = [];
@@ -4251,44 +4218,15 @@ wuwei.util = (function () {
     for (i = 0; i < files.length; i += 1) {
       file = files[i] || {};
       role = String(file.role || '').toLowerCase();
-      if (role === 'preview' || role === 'pdf' || role === 'converted' ||
-        role === 'convertedpdf' || role === 'officepdf' || role === 'pdfpreview' ||
+      if (role === 'preview' || role === 'pdf-preview' || role === 'pdf' ||
         isPdfPreviewUri(chooseResourceFilePathValue(file))) {
         push(makeResourceFileUri(resource, file, role || 'preview', node));
       }
     }
 
     push(getResourceFileUri(resource, 'preview', node));
-    push(resource && resource.previewPdfUri);
-    push(resource && resource.previewPdfUrl);
-    push(resource && resource.convertedPdfUri);
-    push(resource && resource.convertedPdfUrl);
-    push(resource && resource.pdfUri);
-    push(resource && resource.pdfUrl);
-    push(resource && resource.previewUri);
-    push(resource && resource.previewUrl);
-    push(identity.previewUri);
-    push(identity.previewUrl);
-    push(media.previewUri);
-    push(media.previewUrl);
-    push(viewer.previewPdfUri);
-    push(viewer.previewPdfUrl);
-    push(viewer.pdfUri);
-    push(viewer.pdfUrl);
-    push(viewer.previewUri);
-    push(viewer.uri);
-    push(embed.previewPdfUri);
-    push(embed.previewPdfUrl);
-    push(embed.pdfUri);
-    push(embed.pdfUrl);
-    push(embed.previewUri);
-    push(embed.uri);
-    push(snapshotSources.previewPdfUri);
-    push(snapshotSources.previewPdfUrl);
-    push(snapshotSources.pdfUri);
-    push(snapshotSources.pdfUrl);
-    push(snapshotSources.previewUri);
-    push(resource && resource.uri);
+    push(getResourceFileUri(resource, 'pdf-preview', node));
+    if (isPdfPreviewUri(resource && resource.uri)) { push(resource.uri); }
 
     if (isOfficeResourceObject(resource)) {
       candidates = candidates.concat(derivePdfPreviewCandidatesFromOfficeOriginal(resource, node));
@@ -4297,37 +4235,11 @@ wuwei.util = (function () {
     return firstPdfPreviewUri(candidates);
   };
 
+
   getResourcePreviewUri = function (node) {
     var resource = getResource(node);
-    var viewer = (resource && resource.viewer && 'object' === typeof resource.viewer) ? resource.viewer : {};
-    var embed = (viewer.embed && 'object' === typeof viewer.embed) ? viewer.embed : {};
-    var snapshotSources = (resource && resource.snapshotSources && 'object' === typeof resource.snapshotSources) ? resource.snapshotSources : {};
-    var uid = getResourceOwnerUserId(resource, node);
-    var originalFile = getResourceFile(resource, 'original');
     var originalUri;
-    function legacyUploadUri(filename) {
-      var date = String(resource && resource.date || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
-      var id = String(resource && resource.id || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
-      var file = String(filename || resource && resource.file || '').replace(/\\/g, '/').split('/').pop();
-      if (!date || !id || !file) {
-        return '';
-      }
-      return toPublicResourceUri('upload', date + '/' + id + '/' + file, uid);
-    }
-    function localUri(value, area) {
-      var text = String(value || '').replace(/\\/g, '/').trim();
-      if (!text || /^https?:\/\//i.test(text) && text.indexOf('/wu_wei2/') < 0) {
-        return text;
-      }
-      if (/^(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i.test(text) ||
-        /^\d{4}\/\d{2}\/\d{2}\//.test(text)) {
-        return toPublicResourceUri(area, toStorageRelativePath(text, uid, area), uid);
-      }
-      if (text.indexOf(area + '/') === 0 || text.indexOf('/' + area + '/') >= 0) {
-        return toPublicResourceUri(area, toStorageRelativePath(text, uid, area), uid);
-      }
-      return text;
-    }
+
     if (isOfficeResourceObject(resource)) {
       originalUri = getResourcePdfPreviewUri(node);
       if (originalUri) {
@@ -4335,60 +4247,33 @@ wuwei.util = (function () {
       }
     }
     if (getDocumentKindByExtension(node, resource, getResourceFileUri(resource, 'original', node)) === 'pdf') {
-      originalUri = getResourceFileUri(resource, 'original', node) || legacyUploadUri();
+      originalUri = getResourceFileUri(resource, 'original', node);
       if (originalUri) {
         return originalUri;
       }
     }
     return String(
       getResourceFileUri(resource, 'preview', node) ||
-      localUri(embed.uri, 'resource') ||
-      localUri(snapshotSources.previewUri, 'resource') ||
-      localUri(resource.uri, 'upload') ||
-      localUri(resource.canonicalUri, 'upload') ||
+      getResourceFileUri(resource, 'pdf-preview', node) ||
+      getResourceFileUri(resource, 'thumbnail', node) ||
+      resource.uri ||
+      resource.canonicalUri ||
       getResourceFileUri(resource, 'original', node) ||
-      legacyUploadUri() ||
-      localUri(snapshotSources.originalUri, 'upload') ||
       ''
     );
   };
 
+
   getResourceOriginalUri = function (node) {
     var resource = getResource(node);
-    var snapshotSources = (resource && resource.snapshotSources && 'object' === typeof resource.snapshotSources) ? resource.snapshotSources : {};
-    var uid = getResourceOwnerUserId(resource, node);
-    function legacyUploadUri() {
-      var date = String(resource && resource.date || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
-      var id = String(resource && resource.id || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
-      var file = String(resource && resource.file || '').replace(/\\/g, '/').split('/').pop();
-      if (!date || !id || !file) {
-        return '';
-      }
-      return toPublicResourceUri('upload', date + '/' + id + '/' + file, uid);
-    }
-    function localUri(value) {
-      var text = String(value || '').replace(/\\/g, '/').trim();
-      if (!text || /^https?:\/\//i.test(text) && text.indexOf('/wu_wei2/') < 0) {
-        return text;
-      }
-      if (/^(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i.test(text) ||
-        /^\d{4}\/\d{2}\/\d{2}\//.test(text)) {
-        return toPublicResourceUri('upload', toStorageRelativePath(text, uid, 'upload'), uid);
-      }
-      if (text.indexOf('upload/') === 0 || text.indexOf('/upload/') >= 0) {
-        return toPublicResourceUri('upload', toStorageRelativePath(text, uid, 'upload'), uid);
-      }
-      return text;
-    }
     return String(
       getResourceFileUri(resource, 'original', node) ||
-      localUri(snapshotSources.originalUri) ||
-      localUri(resource.canonicalUri) ||
-      localUri(resource.uri) ||
-      legacyUploadUri() ||
+      resource.canonicalUri ||
+      resource.uri ||
       ''
     );
   };
+
 
   getResourceOriginalPath = function (node) {
     var resource = getResource(node);
@@ -4415,36 +4300,24 @@ wuwei.util = (function () {
     var resource = getResource(node);
     var viewer = (resource && resource.viewer && 'object' === typeof resource.viewer) ? resource.viewer : {};
     var embed = (viewer.embed && 'object' === typeof viewer.embed) ? viewer.embed : {};
-    var snapshotSources = (resource && resource.snapshotSources && 'object' === typeof resource.snapshotSources) ? resource.snapshotSources : {};
-    var uid = getResourceOwnerUserId(resource, node);
-    function localUri(value) {
-      var text = String(value || '').replace(/\\/g, '/').trim();
-      var area;
-      if (!text || /^https?:\/\//i.test(text) && text.indexOf('/wu_wei2/') < 0) {
-        return text;
-      }
-      area = (text.indexOf('note/') === 0 || text.indexOf('/note/') >= 0) ? 'note' : 'resource';
-      if (/^(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i.test(text) ||
-        /^\d{4}\/\d{2}\/\d{2}\//.test(text) ||
-        text.indexOf(area + '/') === 0 ||
-        text.indexOf('/' + area + '/') >= 0) {
-        return toPublicResourceUri(area, toStorageRelativePath(text, uid, area), uid);
-      }
-      return text;
-    }
-    return String(
-      getResourceFileUri(resource, 'thumbnail', node) ||
-      localUri(node && node.thumbnailUri) ||
-      localUri(viewer.thumbnailUri) ||
-      localUri(embed.thumbnailUri) ||
-      localUri(snapshotSources.thumbnailUri) ||
+    var explicit = String(
+      resource && resource.thumbnailUri ||
+      viewer.thumbnailUri ||
+      embed.thumbnailUri ||
       ''
-    );
+    ).trim();
+
+    if (explicit) {
+      return explicit;
+    }
+    return String(getResourceFileUri(resource, 'thumbnail', node) || '');
   };
 
+
   getThumbnailUri = function (node) {
-    return getResourceThumbnailUri(node) || String((node && node.thumbnailUri) || '');
+    return getResourceThumbnailUri(node);
   };
+
 
   getResource = function (node) {
     return (node && node.resource && 'object' === typeof node.resource) ? node.resource : {};

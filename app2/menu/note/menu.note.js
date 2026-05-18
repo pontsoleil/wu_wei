@@ -518,10 +518,10 @@ wuwei.menu.note = wuwei.menu.note || {};
             mediaRef: group.mediaRef,
             pageCount: group.pageCount,
             members: (group.members || []).length,
-            entries: (group.entries || []).map(function (entry) {
+            entries: (group.members || []).map(function (member) {
               return {
-                nodeId: entry && entry.nodeId,
-                pageNumber: entry && entry.pageNumber
+                nodeId: member && member.nodeId,
+                pageNumber: member && member.pageNumber
               };
             })
           });

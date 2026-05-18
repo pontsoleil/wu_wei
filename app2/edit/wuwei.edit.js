@@ -255,51 +255,33 @@ wuwei.edit = wuwei.edit || {};
     }
 
     if (kind === 'webpage') {
-      node.resource.kind = 'web';
+      node.resource.kind = 'other';
+      node.resource.documentKind = 'html';
     }
     else if (kind === 'document') {
+      node.resource.kind = 'document';
       if (detected.subtype === 'pdf') {
-        node.resource.kind = 'pdf';
+        node.resource.documentKind = 'pdf';
       }
       else if (detected.subtype === 'word' ||
         detected.subtype === 'excel' ||
         detected.subtype === 'powerpoint' ||
         detected.subtype === 'office-online') {
-        node.resource.kind = 'office';
+        node.resource.documentKind = 'office';
       }
       else {
-        node.resource.kind = 'general';
+        node.resource.documentKind = 'text';
       }
     }
     else if (kind === 'image' || kind === 'video' || kind === 'audio') {
       node.resource.kind = kind;
-    }
-
-    node.resource.media = (node.resource.media && 'object' === typeof node.resource.media)
-      ? node.resource.media
-      : {};
-    if (kind) {
-      node.resource.media.kind = (kind === 'webpage') ? 'webpage' : (kind === 'document' ? 'document' : kind);
-    }
-    if (detected.subtype) {
-      node.resource.media.subtype = detected.subtype;
-    }
-
-    if (kind === 'video') {
-      if (!node.resource.mimeType) {
-        node.resource.mimeType = detected.mimeType || 'video/mp4';
+      if (kind === 'video' && detected.subtype) {
+        node.resource.videoKind = detected.subtype;
       }
     }
-    else if (kind === 'document') {
-      if (!node.resource.mimeType && detected.mimeType) {
-        node.resource.mimeType = detected.mimeType;
-      }
-    }
-    else if (!node.resource.mimeType && detected.mimeType) {
+
+    if (!node.resource.mimeType && detected.mimeType) {
       node.resource.mimeType = detected.mimeType;
-    }
-    if (node.resource.mimeType) {
-      node.resource.media.mimeType = node.resource.mimeType;
     }
   }
 
@@ -354,32 +336,18 @@ wuwei.edit = wuwei.edit || {};
     mimeType = resource.mimeType || detected.mimeType || (detected.kind === 'webpage' ? 'text/html' : 'text/plain');
 
     resource.id = resource.id || node.id;
-    resource.type = 'Resource';
-    resource.label = resource.label || title;
     resource.title = resource.title || title;
-    resource.kind = kind;
+    resource.kind = (detected.kind === 'document') ? 'document' : (detected.kind === 'webpage' ? 'other' : kind);
+    if (detected.kind === 'document') {
+      resource.documentKind = detected.subtype === 'pdf' ? 'pdf' :
+        (/^(word|excel|powerpoint|office-online)$/.test(detected.subtype || '') ? 'office' : 'html');
+    }
+    if (detected.kind === 'video') {
+      resource.videoKind = detected.subtype || resource.videoKind || '';
+    }
     resource.mimeType = mimeType;
     resource.uri = sourceUrl;
     resource.canonicalUri = sourceUrl;
-    resource.origin = (resource.origin && 'object' === typeof resource.origin) ? resource.origin : {};
-    resource.origin.type = resource.origin.type || 'userRegistered';
-    resource.origin.subtype = resource.origin.subtype ||
-      (detected.kind === 'video' ? 'externalVideo' :
-        detected.kind === 'document' ? 'externalDocument' :
-          detected.kind === 'image' ? 'externalImage' :
-            detected.kind === 'audio' ? 'externalAudio' : 'externalWebpage');
-    resource.origin.provider = resource.origin.provider || 'url';
-    resource.media = (resource.media && 'object' === typeof resource.media) ? resource.media : {};
-    resource.media.kind = resource.media.kind || (detected.kind === 'webpage' ? 'webpage' : detected.kind || kind);
-    resource.media.subtype = resource.media.subtype || detected.subtype || resource.subtype || '';
-    resource.media.mimeType = resource.media.mimeType || mimeType;
-    resource.media.downloadable = resource.media.downloadable === true;
-    resource.viewer = (resource.viewer && 'object' === typeof resource.viewer) ? resource.viewer : {};
-    resource.viewer.supportedModes = resource.viewer.supportedModes || ['infoPane', 'newTab', 'newWindow'];
-    resource.viewer.defaultMode = resource.viewer.defaultMode || 'infoPane';
-    resource.viewer.embed = (resource.viewer.embed && 'object' === typeof resource.viewer.embed) ? resource.viewer.embed : {};
-    resource.viewer.embed.enabled = resource.viewer.embed.enabled !== false;
-    resource.viewer.embed.uri = resource.viewer.embed.uri || sourceUrl;
     resource.description = (node.description && 'object' === typeof node.description)
       ? node.description
       : (resource.description && 'object' === typeof resource.description ? resource.description : { format: 'plain/text', body: '' });
@@ -395,8 +363,6 @@ wuwei.edit = wuwei.edit || {};
     resource.audit.lastModifiedBy = owner;
     resource.audit.lastModifiedAt = now;
 
-    delete resource.identity;
-    delete resource.snapshotSources;
     node.resource = resource;
     return resource;
   }
@@ -667,7 +633,7 @@ wuwei.edit = wuwei.edit || {};
       resource_uri: 'resource.uri',
       resource_kind: 'resource.kind',
       resource_canonicalUri: 'resource.canonicalUri',
-      thumbnailUri: 'thumbnailUri',
+      thumbnailUri: 'resource.thumbnailUri',
       shape: 'shape',
       style_fill: 'style.fill',
       style_font_color: 'style.font.color',
@@ -708,45 +674,6 @@ wuwei.edit = wuwei.edit || {};
       pageNumber: 'pageNumber',
       timeRange_start: 'timeRange.start',
       timeRange_end: 'timeRange.end',
-
-      // Legacy edit field ids kept as a fallback during transition.
-      rName: 'label',
-      rValue: 'description.body',
-      rValue_comment: 'description.body',
-      rUri: 'resource.uri',
-      rMedia_kind: 'resource.kind',
-      nShape: 'shape',
-      nColor: 'style.fill',
-      nFont_color: 'style.font.color',
-      nFont_size: 'style.font.size',
-      nSize_radius: 'size.radius',
-      nSize_width: 'size.width',
-      nSize_height: 'size.height',
-      nText_position: 'text.position',
-      nText_width: 'text.width',
-      nText_height: 'text.height',
-      nStyle_label_width: 'style.label.width',
-      nStyle_label_lines: 'style.label.lines',
-      nStyle_label_offset_x: 'style.label.offset.x',
-      nStyle_label_offset_y: 'style.label.offset.y',
-      nGroup: 'group',
-      lLabel: 'label',
-      lShape: 'shape',
-      lStrokedash: 'style.line.kind',
-      lStartArrow_kind: 'routing.startArrow.kind',
-      lStartArrow_size: 'routing.startArrow.size',
-      lEndArrow_kind: 'routing.endArrow.kind',
-      lEndArrow_size: 'routing.endArrow.size',
-      lSize: 'style.line.width',
-      lColor: 'style.line.color',
-      lFont_color: 'style.font.color',
-      lFont_size: 'style.font.size',
-      lRelation: 'relation',
-      contentsPageNumber: 'pageNumber',
-      editVideoStart: 'timeRange.start',
-      editVideoEnd: 'timeRange.end',
-      rMedia_start: 'timeRange.start',
-      rMedia_end: 'timeRange.end',
       editTimelinePointColor: 'style.fill',
       editTimelinePointOutlineWidth: 'style.line.width',
       editTimelinePointOutlineColor: 'style.line.color',
@@ -754,9 +681,6 @@ wuwei.edit = wuwei.edit || {};
     };
     if (aliases[id]) {
       return aliases[id];
-    }
-    if ('source_position' === id || 'target_position' === id) {
-      return id;
     }
     if (id) {
       return id.replace(/_/g, '.');
@@ -952,7 +876,8 @@ wuwei.edit = wuwei.edit || {};
         }
       }
     }
-    if ('thumbnailUri' === path) {
+    if ('resource.thumbnailUri' === path) {
+      node.resource = (node.resource && 'object' === typeof node.resource) ? node.resource : {};
       if (wuwei.util && typeof wuwei.util.toStorageRelativePath === 'function' &&
         (String(value || '').match(/^(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i) ||
           String(value || '').match(/(?:^|\/)(resource|note)\//))) {
@@ -961,6 +886,17 @@ wuwei.edit = wuwei.edit || {};
           el.value = value;
         }
         setNodePath(node, path, value);
+      }
+      node.thumbnailUri = String(value || '');
+      node.resource.viewer = (node.resource.viewer && 'object' === typeof node.resource.viewer)
+        ? node.resource.viewer
+        : { supportedModes: ['infoPane', 'newTab', 'newWindow', 'download'], defaultMode: 'infoPane' };
+      node.resource.viewer.thumbnailUri = String(value || '');
+      if (node.resource.viewer.embed && 'object' === typeof node.resource.viewer.embed) {
+        node.resource.viewer.embed.thumbnailUri = String(value || '');
+      }
+      if (value && node.type === 'Content' && node.shape !== 'THUMBNAIL') {
+        node.shape = 'THUMBNAIL';
       }
     }
     if ('shape' === path) {
@@ -1165,18 +1101,9 @@ wuwei.edit = wuwei.edit || {};
       else if (param.node && param.node.topicKind === 'contents-page') {
         resolve(wuwei.edit.contents.openPageMarker(param));
       }
-      else if (param.node && (
-        'video' === param.node.option ||
-        (param.node.resource.media  && param.node.resource.media.kind && 'video' == param.node.resource.media.kind) ||
-        wuwei.video.isVideoNode(param.node)
-      )) {
-        param.node.option = 'video';
+      else if (param.node && wuwei.video.isVideoNode(param.node)) {
         resolve(wuwei.edit.video.open(param));
       }
-      // else if(param.node && param.node.resource  && param.node.resource.media  && param.node.resource.media.kind && 
-      //   'document' == param.node.resource.media.kind) {
-      //   resolve(wuwei.edit.contents.open(param))
-      // }
       else if (isUploadedContentNode(param.node)) {
         resolve(wuwei.edit.uploaded.open(param));
       }
@@ -1209,8 +1136,7 @@ wuwei.edit = wuwei.edit || {};
     text = String(
       (resource && (
         resource.uri ||
-        resource.canonicalUri ||
-        (resource.snapshotSources && resource.snapshotSources.originalUri)
+        resource.canonicalUri
       )) || ''
     ).replace(/\\/g, '/');
 
@@ -1618,12 +1544,7 @@ wuwei.edit = wuwei.edit || {};
     if (labelEl) {
       setNodePath(stateMap.node, 'label', labelEl.value || '');
       if (stateMap.node.resource && 'object' === typeof stateMap.node.resource) {
-        stateMap.node.resource.label = labelEl.value || '';
         stateMap.node.resource.title = labelEl.value || '';
-        stateMap.node.resource.identity = (stateMap.node.resource.identity && 'object' === typeof stateMap.node.resource.identity)
-          ? stateMap.node.resource.identity
-          : {};
-        stateMap.node.resource.identity.title = labelEl.value || '';
       }
     }
 

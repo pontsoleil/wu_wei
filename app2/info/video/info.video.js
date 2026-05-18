@@ -406,10 +406,6 @@ wuwei.info.video = wuwei.info.video || {};
     stateMap.resource = stateMap.resource || getNodeResource(stateMap.node);
     stateMap.node.resource = stateMap.resource;
     stateMap.resource.duration = sec;
-    stateMap.resource.media = (stateMap.resource.media && 'object' === typeof stateMap.resource.media)
-      ? stateMap.resource.media
-      : {};
-    stateMap.resource.media.duration = sec;
     if (!stateMap.node.timeRange || 'object' !== typeof stateMap.node.timeRange) {
       stateMap.node.timeRange = {};
     }

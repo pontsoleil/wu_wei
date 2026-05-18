@@ -125,78 +125,182 @@ wuwei.note.v1 = (function () {
     return style;
   }
 
+  function cleanLegacyString(value) {
+    if (value == null || value === 'undefined' || value === 'null') {
+      return '';
+    }
+    return String(value);
+  }
+
+  function isHttpUrl(value) {
+    return /^https?:\/\//i.test(String(value || '').trim());
+  }
+
+  function isLocalStorageLikeUri(value) {
+    var text = String(value || '').replace(/\\/g, '/').trim();
+    return !!(
+      text &&
+      !isHttpUrl(text) &&
+      /(?:^|\/)(upload|resource|note|thumbnail|content)\//.test(text)
+    );
+  }
+
+  function storageAreaFromUri(value, fallbackArea) {
+    var text = String(value || '').replace(/\\/g, '/').trim();
+    var match = text.match(/(?:^|\/)(upload|resource|note|thumbnail|content)\//);
+    return match ? match[1] : (fallbackArea || 'upload');
+  }
+
+  function stripFileFragment(value) {
+    return String(value || '').replace(/#.*$/, '').trim();
+  }
+
+  function fileNameFromUri(value) {
+    var text = stripFileFragment(value).replace(/\\/g, '/').split('?')[0];
+    return text.split('/').pop() || '';
+  }
+
+  function extensionFromUri(value) {
+    var name = fileNameFromUri(value).toLowerCase();
+    var match = name.match(/\.([a-z0-9]{1,12})$/i);
+    return match ? ('.' + match[1].toLowerCase()) : '';
+  }
+
+  function documentKindFromExt(ext) {
+    ext = String(ext || '').toLowerCase();
+    if (/^\.(doc|docx|xls|xlsx|ppt|pptx|odt|ods|odp)$/.test(ext)) { return 'office'; }
+    if (ext === '.pdf') { return 'pdf'; }
+    if (/^\.(html|htm|xhtml)$/.test(ext)) { return 'html'; }
+    if (/^\.(txt|text|md|markdown|csv|tsv|log|adoc|asciidoc|json|xml)$/.test(ext)) { return 'text'; }
+    return '';
+  }
+
+  function videoKindFromUri(uri) {
+    var text = String(uri || '').toLowerCase();
+    if (/(^|\/\/)(www\.)?(youtube\.com|youtu\.be)\//.test(text)) { return 'youtube'; }
+    if (/(^|\/\/)(www\.)?(vimeo\.com|player\.vimeo\.com)\//.test(text)) { return 'vimeo'; }
+    if (/\.(mp4|mov|webm|m4v|mpeg|mpg|ogv|ogg)(?:[?#]|$)/.test(text)) { return 'mp4'; }
+    if (/\.(mp3|wav|m4a|aac|oga|flac)(?:[?#]|$)/.test(text)) { return 'mp3'; }
+    return '';
+  }
+
   function mediaKindFromUri(uri, mimeType) {
     var text = String(uri || '').toLowerCase();
     var mime = String(mimeType || '').toLowerCase();
-    if (/^video\//.test(mime) || /\.(mp4|mov|webm|m4v)(?:[?#]|$)/.test(text) || /(^|\/\/)(www\.)?(youtube\.com|youtu\.be|vimeo\.com)\//.test(text)) {
+    var ext = extensionFromUri(uri);
+    if (/^video\//.test(mime) || videoKindFromUri(uri) && !/\.(mp3|wav|m4a|aac|oga|flac)(?:[?#]|$)/.test(text)) {
       return 'video';
     }
-    if (/^image\//.test(mime) || /\.(png|jpe?g|gif|svg|webp)(?:[?#]|$)/.test(text)) {
+    if (/^audio\//.test(mime) || /\.(mp3|wav|m4a|aac|oga|flac)(?:[?#]|$)/.test(text)) {
+      return 'audio';
+    }
+    if (/^image\//.test(mime) || /\.(png|jpe?g|gif|svg|webp|tiff?|ico)(?:[?#]|$)/.test(text)) {
       return 'image';
     }
-    if (/\.(pdf|docx?|xlsx?|pptx?|html?|txt|csv|json|xml)(?:[?#]|$)/.test(text) || /^(application|text)\//.test(mime)) {
+    if (documentKindFromExt(ext) || /^(application|text)\//.test(mime) || isHttpUrl(uri)) {
       return 'document';
     }
-    if (/^https?:\/\//i.test(uri || '')) {
-      return 'webpage';
+    return 'other';
+  }
+
+  function resourceSourceFromUri(uri, node) {
+    var option = String(node && node.option || '').toLowerCase();
+    if (option === 'upload' || isLocalStorageLikeUri(uri)) { return 'upload'; }
+    if (isHttpUrl(uri)) { return 'remote'; }
+    return uri ? 'embedded' : 'embedded';
+  }
+
+  function isFileThumbnail(value) {
+    var text = String(value || '').trim();
+    return !!(
+      text &&
+      !/^fa[srb]?-/.test(text) &&
+      !/^fa-/.test(text) &&
+      !/^\w[\w-]*$/.test(text)
+    );
+  }
+
+  function addStorageFile(files, role, uri, mimeType, fallbackArea) {
+    var path = stripFileFragment(uri).replace(/\\/g, '/').trim();
+    var area;
+    if (!path || isHttpUrl(path) && path.indexOf('/wu_wei2/') < 0) {
+      return;
     }
-    return 'general';
+    area = storageAreaFromUri(path, fallbackArea || (role === 'original' ? 'upload' : 'resource'));
+    files.push({
+      role: role,
+      area: area,
+      path: path,
+      mimeType: String(mimeType || '')
+    });
+  }
+
+  function buildStorageFiles(uri, previewUri, thumbnail, mimeType) {
+    var files = [];
+    var previewRole;
+
+    addStorageFile(files, 'original', uri, mimeType, storageAreaFromUri(uri, 'upload'));
+    if (previewUri && previewUri !== uri) {
+      previewRole = /\.pdf(?:[?#].*)?$/i.test(String(previewUri || '')) ? 'pdf-preview' : 'preview';
+      addStorageFile(files, previewRole, previewUri, previewRole === 'pdf-preview' ? 'application/pdf' : '',
+        storageAreaFromUri(previewUri, 'resource'));
+    }
+    if (isFileThumbnail(thumbnail)) {
+      addStorageFile(files, 'thumbnail', thumbnail, 'image/jpeg', storageAreaFromUri(thumbnail, 'thumbnail'));
+    }
+    return files;
+  }
+
+  function previewUriFromV1(node, originalUri) {
+    var value = node && node.value;
+    var res = value && typeof value === 'object' ? value.resource : null;
+    var preview = String((res && res.uri) || '').trim();
+    if (preview && extensionFromUri(preview)) {
+      return preview;
+    }
+    return originalUri;
+  }
+
+  function documentKindFromResource(kind, uri, mimeType) {
+    var extKind = documentKindFromExt(extensionFromUri(uri));
+    var mime = String(mimeType || '').toLowerCase();
+    if (kind !== 'document') { return ''; }
+    if (extKind) { return extKind; }
+    if (/pdf/.test(mime)) { return 'pdf'; }
+    if (/word|excel|powerpoint|officedocument|msword|spreadsheet|presentation/.test(mime)) { return 'office'; }
+    if (/html/.test(mime) || isHttpUrl(uri)) { return 'html'; }
+    if (/^text\//.test(mime)) { return 'text'; }
+    return '';
   }
 
   function resourceFromV1Content(node) {
-    var uri = String((node && (node.uri || node.url || node.download_url)) || '').trim();
-    var mimeType = String((node && (node.mimeType || node.format || node.contenttype)) || '').trim();
-    var thumbnail = String((node && (node.thumbnailUri || node.thumbnail)) || '').trim();
-    var title = String((node && (node.label || node.name)) || uri || '').trim();
-    var kind = mediaKindFromUri(uri, mimeType);
-    var id = (node && node.resourceRef) || createUuid();
-    var supportedModes = ['infoPane', 'newTab', 'newWindow', 'download'];
-    var snapshotSources = {};
-
-    if (uri) {
-      snapshotSources.previewUri = uri;
-      snapshotSources.originalUri = uri;
-    }
-    if (thumbnail) {
-      snapshotSources.thumbnailUri = thumbnail;
-    }
+    var uri = cleanLegacyString(node && (node.uri || node.url || node.download_url)).trim();
+    var mimeType = cleanLegacyString(node && (node.mimeType || node.format || node.contenttype)).trim();
+    var thumbnail = cleanLegacyString(node && (node.thumbnailUri || node.thumbnail)).trim();
+    var title = cleanLegacyString(node && (node.label || node.name)).trim() || fileNameFromUri(uri) || uri;
+    var previewUri = previewUriFromV1(node, uri);
+    var kind = mediaKindFromUri(uri || previewUri, mimeType);
+    var id = (node && (node.resourceRef || node.content_id)) || createUuid();
+    var source = resourceSourceFromUri(uri, node);
 
     return {
       id: id,
-      type: 'Resource',
-      origin: {
-        type: /^https?:\/\//i.test(uri) ? 'publicReference' : 'userRegistered',
-        subtype: kind === 'video' ? 'videoPage' : (kind === 'document' ? 'document' : ''),
-        provider: ''
-      },
-      identity: {
-        title: title,
-        canonicalUri: uri,
-        uri: uri
-      },
-      media: {
-        kind: kind,
-        mimeType: mimeType || 'text/plain',
-        downloadable: kind === 'document' || !!uri
-      },
-      viewer: {
-        supportedModes: supportedModes,
-        defaultMode: 'infoPane',
-        embed: {
-          enabled: !!uri,
-          uri: uri,
-          thumbnailUri: thumbnail
-        },
-        thumbnailUri: thumbnail
-      },
+      source: source,
+      kind: kind,
+      documentKind: documentKindFromResource(kind, uri || previewUri, mimeType),
+      videoKind: kind === 'video' ? videoKindFromUri(uri || previewUri) : '',
+      canonicalUri: uri,
+      uri: previewUri || uri,
+      title: title,
+      mimeType: mimeType || 'text/plain',
       storage: {
-        managed: false,
-        copyPolicy: 'metadataOnly',
-        files: []
+        managed: source === 'upload',
+        copyPolicy: source === 'upload' ? 'snapshot' : 'metadataOnly',
+        files: buildStorageFiles(uri, previewUri, thumbnail, mimeType)
       },
-      snapshotSources: snapshotSources,
+      thumbnailUri: isFileThumbnail(thumbnail) ? thumbnail : '',
       rights: {
-        owner: String((node && (node.owner || node.owner_id || node.ownerId)) || ''),
+        owner: cleanLegacyString(node && (node.owner || node.owner_id || node.ownerId)),
         copyright: '',
         license: '',
         attribution: ''
@@ -206,12 +310,18 @@ wuwei.note.v1 = (function () {
   }
 
   function descriptionFromV1(value, fallbackFormat) {
-    if (value && 'object' === typeof value) {
+    if (value && 'object' === typeof value && (value.body || value.format)) {
       return clone(value);
+    }
+    if (value && 'object' === typeof value) {
+      return {
+        format: fallbackFormat || 'asciidoc',
+        body: ''
+      };
     }
     return {
       format: fallbackFormat || 'asciidoc',
-      body: String(value || '')
+      body: cleanLegacyString(value)
     };
   }
 
@@ -236,7 +346,8 @@ wuwei.note.v1 = (function () {
       var resource = resourceFromV1Content(src);
       resources.push(resource);
       out.resourceRef = resource.id;
-      out.thumbnailUri = resource.snapshotSources.thumbnailUri || '';
+      out.resource = clone(resource);
+      out.thumbnailUri = resource.thumbnailUri || '';
     }
 
     if (type === 'Memo' && src.memoShape && 'object' === typeof src.memoShape) {

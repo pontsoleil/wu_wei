@@ -58,6 +58,42 @@ var wuwei = (function() {
     }
   })();
 
+  function isEnabledQueryFlag(param, name) {
+    var query = String(param || '');
+    var params;
+    var value;
+
+    if (query.charAt(0) === '?') {
+      query = query.slice(1);
+    }
+    if (!query && window.location && window.location.search) {
+      query = String(window.location.search).replace(/^\?/, '');
+    }
+
+    try {
+      params = new URLSearchParams(query);
+    }
+    catch (e) {
+      return new RegExp('(^|&)' + name + '($|=|&)').test(query);
+    }
+
+    if (!params.has(name)) {
+      return false;
+    }
+
+    value = String(params.get(name) || '').trim().toLowerCase();
+    return !/^(0|false|no|off)$/.test(value);
+  }
+
+  function setPreviousVersionOption(param) {
+    var enabled = isEnabledQueryFlag(param, 'previous_version');
+
+    if (wuwei.common && wuwei.common.state) {
+      wuwei.common.state.previousVersion = enabled;
+      wuwei.common.state.previous_version = enabled;
+    }
+  }
+
   var initModule = async function(param) {
     console.log('START wuwei.initModule()');
     var noscript = document.getElementById('noscript');
@@ -90,6 +126,8 @@ var wuwei = (function() {
       }
       unsupported();
     }
+
+    setPreviousVersionOption(param || '');
 
     await wuwei.shell.initModule(param || '');
   };

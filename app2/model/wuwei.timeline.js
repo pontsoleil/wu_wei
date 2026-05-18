@@ -134,7 +134,7 @@ wuwei.timeline = wuwei.timeline || {};
       return true;
     }
     uri = getMediaSourceUrl(node).toLowerCase();
-    subtype = String(resource.subtype || '').toLowerCase();
+    subtype = String(resource.videoKind || '').toLowerCase();
     return (
       (util && typeof util.isDocumentKindByExtension === 'function' &&
         util.isDocumentKindByExtension(node, resource, uri, 'video')) ||
@@ -416,7 +416,7 @@ wuwei.timeline = wuwei.timeline || {};
     var resource = (videoNode && videoNode.resource) || {};
     var source;
     var url = getMediaSourceUrl(videoNode);
-    var subtype = String(resource.subtype || '').toLowerCase();
+    var subtype = String(resource.videoKind || '').toLowerCase();
     var vimeo;
 
     if (wuwei.video && typeof wuwei.video.detectSource === 'function') {
@@ -699,11 +699,9 @@ wuwei.timeline = wuwei.timeline || {};
     }
     node.playDuration = Math.max(0, node.mediaEnd - node.mediaStart);
     node.label = node.label || formatTime(node.mediaStart);
-    delete node.name;
     node.description = (node.description && typeof node.description === 'object')
       ? node.description
       : { format: 'plain/text', body: '' };
-    delete node.value;
     node.shape = 'CIRCLE';
     node.size = { radius: Number((node.size && node.size.radius) || 20) };
     node.color = node.color || ((node.axisRole === 'point') ? common.Color.nodeFill : '#fff8d8');
@@ -764,20 +762,7 @@ wuwei.timeline = wuwei.timeline || {};
   }
 
   function migrateLegacySegments(group) {
-    var page = getCurrentPage();
-    if (!page || !group || !Array.isArray(group.segments) || !group.segments.length) {
-      return;
-    }
-    ensurePageCollections(page);
-    if (!Array.isArray(group.members)) {
-      group.members = [];
-    }
-    group.segments.forEach(function (segment) {
-      var node = createSegmentNode(group, segment);
-      page.nodes.push(node);
-      appendMember(group, node.id, 'member');
-    });
-    delete group.segments;
+    return;
   }
 
   function axisOrientation(group) {
@@ -1357,24 +1342,18 @@ wuwei.timeline = wuwei.timeline || {};
 
   function getLinkSourceId(link) {
     if (!link) { return ''; }
-    if (link.from) { return (link.from && link.from.id) ? link.from.id : link.from; }
-    if (link.source) { return (link.source && link.source.id) ? link.source.id : link.source; }
-    return '';
+    return link.from ? ((link.from && link.from.id) ? link.from.id : link.from) : '';
   }
 
   function getLinkTargetId(link) {
     if (!link) { return ''; }
-    if (link.to) { return (link.to && link.to.id) ? link.to.id : link.to; }
-    if (link.target) { return (link.target && link.target.id) ? link.target.id : link.target; }
-    return '';
+    return link.to ? ((link.to && link.to.id) ? link.to.id : link.to) : '';
   }
 
   function setLinkTargetId(link, id) {
     if (!link || !id) { return; }
     link.to = id;
-    if (undefined !== link.target) {
-      link.target = id;
-    }
+
   }
 
   function isTimelineSourceLinkForGroup(link, group, videoNode) {

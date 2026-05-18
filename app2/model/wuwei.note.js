@@ -194,67 +194,21 @@ wuwei.note = (function () {
 
   function normalizeResourceDefinition(resource) {
     var src = (resource && typeof resource === 'object') ? resource : {};
-    var media = (src.media && typeof src.media === 'object') ? src.media : {};
-    var identity = (src.identity && typeof src.identity === 'object') ? src.identity : {};
-    var origin = (src.origin && typeof src.origin === 'object') ? src.origin : {};
     var rights = (src.rights && typeof src.rights === 'object') ? src.rights : {};
-    var viewer = normalizeViewer(src.viewer);
-    var storage = normalizeStorage(src.storage);
-    var snapshotSources = (src.snapshotSources && typeof src.snapshotSources === 'object')
-      ? util.clone(src.snapshotSources)
-      : {};
-    var ownerUserId = String(src.owner || rights.owner || src.user_id || src.userId || '').trim();
-    var previewUri = snapshotSources.previewUri || storageFileUrl(storage, 'preview', ownerUserId);
-    var thumbnailUri = snapshotSources.thumbnailUri || viewer.thumbnailUri || storageFileUrl(storage, 'thumbnail', ownerUserId);
-    var originalUri = snapshotSources.originalUri || storageFileUrl(storage, 'original', ownerUserId);
-    if (previewUri) {
-      snapshotSources.previewUri = previewUri;
-      if (!identity.uri) {
-        identity.uri = previewUri;
-      }
-      if (!viewer.embed.uri) {
-        viewer.embed.uri = previewUri;
-      }
-    }
-    if (thumbnailUri) {
-      snapshotSources.thumbnailUri = thumbnailUri;
-      viewer.thumbnailUri = viewer.thumbnailUri || thumbnailUri;
-      if (!viewer.embed.thumbnailUri) {
-        viewer.embed.thumbnailUri = thumbnailUri;
-      }
-    }
-    if (originalUri) {
-      snapshotSources.originalUri = originalUri;
-      if (!identity.canonicalUri) {
-        identity.canonicalUri = originalUri;
-      }
-    }
     return {
       id: src.id || util.createUuid(),
-      type: 'Resource',
-      origin: {
-        type: origin.type || src.originType || (src.kind === 'webpage' || src.kind === 'video' ? 'publicReference' : 'userRegistered'),
-        subtype: origin.subtype || src.originSubtype || '',
-        provider: origin.provider || src.provider || ''
-      },
-      identity: {
-        title: String(identity.title || src.title || src.name || ''),
-        canonicalUri: String(identity.canonicalUri || src.canonicalUri || src.uri || ''),
-        uri: String(identity.uri || src.uri || '')
-      },
-      media: {
-        kind: String(media.kind || src.kind || 'general'),
-        mimeType: String(media.mimeType || src.mimeType || src.format || 'text/plain'),
-        downloadable: media.downloadable === true || src.downloadable === true,
-        duration: (typeof media.duration !== 'undefined') ? media.duration : (src.duration || null),
-        pageCount: Number.isFinite(Number(media.pageCount || src.pageCount))
-          ? Number(media.pageCount || src.pageCount)
-          : undefined
-      },
+      source: String(src.source || ''),
+      kind: String(src.kind || 'other'),
+      documentKind: String(src.documentKind || ''),
+      videoKind: String(src.videoKind || ''),
+      canonicalUri: String(src.canonicalUri || src.uri || ''),
+      uri: String(src.uri || src.canonicalUri || ''),
+      title: String(src.title || ''),
+      mimeType: String(src.mimeType || 'text/plain'),
+      thumbnailUri: String(src.thumbnailUri || ''),
+      viewer: normalizeViewer(src.viewer),
+      storage: normalizeStorage(src.storage),
       contents: (src.contents && typeof src.contents === 'object') ? util.clone(src.contents) : undefined,
-      viewer: viewer,
-      storage: storage,
-      snapshotSources: snapshotSources,
       rights: {
         owner: String(rights.owner || src.owner || ''),
         copyright: String(rights.copyright || src.copyright || ''),
@@ -268,8 +222,8 @@ wuwei.note = (function () {
   function isVideoResourceLike(resource, uri) {
     var src = resource || {};
     var kind = String(src.kind || '').toLowerCase();
-    var subtype = String(src.subtype || (src.media && src.media.subtype) || '').toLowerCase();
-    var text = String(uri || src.canonicalUri || src.uri || src.url || '').toLowerCase();
+    var subtype = String(src.videoKind || '').toLowerCase();
+    var text = String(uri || src.canonicalUri || src.uri || '').toLowerCase();
     return kind === 'video' ||
       subtype === 'youtube' ||
       subtype === 'vimeo' ||
@@ -279,11 +233,10 @@ wuwei.note = (function () {
 
   function normalizeUrlVideoResource(resource, node, uri) {
     var src = resource || {};
-    var sourceUri = String(uri || src.canonicalUri || src.uri || src.url || '').trim();
+    var sourceUri = String(uri || src.canonicalUri || src.uri || '').trim();
     var clone = util.clone(src);
     var tempNode = {
       label: node && node.label,
-      thumbnailUri: node && node.thumbnailUri,
       timeRange: node && node.timeRange,
       resource: clone
     };
@@ -295,169 +248,27 @@ wuwei.note = (function () {
     clone.canonicalUri = sourceUri;
     clone.mimeType = clone.mimeType || 'text/html';
     clone.title = String(clone.title || (node && node.label) || sourceUri || 'Video');
-    clone.media = clone.media && typeof clone.media === 'object' ? clone.media : {};
-    clone.media.kind = 'video';
-    clone.media.mimeType = clone.mimeType;
-    clone.viewer = normalizeViewer(clone.viewer);
-    clone.viewer.embed = clone.viewer.embed && typeof clone.viewer.embed === 'object' ? clone.viewer.embed : {};
-    clone.viewer.embed.enabled = !!sourceUri;
-    clone.viewer.embed.uri = sourceUri;
+    clone.videoKind = clone.videoKind || '';
     delete clone.storage;
-    delete clone.snapshotSources;
-    delete clone.identity;
     return clone;
   }
 
   function normalizeResource(resource, node) {
-    var src = resource || {};
-    var viewer = (src.viewer && typeof src.viewer === 'object') ? src.viewer : {};
-    var embed = (viewer.embed && typeof viewer.embed === 'object') ? viewer.embed : {};
-    var snapshotSources = (src.snapshotSources && typeof src.snapshotSources === 'object') ? src.snapshotSources : {};
-    var uri = String(src.canonicalUri || src.uri || embed.uri || src.url || snapshotSources.previewUri || snapshotSources.originalUri || '');
-    var uploadId, uploadDate, uploadBase, uploadPreview, uploadThumbnail;
-    var currentUserId = String((state.currentUser && state.currentUser.user_id) || '');
-    if (src.kind === 'upload' && src.id && src.date) {
-      uploadId = String(src.id || '');
-      uploadDate = String(src.date || '').replace(/\\/g, '/').replace(/^\/|\/$/g, '');
-      uploadBase = uploadDate + '/' + uploadId + '/';
-      var uploadOriginalFile = String(src.file || src.filename || src.name || '').replace(/\\/g, '/').split('/').pop();
-      var uploadStorage = normalizeStorage(src.storage);
-      if (src.storage && src.storage.manifest) {
-        uploadStorage.manifest = util.clone(src.storage.manifest);
-      }
-      if (!uploadStorage.files.length) {
-        uploadStorage = {
-          managed: true,
-          copyPolicy: 'reference',
-          manifest: { area: 'upload', path: uploadBase + 'manifest.json' },
-          files: [
-            uploadOriginalFile ? { role: 'original', area: 'upload', path: uploadBase + uploadOriginalFile, mimeType: /\.pdf$/i.test(uploadOriginalFile) ? 'application/pdf' : 'application/octet-stream' } : null,
-            { role: 'thumbnail', area: 'upload', path: uploadBase + 'thumbnail.jpg', mimeType: 'image/jpeg' }
-          ].filter(Boolean)
-        };
-      }
-      var uploadOwnerId = String(src.owner || (src.rights && src.rights.owner) || (src.audit && src.audit.owner) || currentUserId);
-      uploadPreview = storageFileUrl(uploadStorage, 'preview', uploadOwnerId);
-      uploadThumbnail = storageFileUrl(uploadStorage, 'thumbnail', uploadOwnerId) ||
-        util.toPublicResourceUri('upload', uploadBase + 'thumbnail.jpg', uploadOwnerId);
-      var uploadOriginal = storageFileUrl(uploadStorage, 'original', uploadOwnerId);
-      if (!uploadOriginal && uploadOriginalFile) {
-        uploadOriginal = util.toPublicResourceUri('upload', uploadBase + uploadOriginalFile, uploadOwnerId);
-      }
-      var uploadMedia = src.media && typeof src.media === 'object' ? util.clone(src.media) : {};
-      var uploadContents = src.contents && typeof src.contents === 'object' ? util.clone(src.contents) : null;
-      var uploadMimeType = String(uploadMedia.mimeType || src.mimeType || '');
-      var uploadExtensionKind = util.getDocumentKindByExtension
-        ? util.getDocumentKindByExtension(node, src, uploadOriginalFile || uploadOriginal)
-        : '';
-      if (!uploadMedia.kind && /^(pdf|office|html|text)$/.test(uploadExtensionKind)) {
-        uploadMedia.kind = 'document';
-      }
-      if (!uploadMedia.mimeType) {
-        uploadMedia.mimeType = uploadMimeType;
-      }
-      if (!uploadMedia.downloadable && /^(pdf|office|html|text)$/.test(uploadExtensionKind)) {
-        uploadMedia.downloadable = true;
-      }
-      var uploadViewerUri = uploadPreview || uploadOriginal;
-      return {
-        id: uploadId,
-        kind: 'upload',
-        uri: uploadViewerUri,
-        canonicalUri: uploadOriginal,
-        mimeType: uploadMimeType,
-        title: String(src.title || (node && node.label) || ''),
-        file: uploadOriginalFile,
-        owner: uploadOwnerId,
-        media: uploadMedia,
-        contents: uploadContents || undefined,
-        copyright: String(src.copyright || ''),
-        license: String((src.rights && src.rights.license) || src.license || ''),
-        attribution: String((src.rights && src.rights.attribution) || src.attribution || ''),
-        rights: {
-          owner: String((src.rights && src.rights.owner) || src.owner || uploadOwnerId),
-          copyright: String((src.rights && src.rights.copyright) || src.copyright || ''),
-          license: String((src.rights && src.rights.license) || src.license || ''),
-          attribution: String((src.rights && src.rights.attribution) || src.attribution || '')
-        },
-        audit: normalizeAudit(src.audit, state.currentUser),
-        viewer: {
-          supportedModes: ['infoPane', 'newTab', 'newWindow', 'download'],
-          defaultMode: 'infoPane',
-          embed: { enabled: true, uri: uploadViewerUri, thumbnailUri: uploadThumbnail },
-          thumbnailUri: uploadThumbnail
-        },
-        storage: uploadStorage,
-        snapshotSources: {
-          previewUri: uploadPreview || undefined,
-          originalUri: uploadOriginal || undefined,
-          thumbnailUri: uploadThumbnail || undefined
-        },
-        thumbnailUri: uploadThumbnail
-      };
+    var out = normalizeResourceDefinition(resource || {});
+    if (!out.title && node && node.label) {
+      out.title = String(node.label || '');
     }
-    if (isVideoResourceLike(src, uri)) {
-      return normalizeUrlVideoResource(src, node, uri);
+    if (!out.kind || out.kind === 'other') {
+      out.kind = resourceKindFromExtension(out, out.uri || out.canonicalUri, node);
     }
-    if (src.type === 'Resource' || (src.storage && typeof src.storage === 'object')) {
-      return runtimeResourceFromDefinition(src, node);
+    if (isVideoResourceLike(out, out.uri || out.canonicalUri)) {
+      return normalizeUrlVideoResource(out, node, out.uri || out.canonicalUri);
     }
-    return {
-      id: String(src.id || ''),
-      kind: src.kind || resourceKindFromExtension(src, uri, node),
-      uri: uri,
-      canonicalUri: String(src.canonicalUri || uri || ''),
-      mimeType: String(src.mimeType || src.format || ''),
-      title: String(src.title || (node && node.label) || (node && node.name) || ''),
-      owner: String(src.owner || ''),
-      copyright: String(src.copyright || ''),
-      license: String((src.rights && src.rights.license) || src.license || ''),
-      attribution: String((src.rights && src.rights.attribution) || src.attribution || ''),
-      rights: {
-        owner: String((src.rights && src.rights.owner) || src.owner || ''),
-        copyright: String((src.rights && src.rights.copyright) || src.copyright || ''),
-        license: String((src.rights && src.rights.license) || src.license || ''),
-        attribution: String((src.rights && src.rights.attribution) || src.attribution || '')
-      },
-      viewer: normalizeViewer(src.viewer),
-      storage: src.storage && typeof src.storage === 'object' ? util.clone(src.storage) : {},
-      snapshotSources: util.clone(snapshotSources)
-    };
+    return out;
   }
 
   function runtimeResourceFromDefinition(definition, node) {
-    var src = normalizeResourceDefinition(definition || {});
-    var viewer = (src.viewer && typeof src.viewer === 'object') ? src.viewer : {};
-    var embed = (viewer.embed && typeof viewer.embed === 'object') ? viewer.embed : {};
-    var uri = src.identity.uri || embed.uri || src.snapshotSources.previewUri || src.identity.canonicalUri || src.snapshotSources.originalUri || '';
-    var thumbnail = src.snapshotSources.thumbnailUri || viewer.thumbnailUri || embed.thumbnailUri || '';
-    return {
-      id: src.id,
-      kind: src.media.kind || resourceKindFromExtension(src, uri, node),
-      uri: String(uri || ''),
-      canonicalUri: String(src.identity.canonicalUri || uri || ''),
-      mimeType: String(src.media.mimeType || ''),
-      title: String(src.identity.title || (node && node.label) || ''),
-      owner: String(src.rights.owner || ''),
-      media: util.clone(src.media || {}),
-      contents: src.contents && typeof src.contents === 'object' ? util.clone(src.contents) : undefined,
-      pageCount: src.contents && Number.isFinite(Number(src.contents.pageCount))
-        ? Number(src.contents.pageCount)
-        : (src.media && Number.isFinite(Number(src.media.pageCount)) ? Number(src.media.pageCount) : undefined),
-      copyright: String(src.rights.copyright || ''),
-      license: String(src.rights.license || ''),
-      attribution: String(src.rights.attribution || ''),
-      rights: {
-        owner: String(src.rights.owner || ''),
-        copyright: String(src.rights.copyright || ''),
-        license: String(src.rights.license || ''),
-        attribution: String(src.rights.attribution || '')
-      },
-      viewer: normalizeViewer(src.viewer),
-      storage: util.clone(src.storage || {}),
-      snapshotSources: util.clone(src.snapshotSources || {}),
-      thumbnailUri: thumbnail
-    };
+    return normalizeResource(definition || {}, node);
   }
 
   function normalizeVisibleFlag(srcVisible, srcHidden, oldHidden) {
@@ -472,21 +283,20 @@ wuwei.note = (function () {
 
   function normalizeNode(node, resourceById) {
     var src = node || {};
-    var oldView = src.view || {};
-    var shape = src.shape || oldView.shape || (src.type === 'Memo' ? 'MEMO' : 'RECTANGLE');
-    var size = src.size || oldView.size || {};
+    var shape = src.shape || (src.type === 'Memo' ? 'MEMO' : 'RECTANGLE');
+    var size = src.size || {};
     var out = {
       id: src.id || util.createUuid(),
       type: src.type || 'Topic',
-      x: Number.isFinite(Number(src.x)) ? Number(src.x) : (Number.isFinite(Number(oldView.x)) ? Number(oldView.x) : 0),
-      y: Number.isFinite(Number(src.y)) ? Number(src.y) : (Number.isFinite(Number(oldView.y)) ? Number(oldView.y) : 0),
+      x: Number.isFinite(Number(src.x)) ? Number(src.x) : 0,
+      y: Number.isFinite(Number(src.y)) ? Number(src.y) : 0,
       shape: shape,
       size: util.clone(size || {}),
-      visible: normalizeVisibleFlag(src.visible, src.hidden, oldView.hidden),
+      visible: (false !== src.visible),
       label: String(src.label || ''),
       description: src.description && typeof src.description === 'object'
         ? util.clone(src.description)
-        : { format: 'asciidoc', body: String(src.description || '') },
+        : { format: 'plain/text', body: '' },
       style: util.clone(src.style || {}),
       audit: normalizeAudit(src.audit, state.currentUser)
     };
@@ -505,12 +315,7 @@ wuwei.note = (function () {
           out.resourceRef = src.resourceRef;
         }
       }
-      if (shape === 'THUMBNAIL' || src.thumbnailUri) {
-        out.thumbnailUri = String(out.thumbnailUri || src.thumbnailUri || '');
-      }
-      if (!out.thumbnailUri && out.resource && out.resource.thumbnailUri) {
-        out.thumbnailUri = out.resource.thumbnailUri;
-      }
+
     }
 
     if (src.type === 'Memo') {//} && (src.memoShape || oldView.memoShape)) {
@@ -518,25 +323,6 @@ wuwei.note = (function () {
       out.style.memo = (out.style.memo && typeof out.style.memo === 'object')
         ? util.clone(out.style.memo)
         : {};
-
-      if (src.memoShape && typeof src.memoShape === 'object') {
-        if (!out.style.memo.corner && src.memoShape.corner) {
-          out.style.memo.corner = src.memoShape.corner;
-        }
-        if (!Number.isFinite(Number(out.style.memo.foldSize)) &&
-          Number.isFinite(Number(src.memoShape.foldSize))) {
-          out.style.memo.foldSize = Number(src.memoShape.foldSize);
-        }
-      }
-      else if (oldView.memoShape && typeof oldView.memoShape === 'object') {
-        if (!out.style.memo.corner && oldView.memoShape.corner) {
-          out.style.memo.corner = oldView.memoShape.corner;
-        }
-        if (!Number.isFinite(Number(out.style.memo.foldSize)) &&
-          Number.isFinite(Number(oldView.memoShape.foldSize))) {
-          out.style.memo.foldSize = Number(oldView.memoShape.foldSize);
-        }
-      }
 
       if (!out.style.memo.corner) {
         out.style.memo.corner = 'bottom-right';
@@ -552,10 +338,7 @@ wuwei.note = (function () {
       out.description = src.description && typeof src.description === 'object'
         ? util.clone(src.description)
         : { format: 'plain/text', body: '' };
-      out.time = util.clone(src.time || {
-        start: Number.isFinite(Number(src.timeStart)) ? Number(src.timeStart) : (Number.isFinite(Number(src.time)) ? Number(src.time) : 0),
-        end: Number.isFinite(Number(src.timeEnd)) ? Number(src.timeEnd) : (Number.isFinite(Number(src.time)) ? Number(src.time) : 0)
-      });
+      out.time = util.clone(src.time || {});
       ['mediaStart', 'mediaEnd', 'playDuration'].forEach(function (key) {
         if (Number.isFinite(Number(src[key]))) {
           out[key] = Number(src[key]);
@@ -570,7 +353,7 @@ wuwei.note = (function () {
     if (src.type === 'PageMarker' || src.topicKind === 'contents-page') {
       out.type = 'PageMarker';
       out.topicKind = 'contents-page';
-      out.groupRef = out.groupRef || (typeof src.contentsRef === 'string' ? src.contentsRef : '');
+      out.groupRef = out.groupRef || '';
       if (typeof src.documentRef === 'string' && src.documentRef) {
         out.documentRef = src.documentRef;
       }
@@ -582,12 +365,7 @@ wuwei.note = (function () {
       }
       [
         'anchorHref',
-        'htmlAnchorHref',
-        'href',
-        'targetHref',
-        'sectionId',
-        'contentsKind',
-        'markerKind'
+        'htmlAnchorHref'
       ].forEach(function (key) {
         if (typeof src[key] === 'string' && src[key]) {
           out[key] = src[key];
@@ -620,16 +398,15 @@ wuwei.note = (function () {
 
   function normalizeLink(link) {
     var src = link || {};
-    var oldView = src.view || {};
     var out = {
       id: src.id || util.createUuid(),
       type: 'Link',
       from: (typeof src.from === 'object') ? src.from.id : (src.from || ''),
       to: (typeof src.to === 'object') ? src.to.id : (src.to || ''),
-      x: Number.isFinite(Number(src.x)) ? Number(src.x) : (Number.isFinite(Number(oldView.x)) ? Number(oldView.x) : 0),
-      y: Number.isFinite(Number(src.y)) ? Number(src.y) : (Number.isFinite(Number(oldView.y)) ? Number(oldView.y) : 0),
+      x: Number.isFinite(Number(src.x)) ? Number(src.x) : 0,
+      y: Number.isFinite(Number(src.y)) ? Number(src.y) : 0,
       shape: src.shape || oldView.shape || 'NORMAL',
-      visible: normalizeVisibleFlag(src.visible, src.hidden, oldView.hidden),
+      visible: (false !== src.visible),
       relation: src.relation || '',
       label: String(src.label || ''),
       description: src.description && typeof src.description === 'object'
@@ -908,7 +685,7 @@ wuwei.note = (function () {
       groups: (page.groups || []).filter(Boolean).map(function (group) {
         return stripRuntimeGroup(group, page);
       }),
-      transform: normalizeTransform(page.transform || page.translate),
+      transform: normalizeTransform(page.transform),
       thumbnail: (typeof page.thumbnail === 'undefined') ? defaultThumbnail : page.thumbnail,
       audit: normalizeAudit(page.audit || current.audit, state.currentUser)
     };
@@ -969,53 +746,7 @@ wuwei.note = (function () {
   }
 
   function resourceFromContentNode(node) {
-    var src = node.resource || {};
-    var uri = String(src.uri || node.uri || '');
-    var mimeType = String(src.mimeType || src.format || node.format || 'text/plain');
-    var kind = String(src.kind || resourceKindFromExtension(src, uri, node));
-    var isManaged = !/^https?:\/\//i.test(uri) && !!uri;
-    var snapshotSources = src.snapshotSources || {};
-    if (src.canonicalUri && !snapshotSources.originalUri) {
-      snapshotSources.originalUri = src.canonicalUri;
-    }
-    if (uri && !snapshotSources.previewUri) {
-      snapshotSources.previewUri = uri;
-    }
-    if (node.thumbnailUri && !snapshotSources.thumbnailUri) {
-      snapshotSources.thumbnailUri = node.thumbnailUri;
-    }
-    return normalizeResourceDefinition({
-      id: node.resourceRef || util.createUuid(),
-      origin: {
-        type: /^https?:\/\//i.test(uri) ? 'publicReference' : 'userRegistered',
-        subtype: kind === 'video' ? 'videoPage' : (kind === 'document' ? 'uploadedDocument' : ''),
-        provider: ''
-      },
-      identity: {
-        title: src.title || node.label || '',
-        uri: uri,
-        canonicalUri: src.canonicalUri || uri
-      },
-      media: {
-        kind: kind,
-        mimeType: mimeType,
-        downloadable: isManaged
-      },
-      viewer: src.viewer || {},
-      snapshotSources: snapshotSources,
-      storage: normalizeStorage(src.storage || {
-        managed: isManaged,
-        copyPolicy: isManaged ? 'snapshot' : 'metadataOnly',
-        files: []
-      }),
-      rights: {
-        owner: src.owner || '',
-        copyright: src.copyright || '',
-        license: (src.rights && src.rights.license) || src.license || '',
-        attribution: (src.rights && src.rights.attribution) || src.attribution || ''
-      },
-      audit: src.audit || node.audit
-    });
+    return normalizeResourceDefinition((node && node.resource) || {});
   }
 
   function uploadRefFromResource(resource) {
@@ -1059,87 +790,15 @@ wuwei.note = (function () {
       kind: 'upload',
       id: id,
       date: date,
-      file: originalFile || String(resource.file || resource.filename || '').replace(/\\/g, '/').split('/').pop()
+      file: originalFile || ''
     };
   }
 
   function compactResourceForSave(node) {
-    var src = node.resource || {};
-    var uploadRef = uploadRefFromResource(src);
-    var uri;
-    if (uploadRef) {
-      var originalFile = null;
-      if (src.storage && Array.isArray(src.storage.files)) {
-        originalFile = src.storage.files.find(function (file) {
-          return file && String(file.role || '').toLowerCase() === 'original';
-        });
-      }
-      uploadRef.title = String(src.title || node.label || '');
-      uploadRef.mimeType = String(
-        (src.media && src.media.mimeType) ||
-        (originalFile && originalFile.mimeType && originalFile.mimeType !== 'application/octet-stream' ? originalFile.mimeType : '') ||
-        src.mimeType ||
-        (/\.pdf$/i.test(String(uploadRef.file || '')) ? 'application/pdf' : '') ||
-        node.format ||
-        ''
-      );
-      if (src.owner) { uploadRef.owner = src.owner; }
-      if (src.media && typeof src.media === 'object') {
-        uploadRef.media = util.clone(src.media);
-      }
-      if (src.contents && typeof src.contents === 'object') {
-        uploadRef.contents = util.clone(src.contents);
-      }
-      if (src.rights && typeof src.rights === 'object') {
-        uploadRef.rights = util.clone(src.rights);
-      }
-      if (src.audit && typeof src.audit === 'object') {
-        uploadRef.audit = util.clone(src.audit);
-      }
-      if (src.storage && typeof src.storage === 'object') {
-        uploadRef.storage = util.clone(src.storage);
-        if (Array.isArray(uploadRef.storage.files)) {
-          uploadRef.storage.files = uploadRef.storage.files.filter(function (file) {
-            var originalKind = util.getDocumentKindByExtension
-              ? util.getDocumentKindByExtension(null, { file: uploadRef.file }, uploadRef.file)
-              : '';
-            return file && file.path && !(/\/preview\.pdf$/i.test(String(file.path || '')) &&
-              originalKind === 'pdf');
-          }).map(function (file) {
-            var copy = util.clone(file);
-            if (copy.role === 'original' && (!copy.mimeType || copy.mimeType === 'application/octet-stream') && uploadRef.mimeType) {
-              copy.mimeType = uploadRef.mimeType;
-            }
-            return copy;
-          });
-        }
-      }
-      uploadRef.viewer = {
-        supportedModes: ['infoPane', 'newTab', 'newWindow', 'download'],
-        defaultMode: 'infoPane'
-      };
-      return uploadRef;
+    if (!node || !node.resource) {
+      return null;
     }
-    uri = String(src.uri || src.canonicalUri || node.uri || node.url || '').trim();
-    if (isVideoResourceLike(src, uri)) {
-      return normalizeUrlVideoResource(src, node, uri);
-    }
-    if (/^https?:\/\//i.test(uri)) {
-      return {
-        kind: String(src.kind || 'web'),
-        uri: uri,
-        canonicalUri: String(src.canonicalUri || uri)
-      };
-    }
-    if (uri) {
-      return {
-        kind: String(src.kind || resourceKindFromExtension(src, uri, node)),
-        uri: uri,
-        title: String(src.title || node.label || ''),
-        mimeType: String(src.mimeType || node.format || '')
-      };
-    }
-    return null;
+    return normalizeResourceDefinition(node.resource);
   }
 
   function stripRuntimeNode(node) {
@@ -1192,12 +851,7 @@ wuwei.note = (function () {
       }
       [
         'anchorHref',
-        'htmlAnchorHref',
-        'href',
-        'targetHref',
-        'sectionId',
-        'contentsKind',
-        'markerKind'
+        'htmlAnchorHref'
       ].forEach(function (key) {
         if (typeof node[key] === 'string' && node[key]) {
           out[key] = node[key];
@@ -1215,12 +869,7 @@ wuwei.note = (function () {
       if (!out.resourceView) {
         out.resourceView = { mode: 'default' };
       }
-      if (node.thumbnailUri && !(out.resource && out.resource.kind === 'upload')) {
-        out.thumbnailUri = String(node.thumbnailUri);
-      }
-      else {
-        delete out.thumbnailUri;
-      }
+      delete out.thumbnailUri;
       delete out.resourceRef;
       delete out.uri;
       delete out.url;
@@ -1757,7 +1406,7 @@ wuwei.note = (function () {
     graph.nodes = page.nodes;
     graph.links = page.links;
     graph.groups = page.groups || [];
-    graph.transform = normalizeTransform(page.transform || page.translate);
+    graph.transform = normalizeTransform(page.transform);
     return page;
   }
 
@@ -2041,15 +1690,6 @@ wuwei.note = (function () {
       });
     }
 
-    if (Array.isArray(group.entries)) {
-      group.entries = group.entries.map(function (entry) {
-        var next = util.clone(entry);
-        next.nodeId = nodeIndexer[next.nodeId] || next.nodeId;
-        return next;
-      }).filter(function (entry) {
-        return !!(entry && entry.nodeId);
-      });
-    }
 
     group.representativeNodeId = nodeIndexer[oldRepresentativeId] || '';
 
@@ -2057,9 +1697,6 @@ wuwei.note = (function () {
     remapObjectReference(group, 'documentRef', nodeIndexer);
     if (group.timeline) {
       remapObjectReference(group.timeline, 'mediaRef', nodeIndexer);
-    }
-    if (group.contents) {
-      remapObjectReference(group.contents, 'documentRef', nodeIndexer);
     }
   }
 
@@ -2105,9 +1742,9 @@ wuwei.note = (function () {
 
     copiedPage.links = (copiedPage.links || []).filter(function (link) {
       var srcId = (link.from && typeof link.from === 'object') ? link.from.id
-        : (link.from || ((link.source && typeof link.source === 'object') ? link.source.id : link.source));
+        : link.from;
       var tgtId = (link.to && typeof link.to === 'object') ? link.to.id
-        : (link.to || ((link.target && typeof link.target === 'object') ? link.target.id : link.target));
+        : link.to;
       return copiedPage.nodes.some(function (node) { return node && node.id === srcId; }) &&
         copiedPage.nodes.some(function (node) { return node && node.id === tgtId; });
     });
@@ -2135,15 +1772,13 @@ wuwei.note = (function () {
     for (let link of copiedPage.links) {
       _id = link.id;
       const srcId = (link.from && typeof link.from === 'object') ? link.from.id
-        : (link.from || ((link.source && typeof link.source === 'object') ? link.source.id : link.source));
+        : link.from;
       const tgtId = (link.to && typeof link.to === 'object') ? link.to.id
-        : (link.to || ((link.target && typeof link.target === 'object') ? link.target.id : link.target));
+        : link.to;
       link.id = linkIndexer[_id];
       link.from = nodeIndexer[srcId] || srcId;
       link.to = nodeIndexer[tgtId] || tgtId;
       remapLinkForPageCopy(link, groupIndexer);
-      delete link.source;
-      delete link.target;
     }
 
     for (let group of (copiedPage.groups || [])) {
@@ -2274,7 +1909,19 @@ wuwei.note = (function () {
     if (span_description) {
       span_description.textContent = page.description || '';
     }
-    wuwei.menu.registerPagebuttonEvent();
+    registerPagebuttonEventSafely();
+  }
+
+  function registerPagebuttonEventSafely() {
+    var menuApi = wuwei && wuwei.menu;
+
+    if (menuApi && typeof menuApi.registerPagebuttonEvent === 'function') {
+      menuApi.registerPagebuttonEvent();
+      return;
+    }
+    if (menuApi && typeof menuApi.registerPageButtonEvent === 'function') {
+      menuApi.registerPageButtonEvent();
+    }
   }
 
   function listPage() {

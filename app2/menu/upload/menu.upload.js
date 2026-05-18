@@ -164,8 +164,8 @@ wuwei.menu.upload = wuwei.menu.upload || {};
         if (requestedLabel) {
           response.label = requestedLabel;
           response.name = requestedLabel;
-          if (response.resource && response.resource.identity) {
-            response.resource.identity.title = requestedLabel;
+          if (response.resource) {
+            response.resource.title = requestedLabel;
           }
         }
 
