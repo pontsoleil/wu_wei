@@ -384,31 +384,6 @@ resolve_env_path() {
 }
 
 
-legacy_note_dir_for() {
-  current=$1
-  uid=${2:-}
-  current=$(printf '%s' "$current" | sed 's#/*$##')
-  [ -n "$current" ] || return 1
-
-  if [ -n "$uid" ]; then
-    case "$current" in
-      */data/"$uid"/note)
-        printf '%s/%s/note\n' "${current%/data/$uid/note}" "$uid"
-        return 0
-        ;;
-    esac
-  fi
-
-  case "$current" in
-    */data/public/note)
-      printf '%s/public/note\n' "${current%/data/public/note}"
-      return 0
-      ;;
-  esac
-
-  return 1
-}
-
 # --- Collect CGI params from QUERY_STRING + POST body -------------------
 qs=${QUERY_STRING:-}
 body=""
@@ -451,7 +426,6 @@ fi
 
 [ -n "${note_dir:-}" ] || error_response 'ERROR NOTE DIR NOT DEFINED'
 current_note_dir=$note_dir
-legacy_note_dir=$(legacy_note_dir_for "$current_note_dir" "$user_id" || true)
 
 include_new_note=$(nameread include_new_note "$CGIVARS" | strip_quotes || true)
 [ -n "$include_new_note" ] || include_new_note=$(nameread include_draft "$CGIVARS" | strip_quotes || true)
@@ -468,18 +442,10 @@ case "$note_format" in
   ver1) include_ver0= ; include_ver1=1 ;;
   ver2) include_ver0= ; include_ver1= ;;
 esac
-case "$note_format" in
-  ver0|ver1)
-    if [ -n "${legacy_note_dir:-}" ] && [ -d "$legacy_note_dir" ]; then
-      note_dir=$legacy_note_dir
-    else
-      note_dir=$current_note_dir
-    fi
-    ;;
-  *)
-    note_dir=$current_note_dir
-    ;;
-esac
+# v0/v1 legacy note files are expected to be copied under the current
+# data directory: wu_wei2/data/{user_id}/note/YYYY/MM/{note_id}.
+# Do not search the old nginx alias directory ({user_id}/note/...).
+note_dir=$current_note_dir
 [ -d "$note_dir" ] || error_response 'ERROR NOTE DIR NOT DEFINED'
 term=$(nameread term "$CGIVARS" | strip_quotes || true)
 year=$(nameread year "$CGIVARS" | strip_quotes || true)
