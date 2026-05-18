@@ -151,6 +151,77 @@ wuwei.note.v1 = (function () {
     return match ? match[1] : (fallbackArea || 'upload');
   }
 
+  function rewriteLegacyStoragePath(path) {
+    var hasLeadingSlash = false;
+    var prefix = '';
+    var text = String(path || '').replace(/\\/g, '/').trim();
+    var match;
+
+    if (!text) {
+      return '';
+    }
+
+    hasLeadingSlash = text.charAt(0) === '/';
+    text = text.replace(/^\/+/, '');
+
+    if (/^wu_wei2\//.test(text)) {
+      prefix = 'wu_wei2/';
+      text = text.substring('wu_wei2/'.length);
+    }
+
+    if (/^data\//.test(text)) {
+      return (hasLeadingSlash ? '/' : '') + prefix + text;
+    }
+
+    match = text.match(/^(note|resource|upload|thumbnail|content)\/([^/]+)\/(\d{4})\/(\d{2})(\/.*)?$/);
+    if (match) {
+      return (hasLeadingSlash ? '/' : '') + prefix + 'data/' + match[2] + '/' + match[1] + '/' + match[3] + '/' + match[4] + (match[5] || '');
+    }
+
+    match = text.match(/^([^/]+)\/(note|resource|upload|thumbnail|content)\/(\d{4})\/(\d{2})(\/.*)?$/);
+    if (match) {
+      return (hasLeadingSlash ? '/' : '') + prefix + 'data/' + text;
+    }
+
+    return (hasLeadingSlash ? '/' : '') + prefix + text;
+  }
+
+  function rewriteLegacyLocalUri(value) {
+    var raw = cleanLegacyString(value).replace(/\\/g, '/').trim();
+    var suffix = '';
+    var hashIndex;
+    var queryIndex;
+    var suffixIndex;
+    var match;
+
+    if (!raw || /^(data:|blob:|mailto:|tel:)/i.test(raw)) {
+      return raw;
+    }
+
+    hashIndex = raw.indexOf('#');
+    queryIndex = raw.indexOf('?');
+    if (hashIndex >= 0 && queryIndex >= 0) {
+      suffixIndex = Math.min(hashIndex, queryIndex);
+    }
+    else {
+      suffixIndex = Math.max(hashIndex, queryIndex);
+    }
+    if (suffixIndex >= 0) {
+      suffix = raw.substring(suffixIndex);
+      raw = raw.substring(0, suffixIndex);
+    }
+
+    match = raw.match(/^(https?:\/\/[^/]+)(\/.*)$/i);
+    if (match) {
+      if (/\/wu_wei2\/(note|resource|upload|thumbnail|content)\//.test(match[2]) || /\/wu_wei2\/[^/]+\/(note|resource|upload|thumbnail|content)\//.test(match[2]) || /\/wu_wei2\/data\//.test(match[2])) {
+        return match[1] + rewriteLegacyStoragePath(match[2]) + suffix;
+      }
+      return raw + suffix;
+    }
+
+    return rewriteLegacyStoragePath(raw) + suffix;
+  }
+
   function stripFileFragment(value) {
     return String(value || '').replace(/#.*$/, '').trim();
   }
@@ -274,11 +345,11 @@ wuwei.note.v1 = (function () {
   }
 
   function resourceFromV1Content(node) {
-    var uri = cleanLegacyString(node && (node.uri || node.url || node.download_url)).trim();
+    var uri = rewriteLegacyLocalUri(node && (node.uri || node.url || node.download_url));
     var mimeType = cleanLegacyString(node && (node.mimeType || node.format || node.contenttype)).trim();
-    var thumbnail = cleanLegacyString(node && (node.thumbnailUri || node.thumbnail)).trim();
+    var thumbnail = rewriteLegacyLocalUri(node && (node.thumbnailUri || node.thumbnail));
     var title = cleanLegacyString(node && (node.label || node.name)).trim() || fileNameFromUri(uri) || uri;
-    var previewUri = previewUriFromV1(node, uri);
+    var previewUri = rewriteLegacyLocalUri(previewUriFromV1(node, uri));
     var kind = mediaKindFromUri(uri || previewUri, mimeType);
     var id = (node && (node.resourceRef || node.content_id)) || createUuid();
     var source = resourceSourceFromUri(uri, node);
@@ -403,7 +474,7 @@ wuwei.note.v1 = (function () {
       }),
       groups: [],
       transform: normalizeTransformFromV1(src),
-      thumbnail: (typeof src.thumbnail === 'undefined') ? null : src.thumbnail,
+      thumbnail: (typeof src.thumbnail === 'undefined') ? null : rewriteLegacyLocalUri(src.thumbnail),
       audit: auditFromV1(src)
     };
   }
@@ -464,7 +535,7 @@ wuwei.note.v1 = (function () {
       currentPage: currentPage,
       pages: pages,
       resources: resources,
-      thumbnail: String(src.thumbnail || ''),
+      thumbnail: rewriteLegacyLocalUri(src.thumbnail || ''),
       audit: auditFromV1(src)
     };
   }

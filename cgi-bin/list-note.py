@@ -8,7 +8,6 @@ from cgi_common import (
     ENV_FILE,
     PUBLIC_USER_IDS,
     collect_note_record,
-    collect_ver0_note_record,
     collect_ver1_note_record,
     decode_note_json,
     debug,
@@ -18,9 +17,7 @@ from cgi_common import (
     get_effective_user_id,
     get_session_user_id,
     json_response,
-    legacy_note_format,
     list_note_files,
-    list_ver0_note_files,
     list_ver1_note_files,
     merge_query_and_body_params,
     normalise_posint,
@@ -162,16 +159,15 @@ def main():
         truthy(params.get("draft", ""))
     )
     note_format = str(params.get("note_format", "") or params.get("format", "") or "").strip().lower()
-    include_ver0 = truthy(params.get("include_ver0", "")) or truthy(params.get("include_v0", ""))
+    # Local Python CGI supports current ver2 notes and app ver1 notes only.
+    # v0/pre-v1 notes are handled by the server-side shell CGI deployment.
+    include_ver0 = False
     include_ver1 = truthy(params.get("include_ver1", "")) or truthy(params.get("include_v1", "")) or truthy(params.get("legacy", ""))
     if note_format == "ver0":
-        include_ver0 = True
         include_ver1 = False
     elif note_format == "ver1":
-        include_ver0 = False
         include_ver1 = True
     elif note_format == "ver2":
-        include_ver0 = False
         include_ver1 = False
     term = (params.get("term", "") or "").strip()
     year = str(params.get("year", "") or "")
@@ -180,16 +176,13 @@ def main():
     start_date = parse_date(params.get("start_date", "") or params.get("from", ""))
     end_date = parse_date(params.get("end_date", "") or params.get("to", ""))
     if note_format == "ver0":
-        files = list_ver0_note_files(root, include_new_note=include_new_note)
+        files = []
     elif note_format == "ver1":
         files = list_ver1_note_files(root, include_new_note=include_new_note)
     else:
         files = list_note_files(root, include_new_note=include_new_note)
-        if include_ver0:
-            files.extend(list_ver0_note_files(root, include_new_note=include_new_note))
         if include_ver1:
             files.extend(list_ver1_note_files(root, include_new_note=include_new_note))
-        if include_ver0 or include_ver1:
             files = sorted(set(files), key=lambda p: p.stat().st_mtime, reverse=True)
     files = filter_notes(files, root, year=year, month=month, date=date, start_date=start_date, end_date=end_date, term=term)
     total = len(files)
@@ -217,11 +210,7 @@ def main():
         if p.name == "note.json":
             notes.append(add_note_key(root, p))
         else:
-            fmt = legacy_note_format(p)
-            if fmt == "ver0":
-                notes.append(collect_ver0_note_record(root, p))
-            else:
-                notes.append(collect_ver1_note_record(root, p))
+            notes.append(collect_ver1_note_record(root, p))
     debug_kv(notes_built=len(notes))
 
     json_response(
