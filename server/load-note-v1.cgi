@@ -61,6 +61,32 @@ resolve_env_path() {
   esac
 }
 
+
+legacy_note_dir_for() {
+  current=$1
+  uid=${2:-}
+  current=$(printf '%s' "$current" | sed 's#/*$##')
+  [ -n "$current" ] || return 1
+
+  if [ -n "$uid" ]; then
+    case "$current" in
+      */data/"$uid"/note)
+        printf '%s/%s/note\n' "${current%/data/$uid/note}" "$uid"
+        return 0
+        ;;
+    esac
+  fi
+
+  case "$current" in
+    */data/public/note)
+      printf '%s/public/note\n' "${current%/data/public/note}"
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
 raw_param() {
   key=$1
   printf '%s' "${QUERY_STRING:-}" |
@@ -229,11 +255,16 @@ else
 fi
 
 [ -n "${note_dir:-}" ] || error_response 'ERROR NOTE DIRECTORY NOT FOUND'
-[ -d "$note_dir" ] || error_response 'ERROR NOTE DIRECTORY NOT FOUND'
+current_note_dir=$note_dir
+legacy_note_dir=$(legacy_note_dir_for "$current_note_dir" "$user_id" || true)
 
 set +e
-file=$(find_v1_note_file "$note_dir" "${id:-}" "${note_key:-}")
+file=$(find_v1_note_file "$current_note_dir" "${id:-}" "${note_key:-}")
 rc=$?
+if [ "$rc" -ne 0 ] && [ -n "${legacy_note_dir:-}" ] && [ -d "$legacy_note_dir" ]; then
+  file=$(find_v1_note_file "$legacy_note_dir" "${id:-}" "${note_key:-}")
+  rc=$?
+fi
 set -e
 case "$rc" in
   0) ;;
@@ -244,7 +275,8 @@ esac
 
 [ -f "$file" ] || error_response 'ERROR VER1 NOTE FILE NOT FOUND'
 case "$file" in
-  "$note_dir"/*|"$note_dir") ;;
+  "$current_note_dir"/*|"$current_note_dir") ;;
+  "$legacy_note_dir"/*|"$legacy_note_dir") ;;
   *) error_response 'ERROR INVALID NOTE PATH' ;;
 esac
 case "$file" in

@@ -287,6 +287,64 @@ print('ver0' if has_v0_fields(note) else 'ver1')
 PY
 }
 
+
+legacy_note_thumbnail_from_json() {
+  file=$1
+  python3 - "$file" <<'PY_LEGACY_THUMB' 2>/dev/null || true
+import base64, json, sys
+from pathlib import Path
+from urllib.parse import unquote_plus
+path = Path(sys.argv[1])
+text = path.read_text(encoding='utf-8', errors='ignore').lstrip('\ufeff')
+stripped = text.strip()
+if stripped.startswith('{'):
+    raw = stripped
+else:
+    values = {}
+    for line in text.splitlines():
+        line = line.rstrip('\r\n')
+        if not line or line.lstrip().startswith('#'):
+            continue
+        if ' ' in line:
+            k, v = line.split(' ', 1)
+        elif '=' in line:
+            k, v = line.split('=', 1)
+        else:
+            continue
+        values[k.strip()] = v.strip().strip('"')
+    if values.get('json_base64'):
+        raw = base64.b64decode(values['json_base64'].encode('ascii')).decode('utf-8', errors='ignore')
+    elif values.get('json'):
+        raw = unquote_plus(values['json'])
+    else:
+        raise SystemExit(0)
+try:
+    note = json.loads(raw)
+except Exception:
+    raise SystemExit(0)
+thumb = str(note.get('thumbnail') or '').strip() if isinstance(note, dict) else ''
+if not thumb and isinstance(note, dict):
+    pages = note.get('pages')
+    current = str(note.get('currentPage') or '')
+    candidates = []
+    if isinstance(pages, dict):
+        if current and isinstance(pages.get(current), dict):
+            candidates.append(pages[current])
+        candidates.extend(v for v in pages.values() if isinstance(v, dict))
+    elif isinstance(pages, list):
+        if current:
+            candidates.extend(p for p in pages if isinstance(p, dict) and str(p.get('id') or p.get('pp') or '') == current)
+        candidates.extend(p for p in pages if isinstance(p, dict))
+    for page in candidates:
+        thumb = str(page.get('thumbnail') or '').strip()
+        if thumb:
+            break
+decoded_thumb = unquote_plus(thumb)
+if decoded_thumb.startswith('<svg'):
+    print(decoded_thumb, end='')
+PY_LEGACY_THUMB
+}
+
 json_string_field() {
   key=$1
   file=$2
@@ -323,6 +381,32 @@ resolve_env_path() {
     wu_wei2/*) printf '%s/%s\n' "$(dirname "$SCRIPT_DIR")" "${tpl#wu_wei2/}" ;;
     *) printf '%s/%s\n' "$SCRIPT_DIR" "$tpl" ;;
   esac
+}
+
+
+legacy_note_dir_for() {
+  current=$1
+  uid=${2:-}
+  current=$(printf '%s' "$current" | sed 's#/*$##')
+  [ -n "$current" ] || return 1
+
+  if [ -n "$uid" ]; then
+    case "$current" in
+      */data/"$uid"/note)
+        printf '%s/%s/note\n' "${current%/data/$uid/note}" "$uid"
+        return 0
+        ;;
+    esac
+  fi
+
+  case "$current" in
+    */data/public/note)
+      printf '%s/public/note\n' "${current%/data/public/note}"
+      return 0
+      ;;
+  esac
+
+  return 1
 }
 
 # --- Collect CGI params from QUERY_STRING + POST body -------------------
@@ -366,7 +450,8 @@ else
 fi
 
 [ -n "${note_dir:-}" ] || error_response 'ERROR NOTE DIR NOT DEFINED'
-[ -d "$note_dir" ] || error_response 'ERROR NOTE DIR NOT DEFINED'
+current_note_dir=$note_dir
+legacy_note_dir=$(legacy_note_dir_for "$current_note_dir" "$user_id" || true)
 
 include_new_note=$(nameread include_new_note "$CGIVARS" | strip_quotes || true)
 [ -n "$include_new_note" ] || include_new_note=$(nameread include_draft "$CGIVARS" | strip_quotes || true)
@@ -383,6 +468,19 @@ case "$note_format" in
   ver1) include_ver0= ; include_ver1=1 ;;
   ver2) include_ver0= ; include_ver1= ;;
 esac
+case "$note_format" in
+  ver0|ver1)
+    if [ -n "${legacy_note_dir:-}" ] && [ -d "$legacy_note_dir" ]; then
+      note_dir=$legacy_note_dir
+    else
+      note_dir=$current_note_dir
+    fi
+    ;;
+  *)
+    note_dir=$current_note_dir
+    ;;
+esac
+[ -d "$note_dir" ] || error_response 'ERROR NOTE DIR NOT DEFINED'
 term=$(nameread term "$CGIVARS" | strip_quotes || true)
 year=$(nameread year "$CGIVARS" | strip_quotes || true)
 month=$(nameread month "$CGIVARS" | strip_quotes || true)
@@ -517,6 +615,9 @@ fi
         note_name=$(read_meta name "$abs_file" || true)
         note_description=$(read_meta description "$abs_file" || true)
         note_thumbnail=$(read_meta thumbnail "$abs_file" || true)
+        if [ -z "${note_thumbnail:-}" ]; then
+          note_thumbnail=$(legacy_note_thumbnail_from_json "$abs_file" || true)
+        fi
       else
         note_user_id=$(json_string_field user_id "$abs_file" || true)
         note_name=$(json_string_field note_name "$abs_file" || true)

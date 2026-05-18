@@ -602,6 +602,36 @@ def is_ver1_note_file(path: Path) -> bool:
         return False
 
 
+def _legacy_note_thumbnail_from_decoded_json(note: object) -> str:
+    if not isinstance(note, dict):
+        return ""
+    thumbnail = str(note.get("thumbnail") or "").strip()
+    if thumbnail.startswith("<svg"):
+        return thumbnail
+
+    pages = note.get("pages")
+    current_page = str(note.get("currentPage") or "")
+    candidates = []
+
+    if isinstance(pages, dict):
+        if current_page and isinstance(pages.get(current_page), dict):
+            candidates.append(pages[current_page])
+        candidates.extend(page for page in pages.values() if isinstance(page, dict))
+    elif isinstance(pages, list):
+        if current_page:
+            candidates.extend(
+                page for page in pages
+                if isinstance(page, dict) and str(page.get("id") or page.get("pp") or "") == current_page
+            )
+        candidates.extend(page for page in pages if isinstance(page, dict))
+
+    for page in candidates:
+        thumbnail = str(page.get("thumbnail") or "").strip()
+        if thumbnail.startswith("<svg"):
+            return thumbnail
+    return ""
+
+
 def read_ver1_note_meta(path: Path) -> Dict[str, str]:
     path = Path(path)
     meta = _read_legacy_named_values(path)
@@ -614,16 +644,19 @@ def read_ver1_note_meta(path: Path) -> Dict[str, str]:
         "thumbnail": str(meta.get("thumbnail") or ""),
         "saved_at": str(meta.get("saved_at") or ""),
     }
-    if not out["name"]:
-        try:
-            note = json.loads(decode_ver1_note_file(path))
-            if isinstance(note, dict):
+    try:
+        note = json.loads(decode_ver1_note_file(path))
+        if isinstance(note, dict):
+            if not out["id"]:
                 out["id"] = str(note.get("note_id") or note.get("note_uuid") or out["id"])
+            if not out["name"]:
                 out["name"] = str(note.get("note_name") or "")
+            if not out["description"]:
                 out["description"] = str(note.get("description") or "")
-                out["thumbnail"] = str(note.get("thumbnail") or out["thumbnail"])
-        except Exception:
-            pass
+            if not out["thumbnail"]:
+                out["thumbnail"] = _legacy_note_thumbnail_from_decoded_json(note)
+    except Exception:
+        pass
     return out
 
 
