@@ -36,6 +36,60 @@ wuwei.menu.note = wuwei.menu.note || {};
     return 0;
   }
 
+
+
+  function normaliseNoteFormat(value) {
+    value = String(value || '').trim().toLowerCase();
+    if (value === 'v0') return 'ver0';
+    if (value === 'v1') return 'ver1';
+    if (value === 'v2' || value === 'current') return 'ver2';
+    if (value === 'ver0' || value === 'ver1' || value === 'ver2') return value;
+    return '';
+  }
+
+  function noteFormatOf(data) {
+    const format = normaliseNoteFormat(data && (data.note_format || data.format));
+    const loader = String(data && data.loader || '').trim().toLowerCase();
+    if (format) return format;
+    if (loader === 'load-note-v0') return 'ver0';
+    if (loader === 'load-note-v1') return 'ver1';
+    return 'ver2';
+  }
+
+  function loaderForNoteFormat(format, loader) {
+    format = normaliseNoteFormat(format) || 'ver2';
+    loader = String(loader || '').trim();
+    if (loader) return loader;
+    if (format === 'ver0') return 'load-note-v0';
+    if (format === 'ver1') return 'load-note-v1';
+    return 'load-note';
+  }
+
+  function noteMatchesCurrentFormat(note, requestedFormat) {
+    requestedFormat = normaliseNoteFormat(requestedFormat);
+    if (!requestedFormat) return true;
+    return noteFormatOf(note) === requestedFormat;
+  }
+
+  function addLegacyListFlags(data, format) {
+    format = normaliseNoteFormat(format);
+    if (format === 'ver0') {
+      data.note_format = 'ver0';
+      data.include_ver0 = 1;
+      data.include_v0 = 1;
+      return;
+    }
+    if (format === 'ver1') {
+      data.note_format = 'ver1';
+      data.include_ver1 = 1;
+      data.include_v1 = 1;
+      return;
+    }
+    if (format === 'ver2') {
+      data.note_format = 'ver2';
+    }
+  }
+
   function notifyError(error) {
     if ('warn' === error.type) {
       wuwei.menu.snackbar.open({ type: 'warning', message: error.message });
@@ -73,7 +127,7 @@ wuwei.menu.note = wuwei.menu.note || {};
       term: (document.getElementById('search-text')?.value || '').trim(),
       start_date: startDate,
       end_date: endDate || startDate,
-      note_format: currentNoteFormat || '',
+      note_format: normaliseNoteFormat(currentNoteFormat) || '',
       include_ver0: document.getElementById('note-include-ver0')
         ? document.getElementById('note-include-ver0').checked
         : false,
@@ -172,9 +226,13 @@ wuwei.menu.note = wuwei.menu.note || {};
     if (term) req.term = term;
     if (filters.start_date) req.start_date = filters.start_date;
     if (filters.end_date) req.end_date = filters.end_date;
-    if (filters.note_format) req.note_format = filters.note_format;
-    if (!filters.note_format && filters.include_ver0) req.include_ver0 = true;
-    if (!filters.note_format && filters.include_ver1) req.include_ver1 = true;
+    if (filters.note_format) {
+      addLegacyListFlags(req, filters.note_format);
+    }
+    else {
+      if (filters.include_ver0) req.include_ver0 = true;
+      if (filters.include_ver1) req.include_ver1 = true;
+    }
 
     wuwei.note.searchNote(req)
       .then(responseText => {
@@ -237,11 +295,12 @@ wuwei.menu.note = wuwei.menu.note || {};
             size: data.size,
             timestamp: data.timestamp,
             thumbnail,
-            note_format: data.note_format || data.format || 'ver2',
-            loader: data.loader || (data.note_format === 'ver0' ? 'load-note-v0' : (data.note_format === 'ver1' ? 'load-note-v1' : 'load-note'))
+            note_format: noteFormatOf(data),
+            loader: loaderForNoteFormat(noteFormatOf(data), data.loader)
           });
         }
 
+        notes = notes.filter(note => noteMatchesCurrentFormat(note, filters.note_format));
         notes.sort(sortNote);
 
         return {
@@ -289,7 +348,7 @@ wuwei.menu.note = wuwei.menu.note || {};
    */
   function list(start, count, options) {
     options = options || {};
-    currentNoteFormat = options.note_format || options.format || currentNoteFormat || 'ver2';
+    currentNoteFormat = normaliseNoteFormat(options.note_format || options.format) || currentNoteFormat || 'ver2';
     console.log('wuwei.note.list()');
 
     const ua = window.navigator.userAgent;
@@ -328,9 +387,7 @@ wuwei.menu.note = wuwei.menu.note || {};
     };
 
     const listRequest = {};
-    if (currentNoteFormat) {
-      listRequest.note_format = currentNoteFormat;
-    }
+    addLegacyListFlags(listRequest, currentNoteFormat);
     wuwei.note.listNote(_start, _count, listRequest)
       .then(responseText => {
         wuwei.menu.modal.close();
@@ -392,11 +449,12 @@ wuwei.menu.note = wuwei.menu.note || {};
             size: data.size,
             timestamp: data.timestamp,
             thumbnail,
-            note_format: data.note_format || data.format || 'ver2',
-            loader: data.loader || (data.note_format === 'ver0' ? 'load-note-v0' : (data.note_format === 'ver1' ? 'load-note-v1' : 'load-note'))
+            note_format: noteFormatOf(data),
+            loader: loaderForNoteFormat(noteFormatOf(data), data.loader)
           });
         }
 
+        notes = notes.filter(note => noteMatchesCurrentFormat(note, currentNoteFormat));
         notes.sort(sortNote);
 
         return { total, count_org, start: _start, count: _count, notes };
@@ -431,7 +489,7 @@ wuwei.menu.note = wuwei.menu.note || {};
   }
 
   function clearSearch() {
-    restoreNoteSearchFilters({ term: '', start_date: '', end_date: '', note_format: currentNoteFormat });
+    restoreNoteSearchFilters({ term: '', start_date: '', end_date: '', note_format: currentNoteFormat, include_ver0: currentNoteFormat === 'ver0', include_ver1: currentNoteFormat === 'ver1' });
     list(1, _count || 12, { note_format: currentNoteFormat });
   }
 
@@ -843,11 +901,12 @@ wuwei.menu.note = wuwei.menu.note || {};
       const found = target && target.querySelector ? target.querySelector(selector) : null;
       return found ? found.value : '';
     };
+    const note_format = normaliseNoteFormat(dataset.noteFormat || dataset.format || valueOf('input.note_format'));
     return {
       id: String(dataset.id || dataset.noteId || valueOf('input.note_id') || ''),
       note_key: String(dataset.noteKey || dataset.key || dataset.dir || valueOf('input.note_key') || ''),
-      note_format: String(dataset.noteFormat || dataset.format || valueOf('input.note_format') || ''),
-      loader: String(dataset.loader || valueOf('input.note_loader') || '')
+      note_format: note_format,
+      loader: loaderForNoteFormat(note_format, dataset.loader || valueOf('input.note_loader') || '')
     };
   }
 
