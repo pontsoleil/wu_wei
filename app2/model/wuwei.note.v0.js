@@ -205,7 +205,7 @@ wuwei.note.v0 = (function () {
     var suffixIndex;
     var match;
 
-    if (!raw || /^(data:|blob:|mailto:|tel:)/i.test(raw)) {
+    if (!raw || /^(https?:\/\/|data:|blob:|mailto:|tel:)/i.test(raw)) {
       return raw;
     }
 
