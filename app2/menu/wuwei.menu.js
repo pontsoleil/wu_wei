@@ -5400,8 +5400,16 @@ wuwei.menu = wuwei.menu || {};
       closeNoteMenu();
       draw.redraw();
     });
+    registerClick('.pulldown.note .operators .operator.OpenV0', () => {
+      wuwei.menu.note.list(1, undefined, { note_format: 'ver0' });
+      closeNoteMenu();
+    });
+    registerClick('.pulldown.note .operators .operator.OpenV1', () => {
+      wuwei.menu.note.list(1, undefined, { note_format: 'ver1' });
+      closeNoteMenu();
+    });
     registerClick('.pulldown.note .operators .operator.Open', () => {
-      wuwei.menu.note.list();
+      wuwei.menu.note.list(1, undefined, { note_format: 'ver2' });
       closeNoteMenu();
     });
     registerClick('.pulldown.note .operators .operator.Save', () => {

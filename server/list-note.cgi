@@ -206,6 +206,87 @@ is_listable_note_file() {
   return 0
 }
 
+is_listable_ver1_note_file() {
+  file=$1
+  load_id=$2
+  [ -s "$file" ] || return 1
+  [ -n "$load_id" ] || return 1
+  case "$load_id" in
+    ERROR*|*/*|*..*) return 1 ;;
+  esac
+  case "$file" in
+    */note.json) return 1 ;;
+  esac
+  grep -q '^json_base64 ' "$file" || grep -q '^json ' "$file" || grep -q '^format_version 2' "$file" || return 1
+  return 0
+}
+
+legacy_note_format() {
+  file=$1
+  python3 - "$file" <<'PY' 2>/dev/null || printf 'ver1\n'
+import base64, json, sys
+from pathlib import Path
+from urllib.parse import unquote_plus
+path = Path(sys.argv[1])
+text = path.read_text(encoding='utf-8', errors='ignore').lstrip('\ufeff')
+stripped = text.strip()
+if stripped.startswith('{'):
+    raw = stripped
+else:
+    values = {}
+    for line in text.splitlines():
+        line = line.rstrip('\r\n')
+        if not line or line.lstrip().startswith('#'):
+            continue
+        if ' ' in line:
+            k, v = line.split(' ', 1)
+        elif '=' in line:
+            k, v = line.split('=', 1)
+        else:
+            continue
+        values[k.strip()] = v.strip().strip('"')
+    if values.get('json_base64'):
+        raw = base64.b64decode(values['json_base64'].encode('ascii')).decode('utf-8', errors='ignore')
+    elif values.get('json'):
+        raw = unquote_plus(values['json'])
+    else:
+        print('ver1')
+        raise SystemExit(0)
+try:
+    note = json.loads(raw)
+except Exception:
+    print('ver1')
+    raise SystemExit(0)
+def has_v0_fields(note):
+    if not isinstance(note, dict):
+        return False
+    if isinstance(note.get('resources'), dict) and note.get('resources'):
+        return True
+    if isinstance(note.get('associations'), dict) and note.get('associations'):
+        return True
+    if isinstance(note.get('page'), dict):
+        return True
+    pages = note.get('pages')
+    if isinstance(pages, dict):
+        iterable = pages.values()
+    elif isinstance(pages, list):
+        iterable = pages
+    else:
+        iterable = []
+    for page in iterable:
+        if not isinstance(page, dict):
+            continue
+        for item in page.get('nodes') or []:
+            if isinstance(item, dict) and 'idx' in item:
+                return True
+        for item in page.get('links') or []:
+            if isinstance(item, dict) and 'idx' in item:
+                return True
+    return False
+print('ver0' if has_v0_fields(note) else 'ver1')
+PY
+}
+
 json_string_field() {
   key=$1
   file=$2
@@ -290,6 +371,18 @@ fi
 include_new_note=$(nameread include_new_note "$CGIVARS" | strip_quotes || true)
 [ -n "$include_new_note" ] || include_new_note=$(nameread include_draft "$CGIVARS" | strip_quotes || true)
 [ -n "$include_new_note" ] || include_new_note=$(nameread draft "$CGIVARS" | strip_quotes || true)
+note_format=$(nameread note_format "$CGIVARS" | strip_quotes || true)
+[ -n "$note_format" ] || note_format=$(nameread format "$CGIVARS" | strip_quotes || true)
+include_ver0=$(nameread include_ver0 "$CGIVARS" | strip_quotes || true)
+[ -n "$include_ver0" ] || include_ver0=$(nameread include_v0 "$CGIVARS" | strip_quotes || true)
+include_ver1=$(nameread include_ver1 "$CGIVARS" | strip_quotes || true)
+[ -n "$include_ver1" ] || include_ver1=$(nameread include_v1 "$CGIVARS" | strip_quotes || true)
+[ -n "$include_ver1" ] || include_ver1=$(nameread legacy "$CGIVARS" | strip_quotes || true)
+case "$note_format" in
+  ver0) include_ver0=1; include_ver1= ;;
+  ver1) include_ver0= ; include_ver1=1 ;;
+  ver2) include_ver0= ; include_ver1= ;;
+esac
 term=$(nameread term "$CGIVARS" | strip_quotes || true)
 year=$(nameread year "$CGIVARS" | strip_quotes || true)
 month=$(nameread month "$CGIVARS" | strip_quotes || true)
@@ -303,12 +396,13 @@ fi
 
 note_date_from_relpath() {
   rel=$1
+  timestamp=${2:-}
   y=$(printf '%s' "$rel" | awk -F/ '{print $1}')
   m=$(printf '%s' "$rel" | awk -F/ '{print $2}')
   d=$(printf '%s' "$rel" | awk -F/ '{print $3}')
   case "$y-$m-$d" in
     [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) printf '%s-%s-%s\n' "$y" "$m" "$d" ;;
-    *) printf '\n' ;;
+    *) printf '%s\n' "$(printf '%s' "$timestamp" | sed 's/[+T].*$//')" ;;
   esac
 }
 
@@ -321,26 +415,39 @@ note_matches_term() {
 
 {
   find "$note_dir" -type f -name note.json -printf '%T+\t%P\t%s\n'
+  if is_truthy "$include_ver0" || is_truthy "$include_ver1"; then
+    find "$note_dir" -type f ! -name note.json -printf '%T+\t%P\t%s\n'
+  fi
 } | {
   if is_truthy "$include_new_note"; then
     cat
   else
-    awk -F "$(printf '\t')" '$2 !~ /(^|\/)new_note\/note\.json$/'
+    awk -F "$(printf '\t')" '$2 !~ /(^|\/)new_note(\/note\.json)?$/'
   fi
 } | while IFS="$(printf '\t')" read -r timestamp relpath size; do
   [ -n "${relpath:-}" ] || continue
-  note_date=$(note_date_from_relpath "$relpath")
+  note_date=$(note_date_from_relpath "$relpath" "$timestamp")
   [ -n "$month_key" ] && [ -z "$date_filter" ] && [ -z "$start_date" ] && [ -z "$end_date" ] && case "$note_date" in "$month_key"-*) ;; *) continue ;; esac
   [ -n "$date_filter" ] && [ "$note_date" != "$date_filter" ] && continue
   [ -n "$start_date" ] && { [ -n "$note_date" ] || continue; [ "$note_date" \< "$start_date" ] && continue; }
   [ -n "$end_date" ] && { [ -n "$note_date" ] || continue; [ "$note_date" \> "$end_date" ] && continue; }
   load_id=$(note_id_from_relpath "$relpath")
   if is_listable_note_file "$note_dir/$relpath" "$load_id"; then
-    if ! note_matches_term "$note_dir/$relpath" "$term"; then
-      continue
+    :
+  elif is_listable_ver1_note_file "$note_dir/$relpath" "$load_id"; then
+    legacy_fmt=$(legacy_note_format "$note_dir/$relpath")
+    if [ "$legacy_fmt" = 'ver0' ]; then
+      is_truthy "$include_ver0" || continue
+    else
+      is_truthy "$include_ver1" || continue
     fi
-    printf '%s\t%s\t%s\n' "$timestamp" "$relpath" "$size"
+  else
+    continue
   fi
+  if ! note_matches_term "$note_dir/$relpath" "$term"; then
+    continue
+  fi
+  printf '%s\t%s\t%s\n' "$timestamp" "$relpath" "$size"
 done | sort -r > "$FOUND"
 
 total=$(wc -l < "$FOUND" | tr -d '[:space:]')
@@ -373,6 +480,7 @@ fi
 {
   printf '{"total":%s,"start":%s,"count_org":%s,"count":%s,' "$total" "$start" "$count_org" "$count"
   printf '"term":"%s",' "$(printf '%s' "$term" | json_escape)"
+  printf '"note_format":"%s",' "$(printf '%s' "$note_format" | json_escape)"
   printf '"year":"%s",' "$(printf '%s' "$year" | json_escape)"
   printf '"month":"%s",' "$(printf '%s' "$month" | json_escape)"
   printf '"date":"%s",' "$(printf '%s' "$date_filter" | json_escape)"
@@ -390,21 +498,43 @@ fi
       [ "$dir" = "$relpath" ] && dir='.'
       file=${relpath##*/}
       note_id=$(note_id_from_relpath "$relpath")
+      note_format='ver2'
+      loader='load-note'
+      note_key="$dir"
+      if [ "$file" != 'note.json' ]; then
+        note_format=$(legacy_note_format "$abs_file")
+        if [ "$note_format" = 'ver0' ]; then
+          loader='load-note-v0'
+        else
+          note_format='ver1'
+          loader='load-note-v1'
+        fi
+        note_key="$relpath"
+      fi
 
-      note_user_id=$(json_string_field user_id "$abs_file" || true)
-      note_name=$(json_string_field note_name "$abs_file" || true)
-      note_description=$(json_string_field description "$abs_file" || true)
-      note_thumbnail=$(json_svg_thumbnail "$abs_file" || true)
-      if [ -z "${note_thumbnail:-}" ]; then
-        note_thumbnail=$(json_string_field thumbnail "$abs_file" || true)
+      if [ "$note_format" = 'ver1' ] || [ "$note_format" = 'ver0' ]; then
+        note_user_id=$(read_meta user_id "$abs_file" || true)
+        note_name=$(read_meta name "$abs_file" || true)
+        note_description=$(read_meta description "$abs_file" || true)
+        note_thumbnail=$(read_meta thumbnail "$abs_file" || true)
+      else
+        note_user_id=$(json_string_field user_id "$abs_file" || true)
+        note_name=$(json_string_field note_name "$abs_file" || true)
+        note_description=$(json_string_field description "$abs_file" || true)
+        note_thumbnail=$(json_svg_thumbnail "$abs_file" || true)
+        if [ -z "${note_thumbnail:-}" ]; then
+          note_thumbnail=$(json_string_field thumbnail "$abs_file" || true)
+        fi
       fi
 
       [ "$i" -gt 0 ] && printf ','
       printf '{"id":"%s",' "$(printf '%s' "$note_id" | json_escape)"
       printf '"user_id":"%s",' "$(printf '%s' "$note_user_id" | json_escape)"
       printf '"note_name":"%s",' "$(printf '%s' "$note_name" | json_escape)"
-      printf '"dir":"%s",' "$(printf '%s' "$dir" | json_escape)"
-      printf '"note_key":"%s",' "$(printf '%s' "$dir" | json_escape)"
+      printf '"dir":"%s",' "$(printf '%s' "$note_key" | json_escape)"
+      printf '"note_key":"%s",' "$(printf '%s' "$note_key" | json_escape)"
+      printf '"note_format":"%s",' "$(printf '%s' "$note_format" | json_escape)"
+      printf '"loader":"%s",' "$(printf '%s' "$loader" | json_escape)"
       printf '"size":%s,' "${size:-0}"
       printf '"timestamp":"%s",' "$(printf '%s' "$timestamp" | json_escape)"
       printf '"file":"%s",' "$(printf '%s' "$file" | json_escape)"

@@ -23,7 +23,8 @@ wuwei.menu.note = wuwei.menu.note || {};
     count_org,
     _start,
     _count,
-    notes;
+    notes,
+    currentNoteFormat = 'ver2';
 
   function sortNote(a, b) {
     if (a.timestamp > b.timestamp) {
@@ -71,7 +72,14 @@ wuwei.menu.note = wuwei.menu.note || {};
     return {
       term: (document.getElementById('search-text')?.value || '').trim(),
       start_date: startDate,
-      end_date: endDate || startDate
+      end_date: endDate || startDate,
+      note_format: currentNoteFormat || '',
+      include_ver0: document.getElementById('note-include-ver0')
+        ? document.getElementById('note-include-ver0').checked
+        : false,
+      include_ver1: document.getElementById('note-include-ver1')
+        ? document.getElementById('note-include-ver1').checked
+        : false
     };
   }
 
@@ -83,6 +91,10 @@ wuwei.menu.note = wuwei.menu.note || {};
     if (termEl) termEl.value = filters.term || '';
     if (startEl) startEl.value = filters.start_date || '';
     if (endEl) endEl.value = filters.end_date || '';
+    const includeV0El = document.getElementById('note-include-ver0');
+    const includeV1El = document.getElementById('note-include-ver1');
+    if (includeV0El) includeV0El.checked = !!filters.include_ver0;
+    if (includeV1El) includeV1El.checked = !!filters.include_ver1;
   }
 
   function open() {
@@ -160,6 +172,9 @@ wuwei.menu.note = wuwei.menu.note || {};
     if (term) req.term = term;
     if (filters.start_date) req.start_date = filters.start_date;
     if (filters.end_date) req.end_date = filters.end_date;
+    if (filters.note_format) req.note_format = filters.note_format;
+    if (!filters.note_format && filters.include_ver0) req.include_ver0 = true;
+    if (!filters.note_format && filters.include_ver1) req.include_ver1 = true;
 
     wuwei.note.searchNote(req)
       .then(responseText => {
@@ -221,7 +236,9 @@ wuwei.menu.note = wuwei.menu.note || {};
             note_key: data.note_key || data.key || data.dir || '',
             size: data.size,
             timestamp: data.timestamp,
-            thumbnail
+            thumbnail,
+            note_format: data.note_format || data.format || 'ver2',
+            loader: data.loader || (data.note_format === 'ver0' ? 'load-note-v0' : (data.note_format === 'ver1' ? 'load-note-v1' : 'load-note'))
           });
         }
 
@@ -256,7 +273,9 @@ wuwei.menu.note = wuwei.menu.note || {};
         });
 
         const current_page = 1 + Math.floor((start - 1) / (count_org * per_page));
-        wuwei.menu.pagination.create('pagination', current_page, count_org, per_page, total, search);
+        wuwei.menu.pagination.create('pagination', current_page, count_org, per_page, total, function (nextStart, nextCount) {
+          search(nextStart, nextCount);
+        });
 
         const seq = Math.floor(start / count_org);
         const page_div = document.querySelectorAll('.pagination div')[seq];
@@ -268,7 +287,9 @@ wuwei.menu.note = wuwei.menu.note || {};
   /**
    * list notes
    */
-  function list(start, count) {
+  function list(start, count, options) {
+    options = options || {};
+    currentNoteFormat = options.note_format || options.format || currentNoteFormat || 'ver2';
     console.log('wuwei.note.list()');
 
     const ua = window.navigator.userAgent;
@@ -306,7 +327,11 @@ wuwei.menu.note = wuwei.menu.note || {};
       notes: []
     };
 
-    wuwei.note.listNote(_start, _count)
+    const listRequest = {};
+    if (currentNoteFormat) {
+      listRequest.note_format = currentNoteFormat;
+    }
+    wuwei.note.listNote(_start, _count, listRequest)
       .then(responseText => {
         wuwei.menu.modal.close();
 
@@ -366,7 +391,9 @@ wuwei.menu.note = wuwei.menu.note || {};
             note_key: data.note_key || data.key || data.dir || '',
             size: data.size,
             timestamp: data.timestamp,
-            thumbnail
+            thumbnail,
+            note_format: data.note_format || data.format || 'ver2',
+            loader: data.loader || (data.note_format === 'ver0' ? 'load-note-v0' : (data.note_format === 'ver1' ? 'load-note-v1' : 'load-note'))
           });
         }
 
@@ -392,7 +419,9 @@ wuwei.menu.note = wuwei.menu.note || {};
         });
 
         const current_page = 1 + Math.floor((start - 1) / (count_org * per_page));
-        wuwei.menu.pagination.create('pagination', current_page, count_org, per_page, total, list);
+        wuwei.menu.pagination.create('pagination', current_page, count_org, per_page, total, function (nextStart, nextCount) {
+          list(nextStart, nextCount, { note_format: currentNoteFormat });
+        });
 
         const seq = Math.floor(start / count_org);
         const page_div = document.querySelectorAll('.pagination div')[seq];
@@ -402,8 +431,8 @@ wuwei.menu.note = wuwei.menu.note || {};
   }
 
   function clearSearch() {
-    restoreNoteSearchFilters({ term: '', start_date: '', end_date: '' });
-    list(1, _count || 12);
+    restoreNoteSearchFilters({ term: '', start_date: '', end_date: '', note_format: currentNoteFormat });
+    list(1, _count || 12, { note_format: currentNoteFormat });
   }
 
   /**
@@ -810,10 +839,63 @@ wuwei.menu.note = wuwei.menu.note || {};
   function getNoteRef(el) {
     const target = el && el.closest ? el.closest('.note') || el : el;
     const dataset = (target && target.dataset) || {};
-    return {
-      id: String(dataset.id || dataset.noteId || ''),
-      note_key: String(dataset.noteKey || dataset.key || dataset.dir || '')
+    const valueOf = function (selector) {
+      const found = target && target.querySelector ? target.querySelector(selector) : null;
+      return found ? found.value : '';
     };
+    return {
+      id: String(dataset.id || dataset.noteId || valueOf('input.note_id') || ''),
+      note_key: String(dataset.noteKey || dataset.key || dataset.dir || valueOf('input.note_key') || ''),
+      note_format: String(dataset.noteFormat || dataset.format || valueOf('input.note_format') || ''),
+      loader: String(dataset.loader || valueOf('input.note_loader') || '')
+    };
+  }
+
+  function parseLoadedNoteJson(responseText) {
+    responseText = (responseText == null) ? '' : String(responseText);
+
+    const rawHead = responseText.trim();
+
+    if (/^ERROR/.test(rawHead)) {
+      throw new Error(responseText);
+    }
+
+    if (/^#!\s*\/bin\/sh/.test(rawHead)) {
+      throw new Error('ERROR Cannot execute bin/sh');
+    }
+
+    let decodedText = decodeMaybe(responseText);
+    decodedText = decodedText.replace(/^\uFEFF/, '');
+    decodedText = decodedText.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
+    decodedText = decodedText.replace(/\u0006/g, ' ');
+    decodedText = decodedText.trim();
+
+    return JSON.parse(decodedText);
+  }
+
+  function openNoteFromJson(noteJson) {
+    current = wuwei.note.updateNote(noteJson);
+
+    const nameEl = document.querySelector('#note_name .name');
+    const descEl = document.querySelector('#note_name .description');
+
+    if (nameEl) {
+      nameEl.textContent = current.note_name || '';
+    }
+    if (descEl) {
+      descEl.textContent = current.description || '';
+    }
+
+    renderCurrentNoteNow();
+
+    setTimeout(() => {
+      if (Array.isArray(current.pages) && current.pages.length > 1) {
+        wuwei.menu.refreshPagenation();
+      }
+
+      renderCurrentNoteNow();
+      wuwei.menu.checkPage();
+    }, 0);
   }
 
   /**
@@ -837,78 +919,35 @@ wuwei.menu.note = wuwei.menu.note || {};
       return;
     }
 
-    wuwei.note.loadNote(noteRef)
-      .then(responseText => {
-        // 念のため文字列化
-        responseText = (responseText == null) ? '' : String(responseText);
+    const isVer0 = noteRef.note_format === 'ver0' || noteRef.loader === 'load-note-v0';
+    const isVer1 = noteRef.note_format === 'ver1' || noteRef.loader === 'load-note-v1';
+    let loadPromise;
 
-        // 実行エラー系は parse 前に判定
-        const rawHead = responseText.trim();
+    if (isVer0) {
+      if (!wuwei.note.v0 || typeof wuwei.note.v0.loadNote !== 'function') {
+        wuwei.menu.snackbar.open({ type: 'error', message: 'ERROR wuwei.note.v0 is not loaded' });
+        wuwei.menu.modal.close();
+        return;
+      }
+      wuwei.note.newNote();
+      loadPromise = wuwei.note.v0.loadNote(noteRef);
+    }
+    else if (isVer1) {
+      if (!wuwei.note.v1 || typeof wuwei.note.v1.loadNote !== 'function') {
+        wuwei.menu.snackbar.open({ type: 'error', message: 'ERROR wuwei.note.v1 is not loaded' });
+        wuwei.menu.modal.close();
+        return;
+      }
+      wuwei.note.newNote();
+      loadPromise = wuwei.note.v1.loadNote(noteRef);
+    }
+    else {
+      loadPromise = wuwei.note.loadNote(noteRef).then(parseLoadedNoteJson);
+    }
 
-        if (/^ERROR/.test(rawHead)) {
-          wuwei.menu.snackbar.open({ type: 'error', message: responseText });
-          return;
-        }
-
-        if (/^#!\s*\/bin\/sh/.test(rawHead)) {
-          wuwei.menu.snackbar.open({
-            type: 'error',
-            message: 'ERROR Cannot execute bin/sh'
-          });
-          return;
-        }
-
-        let noteJson;
-        try {
-          let decodedText = decodeMaybe(responseText);
-
-          // BOM除去
-          decodedText = decodedText.replace(/^\uFEFF/, '');
-
-          // JSONとして不正になりやすい制御文字を除去
-          // \n \r \t は残し、それ以外の 0x00-0x1F を除去
-          decodedText = decodedText.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
-
-          // 今回問題になっている \u0006 を空白化
-          decodedText = decodedText.replace(/\u0006/g, ' ');
-
-          // 前後の空白のみ除去
-          decodedText = decodedText.trim();
-
-          noteJson = JSON.parse(decodedText);
-        }
-        catch (e) {
-          console.error('load() JSON parse error:', e);
-          console.log('responseText:', responseText);
-          wuwei.menu.snackbar.open({
-            type: 'error',
-            message: 'ERROR Invalid CGI response'
-          });
-          return;
-        }
-
-        current = wuwei.note.updateNote(noteJson);
-
-        const nameEl = document.querySelector('#note_name .name');
-        const descEl = document.querySelector('#note_name .description');
-
-        if (nameEl) {
-          nameEl.textContent = current.note_name || '';
-        }
-        if (descEl) {
-          descEl.textContent = current.description || '';
-        }
-
-        renderCurrentNoteNow();
-
-        setTimeout(() => {
-          if (Array.isArray(current.pages) && current.pages.length > 1) {
-            wuwei.menu.refreshPagenation();
-          }
-
-          renderCurrentNoteNow();
-          wuwei.menu.checkPage();
-        }, 0);
+    loadPromise
+      .then(noteJson => {
+        openNoteFromJson(noteJson);
       })
       .catch(err => {
         console.error(err);

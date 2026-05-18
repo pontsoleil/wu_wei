@@ -9,16 +9,6 @@
  * (Sambuichi Professional Engineers Office)
  **/
 wuwei.nls.JA = {
-  'Add Axis': '軸追加',
-  'Add Entry': 'ページ追加',
-  'Add Segment': 'セグメント追加',
-  'Edit properties': '属性編集',
-  'Edit style': 'スタイル編集',
-
-  'Standard colours': '標準色',
-  'Folded corner': '折り返し角',
-  'Apply to all group members': 'グループに一括適用',
-
   'Publish': '公開',
   'Align': '整列',
   'Define / Ungroup': 'グループ定義/解除',
@@ -561,13 +551,24 @@ wuwei.nls.JA = {
   'Vimeo video sample. The selected preview uses a Vimeo embedded iframe.': 'Vimeo 動画例。selected preview は Vimeo 埋め込み iframe を使用する。',
   'Image viewer sample. The selected preview is displayed using an img element.': 'image viewer の確認用。selected preview は img 要素で表示する。',
   'Thumbnail viewer sample. The selected preview displays only the thumbnail image.': 'thumbnail viewer の確認用。selected preview は thumbnail 画像のみ表示する。',
-  'Oguri Hangan, act 7, Terute kuruma-hiki': '小栗判官（7段目・照手車引き）',
+
   '{name} joined the room.': '{name}さんが入室しました。',
   '{name} loaded the note.': '{name}さん　ノートを読み込みました',
   '{name} created': '{name}が作成',
   '{name} modified': '{name}が変更',
   '{name} deleted': '{name}が削除',
   'Target': '対象',
+
+  'Add Axis': '軸追加',
+  'Add Entry': 'ページ追加',
+  'Add Segment': 'セグメント追加',
+  'Edit properties': '属性編集',
+  'Edit style': 'スタイル編集',
+
+  'Standard colours': '標準色',
+  'Folded corner': '折り返し角',
+  'Apply to all group members': 'グループに一括適用',
+
 
   'Content kind': 'コンテンツ種別',
 
@@ -601,6 +602,16 @@ wuwei.nls.JA = {
   'Label offset X': 'ラベル水平距離',
   'Label offset Y': 'ラベル垂直距離',
   'Select label position': 'ラベル位置を選択',
+
+  'offset': 'オフセット',
+  'max': '最大値',
+  'min': '最小値',
+  'position': '位置',
+  'align': '揃え',
+  'width': '幅',
+  'lines': '行数',
+  'offset X': '水平距離',
+  'offset Y': '垂直距離',
 
   'PageMarkers': 'PageMarker一覧',
   'Anchor href': 'anchor href',

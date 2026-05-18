@@ -105,6 +105,13 @@ wuwei.menu.note.markup = ( function () {
         note = note || {};
         const noteId = String(note.id || note.note_id || '');
         const noteKey = String(note.note_key || note.key || note.dir || '');
+        const noteFormat = String(note.note_format || note.format || 'ver2');
+        const loader = String(note.loader || (noteFormat === 'ver0' ? 'load-note-v0' : (noteFormat === 'ver1' ? 'load-note-v1' : 'load-note')));
+        const formatLabel = noteFormat === 'ver0'
+          ? '<p class="format">' + escapeHtml(translate('ver0 note')) + '</p>'
+          : (noteFormat === 'ver1'
+            ? '<p class="format">' + escapeHtml(translate('ver1 note')) + '</p>'
+            : '');
         const datetime = parseTimestamp(note.timestamp);
         const date = datetime.date;
         const time = datetime.time;
@@ -116,9 +123,13 @@ wuwei.menu.note.markup = ( function () {
             data-id="${escapeHtml(noteId)}"
             data-note-key="${escapeHtml(noteKey)}"
             data-key="${escapeHtml(noteKey)}"
+            data-note-format="${escapeHtml(noteFormat)}"
+            data-loader="${escapeHtml(loader)}"
             onclick="wuwei.menu.note.load(this)">
           <input type="hidden" class="note_id" value="${escapeHtml(noteId)}">
           <input type="hidden" class="note_key" value="${escapeHtml(noteKey)}">
+          <input type="hidden" class="note_format" value="${escapeHtml(noteFormat)}">
+          <input type="hidden" class="note_loader" value="${escapeHtml(loader)}">
           <div class="flip-card">
             <div class="flip-card-inner">
               <div class="flip-card-front">
@@ -127,6 +138,7 @@ wuwei.menu.note.markup = ( function () {
               <div class="flip-card-back">
                 <div class="desc">
                   <p class="name">${escapeHtml(note.note_name || note.name || '')}</p>
+                  ${formatLabel}
                   <p>${escapeHtml(date)} ${escapeHtml(time)} ${escapeHtml(size)}</p>
                   <p>${escapeHtml(description)}</p>
                 </div>
@@ -150,6 +162,14 @@ wuwei.menu.note.markup = ( function () {
         <input type="text" id="search-text" class="note-search-text" placeholder="${translate('Keyword')}">
         <input type="date" id="note-date-start" title="${translate('Start date')}">
         <input type="date" id="note-date-end" title="${translate('End date')}">
+        <label class="note-include-ver0" title="${translate('Include ver0 notes')}">
+          <input type="checkbox" id="note-include-ver0">
+          ${translate('ver0')}
+        </label>
+        <label class="note-include-ver1" title="${translate('Include ver1 notes')}">
+          <input type="checkbox" id="note-include-ver1">
+          ${translate('ver1')}
+        </label>
         <button type="button" onclick="wuwei.menu.note.search(); return false;">${translate('Search')}</button>
         <button type="button" onclick="wuwei.menu.note.clearSearch(); return false;">${translate('Clear')}</button>
     </div>

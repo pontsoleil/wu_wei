@@ -78,13 +78,11 @@ wuwei.edit.uploaded.markup = ( function () {
     return getSnapshotDisplayPath(node, 'original', uri);
   }
 
-
   function getResourceContentsValue(node, key) {
     var contents = node && node.resource && node.resource.contents;
     var value = contents && contents[key];
     return Number.isFinite(Number(value)) ? String(Math.floor(Number(value))) : '';
   }
-
 
   function getLabelStyleValue(node, path, fallback) {
     var labelStyle = node && node.style && node.style.label;
@@ -98,7 +96,6 @@ wuwei.edit.uploaded.markup = ( function () {
     }
     return Number.isFinite(Number(labelStyle[path])) ? Number(labelStyle[path]) : (labelStyle[path] || fallback);
   }
-
 
   function getDefaultLabelStyle() {
     return (wuwei.common && wuwei.common.defaultStyle && wuwei.common.defaultStyle.label) || {};
@@ -212,25 +209,21 @@ wuwei.edit.uploaded.markup = ( function () {
         placeholder="${t('Label')}">${node.label || ''}</textarea>
   </div>
   <div class="w3-row">
-    <label class="w3-col s6">${t('Label align')}</label>
+    <label class="w3-col s6">${t('align')}</label>
     ${labelAlignIcons(fontAlign, 's6')}
   </div>
   ${node.label || 'PageMarker' === node.type || 'Segment' === node.type || 'Topic' === node.type || 'Content' === node.type
     ? `<div class="w3-row" id="style_label_width-row">
-        <label for="style_label_width" class="w3-col s6">${t('Label width')}</label>  
-        <input type="number" id="style_label_width" name="style.label.width" value="${labelStyleWidth}" class="w3-col s6 edit-value" min="1" step="1">
-      </div>
-      <div class="w3-row" id="style_label_lines-row">
-        <label for="style_label_lines" class="w3-col s6">${t('Label lines')}</label>  
-        <input type="number" id="style_label_lines" name="style.label.lines" value="${labelStyleLines}" class="w3-col s6 edit-value" min="1" step="1">
+        <label for="style_label_width" class="w3-col s3">${t('width')}</label>  
+        <input type="number" id="style_label_width" name="style.label.width" value="${labelStyleWidth}" class="w3-col s3 edit-value" min="1" step="1">
+        <label for="style_label_lines" class="w3-col s3">${t('lines')}</label>  
+        <input type="number" id="style_label_lines" name="style.label.lines" value="${labelStyleLines}" class="w3-col s3 edit-value" min="1" step="1">
       </div>
       <div class="w3-row" id="style_label_offset_x-row">
-        <label for="style_label_offset_x" class="w3-col s6">${t('Label offset X')}</label>  
-        <input type="number" id="style_label_offset_x" name="style.label.offset.x" value="${labelOffsetX}" class="w3-col s6 edit-value" step="1">
-      </div>
-      <div class="w3-row" id="style_label_offset_y-row">
-        <label for="style_label_offset_y" class="w3-col s6">${t('Label offset Y')}</label>  
-        <input type="number" id="style_label_offset_y" name="style.label.offset.y" value="${labelOffsetY}" class="w3-col s6 edit-value" step="1">
+        <label for="style_label_offset_x" class="w3-col s3">${t('offset X')}</label>  
+        <input type="number" id="style_label_offset_x" name="style.label.offset.x" value="${labelOffsetX}" class="w3-col s3 edit-value" step="1">
+        <label for="style_label_offset_y" class="w3-col s3">${t('offset Y')}</label>  
+        <input type="number" id="style_label_offset_y" name="style.label.offset.y" value="${labelOffsetY}" class="w3-col s3 edit-value" step="1">
       </div>`
     : ''
   }  
@@ -252,7 +245,7 @@ wuwei.edit.uploaded.markup = ( function () {
     <input type="number" id="resource_contents_pageMax" name="resource.contents.pageMax" class="w3-col s6 edit-value" min="1" step="1"
       value="${getResourceContentsValue(node, 'pageMax')}">
   </div>
-  
+
   <div class="w3-row">
   <label for="resource_uri" class="w3-col s2">URL:</label>
   <input type="text" id="resource_uri" name="resource.uri" class="w3-col s10 edit-value" readonly aria-readonly="true"

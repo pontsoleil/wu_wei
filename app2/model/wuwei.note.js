@@ -483,10 +483,10 @@ wuwei.note = (function () {
       shape: shape,
       size: util.clone(size || {}),
       visible: normalizeVisibleFlag(src.visible, src.hidden, oldView.hidden),
-      label: String(src.label || src.name || ''),
+      label: String(src.label || ''),
       description: src.description && typeof src.description === 'object'
         ? util.clone(src.description)
-        : { format: 'asciidoc', body: String(src.description || src.value || '') },
+        : { format: 'asciidoc', body: String(src.description || '') },
       style: util.clone(src.style || {}),
       audit: normalizeAudit(src.audit, state.currentUser)
     };
@@ -500,13 +500,13 @@ wuwei.note = (function () {
         }
       }
       else {
-        out.resource = normalizeResource(src.resource || { uri: src.uri || src.url || '', mimeType: src.format || '' }, src);
+        out.resource = normalizeResource(src.resource || {}, src);
         if (src.resourceRef) {
           out.resourceRef = src.resourceRef;
         }
       }
-      if (shape === 'THUMBNAIL' || src.thumbnailUri || oldView.thumbnailUri || src.thumbnail) {
-        out.thumbnailUri = String(out.thumbnailUri || src.thumbnailUri || oldView.thumbnailUri || src.thumbnail || '');
+      if (shape === 'THUMBNAIL' || src.thumbnailUri) {
+        out.thumbnailUri = String(out.thumbnailUri || src.thumbnailUri || '');
       }
       if (!out.thumbnailUri && out.resource && out.resource.thumbnailUri) {
         out.thumbnailUri = out.resource.thumbnailUri;
@@ -624,13 +624,13 @@ wuwei.note = (function () {
     var out = {
       id: src.id || util.createUuid(),
       type: 'Link',
-      from: (typeof src.from === 'object') ? src.from.id : (src.from || ((typeof src.source === 'object') ? src.source.id : src.source) || ''),
-      to: (typeof src.to === 'object') ? src.to.id : (src.to || ((typeof src.target === 'object') ? src.target.id : src.target) || ''),
+      from: (typeof src.from === 'object') ? src.from.id : (src.from || ''),
+      to: (typeof src.to === 'object') ? src.to.id : (src.to || ''),
       x: Number.isFinite(Number(src.x)) ? Number(src.x) : (Number.isFinite(Number(oldView.x)) ? Number(oldView.x) : 0),
       y: Number.isFinite(Number(src.y)) ? Number(src.y) : (Number.isFinite(Number(oldView.y)) ? Number(oldView.y) : 0),
       shape: src.shape || oldView.shape || 'NORMAL',
       visible: normalizeVisibleFlag(src.visible, src.hidden, oldView.hidden),
-      relation: src.relation || src.rtype || '',
+      relation: src.relation || '',
       label: String(src.label || ''),
       description: src.description && typeof src.description === 'object'
         ? util.clone(src.description)
@@ -640,9 +640,6 @@ wuwei.note = (function () {
       audit: normalizeAudit(src.audit, state.currentUser)
     };
 
-    if (src.path && !out.routing.path) {
-      out.routing.path = src.path;
-    }
     if (Number.isFinite(Number(src.x2))) {
       out.x2 = Number(src.x2);
     }
@@ -809,7 +806,7 @@ wuwei.note = (function () {
       nodes: (src.nodes || []).map(function (node) { return normalizeNode(node, resourceById); }),
       links: (src.links || []).map(normalizeLink),
       groups: (src.groups || []).map(normalizeGroup),
-      transform: normalizeTransform(src.transform || src.translate),
+      transform: normalizeTransform(src.transform),
       thumbnail: (typeof src.thumbnail === 'undefined') ? null : src.thumbnail,
       audit: normalizeAudit(src.audit, state.currentUser)
     });
@@ -821,16 +818,6 @@ wuwei.note = (function () {
       pages = srcPages.map(function (page, index) {
         return normalizePage(page, index + 1, resourceById);
       }).filter(Boolean);
-    }
-    else if (srcPages && typeof srcPages === 'object') {
-      Object.keys(srcPages).sort(function (a, b) {
-        var na = Number(a);
-        var nb = Number(b);
-        if (Number.isFinite(na) && Number.isFinite(nb)) { return na - nb; }
-        return String(a).localeCompare(String(b));
-      }).forEach(function (k, index) {
-        pages.push(normalizePage(srcPages[k], Number(k) || index + 1, resourceById));
-      });
     }
     refreshPageNumbers(pages);
     return pages;
@@ -844,7 +831,7 @@ wuwei.note = (function () {
     return pages;
   }
 
-  function resolveLegacyCurrentPage(pages, currentPageRef, legacyPage) {
+  function resolveCurrentPage(pages, currentPageRef) {
     var ref = currentPageRef;
     var page = null;
 
@@ -854,34 +841,12 @@ wuwei.note = (function () {
       page = pages.find(function (item) { return item && item.id === ref; }) || null;
     }
 
-    /*
-     * Legacy conversion is intentionally centralised here.  Older note files
-     * sometimes stored currentPage as pp.  Convert that legacy reference to the
-     * canonical page.id during note normalisation, so operational modules do
-     * not need pp/index fallback code.
-     */
-    if (!page && Number.isFinite(Number(ref))) {
-      page = pages.find(function (item) {
-        return item && Number(item.pp) === Number(ref);
-      }) || pages[Number(ref) - 1] || null;
-    }
-
-    if (!page && legacyPage && legacyPage.id) {
-      page = pages.find(function (item) { return item && item.id === legacyPage.id; }) || null;
-    }
-
-    if (!page && legacyPage && Number.isFinite(Number(legacyPage.pp))) {
-      page = pages.find(function (item) {
-        return item && Number(item.pp) === Number(legacyPage.pp);
-      }) || null;
-    }
-
     return page || pages[0] || null;
   }
 
   function canonicalizeCurrentPage(note) {
     var pages = Array.isArray(note && note.pages) ? note.pages : [];
-    var page = resolveLegacyCurrentPage(pages, note && note.currentPage, note && note.page);
+    var page = resolveCurrentPage(pages, note && note.currentPage);
 
     if (note && page) {
       note.currentPage = page.id;
@@ -894,16 +859,9 @@ wuwei.note = (function () {
   function ensurePagesArray(note, resourceById) {
     var src = note || common.current || {};
 
-    // if (!Array.isArray(src.pages)) {
-    //   /*
-    //    * Legacy note files used pages as an object keyed by page number:
-    //    *   { "1": page1, "2": page2 }
-    //    * Convert that shape here and keep the rest of the application on the
-    //    * canonical array shape:
-    //    *   [ { pp: 1 }, { pp: 2 } ]
-    //    */
-    //   src.pages = normalizePagesCollection(src.pages, resourceById || {});
-    // }
+    if (!Array.isArray(src.pages)) {
+      src.pages = [];
+    }
 
     if (!src.pages.length) {
       src.pages.push(createPage(1));
@@ -969,13 +927,10 @@ wuwei.note = (function () {
     });
 
     pages = normalizePagesCollection(src.pages, resourceById);
-    if (!pages.length && src.page) {
-      pages = [normalizePage(src.page, 1, resourceById)];
-    }
     if (!pages.length) {
       pages = [createPage(1)];
     }
-    currentPage = resolveLegacyCurrentPage(pages, src.currentPage, src.page) || pages[0];
+    currentPage = resolveCurrentPage(pages, src.currentPage) || pages[0];
     return NoteFactory({
       note_id: src.note_id || util.createUuid(),
       note_name: decodeMaybe(src.note_name || ''),
@@ -984,7 +939,7 @@ wuwei.note = (function () {
       pages: pages,
       resources: resources,
       thumbnail: (typeof src.thumbnail === 'undefined') ? '' : src.thumbnail,
-      audit: normalizeAudit(src.audit || { createdBy: src.owner_id || src.ownerId || (state.currentUser && state.currentUser.user_id) || common.TEMP_OWNER_ID }, state.currentUser)
+      audit: normalizeAudit(src.audit, state.currentUser)
     });
   }
 
@@ -1362,12 +1317,12 @@ wuwei.note = (function () {
       this.note_id = param.note_id || util.createUuid();
       this.note_name = param.note_name || '';
       this.description = param.description || '';
-      this.pages = Array.isArray(param.pages) ? param.pages : normalizePagesCollection(param.pages, {});
+      this.pages = Array.isArray(param.pages) ? param.pages : [];
       if (!this.pages.length) {
         this.pages.push(createPage(1));
       }
       refreshPageNumbers(this.pages);
-      this.page = resolveLegacyCurrentPage(this.pages, param.currentPage, param.page) || this.pages[0];
+      this.page = resolveCurrentPage(this.pages, param.currentPage) || this.pages[0];
       this.currentPage = this.page.id;
       this.resources = cloneArray(param.resources).map(normalizeResourceDefinition);
       this.thumbnail = (typeof param.thumbnail === 'undefined') ? '' : param.thumbnail;
@@ -1388,13 +1343,13 @@ wuwei.note = (function () {
     }
     var pages = Array.isArray(param.pages)
       ? param.pages.map(function (page, index) { return PageFactory(Object.assign({}, page, { pp: index + 1 })); }).filter(Boolean)
-      : normalizePagesCollection(param.pages, {});
+      : [];
     if (!pages.length) {
       pages.push(PageFactory(param.page || createPage(1)));
     }
     refreshPageNumbers(pages);
     param.pages = pages;
-    param.currentPage = (resolveLegacyCurrentPage(pages, param.currentPage, param.page) || pages[0]).id;
+    param.currentPage = (resolveCurrentPage(pages, param.currentPage) || pages[0]).id;
     return new Note(param);
   }
 
@@ -1434,157 +1389,6 @@ wuwei.note = (function () {
     return current;
   }
 
-  /**
-   * 判定：旧形式(note.resources / associations)なら true
-   */
-  function isLegacyNoteJson(note) {
-    if (!note || typeof note !== 'object') return false;
-    // if (note.page) return true;
-    if (note.resources && !Array.isArray(note.resources)) return true;
-    if (note.associations) return true;
-
-    // pages はあるが node に idx が残っている「中間形式」も旧扱いにする
-    if (note.pages && typeof note.pages === 'object') {
-      for (const k of Object.keys(note.pages)) {
-        const p = note.pages[k];
-        if (p && Array.isArray(p.nodes)) {
-          for (const n of p.nodes) {
-            if (n && typeof n === 'object' && 'idx' in n) return true;
-          }
-        }
-        if (p && Array.isArray(p.links)) {
-          for (const l of p.links) {
-            if (l && typeof l === 'object' && 'idx' in l) return true;
-          }
-        }
-      }
-    }
-    return false;
-  }
-
-  /**
-   * 旧形式 -> 新形式へ変換（resources/associations を nodes/links に織り込む）
-   */
-  function migrateNoteJson(note) {
-    if (!isLegacyNoteJson(note)) return note;
-
-    const resources = note.resources || {};
-    const associations = note.associations || {};
-
-    // 旧: note.page だけのケース、旧: note.pages もあり得るケース両対応
-    const srcPages = {};
-    if (note.page) {
-      const pp = (note.page.pp != null) ? note.page.pp : 1;
-      srcPages[String(pp)] = note.page;
-    } else if (note.pages && typeof note.pages === 'object') {
-      Object.assign(srcPages, note.pages);
-    } else {
-      srcPages["1"] = { pp: 1, name: "", description: "", nodes: [], links: [], translate: { x: 0, y: 0, scale: 1 } };
-    }
-
-    const newPages = {};
-    const pageKeys = Object.keys(srcPages);
-
-    for (const pid of pageKeys) {
-      const page = srcPages[pid] || {};
-      const nodes = Array.isArray(page.nodes) ? page.nodes : [];
-      const links = Array.isArray(page.links) ? page.links : [];
-
-      // resourceId -> nodeId 対応表（association の body_ref/target_ref から node を引くため）
-      const resIdToNodeId = {};
-
-      // ---- nodes: idx(=resource id) を消して、resource情報を node に寄せる
-      const newNodes = nodes.map((n) => {
-        const nn = Object.assign({}, n);
-        const resId = nn.idx;
-        if (resId) resIdToNodeId[resId] = nn.id;
-
-        const r = resId ? resources[resId] : null;
-
-        // 旧 idx は廃止
-        delete nn.idx;
-
-        // option の正規化（旧は "undefined" が入りがち）
-        const optFromRes = (r && typeof r.option === 'string' && r.option !== 'undefined') ? r.option : '';
-
-        // 型から option を推定（app2 の addSimpleTopic/addMemoNode/addUploadedNode に合わせる）
-        if (!nn.option || nn.option === 'undefined') {
-          if (optFromRes) nn.option = optFromRes;
-          else if (nn.type === 'Topic') nn.option = 'topic';
-          else if (nn.type === 'Memo') nn.option = 'memo';
-          else if (nn.type === 'Uploaded' || nn.type === 'Content') nn.option = 'upload';
-        }
-
-        // name/format/uri/thumbnail/value を resource から補完
-        if (!nn.name && r && r.name) nn.name = r.name;
-        if (!nn.format && r && r.format) nn.format = r.format;
-        if (!nn.uri && r && r.uri) nn.uri = r.uri;
-        if (!nn.thumbnail && r && r.thumbnail) nn.thumbnail = r.thumbnail;
-
-        // value：Topic/Memo は文字列が基本。旧 resource に value が無いことも多いので空文字に。
-        if (typeof nn.value === 'undefined') {
-          if (r && typeof r.value !== 'undefined') nn.value = r.value;
-          else nn.value = '';
-        }
-
-        return nn;
-      });
-
-      // ---- links: idx(=association id) を消して、source/target を nodeId にする
-      const newLinks = links.map((l) => {
-        const ll = Object.assign({}, l);
-        const assocId = ll.idx;
-        const a = assocId ? associations[assocId] : null;
-
-        // 旧 idx は廃止
-        delete ll.idx;
-
-        let sourceId = null;
-        let targetId = null;
-
-        // association があれば body_ref/target_ref(=resource id) -> nodeId に変換
-        if (a) {
-          sourceId = resIdToNodeId[a.body_ref] || null;
-          targetId = resIdToNodeId[a.target_ref] || null;
-        }
-
-        // フォールバック（link.source/target が object の場合にも対応）
-        if (!sourceId && ll.source) sourceId = (typeof ll.source === 'object') ? ll.source.id : ll.source;
-        if (!targetId && ll.target) targetId = (typeof ll.target === 'object') ? ll.target.id : ll.target;
-
-        ll.source = sourceId;
-        ll.target = targetId;
-
-        return ll;
-      }).filter((ll) => ll && ll.source && ll.target);
-
-      // page を組み立て
-      const pp = (page.pp != null) ? page.pp : Number(pid) || 1;
-      newPages[String(pp)] = Object.assign({}, page, {
-        pp,
-        nodes: newNodes,
-        links: newLinks,
-        translate: page.translate || { x: 0, y: 0, scale: 1 },
-        thumbnail: (typeof page.thumbnail === 'undefined') ? null : page.thumbnail
-      });
-    }
-
-    // note を組み立て（旧フィールドは削除）
-    const migrated = Object.assign({}, note, { pages: newPages });
-
-    // 旧: note.page を持つ場合、currentPage が無ければ pp を採用（ページが 1 個しかないケース対策）
-    if (typeof migrated.currentPage === 'undefined' || migrated.currentPage === null) {
-      if (note.page && note.page.pp != null) migrated.currentPage = note.page.pp;
-      else migrated.currentPage = 1;
-    }
-
-    delete migrated.page;
-    delete migrated.resources;
-    delete migrated.associations;
-
-    return migrated;
-  }
-
   function updateNote(note_) {
     if (!note_) {
       return newNote();
@@ -1595,8 +1399,7 @@ wuwei.note = (function () {
       }
       catch (e) { console.log(e); }
     }
-    const note_json = migrateNoteJson(note_);
-    current = normalizeNote(note_json);
+    current = normalizeNote(note_);
     common.current = current;
     const page = setGraphFromCurrentPage(current.currentPage);
     updateCanvasTransform(util.getPageTransform(page));
@@ -1754,7 +1557,13 @@ wuwei.note = (function () {
     if (includeNewNote) {
       data.include_new_note = 1;
     }
-    ['term', 'year', 'month', 'date', 'start_date', 'end_date'].forEach(function (key) {
+    if (options && (options.include_ver0 || options.includeVer0)) {
+      data.include_ver0 = 1;
+    }
+    if (options && (options.include_ver1 || options.includeVer1 || options.legacy)) {
+      data.include_ver1 = 1;
+    }
+    ['term', 'year', 'month', 'date', 'start_date', 'end_date', 'note_format'].forEach(function (key) {
       if (options && options[key]) {
         data[key] = options[key];
       }
@@ -1789,7 +1598,7 @@ wuwei.note = (function () {
     if (term) {
       data.term = term;
     }
-    ['year', 'month', 'date', 'start_date', 'end_date', 'include_new_note'].forEach(function (key) {
+    ['year', 'month', 'date', 'start_date', 'end_date', 'include_new_note', 'include_ver0', 'include_ver1', 'note_format'].forEach(function (key) {
       if (param && param[key]) {
         data[key] = param[key];
       }
