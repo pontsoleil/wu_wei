@@ -81,6 +81,7 @@ wuwei.edit.contents.markup = (function () {
             alignLabel: 'Label align',
             alignSize: 's8'
           }),
+          wuwei.edit.style.markup.labelLayoutRows({ width: 120, lines: 1, offsetX: 0, offsetY: 0 }),
           wuwei.edit.style.markup.descriptionRows({
             format: 'plain/text',
             body: ''
@@ -112,11 +113,6 @@ wuwei.edit.contents.markup = (function () {
             fontPaletteId: 'editContentsPageFontPalette',
             fontSize: '12pt'
           }),
-          '<div class="w3-row">',
-            '<label class="w3-col s4">' + t('Label align') + '</label>',
-            wuwei.edit.style.markup.labelAlignIcons('center', 's8'),
-          '</div>',
-          wuwei.edit.style.markup.labelLayoutRows({ width: 120, lines: 1, offsetX: 0, offsetY: 0 }),
           '<div class="w3-row">',
             '<label for="applyToContentsGroup" class="w3-col s10">' + t('Apply to group members') + '</label>',
             '<input type="checkbox" id="applyToContentsGroup" class="w3-col s2">',
