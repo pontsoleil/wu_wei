@@ -541,6 +541,142 @@ wuwei.edit = wuwei.edit || {};
     syncNodeRuntimeMirrors(node, path, value);
   }
 
+  function getCurrentUserIdForEdit() {
+    return String(
+      (wuwei.common && wuwei.common.state && wuwei.common.state.currentUser && wuwei.common.state.currentUser.user_id) ||
+      (wuwei.common && wuwei.common.state && wuwei.common.state.user_id) ||
+      ''
+    ).trim();
+  }
+
+  function guessStorageAreaFromEditedUri(value, fallbackArea) {
+    var text = String(value || '').replace(/\\/g, '/').trim();
+    var uid = getCurrentUserIdForEdit();
+    var match, parsedUrl, queryArea;
+
+    try {
+      if (/^https?:\/\//i.test(text) || text.indexOf('?') >= 0) {
+        parsedUrl = new URL(text, window.location.href);
+        queryArea = parsedUrl.searchParams.get('area');
+        if (/^(upload|resource|note|thumbnail|content)$/i.test(String(queryArea || ''))) {
+          return String(queryArea).toLowerCase();
+        }
+        text = parsedUrl.pathname || text;
+      }
+    }
+    catch (e) { /* keep raw value */ }
+    text = text.replace(/[?#].*$/, '').replace(/^\/+/, '');
+    if (text.indexOf('data/') === 0) {
+      text = text.slice('data/'.length);
+    }
+    if (uid && text.indexOf(uid + '/') === 0) {
+      text = text.slice(uid.length + 1);
+    }
+    match = text.match(/^(upload|resource|note|thumbnail|content)\//);
+    if (match) {
+      return match[1];
+    }
+    if (/^\d{4}\/\d{2}\//.test(text)) {
+      return 'content';
+    }
+    return fallbackArea || 'upload';
+  }
+
+  function normaliseEditedStoragePath(value, area) {
+    var text = String(value || '').replace(/\\/g, '/').trim();
+    var uid = getCurrentUserIdForEdit();
+    var idx;
+
+    if (!text || /^(?:https?:|data:|blob:|mailto:|tel:)/i.test(text)) {
+      return '';
+    }
+    text = text.replace(/[?#].*$/, '');
+    idx = text.indexOf('/wu_wei2/');
+    if (idx >= 0) {
+      text = text.slice(idx + '/wu_wei2/'.length);
+    }
+    text = text.replace(/^\/+/, '');
+    if (text.indexOf('data/') === 0) {
+      text = text.slice('data/'.length);
+    }
+    if (uid && text.indexOf(uid + '/') === 0) {
+      text = text.slice(uid.length + 1);
+    }
+    if (area && text.indexOf(area + '/') === 0) {
+      text = text.slice(area.length + 1);
+    }
+    return text.replace(/^\/+/, '');
+  }
+
+  function updateOriginalStorageFileFromEditedUri(node, value) {
+    var resource, storage, files, file, i, area, path;
+
+    if (!node || !node.resource) {
+      return;
+    }
+    resource = node.resource;
+    area = guessStorageAreaFromEditedUri(value, 'upload');
+    path = normaliseEditedStoragePath(value, area);
+    if (!path) {
+      return;
+    }
+    storage = (resource.storage && 'object' === typeof resource.storage) ? resource.storage : {};
+    files = Array.isArray(storage.files) ? storage.files : [];
+    for (i = 0; i < files.length; i += 1) {
+      if (String(files[i] && files[i].role || '').toLowerCase() === 'original') {
+        file = files[i];
+        break;
+      }
+    }
+    if (!file) {
+      file = { role: 'original' };
+      files.push(file);
+    }
+    file.area = area;
+    file.path = path;
+    if (!file.mimeType && resource.mimeType) {
+      file.mimeType = resource.mimeType;
+    }
+    storage.files = files;
+    resource.storage = storage;
+  }
+
+  function updateThumbnailStorageFileFromEditedUri(node, value) {
+    var resource, storage, files, file, i, area, path;
+
+    if (!node || !node.resource) {
+      return;
+    }
+    resource = node.resource;
+    area = guessStorageAreaFromEditedUri(value, 'upload');
+    path = normaliseEditedStoragePath(value, area);
+    if (!path && wuwei.util && typeof wuwei.util.toStorageRelativePath === 'function') {
+      path = wuwei.util.toStorageRelativePath(value, null, area);
+    }
+    if (!path || /^(?:https?:|data:|blob:)/i.test(path)) {
+      return;
+    }
+    storage = (resource.storage && 'object' === typeof resource.storage) ? resource.storage : {};
+    files = Array.isArray(storage.files) ? storage.files : [];
+    for (i = 0; i < files.length; i += 1) {
+      if (String(files[i] && files[i].role || '').toLowerCase() === 'thumbnail') {
+        file = files[i];
+        break;
+      }
+    }
+    if (!file) {
+      file = { role: 'thumbnail' };
+      files.push(file);
+    }
+    file.area = area;
+    file.path = path;
+    if (!file.mimeType) {
+      file.mimeType = 'image/jpeg';
+    }
+    storage.files = files;
+    resource.storage = storage;
+  }
+
   function sanitizeContentPageRange(node) {
     var contents, min, max;
     if (!node || node.type !== 'Content' || !node.resource || !node.resource.contents) {
@@ -849,6 +985,10 @@ wuwei.edit = wuwei.edit || {};
           el.value = value;
         }
       }
+      node.resource = (node.resource && 'object' === typeof node.resource) ? node.resource : {};
+      node.resource.uri = String(value || '');
+      node.resource.canonicalUri = String(value || '');
+      updateOriginalStorageFileFromEditedUri(node, value);
     }
     if (state.Selecting && Array.isArray(stateMap.selecteds) &&
       ['shape', 'size.radius', 'size.width', 'size.height', 'style.fill', 'style.line.color',
@@ -875,6 +1015,9 @@ wuwei.edit = wuwei.edit || {};
           el.value = value;
         }
         setNodePath(node, path, value);
+        node.resource.uri = String(value || '');
+        node.resource.canonicalUri = String(value || '');
+        updateOriginalStorageFileFromEditedUri(node, value);
       }
       detectedMedia = detectMediaFromUrl(value || '');
       if (detectedMedia.kind === 'video' || node.option === 'video' || node.resource.kind === 'video') {
@@ -892,13 +1035,15 @@ wuwei.edit = wuwei.edit || {};
       node.resource = (node.resource && 'object' === typeof node.resource) ? node.resource : {};
       if (wuwei.util && typeof wuwei.util.toStorageRelativePath === 'function' &&
         (String(value || '').match(/^(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i) ||
-          String(value || '').match(/(?:^|\/)(resource|note)\//))) {
-        value = wuwei.util.toStorageRelativePath(value, null, /(?:^|\/)note\//.test(String(value || '')) ? 'note' : 'resource');
+          String(value || '').match(/\/(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i) ||
+          String(value || '').match(/(?:^|\/)(upload|resource|note|thumbnail|content)\//))) {
+        value = wuwei.util.toStorageRelativePath(value, null, '');
         if (el) {
           el.value = value;
         }
         setNodePath(node, path, value);
       }
+      updateThumbnailStorageFileFromEditedUri(node, value);
       node.thumbnailUri = String(value || '');
       node.resource.viewer = (node.resource.viewer && 'object' === typeof node.resource.viewer)
         ? node.resource.viewer

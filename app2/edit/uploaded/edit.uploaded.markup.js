@@ -51,16 +51,20 @@ wuwei.edit.uploaded.markup = ( function () {
   }
 
   function getEditableThumbnailUri(node) {
-    var uri = String(node && node.resource && node.resource.thumbnailUri || '');
-    if (!uri && wuwei.util && typeof wuwei.util.getResourceFilePath === 'function' &&
+    var uri = '';
+    if (wuwei.util && typeof wuwei.util.getResourceFilePath === 'function' &&
       node && node.resource) {
       uri = wuwei.util.getResourceFilePath(node.resource, 'thumbnail', node) || '';
     }
+    if (!uri) {
+      uri = String(node && node.resource && node.resource.thumbnailUri || '');
+    }
     if (wuwei.util && typeof wuwei.util.toStorageRelativePath === 'function' &&
       (/^(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i.test(String(uri || '')) ||
-        /^\/?(resource|note)\//.test(String(uri).replace(/^.*\/wu_wei2\//, '')) ||
-        /\/(resource|note)\//.test(String(uri || '')))) {
-      uri = wuwei.util.toStorageRelativePath(uri, null, /(?:^|\/)note\//.test(String(uri || '')) ? 'note' : 'resource');
+        /\/(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i.test(String(uri || '')) ||
+        /^\/?(upload|resource|note|thumbnail|content)\//.test(String(uri).replace(/^.*\/wu_wei2\//, '')) ||
+        /\/(upload|resource|note|thumbnail|content)\//.test(String(uri || '')))) {
+      uri = wuwei.util.toStorageRelativePath(uri, null, '');
     }
     return getSnapshotDisplayPath(node, 'thumbnail', uri);
   }
@@ -240,7 +244,7 @@ wuwei.edit.uploaded.markup = ( function () {
 
   <div class="w3-row">
   <label for="resource_uri" class="w3-col s2">URL:</label>
-  <input type="text" id="resource_uri" name="resource.uri" class="w3-col s10 edit-value" readonly aria-readonly="true"
+  <input type="text" id="resource_uri" name="resource.uri" class="w3-col s10 edit-value"
       value="${resourceUri || ''}">
   </div>
   <div class="w3-row">

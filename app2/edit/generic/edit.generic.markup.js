@@ -83,8 +83,10 @@ wuwei.edit.generic.markup = ( function () {
   }
 
   function getEditableResourceUri(node) {
-    var uri = (node && node.resource && node.resource.uri) || '';
-    if (wuwei.util && typeof wuwei.util.getResourceOriginalPath === 'function') {
+    var resource = node && node.resource || {};
+    var uri = String(resource.uri || resource.canonicalUri || '');
+
+    if (!uri && wuwei.util && typeof wuwei.util.getResourceOriginalPath === 'function') {
       uri = wuwei.util.getResourceOriginalPath(node) || uri;
     }
     if (wuwei.util && typeof wuwei.util.toStorageRelativePath === 'function' &&
@@ -97,16 +99,20 @@ wuwei.edit.generic.markup = ( function () {
   }
 
   function getEditableThumbnailUri(node) {
-    var uri = String(node && node.resource && node.resource.thumbnailUri || '');
-    if (!uri && wuwei.util && typeof wuwei.util.getResourceFilePath === 'function' &&
+    var uri = '';
+    if (wuwei.util && typeof wuwei.util.getResourceFilePath === 'function' &&
       node && node.resource) {
       uri = wuwei.util.getResourceFilePath(node.resource, 'thumbnail', node) || '';
     }
+    if (!uri) {
+      uri = String(node && node.resource && node.resource.thumbnailUri || '');
+    }
     if (wuwei.util && typeof wuwei.util.toStorageRelativePath === 'function' &&
       (/^(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i.test(String(uri || '')) ||
-        /^\/?(resource|note)\//.test(String(uri).replace(/^.*\/wu_wei2\//, '')) ||
-        /\/(resource|note)\//.test(String(uri || '')))) {
-      uri = wuwei.util.toStorageRelativePath(uri, null, /(?:^|\/)note\//.test(String(uri || '')) ? 'note' : 'resource');
+        /\/(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i.test(String(uri || '')) ||
+        /^\/?(upload|resource|note|thumbnail|content)\//.test(String(uri).replace(/^.*\/wu_wei2\//, '')) ||
+        /\/(upload|resource|note|thumbnail|content)\//.test(String(uri || '')))) {
+      uri = wuwei.util.toStorageRelativePath(uri, null, '');
     }
     return getSnapshotDisplayPath(node, 'thumbnail', uri);
   }
@@ -226,6 +232,7 @@ wuwei.edit.generic.markup = ( function () {
     var fontSizeValue = normalizeFontSizeValue(font && font.size);
     var memoStyle = (style && style.memo && typeof style.memo === 'object') ? style.memo : {};
     var memoCorner = memoStyle.corner || 'bottom-right';
+    var resourceUriAttrs = '';
     var storagePathAttrs = isManagedResourceNode(node) ? ' readonly aria-readonly="true"' : '';
     var labelStyleWidth = getLabelStyleValue(node, 'width', getDefaultLabelWidth(node));
     var labelStyleLines = getLabelStyleValue(node, 'lines', getDefaultLabelLines());
@@ -272,7 +279,7 @@ wuwei.edit.generic.markup = ( function () {
         '<div class="w3-row">',
         '  <label for="resource_uri" class="w3-col s2">URL:</label>',
         '  <input type="text" id="resource_uri" name="resource.uri" class="w3-col s10 edit-value"',
-        storagePathAttrs + ' value="' + getEditableResourceUri(node) + '">',
+        resourceUriAttrs + ' value="' + getEditableResourceUri(node) + '">',
         '</div>',
 
         '<div class="w3-row">',
