@@ -242,13 +242,58 @@ def write_resource_file(
     resource_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def file_entry(role: str, path: Path, mime_type: str, size_text: str = "") -> dict:
+def server_root_relative(path: Path) -> str:
+    text = path.resolve().as_posix()
+    marker = "/wu_wei2/"
+    idx = text.lower().find(marker)
+    if idx >= 0:
+        return text[idx + len(marker):]
+    marker2 = "/htdocs/"
+    idx = text.lower().find(marker2)
+    if idx >= 0:
+        return text[idx + len(marker2):]
+    return text
+
+
+def logical_upload_path(upload_date: str, file_uuid: str, filename: str) -> str:
+    date = str(upload_date or "").replace("\\", "/").strip("/")
+    fid = safe_filename(str(file_uuid or "").strip("/"))
+    if fid and not fid.startswith("_"):
+        fid = "_" + fid
+    return f"{date}/{fid}/{safe_filename(filename)}"
+
+
+def write_path_index(upload_root: Path, *, logical_path: str, upload_id: str, actual_date: str, filename: str) -> None:
+    logical_path = str(logical_path or "").replace("\\", "/").strip("/")
+    if not logical_path:
+        return
+    index_file = upload_root / "_index" / "path" / (logical_path + ".json")
+    index_file.parent.mkdir(parents=True, exist_ok=True)
+    index_file.write_text(
+        json.dumps({
+            "logicalPath": logical_path,
+            "upload_id": upload_id,
+            "actual_date": actual_date,
+            "date": actual_date,
+            "file": filename,
+            "manifest": f"{actual_date}/{upload_id}/manifest.json",
+        }, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+
+
+def file_entry(role: str, logical_path: str, dir_path: Path, file_name: str, mime_type: str, size_text: str = "") -> dict:
+    actual = dir_path / file_name
     item = {
         "role": role,
-        "path": path.name,
+        "area": "upload",
+        "path": logical_path,
+        "dir_name": server_root_relative(dir_path),
+        "file_name": file_name,
         "mimeType": mime_type or "application/octet-stream",
-        "size": path.stat().st_size if path.exists() else 0,
-        "sha256": sha256_file(path) if path.exists() else "",
+        "size": actual.stat().st_size if actual.exists() else 0,
+        "sha256": sha256_file(actual) if actual.exists() else "",
     }
     if size_text:
         item["displaySize"] = size_text
@@ -311,16 +356,19 @@ def resource_relative_path(resource_root: Path, path: Path) -> str:
         return path.name
 
 
-def protected_file_url(user_id: str, area: str, rel_path: str) -> str:
+def protected_file_url(user_id: str, area: str, rel_path: str, role: str = "") -> str:
     area = trim(area).lower()
     rel_path = str(rel_path or "").replace("\\", "/").strip("/")
+    role = trim(role).lower()
     if not area or not rel_path:
         return ""
-    return (
+    url = (
         f"cgi-bin/load-file.py?area={quote(area, safe='')}"
         f"&path={quote(rel_path, safe='')}"
-        f"&user_id={quote(user_id, safe='')}"
     )
+    if role:
+        url += f"&role={quote(role, safe='')}"
+    return url
 
 
 def sha256_file(path: Path) -> str:
@@ -339,93 +387,6 @@ def load_resource_json(path: Path) -> dict | None:
         return None
 
 
-def resource_original_hash(resource: dict) -> str:
-    storage = resource.get("storage") if isinstance(resource.get("storage"), dict) else {}
-    for item in storage.get("files") or []:
-        if isinstance(item, dict) and item.get("role") == "original":
-            return str(item.get("sha256") or "")
-    return ""
-
-
-def find_existing_resource(resource_root: Path, *, original_hash: str, canonical_uri: str, source_path: str) -> tuple[dict | None, str]:
-    canonical_uri = (canonical_uri or "").strip()
-    source_path = (source_path or "").replace("\\", "/").strip()
-    for resource_json in resource_root.rglob("resource.json"):
-        resource = load_resource_json(resource_json)
-        if not resource:
-            continue
-        identity = resource.get("identity") if isinstance(resource.get("identity"), dict) else {}
-        storage = resource.get("storage") if isinstance(resource.get("storage"), dict) else {}
-        existing_uri = str(identity.get("canonicalUri") or identity.get("uri") or "").strip()
-        existing_source = ""
-        for item in storage.get("files") or []:
-            if isinstance(item, dict) and item.get("role") == "original":
-                existing_source = str(item.get("path") or "").replace("\\", "/").strip()
-                break
-        if original_hash and resource_original_hash(resource) == original_hash:
-            return resource, "sha256"
-        if canonical_uri and existing_uri == canonical_uri:
-            return resource, "canonicalUri"
-        if source_path and existing_source == source_path:
-            return resource, "originalPath"
-    return None, ""
-
-
-def response_from_resource(resource: dict, *, user_id: str, warning: str = "") -> dict:
-    identity = resource.get("identity") if isinstance(resource.get("identity"), dict) else {}
-    media = resource.get("media") if isinstance(resource.get("media"), dict) else {}
-    storage = resource.get("storage") if isinstance(resource.get("storage"), dict) else {}
-    files = [item for item in (storage.get("files") or []) if isinstance(item, dict)]
-
-    def file_uri(role: str) -> str:
-        for item in files:
-            if item.get("role") == role and item.get("path"):
-                area = str(item.get("area") or ("upload" if role == "original" else "resource"))
-                return protected_file_url(user_id, area, str(item.get("path")))
-        return ""
-
-    original_uri = file_uri("original") or str(identity.get("canonicalUri") or identity.get("uri") or "")
-    thumbnail_uri = file_uri("thumbnail")
-    original = next((item for item in files if item.get("role") == "original"), {})
-    thumbnail = next((item for item in files if item.get("role") == "thumbnail"), {})
-    return {
-        "id": resource.get("id"),
-        "resource": resource,
-        "name": identity.get("title") or resource.get("id") or "",
-        "option": "video",
-        "contenttype": media.get("mimeType") or "application/octet-stream",
-        "uri": original_uri,
-        **({"warning": warning} if warning else {}),
-        "value": {
-            "totalsize": str(original.get("size") or ""),
-            "resource": {
-                "uri": str(identity.get("uri") or ""),
-            },
-            **(
-                {
-                    "thumbnail": {
-                        "uri": thumbnail_uri,
-                        **({"size": thumbnail.get("displaySize")} if thumbnail.get("displaySize") else {}),
-                    }
-                }
-                if thumbnail_uri
-                else {}
-            ),
-            **({"duration": media.get("duration")} if media.get("duration") else {}),
-            "file": "",
-            "identify": "",
-        },
-    }
-
-
-def rel_uri_from_abs(base_dir: Path, target: Path, kind: str, user_id: str) -> str:
-    try:
-        rel = target.relative_to(base_dir)
-        return rel.as_posix()
-    except Exception:
-        return target.as_posix()
-
-
 def main():
     debug("script begin")
 
@@ -441,20 +402,17 @@ def main():
     base_dir_s = environment_path("base")
     upload_root_s = environment_path("upload", user_id)
     resource_root_s = environment_path("resource", user_id)
-    thumbnail_root_s = environment_path("thumbnail", user_id)
 
     debug_kv(
         env_file=str(ENV_FILE),
         raw_base=read_named_value(ENV_FILE, "base"),
         raw_upload=read_named_value(ENV_FILE, "upload"),
         raw_resource=read_named_value(ENV_FILE, "resource"),
-        raw_thumbnail=read_named_value(ENV_FILE, "thumbnail"),
     )
     debug_kv(
         base_dir=base_dir_s,
         upload_root=upload_root_s,
         resource_root=resource_root_s,
-        thumbnail_root=thumbnail_root_s,
     )
 
     if not base_dir_s:
@@ -463,26 +421,22 @@ def main():
         script_error("ERROR UPLOAD DIRECTORY NOT DEFINED")
     if not resource_root_s:
         script_error("ERROR RESOURCE DIRECTORY NOT DEFINED")
-    if not thumbnail_root_s:
-        script_error("ERROR THUMBNAIL DIRECTORY NOT DEFINED")
 
     base_dir = Path(base_dir_s)
     upload_root = Path(upload_root_s)
     resource_root = Path(resource_root_s)
-    thumbnail_root = Path(thumbnail_root_s)
 
     now = datetime.now().astimezone()
     year = now.strftime("%Y")
     month = now.strftime("%m")
     day = now.strftime("%d")
+    upload_date = f"{year}/{month}/{day}"
 
     upload_dir = upload_root / year / month / day
     resource_dir = resource_root / year / month / day
-    thumbnail_dir = thumbnail_root / year / month / day
 
     upload_dir.mkdir(parents=True, exist_ok=True)
     resource_dir.mkdir(parents=True, exist_ok=True)
-    thumbnail_dir.mkdir(parents=True, exist_ok=True)
 
     if "file" not in form:
         script_error("ERROR FILE NOT FOUND IN MULTIPART")
@@ -510,7 +464,7 @@ def main():
 
     content_type = detect_content_type(dest_file, declared_contenttype)
     original_hash = sha256_file(dest_file)
-    upload_relpath = upload_relative_path(upload_root, dest_file)
+    logical_path = logical_upload_path(upload_date, upload_file_id, filename)
     resource_id = f"_{uuid.uuid4()}"
     primary_dir = resource_dir / resource_id
     rid = resource_id.lstrip("_")
@@ -530,10 +484,11 @@ def main():
     if (content_type or "").startswith("video/"):
         _, thumbnail_size = make_video_thumbnail(dest_file, thumb_file, duration)
         if thumb_file.exists():
-            thumbnail_uri = protected_file_url(user_id, "upload", upload_relative_path(upload_root, thumb_file))
+            thumbnail_logical_path = logical_upload_path(upload_date, upload_file_id, thumb_file.name)
+            thumbnail_uri = protected_file_url(user_id, "upload", thumbnail_logical_path, "thumbnail")
 
-    file_uri = protected_file_url(user_id, "upload", upload_relpath)
-    resource_uri = ""
+    file_uri = protected_file_url(user_id, "upload", logical_path, "original")
+    resource_uri = logical_path
 
     name = fullname or filename
     totalsize = dest_file.stat().st_size
@@ -552,14 +507,12 @@ def main():
         thumbnail_size=thumbnail_size,
     )
 
-    files = [file_entry("original", dest_file, content_type, video_wh or "")]
-    files[0]["area"] = "upload"
-    files[0]["path"] = upload_relpath
+    files = [file_entry("original", logical_path, dest_file.parent, dest_file.name, content_type, video_wh or "")]
     if thumb_file.exists():
-        item = file_entry("thumbnail", thumb_file, "image/jpeg", thumbnail_size or "")
-        item["area"] = "upload"
-        item["path"] = upload_relative_path(upload_root, thumb_file)
+        item = file_entry("thumbnail", logical_upload_path(upload_date, upload_file_id, thumb_file.name), thumb_file.parent, thumb_file.name, "image/jpeg", thumbnail_size or "")
         files.append(item)
+    manifest_logical_path = logical_upload_path(upload_date, upload_file_id, manifest_file.name)
+    video_kind = dest_file.suffix.lower().lstrip(".")
 
     resource = {
         "id": resource_id,
@@ -567,9 +520,11 @@ def main():
         "label": name,
         "title": name,
         "kind": "video",
+        "source": "upload",
+        "videoKind": video_kind,
         "mimeType": content_type,
-        "uri": "",
-        "canonicalUri": "",
+        "uri": logical_path,
+        "canonicalUri": logical_path,
         "origin": {
             "type": "userRegistered",
             "subtype": "uploadedVideo",
@@ -577,8 +532,8 @@ def main():
         },
         "identity": {
             "title": name,
-            "canonicalUri": "",
-            "uri": "",
+            "canonicalUri": logical_path,
+            "uri": logical_path,
         },
         "media": {
             "kind": "video",
@@ -586,6 +541,7 @@ def main():
             "downloadable": True,
             "duration": float(duration) if duration else None,
         },
+        "thumbnailUri": thumbnail_uri or "",
         "viewer": {
             "supportedModes": ["infoPane", "newTab", "newWindow", "download", "player"],
             "defaultMode": "infoPane",
@@ -599,7 +555,9 @@ def main():
             "copyPolicy": "snapshot",
             "manifest": {
                 "area": "upload",
-                "path": upload_relative_path(upload_root, manifest_file),
+                "path": manifest_logical_path,
+                "dir_name": server_root_relative(manifest_file.parent),
+                "file_name": "manifest.json",
             },
             "files": files,
         },
@@ -630,6 +588,13 @@ def main():
         duration=duration or "",
         created_at=now.isoformat(),
     )
+    write_path_index(
+        upload_root,
+        logical_path=logical_path,
+        upload_id=upload_file_id,
+        actual_date=upload_date,
+        filename=dest_file.name,
+    )
     resource_file.write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     warning = ""
@@ -643,6 +608,8 @@ def main():
         "option": "video",
         "contenttype": declared_contenttype or content_type,
         "uri": file_uri,
+        "url": file_uri,
+        "download_url": file_uri,
         **({"warning": warning} if warning else {}),
         "value": {
             "totalsize": str(totalsize),

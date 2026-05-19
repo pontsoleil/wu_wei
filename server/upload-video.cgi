@@ -94,7 +94,7 @@ day="$(date '+%d')"
 #   user      /.../wu_wei2
 #   upload    /.../wu_wei2/*/upload
 #   resource  /.../wu_wei2/*/resource
-#   thumbnail /.../wu_wei2/*/thumbnail
+#   thumbnails are stored in the upload bundle as thumbnail.jpg
 
 base_dir="$(read_env user)"
 [ -z "${base_dir:-}" ] && die_json "ERROR: 'user' is empty in data/environment"
@@ -107,20 +107,14 @@ resource_tpl="$(read_env resource)"
 [ -z "${resource_tpl:-}" ] && die_json "ERROR: 'resource' is empty in data/environment"
 resource_dir="${resource_tpl//\*/$user_id}"
 
-thumbnail_tpl="$(read_env thumbnail)"
-[ -z "${thumbnail_tpl:-}" ] && die_json "ERROR: 'thumbnail' is empty in data/environment"
-thumbnail_dir="${thumbnail_tpl//\*/$user_id}"
-
 # --- ensure directories ----------------------------------------------
 mkdir -p "$file_dir/$year/$month/$day"      || die_json "ERROR: cannot mkdir $file_dir/$year/$month/$day (permission?)"
 mkdir -p "$resource_dir/$year/$month/$day"  || die_json "ERROR: cannot mkdir $resource_dir/$year/$month/$day (permission?)"
-mkdir -p "$thumbnail_dir/$year/$month/$day" || die_json "ERROR: cannot mkdir $thumbnail_dir/$year/$month/$day (permission?)"
 
 upload_root="$file_dir"
 resource_root="$resource_dir"
 file_dir="$file_dir/$year/$month/$day"
 resource_day_dir="$resource_dir/$year/$month/$day"
-thumbnail_dir="$thumbnail_dir/$year/$month/$day"
 
 # --- read request body -----------------------------------------------
 dd bs=1K if=/dev/stdin > "$Tmp-cgivars"
@@ -159,10 +153,11 @@ resource_dir="$resource_day_dir/$uuid"
 mkdir -p "$resource_dir" || die_json "ERROR: cannot mkdir $resource_dir"
 
 resource_file="$resource_dir/resource.json"
-resource_uri=""
+resource_uri="$year/$month/$day/$upload_file_uuid/$filename"
 
-thumb_file="$resource_dir/thumbnail.jpg"
+thumb_file="$upload_file_dir/thumbnail.jpg"
 thumbnail_uri=""
+manifest_file="$upload_file_dir/manifest.json"
 
 url_encode() {
   printf '%s' "$1" | sed 's/%/%25/g; s/ /%20/g; s#/#%2F#g; s/&/%26/g; s/?/%3F/g; s/=/%3D/g'
@@ -170,12 +165,13 @@ url_encode() {
 
 protected_file_uri() {
   local area="$1" rel="$2"
-  printf '/wu_wei2/server/load-file.cgi?area=%s&path=%s&user_id=%s' \
-    "$(url_encode "$area")" "$(url_encode "$rel")" "$(url_encode "$user_id")"
+  printf '/wu_wei2/server/load-file.cgi?area=%s&path=%s' \
+    "$(url_encode "$area")" "$(url_encode "$rel")"
 }
 
 upload_relpath="$year/$month/$day/$upload_file_uuid/$filename"
 file_uri="$(protected_file_uri upload "$upload_relpath")"
+thumb_relpath="$year/$month/$day/$upload_file_uuid/thumbnail.jpg"
 
 det_mime="$(file -b --mime-type -- "$DEST_FILE" 2>/dev/null || true)"
 det_full="$(file -b -i -- "$DEST_FILE" 2>/dev/null || true)"
@@ -217,7 +213,7 @@ if [[ "${det_mime:-}" == video/* || "${contenttype:-}" == video/* ]]; then
       -ss "$ss" -i "$DEST_FILE" \
       -frames:v 1 -vf "scale='min($size,iw)':-2" -q:v 3 \
       "$thumb_file"; then
-      thumbnail="$(protected_file_uri resource "${thumb_file#$resource_root/}")"
+      thumbnail="$(protected_file_uri upload "$thumb_relpath")"
       if [[ -n "$FFPROBE" ]]; then
         thumb_wh="$("$FFPROBE" -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0:s=x "$thumb_file" 2>/dev/null || true)"
       fi
@@ -243,10 +239,44 @@ lastmodified="$(stat -c %y -- "$DEST_FILE" 2>/dev/null || true)"
   thumb_sha=""
   [ -f "$thumb_file" ] && thumb_sha="$(sha256sum "$thumb_file" 2>/dev/null | awk '{print $1}')"
   created_at="$(date '+%Y-%m-%dT%H:%M:%S%z')"
+  cat >"$manifest_file" <<MANIFEST
+{
+  "id": "$(json_escape "$uuid")",
+  "type": "UploadResource",
+  "version": 1,
+  "created_at": "$(json_escape "$created_at")",
+  "created_by": "$(json_escape "$user_id")",
+  "title": "$(json_escape "$name")",
+  "kind": "video",
+  "original": {
+    "file": "$(json_escape "$filename")",
+    "display_name": "$(json_escape "$name")",
+    "mime": "$(json_escape "${contenttype:-application/octet-stream}")",
+    "size": ${totalsize:-0},
+    "sha256": "$(json_escape "$original_sha")",
+    "duration": "$(json_escape "${duration:-}")"
+  }$(if [ -f "$thumb_file" ]; then printf ',\n  "thumbnail": {\n    "file": "thumbnail.jpg",\n    "mime": "image/jpeg",\n    "size": %s,\n    "sha256": "%s",\n    "display_size": "%s"\n  }' "$(stat -c %s -- "$thumb_file" 2>/dev/null || echo 0)" "$(json_escape "$thumb_sha")" "$(json_escape "${tw}x${th}")"; fi)
+}
+MANIFEST
+  path_index_file="$upload_root/_index/path/$upload_relpath.json"
+  mkdir -p "$(dirname "$path_index_file")" || die_json "ERROR: cannot mkdir path index"
+  cat >"$path_index_file" <<INDEX
+{
+  "logicalPath": "$(json_escape "$upload_relpath")",
+  "upload_id": "$(json_escape "$uuid")",
+  "actual_date": "$(json_escape "$year/$month/$day")",
+  "date": "$(json_escape "$year/$month/$day")",
+  "file": "$(json_escape "$filename")",
+  "manifest": "$(json_escape "$year/$month/$day/$upload_file_uuid/manifest.json")"
+}
+INDEX
   cat <<JSON
 {
   "id": "$(json_escape "$uuid")",
   "type": "Resource",
+  "source": "upload",
+  "uri": "$(json_escape "$upload_relpath")",
+  "canonicalUri": "$(json_escape "$upload_relpath")",
   "origin": {
     "type": "userRegistered",
     "subtype": "uploadedVideo",
@@ -254,8 +284,8 @@ lastmodified="$(stat -c %y -- "$DEST_FILE" 2>/dev/null || true)"
   },
   "identity": {
     "title": "$(json_escape "$name")",
-    "canonicalUri": "",
-    "uri": ""
+    "canonicalUri": "$(json_escape "$upload_relpath")",
+    "uri": "$(json_escape "$upload_relpath")"
   },
   "media": {
     "kind": "video",
@@ -274,15 +304,23 @@ lastmodified="$(stat -c %y -- "$DEST_FILE" 2>/dev/null || true)"
   "storage": {
     "managed": true,
     "copyPolicy": "snapshot",
+    "manifest": {
+      "area": "upload",
+      "path": "$(json_escape "$year/$month/$day/$upload_file_uuid/manifest.json")",
+      "dir_name": "$(json_escape "data/$user_id/upload/$year/$month/$day/$upload_file_uuid")",
+      "file_name": "manifest.json"
+    },
     "files": [
       {
         "role": "original",
         "area": "upload",
         "path": "$(json_escape "$upload_relpath")",
+        "dir_name": "$(json_escape "data/$user_id/upload/$year/$month/$day/$upload_file_uuid")",
+        "file_name": "$(json_escape "$filename")",
         "mimeType": "$(json_escape "${contenttype:-application/octet-stream}")",
         "size": ${totalsize:-0},
         "sha256": "$(json_escape "$original_sha")"$(if [ -n "${video_wh:-}" ]; then printf ',\n        "displaySize": "%s"' "$(json_escape "$video_wh")"; fi)
-      }$(if [ -f "$thumb_file" ]; then printf ',\n      {\n        "role": "thumbnail",\n        "area": "resource",\n        "path": "%s",\n        "mimeType": "image/jpeg",\n        "size": %s,\n        "sha256": "%s"%s\n      }' "$(json_escape "${thumb_file#$resource_root/}")" "$(stat -c %s -- "$thumb_file" 2>/dev/null || echo 0)" "$(json_escape "$thumb_sha")" "$(if [ -n "${tw:-}" ] && [ -n "${th:-}" ]; then printf ',\n        "displaySize": "%s"' "$(json_escape "${tw}x${th}")"; fi)"; fi)
+      }$(if [ -f "$thumb_file" ]; then printf ',\n      {\n        "role": "thumbnail",\n        "area": "upload",\n        "path": "%s",\n        "dir_name": "%s",\n        "file_name": "thumbnail.jpg",\n        "mimeType": "image/jpeg",\n        "size": %s,\n        "sha256": "%s"%s\n      }' "$(json_escape "$thumb_relpath")" "$(json_escape "data/$user_id/upload/$year/$month/$day/$upload_file_uuid")" "$(stat -c %s -- "$thumb_file" 2>/dev/null || echo 0)" "$(json_escape "$thumb_sha")" "$(if [ -n "${tw:-}" ] && [ -n "${th:-}" ]; then printf ',\n        "displaySize": "%s"' "$(json_escape "${tw}x${th}")"; fi)"; fi)
     ]
   },
   "rights": {
@@ -320,6 +358,8 @@ if [[ -n "${thumbnail:-}" ]]; then
   "option":"video",
   "contenttype":"$(json_escape "${contenttype:-}")",
   "uri":"$(json_escape "$file_uri")",
+  "url":"$(json_escape "$file_uri")",
+  "download_url":"$(json_escape "$file_uri")",
   "warning":"$(json_escape "$warn")",
   "value":{
     "totalsize":"$(json_escape "${totalsize:-}")",
@@ -341,6 +381,8 @@ else
   "option":"video",
   "contenttype":"$(json_escape "${contenttype:-}")",
   "uri":"$(json_escape "$file_uri")",
+  "url":"$(json_escape "$file_uri")",
+  "download_url":"$(json_escape "$file_uri")",
   "warning":"$(json_escape "$warn")",
   "value":{
     "totalsize":"$(json_escape "${totalsize:-}")",

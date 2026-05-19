@@ -61,16 +61,19 @@ def available_months(resource_root: Path) -> list[str]:
     return sorted([m for m in months if m])
 
 
-def protected_file_url(user_id: str, area: str, rel_path: str) -> str:
+def protected_file_url(user_id: str, area: str, rel_path: str, role: str = "") -> str:
     area = str(area or "").strip().lower()
     rel_path = str(rel_path or "").replace("\\", "/").strip("/")
+    role = str(role or "").strip().lower()
     if not area or not rel_path:
         return ""
-    return (
+    url = (
         f"cgi-bin/load-file.py?area={quote(area, safe='')}"
         f"&path={quote(rel_path, safe='')}"
-        f"&user_id={quote(str(user_id or ''), safe='')}"
     )
+    if role:
+        url += f"&role={quote(role, safe='')}"
+    return url
 
 
 def local_file_url(user_id: str, source_path: str) -> str:
@@ -92,7 +95,7 @@ def local_file_url(user_id: str, source_path: str) -> str:
     return ""
 
 
-def file_url(user_id: str, resource_json: Path, role_path: str, source_path: str = "", area: str = "") -> str:
+def file_url(user_id: str, resource_json: Path, role_path: str, source_path: str = "", area: str = "", role: str = "") -> str:
     if not role_path:
         return local_file_url(user_id, source_path)
     if role_path.startswith("http://") or role_path.startswith("https://") or role_path.startswith("data:"):
@@ -103,14 +106,14 @@ def file_url(user_id: str, resource_json: Path, role_path: str, source_path: str
         area_root = Path(environment_path(area, user_id))
         candidate = area_root / role_path
         if candidate.exists():
-            return protected_file_url(user_id, area, role_path)
+            return protected_file_url(user_id, area, role_path, role)
 
     resource_dir = resource_json.parent
     candidate = resource_dir / role_path
     if candidate.exists():
         try:
             rel = candidate.relative_to(Path(environment_path("resource", user_id))).as_posix()
-            return protected_file_url(user_id, "resource", rel)
+            return protected_file_url(user_id, "resource", rel, role)
         except Exception:
             return str(candidate)
 
@@ -252,14 +255,14 @@ def collect_resource_record(resource_root: Path, resource_json: Path, user_id: s
     if not content_type and is_webpage_resource(resource, canonical_uri or uri):
         content_type = "text/html"
     viewer_type = viewer_type_for_resource(resource, canonical_uri or uri, content_type)
-    original_uri = file_url(user_id, resource_json, str(original.get("path") or ""), "", str(original.get("area") or "")) if original else ""
+    original_uri = file_url(user_id, resource_json, str(original.get("path") or ""), "", str(original.get("area") or ""), "original") if original else ""
     preview_uri = embed.get("uri") or (
-        file_url(user_id, resource_json, str(preview.get("path") or ""), "", str(preview.get("area") or ""))
+        file_url(user_id, resource_json, str(preview.get("path") or ""), "", str(preview.get("area") or ""), str(preview.get("role") or "preview"))
         if preview
         else (original_uri or uri)
     )
     thumbnail_uri = (
-        file_url(user_id, resource_json, str(thumbnail.get("path") or ""), "", str(thumbnail.get("area") or ""))
+        file_url(user_id, resource_json, str(thumbnail.get("path") or ""), "", str(thumbnail.get("area") or ""), "thumbnail")
         if thumbnail
         else external_thumbnail_uri(resource)
     )
@@ -272,9 +275,9 @@ def collect_resource_record(resource_root: Path, resource_json: Path, user_id: s
         "name": title,
         "option": option_for_resource(resource),
         "contenttype": content_type,
-        "uri": uri,
-        "url": preview_uri or uri,
-        "download_url": canonical_uri or original_uri,
+        "uri": original_uri or canonical_uri or uri,
+        "url": preview_uri or original_uri or uri,
+        "download_url": original_uri or canonical_uri or uri,
         "preview_url": preview_uri,
         "value": {
             "lastmodified": timestamp_for_resource(resource_root, resource_json, resource),
@@ -293,8 +296,8 @@ def collect_resource_record(resource_root: Path, resource_json: Path, user_id: s
                 else {}
             ),
             "resource": {
-                "uri": canonical_uri or original_uri,
-                "url": canonical_uri or original_uri,
+                "uri": original_uri or canonical_uri or uri,
+                "url": original_uri or canonical_uri or uri,
             },
             **(
                 {

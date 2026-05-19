@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import cgi
-import hashlib
 import json
 import mimetypes
 import os
@@ -348,20 +347,7 @@ def media_kind(content_type: str, filename: str) -> str:
         return "audio"
     if content_type.startswith("text/") or content_type == "application/pdf" or suffix in OFFICE_EXTS:
         return "document"
-    return "general"
-
-
-def file_entry(role: str, path: Path, mime_type: str, size_text: str = "", sha256: str | None = None) -> dict:
-    item = {
-        "role": role,
-        "path": path.name,
-        "mimeType": mime_type or "application/octet-stream",
-        "size": path.stat().st_size if path.exists() else 0,
-        "sha256": sha256 if sha256 is not None else (sha256_file(path) if path.exists() else ""),
-    }
-    if size_text:
-        item["displaySize"] = size_text
-    return item
+    return "other"
 
 
 def write_upload_manifest(
@@ -374,11 +360,9 @@ def write_upload_manifest(
     original_file: Path,
     original_name: str,
     original_mime: str,
-    original_sha: str,
     thumbnail_file: Path | None,
     thumbnail_size: str,
     preview_file: Path | None,
-    preview_sha: str,
     created_at: str,
 ) -> None:
     manifest = {
@@ -394,7 +378,6 @@ def write_upload_manifest(
             "display_name": original_name,
             "mime": original_mime or "application/octet-stream",
             "size": original_file.stat().st_size if original_file.exists() else 0,
-            "sha256": original_sha,
         },
     }
     if thumbnail_file and thumbnail_file.exists():
@@ -402,7 +385,6 @@ def write_upload_manifest(
             "file": thumbnail_file.name,
             "mime": "image/png" if thumbnail_file.suffix.lower() == ".png" else "image/jpeg",
             "size": thumbnail_file.stat().st_size,
-            "sha256": sha256_file(thumbnail_file),
             "display_size": thumbnail_size or "",
         }
     if preview_file and preview_file.exists():
@@ -410,32 +392,72 @@ def write_upload_manifest(
             "file": preview_file.name,
             "mime": "application/pdf",
             "size": preview_file.stat().st_size,
-            "sha256": preview_sha or sha256_file(preview_file),
             "generated_by": "LibreOffice",
         }
     manifest_file.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def read_sha_index(index_file: Path) -> dict | None:
-    try:
-        data = json.loads(index_file.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else None
-    except Exception:
-        return None
+def server_root_relative(path: Path) -> str:
+    text = path.resolve().as_posix()
+    marker = "/wu_wei2/"
+    idx = text.lower().find(marker)
+    if idx >= 0:
+        return text[idx + len(marker):]
+    marker2 = "/htdocs/"
+    idx = text.lower().find(marker2)
+    if idx >= 0:
+        return text[idx + len(marker2):]
+    return text
 
 
-def write_sha_index(index_file: Path, *, sha256: str, upload_id: str, date: str, filename: str) -> None:
+def logical_upload_path(upload_date: str, file_uuid: str, filename: str) -> str:
+    """Return the v2 logical upload path: YYYY/MM/DD/file_uuid/filename."""
+    date = str(upload_date or "").replace("\\", "/").strip("/")
+    fid = safe_filename(str(file_uuid or "").strip("/"))
+    if fid and not fid.startswith("_"):
+        fid = "_" + fid
+    return f"{date}/{fid}/{safe_filename(filename)}"
+
+def write_path_index(upload_root: Path, *, logical_path: str, upload_id: str, actual_date: str, filename: str) -> None:
+    """Map a v2 logical path to the upload bundle manifest.
+
+    The normal v2 path is YYYY/MM/DD/file_uuid/filename.  This index is
+    path-based only; SHA duplicate handling is intentionally out of scope
+    for this revision.
+    """
+    logical_path = str(logical_path or "").replace("\\", "/").strip("/")
+    if not logical_path:
+        return
+    index_file = upload_root / "_index" / "path" / (logical_path + ".json")
     index_file.parent.mkdir(parents=True, exist_ok=True)
     index_file.write_text(
         json.dumps({
-            "sha256": sha256,
+            "logicalPath": logical_path,
             "upload_id": upload_id,
-            "date": date,
+            "actual_date": actual_date,
+            "date": actual_date,
             "file": filename,
+            "manifest": f"{actual_date}/{upload_id}/manifest.json",
         }, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
         newline="\n",
     )
+
+
+def file_entry(role: str, logical_path: str, dir_path: Path, file_name: str, mime_type: str, size_text: str = "") -> dict:
+    actual = dir_path / file_name
+    item = {
+        "role": role,
+        "area": "upload",
+        "path": logical_path,
+        "dir_name": server_root_relative(dir_path),
+        "file_name": file_name,
+        "mimeType": mime_type or "application/octet-stream",
+        "size": actual.stat().st_size if actual.exists() else 0,
+    }
+    if size_text:
+        item["displaySize"] = size_text
+    return item
 
 
 def role_filename(role: str, path: Path) -> str:
@@ -504,14 +526,6 @@ def find_upload_file_for_day(upload_day_dir: Path, filename: str) -> Path | None
     return None
 
 
-def sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
 def file_url_from_path(path: Path) -> str:
     path_s = path.resolve().as_posix()
     docroot = "C:/Apache24/htdocs"
@@ -520,16 +534,19 @@ def file_url_from_path(path: Path) -> str:
     return path_s
 
 
-def protected_file_url(user_id: str, area: str, rel_path: str) -> str:
+def protected_file_url(user_id: str, area: str, rel_path: str, role: str = "") -> str:
     area = trim(area).lower()
     rel_path = str(rel_path or "").replace("\\", "/").strip("/")
+    role = trim(role).lower()
     if not area or not rel_path:
         return ""
-    return (
+    url = (
         f"cgi-bin/load-file.py?area={quote(area, safe='')}"
         f"&path={quote(rel_path, safe='')}"
-        f"&user_id={quote(user_id, safe='')}"
     )
+    if role:
+        url += f"&role={quote(role, safe='')}"
+    return url
 
 
 def load_resource_json(path: Path) -> dict | None:
@@ -538,14 +555,6 @@ def load_resource_json(path: Path) -> dict | None:
         return data if isinstance(data, dict) and data.get("type") == "Resource" else None
     except Exception:
         return None
-
-
-def resource_original_hash(resource: dict) -> str:
-    storage = resource.get("storage") if isinstance(resource.get("storage"), dict) else {}
-    for item in storage.get("files") or []:
-        if isinstance(item, dict) and item.get("role") == "original":
-            return str(item.get("sha256") or "")
-    return ""
 
 
 def resource_file_exists(resource: dict, role: str, resource_root: Path, upload_root: Path | None = None) -> bool:
@@ -570,30 +579,6 @@ def office_resource_needs_preview(resource: dict, filename: str, resource_root: 
     return not resource_file_exists(resource, "preview", resource_root, upload_root)
 
 
-def find_existing_resource(resource_root: Path, *, original_hash: str, canonical_uri: str, source_path: str) -> tuple[dict | None, str]:
-    canonical_uri = (canonical_uri or "").strip()
-    source_path = (source_path or "").replace("\\", "/").strip()
-    for resource_json in resource_root.rglob("resource.json"):
-        resource = load_resource_json(resource_json)
-        if not resource:
-            continue
-        identity = resource.get("identity") if isinstance(resource.get("identity"), dict) else {}
-        storage = resource.get("storage") if isinstance(resource.get("storage"), dict) else {}
-        existing_uri = str(identity.get("canonicalUri") or identity.get("uri") or "").strip()
-        existing_source = ""
-        for item in storage.get("files") or []:
-            if isinstance(item, dict) and item.get("role") == "original":
-                existing_source = str(item.get("path") or "").replace("\\", "/").strip()
-                break
-        if original_hash and resource_original_hash(resource) == original_hash:
-            return resource, "sha256"
-        if canonical_uri and existing_uri == canonical_uri:
-            return resource, "canonicalUri"
-        if source_path and existing_source == source_path:
-            return resource, "originalPath"
-    return None, ""
-
-
 def response_from_resource(resource: dict, *, option: str, warning: str = "") -> dict:
     identity = resource.get("identity") if isinstance(resource.get("identity"), dict) else {}
     media = resource.get("media") if isinstance(resource.get("media"), dict) else {}
@@ -604,7 +589,7 @@ def response_from_resource(resource: dict, *, option: str, warning: str = "") ->
         for item in files:
             if item.get("role") == role and item.get("path"):
                 area = str(item.get("area") or ("upload" if role == "original" else "resource"))
-                return protected_file_url(str(resource.get("audit", {}).get("owner") or ""), area, str(item.get("path")))
+                return protected_file_url(str(resource.get("audit", {}).get("owner") or ""), area, str(item.get("path")), role)
         return ""
 
     original_url = file_url("original") or str(identity.get("canonicalUri") or identity.get("uri") or "")
@@ -659,26 +644,28 @@ def response_from_upload_manifest(
     thumbnail = manifest.get("thumbnail") if isinstance(manifest.get("thumbnail"), dict) else {}
     preview = manifest.get("preview") if isinstance(manifest.get("preview"), dict) else {}
 
-    def upload_uri(filename: str) -> str:
-        return protected_file_url(user_id, "upload", f"{upload_date}/{upload_id}/{filename}") if filename else ""
+    logical_path = logical_upload_path(upload_date, upload_id, str(original.get("display_name") or original.get("file") or ""))
 
-    original_url = upload_uri(str(original.get("file") or ""))
-    thumbnail_url = upload_uri(str(thumbnail.get("file") or ""))
-    preview_url = upload_uri(str(preview.get("file") or "")) or original_url
+    def upload_uri(role: str) -> str:
+        return protected_file_url(user_id, "upload", logical_path, role) if logical_path else ""
+
+    original_url = upload_uri("original")
+    thumbnail_url = upload_uri("thumbnail") if thumbnail else ""
+    preview_url = upload_uri("preview") if preview else original_url
     return {
         "id": upload_id,
         "resource": resource,
         "name": manifest.get("title") or original.get("display_name") or original.get("file") or upload_id,
         "option": option,
         "contenttype": original.get("mime") or "application/octet-stream",
-        "uri": original_url,
+        "uri": logical_path,
         "url": preview_url,
         "download_url": original_url,
         **({"preview_url": preview_url} if preview_url and preview_url != original_url else {}),
         **({"warning": warning} if warning else {}),
         "value": {
             "totalsize": str(original.get("size") or ""),
-            "resource": {"uri": "", "url": preview_url},
+            "resource": {"uri": logical_path, "url": preview_url},
             **(
                 {"thumbnail": {"uri": thumbnail_url, **({"size": thumbnail.get("display_size")} if thumbnail.get("display_size") else {})}}
                 if thumbnail_url else {}
@@ -760,37 +747,17 @@ def main():
     temp_upload = upload_day_dir / f".{uuid.uuid4()}.uploading"
     with temp_upload.open("wb") as f:
         shutil.copyfileobj(fileitem.file, f)
-    original_hash = sha256_file(temp_upload)
-    sha_index_file = upload_root / "_index" / "sha256" / f"{original_hash}.json"
-    sha_index = read_sha_index(sha_index_file)
-    if sha_index and sha_index.get("upload_id") and sha_index.get("date"):
-        upload_file_id = str(sha_index.get("upload_id"))
-        upload_date = str(sha_index.get("date")).strip("/") or upload_date
-        upload_file_dir = upload_root / upload_date / upload_file_id
-        indexed_file = str(sha_index.get("file") or filename)
-        dest_file = upload_file_dir / indexed_file
-        if not dest_file.is_file():
-            dest_file = upload_file_dir / filename
-            dest_file.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(temp_upload), str(dest_file))
-        else:
-            try:
-                temp_upload.unlink()
-            except OSError:
-                pass
-        debug_kv(dedupe="upload bundle reused", upload_id=upload_file_id, sha256=original_hash)
-    else:
-        upload_file_id = f"_{uuid.uuid4()}"
-        upload_file_dir = upload_root / upload_date / upload_file_id
-        dest_file = upload_file_dir / filename
-        dest_file.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(temp_upload), str(dest_file))
+
+    upload_file_id = f"_{uuid.uuid4()}"
+    upload_file_dir = upload_root / upload_date / upload_file_id
+    dest_file = upload_file_dir / filename
+    dest_file.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(temp_upload), str(dest_file))
 
     content_type = detect_content_type(dest_file, declared_contenttype)
     upload_relpath = upload_relative_path(upload_root, dest_file)
     resource_dir = resource_root / upload_date
     resource_dir.mkdir(parents=True, exist_ok=True)
-    existing_resource, dedupe_reason = (None, "")
     resource_id = upload_file_id
     primary_dir = resource_dir / resource_id
     rid = resource_id.lstrip("_")
@@ -834,8 +801,9 @@ def main():
                     debug_kv(office_pdf_rename_exception=str(e), src=str(office_pdf), dst=str(normalized_pdf))
             resource_size, thumbnail_size = make_pdf_thumbnail(office_pdf, thumb_file)
             page_count = count_pdf_pages(office_pdf)
-            pdf_preview_uri = protected_file_url(user_id, "upload", upload_relative_path(upload_root, office_pdf))
-            pdf_preview_url = pdf_preview_uri
+            # Preview URL is generated after the logical path is known.
+            pdf_preview_uri = ""
+            pdf_preview_url = ""
             debug_kv(
                 office_preview_pdf=str(office_pdf),
                 office_preview_uri=pdf_preview_uri,
@@ -846,14 +814,23 @@ def main():
         else:
             debug("office pdf conversion failed")
 
-    file_uri = protected_file_url(user_id, "upload", upload_relpath)
-    file_url = file_uri
-    resource_uri = ""
-    resource_url = ""
+    logical_path = logical_upload_path(upload_date, upload_file_id, filename)
+    file_uri = logical_path
+    file_url = protected_file_url(user_id, "upload", logical_path, "original")
+    resource_uri = logical_path
+    resource_url = file_url
+
+    thumbnail_logical_path = ""
+    preview_logical_path = ""
 
     if thumb_file.exists():
-        thumb_rel = note_relative_path(thumb_root, thumb_file) if thumb_area == "note" else resource_relative_path(thumb_root, thumb_file)
-        thumbnail_uri = protected_file_url(user_id, thumb_area, thumb_rel)
+        thumbnail_logical_path = logical_upload_path(upload_date, upload_file_id, thumb_file.name)
+        thumbnail_uri = protected_file_url(user_id, "upload", thumbnail_logical_path, "thumbnail")
+
+    if office_pdf and office_pdf.exists():
+        preview_logical_path = logical_upload_path(upload_date, upload_file_id, office_pdf.name)
+        pdf_preview_uri = protected_file_url(user_id, "upload", preview_logical_path, "preview")
+        pdf_preview_url = pdf_preview_uri
 
     name = fullname or filename
     totalsize = dest_file.stat().st_size
@@ -878,29 +855,24 @@ def main():
         pdf_preview_url=pdf_preview_url or "",
     )
 
-    files = [file_entry("original", dest_file, content_type, resource_size or "", original_hash)]
-    files[0]["area"] = "upload"
-    files[0]["path"] = upload_relpath
+    files = [file_entry("original", logical_path, dest_file.parent, dest_file.name, content_type, resource_size or "")]
     if thumb_file.exists():
-        item = file_entry("thumbnail", thumb_file, "image/png" if thumb_file.suffix.lower() == ".png" else "image/jpeg", thumbnail_size or "")
-        item["area"] = thumb_area
-        item["path"] = note_relative_path(thumb_root, thumb_file) if thumb_area == "note" else resource_relative_path(thumb_root, thumb_file)
-        files.append(item)
+        files.append(file_entry("thumbnail", thumbnail_logical_path, thumb_file.parent, thumb_file.name, "image/png" if thumb_file.suffix.lower() == ".png" else "image/jpeg", thumbnail_size or ""))
     if office_pdf and office_pdf.exists():
-        item = file_entry("preview", office_pdf, "application/pdf")
-        item["area"] = "upload"
-        item["path"] = upload_relative_path(upload_root, office_pdf)
-        files.append(item)
+        files.append(file_entry("preview", preview_logical_path, office_pdf.parent, office_pdf.name, "application/pdf"))
 
     resource = {
         "id": resource_id,
         "type": "Resource",
         "label": name,
         "title": name,
+        "source": "upload",
         "kind": media_kind(content_type, filename),
+        "documentKind": "office" if dest_file.suffix.lower() in OFFICE_EXTS else ("pdf" if content_type.lower().startswith("application/pdf") else ("html" if content_type.lower().startswith("text/html") else ("text" if media_kind(content_type, filename) == "document" else ""))),
+        "videoKind": "",
         "mimeType": content_type,
-        "uri": "",
-        "canonicalUri": "",
+        "uri": logical_path,
+        "canonicalUri": logical_path,
         "origin": {
             "type": "userRegistered",
             "subtype": "uploadedDocument" if media_kind(content_type, filename) == "document" else f"uploaded{media_kind(content_type, filename).capitalize()}",
@@ -908,8 +880,8 @@ def main():
         },
         "identity": {
             "title": name,
-            "canonicalUri": "",
-            "uri": "",
+            "canonicalUri": logical_path,
+            "uri": logical_path,
         },
         "media": {
             "kind": media_kind(content_type, filename),
@@ -946,7 +918,9 @@ def main():
             "copyPolicy": "reference",
             "manifest": {
                 "area": "upload",
-                "path": upload_relative_path(upload_root, manifest_file),
+                "path": logical_path,
+                "dir_name": server_root_relative(manifest_file.parent),
+                "file_name": "manifest.json",
             },
             "files": files,
         },
@@ -964,7 +938,6 @@ def main():
             "lastModifiedAt": "",
         },
     }
-    preview_sha = sha256_file(office_pdf) if office_pdf and office_pdf.exists() else ""
     write_upload_manifest(
         manifest_file,
         upload_id=upload_file_id,
@@ -974,14 +947,18 @@ def main():
         original_file=dest_file,
         original_name=name,
         original_mime=content_type,
-        original_sha=original_hash,
         thumbnail_file=thumb_file if thumb_file.exists() else None,
         thumbnail_size=thumbnail_size or "",
         preview_file=office_pdf if office_pdf and office_pdf.exists() else None,
-        preview_sha=preview_sha,
         created_at=now.isoformat(),
     )
-    write_sha_index(sha_index_file, sha256=original_hash, upload_id=upload_file_id, date=upload_date, filename=dest_file.name)
+    write_path_index(
+        upload_root,
+        logical_path=logical_path,
+        upload_id=upload_file_id,
+        actual_date=upload_date,
+        filename=dest_file.name,
+    )
     resource_file.write_text(json.dumps(resource, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     response = {
@@ -990,7 +967,7 @@ def main():
         "name": name,
         "option": "upload",
         "contenttype": declared_contenttype or content_type,
-        "uri": file_uri,
+        "uri": logical_path,
         "url": file_url,
         "download_url": file_url,
         **({"preview_url": pdf_preview_url} if pdf_preview_url else {}),
@@ -998,8 +975,8 @@ def main():
             "totalsize": str(totalsize),
             "lastmodified": lastmodified,
             "resource": {
-                "uri": resource_uri,
-                "url": resource_url,
+                "uri": logical_path,
+                "url": file_url,
                 **({"size": resource_size} if resource_size else {}),
             },
             **(

@@ -81,8 +81,26 @@ file_rel_url() {
   rel=$3
   [ -n "$area" ] || return 0
   [ -n "$rel" ] || return 0
-  printf '/wu_wei2/server/load-file.cgi?area=%s&path=%s&user_id=%s' \
-    "$(url_encode "$area")" "$(url_encode "$rel")" "$(url_encode "$uid")"
+  printf '/wu_wei2/server/load-file.cgi?area=%s&path=%s' \
+    "$(url_encode "$area")" "$(url_encode "$rel")"
+}
+
+dirname_json() {
+  uid=$1
+  area=$2
+  rel=$3
+  dir=${rel%/*}
+  [ "$dir" != "$rel" ] || dir=""
+  if [ -n "$dir" ]; then
+    printf 'data/%s/%s/%s' "$uid" "$area" "$dir"
+  else
+    printf 'data/%s/%s' "$uid" "$area"
+  fi
+}
+
+basename_json() {
+  rel=$1
+  printf '%s' "${rel##*/}"
 }
 
 json_string_field() {
@@ -237,13 +255,13 @@ emit_upload_manifest_record() {
   printf '"identity":{"title":"%s","canonicalUri":"%s","uri":"%s"},' "$(printf '%s' "$name" | json_escape)" "$(printf '%s' "$original_url" | json_escape)" "$(printf '%s' "$preview_url" | json_escape)"
   printf '"media":{"kind":"%s","mimeType":"%s","downloadable":true},' "$(printf '%s' "$kind" | json_escape)" "$(printf '%s' "$original_mime" | json_escape)"
   printf '"viewer":{"defaultMode":"infoPane","embed":{"enabled":true,"uri":"%s"},"thumbnailUri":"%s"},' "$(printf '%s' "$preview_url" | json_escape)" "$(printf '%s' "$thumb_url" | json_escape)"
-  printf '"storage":{"managed":true,"copyPolicy":"reference","manifest":{"area":"upload","path":"%s"},"files":[' "$(printf '%s' "$rel" | json_escape)"
-  printf '{"role":"original","area":"upload","path":"%s","mimeType":"%s","size":%s,"sha256":"%s"}' "$(printf '%s' "$original_path" | json_escape)" "$(printf '%s' "$original_mime" | json_escape)" "$original_size" "$(printf '%s' "$original_sha" | json_escape)"
+  printf '"storage":{"managed":true,"copyPolicy":"reference","manifest":{"area":"upload","path":"%s","dir_name":"%s","file_name":"manifest.json"},"files":[' "$(printf '%s' "$rel" | json_escape)" "$(printf '%s' "$(dirname_json "$uid" upload "$rel")" | json_escape)"
+  printf '{"role":"original","area":"upload","path":"%s","dir_name":"%s","file_name":"%s","mimeType":"%s","size":%s,"sha256":"%s"}' "$(printf '%s' "$original_path" | json_escape)" "$(printf '%s' "$(dirname_json "$uid" upload "$original_path")" | json_escape)" "$(printf '%s' "$(basename_json "$original_path")" | json_escape)" "$(printf '%s' "$original_mime" | json_escape)" "$original_size" "$(printf '%s' "$original_sha" | json_escape)"
   if [ -n "$thumb_path" ]; then
-    printf ',{"role":"thumbnail","area":"upload","path":"%s","mimeType":"%s","size":%s,"sha256":"%s"}' "$(printf '%s' "$thumb_path" | json_escape)" "$(printf '%s' "$thumb_mime" | json_escape)" "$thumb_size" "$(printf '%s' "$thumb_sha" | json_escape)"
+    printf ',{"role":"thumbnail","area":"upload","path":"%s","dir_name":"%s","file_name":"%s","mimeType":"%s","size":%s,"sha256":"%s"}' "$(printf '%s' "$thumb_path" | json_escape)" "$(printf '%s' "$(dirname_json "$uid" upload "$thumb_path")" | json_escape)" "$(printf '%s' "$(basename_json "$thumb_path")" | json_escape)" "$(printf '%s' "$thumb_mime" | json_escape)" "$thumb_size" "$(printf '%s' "$thumb_sha" | json_escape)"
   fi
   if [ -n "$preview_path" ]; then
-    printf ',{"role":"preview","area":"upload","path":"%s","mimeType":"%s","size":%s,"sha256":"%s"}' "$(printf '%s' "$preview_path" | json_escape)" "$(printf '%s' "$preview_mime" | json_escape)" "$preview_size" "$(printf '%s' "$preview_sha" | json_escape)"
+    printf ',{"role":"preview","area":"upload","path":"%s","dir_name":"%s","file_name":"%s","mimeType":"%s","size":%s,"sha256":"%s"}' "$(printf '%s' "$preview_path" | json_escape)" "$(printf '%s' "$(dirname_json "$uid" upload "$preview_path")" | json_escape)" "$(printf '%s' "$(basename_json "$preview_path")" | json_escape)" "$(printf '%s' "$preview_mime" | json_escape)" "$preview_size" "$(printf '%s' "$preview_sha" | json_escape)"
   fi
   printf ']},'
   printf '"audit":{"owner":"%s","createdBy":"%s","createdAt":"%s","lastModifiedBy":"","lastModifiedAt":""}' "$(printf '%s' "$uid" | json_escape)" "$(printf '%s' "$uid" | json_escape)" "$(printf '%s' "$ts" | json_escape)"

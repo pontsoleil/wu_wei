@@ -256,59 +256,30 @@ note_id="new_note"
 
 original_sha="$(sha256sum "$Tmp-uploadfile" 2>/dev/null | awk '{print $1}')"
 [ -n "$original_sha" ] || die_json "ERROR: cannot calculate upload sha256"
-sha_index_dir="$upload_root/_index/sha256"
-sha_index_file="$sha_index_dir/$original_sha.json"
 
-upload_file_uuid=""
 upload_file_date="$year/$month/$day"
-if [ -f "$sha_index_file" ]; then
-  upload_file_uuid="$(sed -n 's/.*"upload_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$sha_index_file" | head -n 1)"
-  upload_file_date="$(sed -n 's/.*"date"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$sha_index_file" | head -n 1)"
-  [ -n "$upload_file_date" ] || upload_file_date="$year/$month/$day"
-fi
-
-[ -n "$upload_file_uuid" ] || upload_file_uuid="_$(uuidgen | tr 'A-Z' 'a-z')"
+upload_file_uuid="_$(uuidgen | tr 'A-Z' 'a-z')"
 upload_file_dir="$upload_root/$upload_file_date/$upload_file_uuid"
 mkdir -p "$upload_file_dir" || die_json "ERROR: cannot mkdir $upload_file_dir"
 
-# full path to save uploaded file. If this sha is already known, reuse the
-# existing upload bundle and avoid duplicating the uploaded payload.
 dest_file="$upload_file_dir/$filename"
-if [ ! -f "$dest_file" ]; then
-  cp -- "$Tmp-uploadfile" "$dest_file" || die_json "ERROR: cannot save upload to $dest_file"
-fi
+cp -- "$Tmp-uploadfile" "$dest_file" || die_json "ERROR: cannot save upload to $dest_file"
 
 upload_relpath="$upload_file_date/$upload_file_uuid/$filename"
 resource_day_dir="$resource_root/$upload_file_date"
 mkdir -p "$resource_day_dir" || die_json "ERROR: cannot mkdir $resource_day_dir"
 
-find_existing_resource_dir() {
-  local sha="$1" rel="$2" rf
-  find "$resource_root" -type f -name resource.json 2>/dev/null | while IFS= read -r rf; do
-    if { [ -n "$sha" ] && grep -q "\"sha256\"[[:space:]]*:[[:space:]]*\"$sha\"" "$rf"; } ||
-       { [ -n "$rel" ] && grep -q "\"role\"[[:space:]]*:[[:space:]]*\"original\"" "$rf" && grep -q "\"path\"[[:space:]]*:[[:space:]]*\"$rel\"" "$rf"; }; then
-      dirname "$rf"
-      break
-    fi
-  done
-}
-
 # --- ids / uri mapping -----------------------------------------------
-existing_resource_dir=""
-if [ -n "$existing_resource_dir" ]; then
-  uuid="${existing_resource_dir##*/}"
-else
-  uuid="$upload_file_uuid"
-fi
+uuid="$upload_file_uuid"
 uuidrgx='[0-9a-f]\{8\}-[0-9a-f]\{4\}-[1-5][0-9a-f]\{3\}-[89ab][0-9a-f]\{3\}-[0-9a-f]\{12\}'
 
 escaped_base="$(printf '%s' "$base_dir" | sed 's/\//\\\//g')"
 
-resource_dir="${existing_resource_dir:-$resource_day_dir/$uuid}"
+resource_dir="$resource_day_dir/$uuid"
 mkdir -p "$resource_dir" || die_json "ERROR: cannot mkdir $resource_dir"
 resource_file="$resource_dir/resource.json"
 manifest_file="$upload_file_dir/manifest.json"
-resource_uri=""
+resource_uri="$upload_relpath"
 
 thumb_file="$upload_file_dir/thumbnail.jpg"
 thumb_area="upload"
@@ -321,8 +292,8 @@ url_encode() {
 
 protected_file_uri() {
   local area="$1" rel="$2"
-  printf '/wu_wei2/server/load-file.cgi?area=%s&path=%s&user_id=%s' \
-    "$(url_encode "$area")" "$(url_encode "$rel")" "$(url_encode "$user_id")"
+  printf '/wu_wei2/server/load-file.cgi?area=%s&path=%s' \
+    "$(url_encode "$area")" "$(url_encode "$rel")"
 }
 
 # protected runtime file uri; resource JSON stores area/path instead.
@@ -490,7 +461,6 @@ case "$content_type" in
 esac
 if is_office_file "$filename"; then media_kind="document"; fi
 
-mkdir -p "$sha_index_dir" || die_json "ERROR: cannot mkdir $sha_index_dir"
 cat >"$manifest_file" <<JSON || die_json "ERROR: cannot write manifest file $manifest_file"
 {
   "id": "$(json_escape "$uuid")",
@@ -509,12 +479,16 @@ cat >"$manifest_file" <<JSON || die_json "ERROR: cannot write manifest file $man
   }$(if [ -f "$thumb_file" ]; then printf ',\n  "thumbnail": {\n    "file": "thumbnail.jpg",\n    "mime": "image/jpeg",\n    "size": %s,\n    "sha256": "%s",\n    "display_size": "%s"\n  }' "$(stat -c %s -- "$thumb_file" 2>/dev/null || echo 0)" "$(json_escape "$thumb_sha")" "$(json_escape "${w}x${h}")"; fi)$(if [ -n "$preview_pdf" ] && [ -f "$preview_pdf" ]; then printf ',\n  "preview": {\n    "file": "preview.pdf",\n    "mime": "application/pdf",\n    "size": %s,\n    "sha256": "%s",\n    "generated_by": "LibreOffice"\n  }' "$(stat -c %s -- "$preview_pdf" 2>/dev/null || echo 0)" "$(json_escape "$preview_sha")"; fi)
 }
 JSON
-cat >"$sha_index_file" <<JSON || die_json "ERROR: cannot write sha index $sha_index_file"
+path_index_file="$upload_root/_index/path/$upload_relpath.json"
+mkdir -p "$(dirname "$path_index_file")" || die_json "ERROR: cannot mkdir path index"
+cat >"$path_index_file" <<JSON || die_json "ERROR: cannot write path index $path_index_file"
 {
-  "sha256": "$(json_escape "$original_sha")",
+  "logicalPath": "$(json_escape "$upload_relpath")",
   "upload_id": "$(json_escape "$uuid")",
+  "actual_date": "$(json_escape "$upload_file_date")",
   "date": "$(json_escape "$upload_file_date")",
-  "file": "$(json_escape "$filename")"
+  "file": "$(json_escape "$filename")",
+  "manifest": "$(json_escape "$upload_file_date/$upload_file_uuid/manifest.json")"
 }
 JSON
 
@@ -522,6 +496,9 @@ cat >"$resource_file" <<JSON || die_json "ERROR: cannot write resource file $res
 {
   "id": "$(json_escape "$uuid")",
   "type": "Resource",
+  "source": "upload",
+  "uri": "$(json_escape "$upload_relpath")",
+  "canonicalUri": "$(json_escape "$upload_relpath")",
   "origin": {
     "type": "userRegistered",
     "subtype": "uploadedDocument",
@@ -529,8 +506,8 @@ cat >"$resource_file" <<JSON || die_json "ERROR: cannot write resource file $res
   },
   "identity": {
     "title": "$(json_escape "$name")",
-    "canonicalUri": "",
-    "uri": ""
+    "canonicalUri": "$(json_escape "$upload_relpath")",
+    "uri": "$(json_escape "$upload_relpath")"
   },
   "media": {
     "kind": "$(json_escape "$media_kind")",
@@ -552,17 +529,21 @@ cat >"$resource_file" <<JSON || die_json "ERROR: cannot write resource file $res
     "copyPolicy": "reference",
     "manifest": {
       "area": "upload",
-      "path": "$(json_escape "$upload_file_date/$upload_file_uuid/manifest.json")"
+      "path": "$(json_escape "$upload_file_date/$upload_file_uuid/manifest.json")",
+      "dir_name": "$(json_escape "data/$user_id/upload/$upload_file_date/$upload_file_uuid")",
+      "file_name": "manifest.json"
     },
     "files": [
       {
         "role": "original",
         "area": "upload",
         "path": "$(json_escape "$upload_relpath")",
+        "dir_name": "$(json_escape "data/$user_id/upload/$upload_file_date/$upload_file_uuid")",
+        "file_name": "$(json_escape "$filename")",
         "mimeType": "$(json_escape "$content_type")",
         "size": ${totalsize:-0},
         "sha256": "$(json_escape "$original_sha")"
-      }$(if [ -f "$thumb_file" ]; then printf ',\n      {\n        "role": "thumbnail",\n        "area": "upload",\n        "path": "%s",\n        "mimeType": "image/jpeg",\n        "size": %s,\n        "sha256": "%s"\n      }' "$(json_escape "${thumb_file#$upload_root/}")" "$(stat -c %s -- "$thumb_file" 2>/dev/null || echo 0)" "$(json_escape "$thumb_sha")"; fi)$(if [ -n "$preview_pdf" ] && [ -f "$preview_pdf" ]; then printf ',\n      {\n        "role": "preview",\n        "area": "upload",\n        "path": "%s",\n        "mimeType": "application/pdf",\n        "size": %s,\n        "sha256": "%s"\n      }' "$(json_escape "${preview_pdf#$upload_root/}")" "$(stat -c %s -- "$preview_pdf" 2>/dev/null || echo 0)" "$(json_escape "$preview_sha")"; fi)
+      }$(if [ -f "$thumb_file" ]; then printf ',\n      {\n        "role": "thumbnail",\n        "area": "upload",\n        "path": "%s",\n        "dir_name": "%s",\n        "file_name": "thumbnail.jpg",\n        "mimeType": "image/jpeg",\n        "size": %s,\n        "sha256": "%s"\n      }' "$(json_escape "${thumb_file#$upload_root/}")" "$(json_escape "data/$user_id/upload/$upload_file_date/$upload_file_uuid")" "$(stat -c %s -- "$thumb_file" 2>/dev/null || echo 0)" "$(json_escape "$thumb_sha")"; fi)$(if [ -n "$preview_pdf" ] && [ -f "$preview_pdf" ]; then printf ',\n      {\n        "role": "preview",\n        "area": "upload",\n        "path": "%s",\n        "dir_name": "%s",\n        "file_name": "preview.pdf",\n        "mimeType": "application/pdf",\n        "size": %s,\n        "sha256": "%s"\n      }' "$(json_escape "${preview_pdf#$upload_root/}")" "$(json_escape "data/$user_id/upload/$upload_file_date/$upload_file_uuid")" "$(stat -c %s -- "$preview_pdf" 2>/dev/null || echo 0)" "$(json_escape "$preview_sha")"; fi)
     ]
   },
   "rights": {
@@ -593,6 +574,8 @@ if [[ "$content_type" == application/pdf* || "$content_type" == image/* || -n "$
   "option":"upload",
   "contenttype":"$(json_escape "${contenttype:-$content_type}")",
   "uri":"$(json_escape "$file_uri")",
+  "url":"$(json_escape "${preview_pdf_url:-$file_uri}")",
+  "download_url":"$(json_escape "$file_uri")",
   "value":{
     "totalsize":"$(json_escape "${totalsize:-}")",
     "lastmodified":"$(json_escape "${lastmodified:-}")",
@@ -613,6 +596,8 @@ else
   "option":"upload",
   "contenttype":"$(json_escape "${contenttype:-$content_type}")",
   "uri":"$(json_escape "$file_uri")",
+  "url":"$(json_escape "$file_uri")",
+  "download_url":"$(json_escape "$file_uri")",
   "value":{
     "totalsize":"$(json_escape "${totalsize:-}")",
     "lastmodified":"$(json_escape "${lastmodified:-}")",
