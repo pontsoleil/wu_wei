@@ -694,3 +694,108 @@ def collect_ver1_note_record(note_root: Path, file_path: Path) -> Dict[str, obje
         "note_format": "ver1",
         "loader": "load-note-v1",
     }
+
+
+def _decoded_legacy_note(path: Path) -> object:
+    try:
+        return json.loads(decode_ver1_note_file(path))
+    except Exception:
+        return {}
+
+
+def _has_ver0_shape(note: object) -> bool:
+    if not isinstance(note, dict):
+        return False
+    if isinstance(note.get("resources"), dict) and note.get("resources"):
+        return True
+    if isinstance(note.get("associations"), dict) and note.get("associations"):
+        return True
+    if isinstance(note.get("page"), dict):
+        return True
+
+    pages = note.get("pages")
+    if isinstance(pages, dict):
+        page_iter = pages.values()
+    elif isinstance(pages, list):
+        page_iter = pages
+    else:
+        page_iter = []
+
+    for page in page_iter:
+        if not isinstance(page, dict):
+            continue
+        for node in page.get("nodes") or []:
+            if isinstance(node, dict) and "idx" in node:
+                return True
+        for link in page.get("links") or []:
+            if isinstance(link, dict) and "idx" in link:
+                return True
+    return False
+
+
+def _is_2024_yyyy_mm_file(path: Path) -> bool:
+    return (
+        path.is_file()
+        and path.name != NOTE_JSON_FILENAME
+        and re.match(r"^\d{2}$", path.parent.name or "") is not None
+        and path.parent.parent.name == "2024"
+    )
+
+
+def is_ver0_note_file(path: Path) -> bool:
+    path = Path(path)
+    if not path.is_file() or path.name == NOTE_JSON_FILENAME:
+        return False
+    if not (_is_2024_yyyy_mm_file(path) or is_ver1_note_file(path)):
+        return False
+    note = _decoded_legacy_note(path)
+    return _is_2024_yyyy_mm_file(path) or _has_ver0_shape(note)
+
+
+def read_ver0_note_meta(path: Path) -> Dict[str, str]:
+    path = Path(path)
+    out = read_ver1_note_meta(path)
+    note = _decoded_legacy_note(path)
+    if isinstance(note, dict):
+        out["id"] = str(note.get("note_id") or note.get("note_uuid") or out.get("id") or path.name)
+        out["name"] = str(note.get("note_name") or note.get("name") or out.get("name") or "")
+        out["description"] = str(note.get("description") or out.get("description") or "")
+        if not out.get("thumbnail"):
+            out["thumbnail"] = _legacy_note_thumbnail_from_decoded_json(note)
+    return out
+
+
+def list_ver0_note_files(note_root: Path, include_new_note: bool = False) -> List[Path]:
+    note_root = Path(note_root)
+    if not note_root.exists():
+        return []
+    files: List[Path] = []
+    for p in note_root.rglob("*"):
+        if not is_ver0_note_file(p):
+            continue
+        if not include_new_note and "new_note" in p.relative_to(note_root).parts:
+            continue
+        files.append(p)
+    files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return files
+
+
+def collect_ver0_note_record(note_root: Path, file_path: Path) -> Dict[str, object]:
+    note_root = Path(note_root)
+    file_path = Path(file_path)
+    relpath = file_path.relative_to(note_root).as_posix()
+    meta = read_ver0_note_meta(file_path)
+    return {
+        "id": meta.get("id") or file_path.name,
+        "user_id": meta.get("user_id", ""),
+        "note_name": meta.get("name", ""),
+        "description": meta.get("description", ""),
+        "dir": relpath,
+        "note_key": relpath,
+        "size": file_path.stat().st_size,
+        "timestamp": note_timestamp(file_path),
+        "file": file_path.name,
+        "thumbnail": meta.get("thumbnail", ""),
+        "note_format": "ver0",
+        "loader": "load-note-v0",
+    }

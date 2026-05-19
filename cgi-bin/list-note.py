@@ -8,6 +8,7 @@ from cgi_common import (
     ENV_FILE,
     PUBLIC_USER_IDS,
     collect_note_record,
+    collect_ver0_note_record,
     collect_ver1_note_record,
     decode_note_json,
     debug,
@@ -18,6 +19,7 @@ from cgi_common import (
     get_session_user_id,
     json_response,
     list_note_files,
+    list_ver0_note_files,
     list_ver1_note_files,
     merge_query_and_body_params,
     normalise_posint,
@@ -44,6 +46,8 @@ def note_date_from_path(root: Path, path: Path) -> str:
         parts = path.parts
     if len(parts) >= 3 and re.match(r"^\d{4}$", parts[0]) and re.match(r"^\d{2}$", parts[1]) and re.match(r"^\d{2}$", parts[2]):
         return f"{parts[0]}-{parts[1]}-{parts[2]}"
+    if len(parts) >= 2 and re.match(r"^\d{4}$", parts[0]) and re.match(r"^\d{2}$", parts[1]):
+        return f"{parts[0]}-{parts[1]}-01"
     try:
         from datetime import datetime
         return datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d")
@@ -159,11 +163,10 @@ def main():
         truthy(params.get("draft", ""))
     )
     note_format = str(params.get("note_format", "") or params.get("format", "") or "").strip().lower()
-    # Local Python CGI supports current ver2 notes and app ver1 notes only.
-    # v0/pre-v1 notes are handled by the server-side shell CGI deployment.
-    include_ver0 = False
+    include_ver0 = truthy(params.get("include_ver0", "")) or truthy(params.get("include_v0", ""))
     include_ver1 = truthy(params.get("include_ver1", "")) or truthy(params.get("include_v1", "")) or truthy(params.get("legacy", ""))
     if note_format == "ver0":
+        include_ver0 = True
         include_ver1 = False
     elif note_format == "ver1":
         include_ver1 = True
@@ -176,13 +179,16 @@ def main():
     start_date = parse_date(params.get("start_date", "") or params.get("from", ""))
     end_date = parse_date(params.get("end_date", "") or params.get("to", ""))
     if note_format == "ver0":
-        files = []
+        files = list_ver0_note_files(root, include_new_note=include_new_note)
     elif note_format == "ver1":
         files = list_ver1_note_files(root, include_new_note=include_new_note)
     else:
         files = list_note_files(root, include_new_note=include_new_note)
+        if include_ver0:
+            files.extend(list_ver0_note_files(root, include_new_note=include_new_note))
         if include_ver1:
             files.extend(list_ver1_note_files(root, include_new_note=include_new_note))
+        if include_ver0 or include_ver1:
             files = sorted(set(files), key=lambda p: p.stat().st_mtime, reverse=True)
     files = filter_notes(files, root, year=year, month=month, date=date, start_date=start_date, end_date=end_date, term=term)
     total = len(files)
@@ -205,10 +211,13 @@ def main():
         for p in selected:
             debug(f"selected file={p}")
 
+    ver0_files = set(list_ver0_note_files(root, include_new_note=True))
     notes = []
     for p in selected:
         if p.name == "note.json":
             notes.append(add_note_key(root, p))
+        elif p in ver0_files:
+            notes.append(collect_ver0_note_record(root, p))
         else:
             notes.append(collect_ver1_note_record(root, p))
     debug_kv(notes_built=len(notes))

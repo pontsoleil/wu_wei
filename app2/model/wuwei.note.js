@@ -691,8 +691,23 @@ wuwei.note = (function () {
     };
   }
 
+  function prepareNoteForV2Runtime(note) {
+    /*
+     * Transitional hook.  wuwei.note.js itself keeps the normal v2 loading path
+     * simple; incomplete quasi-v2 notes are first materialized by
+     * wuwei.note.v2.js when that migration module is loaded.
+     * After all existing notes have been opened and saved as complete v2 notes,
+     * remove wuwei.note.v2.js and this optional call.
+     */
+    if (wuwei && wuwei.note && wuwei.note.v2 &&
+        typeof wuwei.note.v2.normalize === 'function') {
+      return wuwei.note.v2.normalize(note, { inPlace: false });
+    }
+    return note;
+  }
+
   function normalizeNote(note) {
-    var src = note || {};
+    var src = prepareNoteForV2Runtime(note || {});
     var resources = cloneArray(src.resources).map(normalizeResourceDefinition);
     var resourceById = {};
     var pages, currentPage;
@@ -898,12 +913,21 @@ wuwei.note = (function () {
       if (!node || node.topicKind !== 'contents-page') {
         return null;
       }
-      return {
+      var entry = {
         role: 'entry',
         nodeId: node.id,
+        order: Number.isFinite(Number(member && member.order)) ? Number(member.order) : undefined,
         pageNumber: Number.isFinite(Number(node.pageNumber)) ? Math.max(1, Math.floor(Number(node.pageNumber))) : 1,
+        label: String(node.label || ''),
         comment: node.description && typeof node.description.body === 'string' ? node.description.body : ''
       };
+      if (typeof node.anchorHref === 'string' && node.anchorHref) {
+        entry.anchorHref = node.anchorHref;
+      }
+      if (typeof node.htmlAnchorHref === 'string' && node.htmlAnchorHref) {
+        entry.htmlAnchorHref = node.htmlAnchorHref;
+      }
+      return entry;
     }).filter(Boolean);
   }
 
@@ -1075,6 +1099,7 @@ wuwei.note = (function () {
     // Build a clean JSON that contains only pages -> nodes/links.
     // (D3 may mutate link endpoints to objects; normalise them back to id strings.)
     const noteToSave = {
+      dataModel: { name: 'wuwei.note', version: 'v2' },
       note_id: current.note_id,
       note_name: current.note_name,
       description: current.description,
@@ -1134,6 +1159,7 @@ wuwei.note = (function () {
 
     const currentPageThumbnail = snapshotCurrentPageThumbnail();
     const noteToExport = {
+      dataModel: { name: 'wuwei.note', version: 'v2' },
       note_id: current.note_id,
       note_name: current.note_name || '',
       description: current.description || '',
@@ -1968,4 +1994,4 @@ wuwei.note = (function () {
     initModule: initModule
   };
 })();
-// wuwei.note.js last modified 2026-05-11
+// wuwei.note.js last modified 2026-05-19
