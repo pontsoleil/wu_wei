@@ -4,8 +4,6 @@
 # Import a WuWei note export package without delegating to Python.
 # The exported note identity is preserved.  Legacy v0/v1 note ids that start
 # with '_' are valid and must not be rejected as UUID errors.
-#
-# last modified 2026-05-20
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "${SCRIPT_FILENAME:-$0}")" && pwd) || exit 1
 cd "$SCRIPT_DIR" || exit 1
