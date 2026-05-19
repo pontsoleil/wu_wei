@@ -90,6 +90,36 @@ wuwei.menu.note = wuwei.menu.note || {};
     }
   }
 
+
+
+  function escapeAttr(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function renderNoteListThumbnail(value) {
+    var thumbnail = decodeMaybe(value || '').trim();
+    var src;
+
+    if (!thumbnail) {
+      return '';
+    }
+
+    // Existing notes may store the thumbnail as an SVG fragment.
+    if (thumbnail.charAt(0) === '<') {
+      return thumbnail;
+    }
+
+    // Legacy v0/v1 note lists may store the thumbnail as a URL or local path.
+    // Do not discard it; expand it into an image element for the gallery.
+    src = thumbnail.replace(/\\/g, '/');
+    return '<img class="thumbnail" src="' + escapeAttr(src) + '" alt="">';
+  }
+
   function notifyError(error) {
     if ('warn' === error.type) {
       wuwei.menu.snackbar.open({ type: 'warning', message: error.message });
@@ -276,8 +306,7 @@ wuwei.menu.note = wuwei.menu.note || {};
         notes = [];
 
         for (const data of _notes) {
-          let thumbnail = decodeMaybe(data.thumbnail || '');
-          if (!thumbnail || thumbnail[0] !== '<') thumbnail = '';
+          const thumbnail = renderNoteListThumbnail(data.thumbnail || '');
 
           const noteKey = String(data.note_key || data.key || data.dir || data.id || '');
           thumbnails[noteKey] = thumbnail;
@@ -430,8 +459,7 @@ wuwei.menu.note = wuwei.menu.note || {};
         notes = [];
 
         for (const data of _notes) {
-          let thumbnail = decodeMaybe(data.thumbnail || '');
-          if (!thumbnail || thumbnail[0] !== '<') thumbnail = '';
+          const thumbnail = renderNoteListThumbnail(data.thumbnail || '');
 
           const noteKey = String(data.note_key || data.key || data.dir || data.id || '');
           thumbnails[noteKey] = thumbnail;
@@ -695,43 +723,28 @@ wuwei.menu.note = wuwei.menu.note || {};
     try {
       const current = wuwei.common.current || {};
       const cu = wuwei.common.state && wuwei.common.state.currentUser;
-      const canUseServerBundle = current.note_id && cu && cu.user_id;
-      if (canUseServerBundle) {
-        wuwei.note.saveNote().then(function () {
-          const action = wuwei.util.getAction('export-note');
-          const url = `${action}?id=${encodeURIComponent(wuwei.common.current.note_id)}&user_id=${encodeURIComponent(cu.user_id)}`;
-          const anchor = document.createElement('a');
-          anchor.href = url;
-          anchor.download = makeFileName('.zip');
-          document.body.appendChild(anchor);
-          anchor.click();
-          anchor.remove();
-        }).catch(function (e) {
-          console.error(e);
-          wuwei.menu.snackbar.open({
-            type: 'error',
-            message: e && e.message ? e.message : 'ERROR Failed to download note file'
-          });
-        });
+      if (!cu || !cu.user_id) {
+        wuwei.menu.snackbar.open({ type: 'error', message: 'ERROR NOT LOGGED IN' });
         return;
       }
-
-      const text = wuwei.note.exportNoteText();
-      Promise.resolve(text).then(function (noteText) {
-        const blob = new Blob([noteText], { type: 'application/json;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
+      wuwei.note.saveNote().then(function () {
+        const noteId = wuwei.common.current && wuwei.common.current.note_id;
+        if (!noteId) {
+          throw new Error('ERROR NOTE ID NOT FOUND');
+        }
+        const action = wuwei.util.getAction('export-note');
+        const url = `${action}?id=${encodeURIComponent(noteId)}&user_id=${encodeURIComponent(cu.user_id)}`;
         const anchor = document.createElement('a');
         anchor.href = url;
-        anchor.download = makeFileName('.txt');
+        anchor.download = makeFileName('.zip');
         document.body.appendChild(anchor);
         anchor.click();
         anchor.remove();
-        URL.revokeObjectURL(url);
       }).catch(function (e) {
         console.error(e);
         wuwei.menu.snackbar.open({
           type: 'error',
-          message: e && e.message ? e.message : 'ERROR Failed to download note file'
+          message: e && e.message ? e.message : 'ERROR Failed to export note'
         });
       });
     }
@@ -739,7 +752,7 @@ wuwei.menu.note = wuwei.menu.note || {};
       console.error(e);
       wuwei.menu.snackbar.open({
         type: 'error',
-        message: e && e.message ? e.message : 'ERROR Failed to download note file'
+        message: e && e.message ? e.message : 'ERROR Failed to export note'
       });
     }
   }
@@ -768,7 +781,7 @@ wuwei.menu.note = wuwei.menu.note || {};
     }
     input.value = '';
     input.onchange = importFile;
-    input.accept = '.zip,.txt,.json,.wuwei,.note,application/zip,application/json,text/plain';
+    input.accept = '.zip,application/zip';
     input.click();
     return false;
   }
@@ -807,16 +820,6 @@ wuwei.menu.note = wuwei.menu.note || {};
       wuwei.menu.snackbar.open({ type: 'error', message: 'ERROR NOT LOGGED IN' });
       return;
     }
-    const clientNotePromise = readNoteJsonFromZipInBrowser(file)
-      .then(function (clientNoteJson) {
-        console.log('[WuWei import debug] browser ZIP note JSON', clientNoteJson);
-        console.log('[WuWei import debug] browser ZIP summary', summarizeImportedNote(clientNoteJson));
-        return clientNoteJson;
-      })
-      .catch(function (e) {
-        console.warn('[WuWei import debug] browser ZIP note JSON read failed:', e);
-        return null;
-      });
     const form = new FormData();
     form.append('user_id', cu.user_id);
     form.append('file', file);
@@ -840,22 +843,8 @@ wuwei.menu.note = wuwei.menu.note || {};
         console.log('import response:', text);
         throw new Error('ERROR Invalid imported note JSON');
       }
-      console.log('[WuWei import debug] server import-note response text', text);
-      console.log('[WuWei import debug] server import-note JSON', noteJson);
-      console.log('[WuWei import debug] server import-note summary', summarizeImportedNote(noteJson));
-      return clientNotePromise.then(function (clientNoteJson) {
-        if (clientNoteJson) {
-          const clientText = JSON.stringify(clientNoteJson);
-          const serverText = JSON.stringify(noteJson);
-          console.log('[WuWei import debug] server/browser JSON equal', serverText === clientText);
-          if (serverText !== clientText) {
-            console.log('[WuWei import debug] browser-only JSON text', clientText);
-            console.log('[WuWei import debug] server JSON text', serverText);
-          }
-        }
-        applyImportedNote(noteJson);
-        wuwei.menu.snackbar.open({ type: 'success', message: 'Imported note bundle' });
-      });
+      applyImportedNote(noteJson);
+      wuwei.menu.snackbar.open({ type: 'success', message: 'Imported note bundle' });
     }).catch(function (e) {
       console.error(e);
       wuwei.menu.snackbar.open({
@@ -872,26 +861,7 @@ wuwei.menu.note = wuwei.menu.note || {};
       importZipFile(file);
       return;
     }
-    const reader = new FileReader();
-    reader.onload = function () {
-      try {
-        const text = noteJsonTextFromFileText(reader.result);
-        const noteJson = JSON.parse(text);
-        applyImportedNote(noteJson);
-        wuwei.menu.snackbar.open({ type: 'success', message: 'Imported note file' });
-      }
-      catch (e) {
-        console.error(e);
-        wuwei.menu.snackbar.open({
-          type: 'error',
-          message: e && e.message ? e.message : 'ERROR Failed to import note file'
-        });
-      }
-    };
-    reader.onerror = function () {
-      wuwei.menu.snackbar.open({ type: 'error', message: 'ERROR Failed to read note file' });
-    };
-    reader.readAsText(file, 'utf-8');
+    wuwei.menu.snackbar.open({ type: 'error', message: 'ERROR Import note requires export ZIP' });
   }
 
   function getNoteRef(el) {

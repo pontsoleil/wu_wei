@@ -176,12 +176,12 @@ wuwei.menu.markup = (function () {
       </div>
       <div class="operator Download loggedin" ${state.viewOnly ? 'style="display:none"' : ''}>
         <i class="fas fa-file-download fa-fw"></i>
-        <span>${translate('Download note file')}</span>
+        <span>${translate('Export note')}</span>
       </div>
       <div class="operator UploadNote loggedin" ${state.viewOnly ? 'style="display:none"' : ''}>
         <i class="fas fa-file-upload fa-fw"></i>
-        <span>${translate('Upload note file')}</span>
-        <input id="noteFileInput" type="file" accept=".zip,.txt,.json,.wuwei,.note,application/zip,application/json,text/plain" style="display:none">
+        <span>${translate('Import note')}</span>
+        <input id="noteFileInput" type="file" accept=".zip,application/zip" style="display:none">
       </div>
       <div class="operator Publish loggedin" ${state.viewOnly ? 'style="display:none"' : ''}>
         <i class="fas fa-share-square fa-fw"></i>
