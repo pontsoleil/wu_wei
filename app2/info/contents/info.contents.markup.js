@@ -89,6 +89,7 @@ wuwei.info.contents.markup = (function () {
     var documentName = (param && param.documentName) || '';
     var markerLabel = point.label || ('p.' + pageNumber);
     var viewerUri = String((param && param.viewerUri) || '');
+    var anchorHref = String(point.htmlAnchorHref || point.anchorHref || '');
     var description = (point.description && 'object' === typeof point.description)
       ? point.description.body
       : (point.value || '');
@@ -101,6 +102,7 @@ wuwei.info.contents.markup = (function () {
       '<div class="contents-grid">' +
       block(null, markerLabel, 'marker-label') +
       block(t('Page number'), pageNumber, 'page') +
+      (anchorHref ? block(t('Anchor href'), anchorHref, 'anchor') : '') +
       // block(t('Axis'), (param && param.axisName) || '', 'axis') +
       // block(t('Document'), documentName, 'document') +
       '</div>' +

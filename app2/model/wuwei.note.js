@@ -706,6 +706,14 @@ wuwei.note = (function () {
     return note;
   }
 
+  function materializeNoteForV2Storage(note) {
+    if (wuwei && wuwei.note && wuwei.note.v2 &&
+        typeof wuwei.note.v2.normalize === 'function') {
+      return wuwei.note.v2.normalize(note, { inPlace: false });
+    }
+    return note;
+  }
+
   function normalizeNote(note) {
     var src = prepareNoteForV2Runtime(note || {});
     var resources = cloneArray(src.resources).map(normalizeResourceDefinition);
@@ -1117,7 +1125,7 @@ wuwei.note = (function () {
 
     current.resources = noteToSave.resources;
     current.thumbnail = noteToSave.thumbnail;
-    const noteJson = JSON.stringify(noteToSave).trim();
+    const noteJson = JSON.stringify(materializeNoteForV2Storage(noteToSave)).trim();
 
     // const thumbEl = document.querySelector('div.thumbnail');
     // const iconHTML = thumbEl
@@ -1177,7 +1185,7 @@ wuwei.note = (function () {
 
     current.resources = noteToExport.resources;
     current.thumbnail = noteToExport.thumbnail;
-    return JSON.stringify(noteToExport).trim();
+    return JSON.stringify(materializeNoteForV2Storage(noteToExport)).trim();
   }
 
   function exportPortableNoteText() {
