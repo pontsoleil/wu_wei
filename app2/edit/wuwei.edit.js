@@ -972,14 +972,14 @@ wuwei.edit = wuwei.edit || {};
     if (!target || !target.closest || !target.closest('#edit')) {
       return;
     }
-    if (!(target.classList && target.classList.contains('nFont_text-anchor'))) {
+    if (!(target.classList && target.classList.contains('font_text-anchor'))) {
       return;
     }
     event.preventDefault();
     event.stopPropagation();
     value = target.classList.contains('start') ? 'left' :
       (target.classList.contains('end') ? 'right' : 'center');
-    document.querySelectorAll('#edit .nFont_text-anchor.checked').forEach(function (el) {
+    document.querySelectorAll('#edit .font_text-anchor.checked').forEach(function (el) {
       el.classList.remove('checked');
     });
     target.classList.add('checked');

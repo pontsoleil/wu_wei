@@ -218,15 +218,15 @@
   display: block;
 }
 
-#edit div.nFont_text-anchor {
+#edit div.font_text-anchor {
   display: flex;
   align-items: center;
   gap: 4px;
 }
 
-#edit i.nFont_text-anchor,
-#edit svg.nFont_text-anchor,
-#edit .svg-inline--fa.nFont_text-anchor {
+#edit i.font_text-anchor,
+#edit svg.font_text-anchor,
+#edit .svg-inline--fa.font_text-anchor {
   display: inline-flex;
   justify-content: center;
   align-items: center;
@@ -236,21 +236,21 @@
   border-radius: 4px;
 }
 
-#edit i.nFont_text-anchor {
+#edit i.font_text-anchor {
   color: #505050;
   background: #fcfdfe;
 }
 
-#edit .nFont_text-anchor.checked,
-#edit .svg-inline--fa.nFont_text-anchor.checked {
+#edit .font_text-anchor.checked,
+#edit .svg-inline--fa.font_text-anchor.checked {
   color: #fcfdfe !important;
   background: #303030 !important;
   box-shadow: inset 0 0 0 1px #303030;
 }
 
-#edit i.nFont_text-anchor:not(.checked):hover,
-#edit svg.nFont_text-anchor:not(.checked):hover,
-#edit .svg-inline--fa.nFont_text-anchor:not(.checked):hover {
+#edit i.font_text-anchor:not(.checked):hover,
+#edit svg.font_text-anchor:not(.checked):hover,
+#edit .svg-inline--fa.font_text-anchor:not(.checked):hover {
   color: #fcfdfe;
   background: #808080;
 }

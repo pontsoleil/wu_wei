@@ -180,7 +180,7 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     });
     host.addEventListener('click', function (ev) {
       var target = ev.target;
-      if (!target || !(target.classList && target.classList.contains('nFont_text-anchor'))) {
+      if (!target || !(target.classList && target.classList.contains('font_text-anchor'))) {
         return;
       }
       ev.preventDefault();
@@ -233,7 +233,7 @@ wuwei.edit.contents = wuwei.edit.contents || {};
 
   function setLabelAlignIcons(align) {
     var value = normalizeTextAlign(align || 'center');
-    document.querySelectorAll('#edit-contents-page-marker i.nFont_text-anchor').forEach(function (el) {
+    document.querySelectorAll('#edit-contents-page-marker i.font_text-anchor').forEach(function (el) {
       el.classList.remove('checked');
       if ((value === 'left' && el.classList.contains('start')) ||
         (value === 'center' && el.classList.contains('middle')) ||
@@ -244,7 +244,7 @@ wuwei.edit.contents = wuwei.edit.contents || {};
   }
 
   function getLabelAlignFromIcons() {
-    var checked = document.querySelector('#edit-contents-page-marker i.nFont_text-anchor.checked');
+    var checked = document.querySelector('#edit-contents-page-marker i.font_text-anchor.checked');
     if (!checked) {
       return 'center';
     }

@@ -32,10 +32,10 @@ wuwei.edit.style.markup = (function () {
   function labelAlignIcons(value, size) {
     value = String(value || 'center').toLowerCase();
     return [
-      '<div class="nFont_text-anchor w3-col ' + (size || 's8') + '">',
-      '  <i class="nFont_text-anchor start fas fa-align-left ' + (value === 'left' ? 'checked' : '') + '" title="left"></i>',
-      '  <i class="nFont_text-anchor middle fas fa-align-center ' + (value === 'center' ? 'checked' : '') + '" title="center"></i>',
-      '  <i class="nFont_text-anchor end fas fa-align-right ' + (value === 'right' ? 'checked' : '') + '" title="right"></i>',
+      '<div class="font_text-anchor w3-col ' + (size || 's8') + '">',
+      '  <i class="font_text-anchor start fas fa-align-left ' + (value === 'left' ? 'checked' : '') + '" title="left"></i>',
+      '  <i class="font_text-anchor middle fas fa-align-center ' + (value === 'center' ? 'checked' : '') + '" title="center"></i>',
+      '  <i class="font_text-anchor end fas fa-align-right ' + (value === 'right' ? 'checked' : '') + '" title="right"></i>',
       '</div>'
     ].join('');
   }
