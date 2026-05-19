@@ -14,41 +14,14 @@ wuwei.edit.generic = wuwei.edit.generic || {};
 (function (ns) {
 
   function initColorPalettePicker(param) {
-    $('#style_fill_palette').colorPalettePicker({
-      lines: 6,
-      bootstrap: 4,
-      dropdownTitle: wuwei.nls.translate('Standard colours'),
-      buttonClass: 'btn btn-light btn-sm dropdown-toggle',
-      buttonPreviewName: 'styleFillPaletteSelected',
-      onSelected: function (fill) {
-        var input = document.getElementById('style_fill');
-        if (input) {
-          input.value = fill;
-          input.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-        else if (param && param.node) {
-          param.node.fill = fill;
-        }
-      }
-    });
-
-    $('#style_font_color_palette').colorPalettePicker({
-      lines: 6,
-      bootstrap: 4,
-      dropdownTitle: wuwei.nls.translate('Standard colours'),
-      buttonClass: 'btn btn-light btn-sm dropdown-toggle',
-      buttonPreviewName: 'styleFontColorPaletteSelected',
-      onSelected: function (font_color) {
-        var input = document.getElementById('style_font_color');
-        if (input) {
-          input.value = font_color;
-          input.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-        else if (param && param.node && param.node.font) {
-          param.node.font.color = font_color;
-        }
-      }
-    });
+    if (wuwei.edit.style && wuwei.edit.style.markup &&
+      typeof wuwei.edit.style.markup.initPalettes === 'function') {
+      wuwei.edit.style.markup.initPalettes({
+        target: param && param.node,
+        fillPaletteId: 'style_fill_palette',
+        fontPaletteId: 'style_font_color_palette'
+      });
+    }
   }
         
   function open(param) {

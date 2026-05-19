@@ -161,64 +161,20 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
   }
 
   function initColorPalettePicker() {
-    if (typeof jQuery === 'undefined' || !jQuery.fn || typeof jQuery.fn.colorPalettePicker !== 'function') {
+    if (!wuwei.edit.style || !wuwei.edit.style.markup ||
+      typeof wuwei.edit.style.markup.initPalette !== 'function') {
       return;
     }
 
-    jQuery('#editTimelineAxisStrokeColorPalette').colorPalettePicker({
-      lines: 6,
-      bootstrap: 4,
-      dropdownTitle: wuwei.nls.translate('Standard colours'),
-      buttonClass: 'btn btn-light btn-sm dropdown-toggle',
-      onSelected: function (color) {
-        var input = $('editTimelineAxisStrokeColor');
-        if (input) {
-          input.value = color;
-          input.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-      }
+    wuwei.edit.style.markup.initPalette('editTimelineAxisStrokeColorPalette', 'editTimelineAxisStrokeColor');
+    wuwei.edit.style.markup.initPaletteWithResolver('editTimelinePointColorPalette', function () {
+      return pointField('style_fill');
     });
-
-    jQuery('#editTimelinePointColorPalette').colorPalettePicker({
-      lines: 6,
-      bootstrap: 4,
-      dropdownTitle: wuwei.nls.translate('Standard colours'),
-      buttonClass: 'btn btn-light btn-sm dropdown-toggle',
-      onSelected: function (color) {
-        var input = pointField('style_fill');
-        if (input) {
-          input.value = color;
-          input.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-      }
+    wuwei.edit.style.markup.initPaletteWithResolver('editTimelinePointFontColorPalette', function () {
+      return pointField('style_font_color');
     });
-
-    jQuery('#editTimelinePointFontColorPalette').colorPalettePicker({
-      lines: 6,
-      bootstrap: 4,
-      dropdownTitle: wuwei.nls.translate('Standard colours'),
-      buttonClass: 'btn btn-light btn-sm dropdown-toggle',
-      onSelected: function (color) {
-        var input = pointField('style_font_color');
-        if (input) {
-          input.value = color;
-          input.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-      }
-    });
-
-    jQuery('#editTimelinePointOutlineColorPalette').colorPalettePicker({
-      lines: 6,
-      bootstrap: 4,
-      dropdownTitle: wuwei.nls.translate('Standard colours'),
-      buttonClass: 'btn btn-light btn-sm dropdown-toggle',
-      onSelected: function (color) {
-        var input = pointField('style_line_color');
-        if (input) {
-          input.value = color;
-          input.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-      }
+    wuwei.edit.style.markup.initPaletteWithResolver('editTimelinePointOutlineColorPalette', function () {
+      return pointField('style_line_color');
     });
   }
 
@@ -399,9 +355,17 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
     return '';
   }
 
-  function buildDescription(body) {
+  function getDescriptionFormat(point) {
+    if (point && point.description && typeof point.description === 'object' &&
+      typeof point.description.format === 'string') {
+      return point.description.format;
+    }
+    return 'plain/text';
+  }
+
+  function buildDescription(body, format) {
     return {
-      format: 'plain/text',
+      format: format || 'plain/text',
       body: body || ''
     };
   }
@@ -420,7 +384,12 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
       (menu.timeline && typeof menu.timeline.formatTime === 'function'
         ? menu.timeline.formatTime(point.mediaStart || 0)
         : '');
-    $('editTimelinePointValue').value = getDescriptionBody(point);
+    if (pointField('description_format')) {
+      pointField('description_format').value = getDescriptionFormat(point);
+    }
+    if (pointField('description_body')) {
+      pointField('description_body').value = getDescriptionBody(point);
+    }
     if (pointField('style_fill')) {
       pointField('style_fill').value = toHexColor(point.color || '#ffffff', '#ffffff');
     }
@@ -503,7 +472,10 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
         (menu.timeline && typeof menu.timeline.formatTime === 'function'
           ? menu.timeline.formatTime(mediaStart)
           : ''),
-      description: buildDescription($('editTimelinePointValue').value || '')
+      description: buildDescription(
+        pointField('description_body') ? pointField('description_body').value || '' : '',
+        pointField('description_format') ? pointField('description_format').value || 'plain/text' : 'plain/text'
+      )
     };
   }
 
@@ -1204,7 +1176,10 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
     if (record.segment.axisRole === 'start' || record.segment.axisRole === 'end') {
       menu.timeline.updateTimePoint(currentTarget, {
         label: $('editTimelinePointName').value || record.segment.label || '',
-        description: buildDescription($('editTimelinePointValue').value || '')
+        description: buildDescription(
+          pointField('description_body') ? pointField('description_body').value || '' : '',
+          pointField('description_format') ? pointField('description_format').value || 'plain/text' : 'plain/text'
+        )
       });
       applyPointStyle(record.segment);
       applyPointStyleToGroup(record.segment);

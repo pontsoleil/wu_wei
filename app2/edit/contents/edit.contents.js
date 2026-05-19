@@ -124,34 +124,14 @@ wuwei.edit.contents = wuwei.edit.contents || {};
   }
 
   function initColorPalette() {
-    if (!window.jQuery || !jQuery.fn || !jQuery.fn.colorPalettePicker) {
+    if (!wuwei.edit.style || !wuwei.edit.style.markup ||
+      typeof wuwei.edit.style.markup.initPalette !== 'function') {
       return;
     }
-    initPalette('editContentsAxisStrokeColorPalette', 'editContentsAxisStrokeColor');
-    initPalette('editContentsPageFillPalette', 'style_fill');
-    initPalette('editContentsPageOutlinePalette', 'style_line_color');
-    initPalette('editContentsPageFontPalette', 'style_font_color');
-  }
-
-  function initPalette(paletteId, inputId) {
-    var palette = $(paletteId);
-    if (!palette || palette.dataset.initialized === '1') {
-      return;
-    }
-    jQuery('#' + paletteId).colorPalettePicker({
-      lines: 4,
-      bootstrap: 4,
-      dropdownTitle: wuwei.nls.translate('Standard colours'),
-      buttonClass: 'btn btn-light btn-sm dropdown-toggle',
-      onSelected: function (color) {
-        var input = $(inputId);
-        if (input) {
-          input.value = color;
-          input.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-      }
-    });
-    palette.dataset.initialized = '1';
+    wuwei.edit.style.markup.initPalette('editContentsAxisStrokeColorPalette', 'editContentsAxisStrokeColor');
+    wuwei.edit.style.markup.initPalette('editContentsPageFillPalette', 'style_fill');
+    wuwei.edit.style.markup.initPalette('editContentsPageOutlinePalette', 'style_line_color');
+    wuwei.edit.style.markup.initPalette('editContentsPageFontPalette', 'style_font_color');
   }
 
   function bindEvents(host) {
@@ -224,6 +204,12 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     return node && node.description && typeof node.description.body === 'string'
       ? node.description.body
       : '';
+  }
+
+  function getDescriptionFormat(node) {
+    return node && node.description && typeof node.description.format === 'string'
+      ? node.description.format
+      : 'plain/text';
   }
 
   function clonePlain(value) {
@@ -674,6 +660,9 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     var anchorHref = htmlMarker ? normalizeAnchorHref(point.anchorHref || point.htmlAnchorHref || '') : '';
     $('editContentsPageMarkerId').value = point.id || '';
     $('label').value = point.label || '';
+    if ($('description_format')) {
+      $('description_format').value = getDescriptionFormat(point);
+    }
     $('description_body').value = getDescriptionBody(point);
     if ($('pageNumber')) {
       $('pageNumber').value = toPositiveInteger(point.pageNumber, 1);
@@ -904,7 +893,7 @@ wuwei.edit.contents = wuwei.edit.contents || {};
       : getLabelAlignFromIcons();
     labelValue = $('label').value || '';
     currentPoint.description = {
-      format: 'plain/text',
+      format: $('description_format') ? ($('description_format').value || 'plain/text') : 'plain/text',
       body: $('description_body').value || ''
     };
     if (!String(labelValue || '').trim() && !isCurrentHtmlPageMarker()) {

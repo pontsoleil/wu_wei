@@ -11,14 +11,16 @@ wuwei.edit.timeline.markup = (function () {
   function axisPanelHtml() {
     return [
       '<section id="edit-timeline-axis" class="edit-panel edit-timeline-panel" style="display:none;">',
-        '<h3 id="editTimelineAxisTitle" class="edit-panel-title">' + t('Timeline axis') + '</h3>',
+        '<h3 id="editTimelineAxisTitle" class="edit-panel-title">' + t('Edit perspective') + '</h3>',
         '<input type="hidden" id="editTimelineAxisId">',
         '<input type="hidden" id="editTimelineAxisStart" value="0">',
         '<input type="hidden" id="editTimelineAxisEnd" value="0">',
+        '<h4 class="edit-section-title">' + t('Source content') + '</h4>',
         '<div id="editTimelineAxisMediaRow" class="edit-field">',
           '<label for="editTimelineAxisMedia" class="w3-col s4">' + t('Media') + '</label>',
           '<input id="editTimelineAxisMedia" class="w3-col s8" type="text" readonly>',
         '</div>',
+        '<h4 class="edit-section-title">' + t('Axis properties') + '</h4>',
         '<div id="editTimelineAxisDirectionRow" class="edit-field">',
           '<label for="editTimelineAxisDirection" class="w3-col s4">' + t('Direction') + '</label>',
           '<select id="editTimelineAxisDirection" class="w3-col s8">',
@@ -98,33 +100,19 @@ wuwei.edit.timeline.markup = (function () {
           '<label for="editTimelinePointName" class="w3-col s4">' + t('Label') + '</label>',
           '<input id="editTimelinePointName" class="w3-col s8" type="text">',
         '</div>',
-        '<div class="edit-field">',
-          '<label for="editTimelinePointValue">' + t('info') + '</label>',
-          '<textarea id="editTimelinePointValue" rows="1"></textarea>',
-        '</div>',
+        wuwei.edit.style.markup.descriptionRows({
+          format: 'plain/text',
+          body: ''
+        }),
 
-        '<div class="edit-field">',
-          '<label for="style_fill" class="w3-col s6">' + t('Background Color') + '</label>',
-          '<div class="edit-color-inline">',
-            '<input id="style_fill" class="w3-col s6" type="color">',
-            '<div id="editTimelinePointColorPalette" class="edit-color-palette w3-col s6"></div>',
-          '</div>',
-        '</div>',
-
-        '<div class="edit-field">',
-          '<label for="style_line_width" class="w3-col s3">' + t('Outline') + '</label>',
-          '<input id="style_line_width" class="w3-col s3" type="number" step="1" min="0">',
-          '<input id="style_line_color" class="w3-col s3" type="color">',
-          '<div id="editTimelinePointOutlineColorPalette" class="edit-color-palette w3-col s3"></div>',
-        '</div>',
-
-        '<div class="edit-field">',
-          '<label for="style_font_color" class="w3-col s4">' + t('Text Color') + '</label>',
-          '<div class="edit-color-inline">',
-            '<input id="style_font_color" class="w3-col s4" type="color">',
-            '<div id="editTimelinePointFontColorPalette" class="edit-color-palette w3-col s4"></div>',
-          '</div>',
-        '</div>',
+        '<h4 class="edit-section-title">' + t('Representative appearance') + '</h4>',
+        wuwei.edit.style.markup.paintRows({
+          includeLine: true,
+          includeFontSize: false,
+          fillPaletteId: 'editTimelinePointColorPalette',
+          linePaletteId: 'editTimelinePointOutlineColorPalette',
+          fontPaletteId: 'editTimelinePointFontColorPalette'
+        }),
 
         '<div class="edit-field">',
           '<label for="applyToTimelineGroup" class="w3-col s10">' + t('Apply to group members') + '</label>',

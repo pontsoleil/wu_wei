@@ -25,8 +25,6 @@ wuwei.menu = wuwei.menu || {};
     /** state */
     state = common.state,
     currentUser = state.currentUser,
-    // user = currentUser.user,
-    // user_id = currentUser.user_id,
     /** model */
     model = wuwei.model,
     note = wuwei.note,
@@ -4486,7 +4484,9 @@ wuwei.menu = wuwei.menu || {};
         var node = getContextTarget(allNodes);
         return !!(node && isRepresentativeTopic(node) &&
           graph.mode !== 'view' && !state.viewOnly && !state.published &&
-          !state.Selecting && !state.Connecting);
+          !state.Selecting && !state.Connecting &&
+          !isContextTimelineAxis(allNodes) &&
+          !isContextContentsAxis(allNodes));
       },
       null,
       'fas fa-palette fa-lg fa-fw'
@@ -5047,22 +5047,6 @@ wuwei.menu = wuwei.menu || {};
       null,
     ],
 
-    // 'timemachine': ['Timemachine',
-    //   function () {
-    //     if (state.loggedIn &&
-    //       current.note_id &&
-    //       util.notEmpty(current.note_name) &&
-    //       util.notEmpty(util.getNoteOwnerUserId(current)) &&
-    //       auth.currentUser &&
-    //       util.getNoteOwnerUserId(current) === (auth.currentUser.user_id || auth.currentUser._id)) {
-    //       return true;
-    //     }
-    //     return false;
-    //   },
-    //   null,
-    //   'fa fa-history fa-lg fa-fw'
-    // ],
-
     'newPage': ['New Page',
       function () {
         const current = wuwei.common.current;
@@ -5160,7 +5144,7 @@ wuwei.menu = wuwei.menu || {};
       'far fa-trash-alt fa-lg fa-fw'
     ],
 
-    'editTimelineAxisProps': ['Axis properties',
+    'editTimelineAxisProps': ['Edit perspective',
       function (allNodes) {
         return !state.Selecting &&
           !state.Connecting &&

@@ -18,15 +18,22 @@
 
   <link rel="shortcut icon" href="favicon.ico" type="image/vnd.microsoft.ico" />
 
-  <!-- third-party stylesheets (keep minimal; app2 CSS expects FontAwesome classes) -->
+  <!-- 1. フォント定義 -->
+  <link rel="stylesheet" href="css/fonts_googleapis_css/Roboto.css">
+  <link rel="stylesheet" href="css/fonts_googleapis_css/Montserrat.css">
+
+  <!-- 2. Bootstrap -->
+  <link rel="stylesheet" href="css/bootstrap_4.1.3_css/bootstrap.css">
+
+  <!-- 3. W3.CSS -->
   <link rel="stylesheet" href="css/w3css/4/w3.css">
-  <link rel="stylesheet" href="css/fontawesome-free-5.8.1-web/css/all.css">
 
-  <!-- app2 stylesheets -->
+  <!-- 4. Font Awesome -->
+  <link rel="stylesheet" href="css/fontawesome-free-5.8.1-web/css/all.min.css">
+
+  <!-- 5. WuWei 固有CSS app2 stylesheets -->
   <link type="text/css" rel="stylesheet" href="app2/wuwei.css" />
-
   <link type="text/css" rel="stylesheet" href="app2/home/wuwei.home.css" />
-
   <link type="text/css" rel="stylesheet" href="app2/draw/wuwei.draw.css" />
   <link type="text/css" rel="stylesheet" href="app2/menu/wuwei.menu.css" />
   <link type="text/css" rel="stylesheet" href="app2/menu/login/menu.login.css" />
@@ -40,14 +47,12 @@
   <link type="text/css" rel="stylesheet" href="app2/menu/progressbar/menu.progressbar.css" />
   <!-- <link type="text/css" rel="stylesheet" href="app2/menu/setting/menu.setting.css" />
   <link type="text/css" rel="stylesheet" href="app2/menu/timeline/menu.timeline.css" /> -->
-
   <link type="text/css" rel="stylesheet" href="app2/edit/wuwei.edit.css" />
   <link type="text/css" rel="stylesheet" href="app2/edit/generic/edit.generic.css" />
   <link type="text/css" rel="stylesheet" href="app2/edit/uploaded/edit.uploaded.css" />
   <link type="text/css" rel="stylesheet" href="app2/edit/video/edit.video.css" />
   <link type="text/css" rel="stylesheet" href="app2/edit/link/edit.link.css" />
   <link type="text/css" rel="stylesheet" href="app2/edit/timeline/edit.timeline.css" />
-
   <link type="text/css" rel="stylesheet" href="app2/info/wuwei.info.css" />
   <link type="text/css" rel="stylesheet" href="app2/info/generic/info.generic.css" />
   <link type="text/css" rel="stylesheet" href="app2/info/uploaded/info.uploaded.css" />
@@ -55,13 +60,14 @@
   <link type="text/css" rel="stylesheet" href="app2/info/asciidoc/info.asciidoc.css" />
   <link type="text/css" rel="stylesheet" href="app2/info/timeline/info.timeline.css" />
   <link type="text/css" rel="stylesheet" href="app2/info/contents/info.contents.css" />
-
   <!-- <link type="text/css" rel="stylesheet" href="app2/filter/wuwei.filter.css" /> -->
-
   <link type="text/css" rel="stylesheet" href="app2/search/wuwei.search.css" />
   <link type="text/css" rel="stylesheet" href="app2/search/this_note/search.this_note.css" />
   <!-- <link type="text/css" rel="stylesheet" href="app2/search/note/search.note.css" />
   <link type="text/css" rel="stylesheet" href="app2/search/uploaded/search.uploaded.css" /> -->
+
+  <!-- 6. 最終上書きCSS -->
+  <link rel="stylesheet" href="css/wuwei.override.css">
 
   <!-- third-party javascript -->
   <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
@@ -138,6 +144,8 @@
   <script type="text/javascript" src="app2/model/wuwei.note.js"></script>
   <!-- transitional v2 normalizer: remove after all notes have been saved as complete v2 -->
   <script type="text/javascript" src="app2/model/wuwei.note.v2.js"></script>
+  <script type="text/javascript" src="app2/model/wuwei.note.v0.js"></script>
+  <script type="text/javascript" src="app2/model/wuwei.note.v1.js"></script>
   <script type="text/javascript" src="app2/model/wuwei.log.js"></script>
   <script type="text/javascript" src="app2/model/wuwei.video.js"></script>
   <script type="text/javascript" src="app2/model/wuwei.timeline.js"></script>
@@ -178,6 +186,8 @@
   <!-- edit -->
   <script type="text/javascript" src="app2/edit/wuwei.edit.js"></script>
   <script type="text/javascript" src="app2/edit/wuwei.edit.markup.js"></script>
+  <script type="text/javascript" src="app2/edit/style/edit.style.js"></script>
+  <script type="text/javascript" src="app2/edit/style/edit.style.markup.js"></script>
   <script type="text/javascript" src="app2/edit/generic/edit.generic.js"></script>
   <script type="text/javascript" src="app2/edit/generic/edit.generic.markup.js"></script>
   <script type="text/javascript" src="app2/edit/group/edit.group.js"></script>
@@ -210,20 +220,19 @@
   <script type="text/javascript" src="app2/info/contents/info.contents.markup.js"></script>
   <script type="text/javascript" src="app2/info/video/info.video.js"></script>
   <script type="text/javascript" src="app2/info/video/info.video.markup.js"></script>
-
-  <!-- search/filter modules -->
+  <!-- search modules -->
   <script type="text/javascript" src="app2/search/wuwei.search.js"></script>
   <script type="text/javascript" src="app2/search/wuwei.search.markup.js"></script>
   <script type="text/javascript" src="app2/search/this_note/search.this_note.js"></script>
   <script type="text/javascript" src="app2/search/this_note/search.this_note.markup.js"></script>
-
+  <!-- filter module -->
   <script type="text/javascript" src="app2/filter/wuwei.filter.js"></script>
 
 </head>
 
 <body>
   <span id="noscript"></span>
-  
+
   <div id="home" style="display:none"></div>
 
   <div id="wuwei">
@@ -286,4 +295,4 @@
 </body>
 
 </html>
-<!-- Last modified 2026-05-11 -->
+<!-- Last modified 2026-05-18 -->

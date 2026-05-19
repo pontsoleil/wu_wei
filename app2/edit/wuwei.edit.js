@@ -457,6 +457,17 @@ wuwei.edit = wuwei.edit || {};
       );
       return;
     }
+    if ('description.format' === path) {
+      node.description = Object.assign(
+        {},
+        (node.description && 'object' === typeof node.description) ? node.description : {},
+        {
+          format: String(value || 'plain/text'),
+          body: (node.description && typeof node.description.body === 'string') ? node.description.body : ''
+        }
+      );
+      return;
+    }
     if ('style.fill' === path) {
       node.color = value;
       return;
@@ -630,6 +641,7 @@ wuwei.edit = wuwei.edit || {};
     aliases = {
       label: 'label',
       description_body: 'description.body',
+      description_format: 'description.format',
       resource_uri: 'resource.uri',
       resource_kind: 'resource.kind',
       resource_canonicalUri: 'resource.canonicalUri',

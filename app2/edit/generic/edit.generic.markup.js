@@ -237,43 +237,32 @@ wuwei.edit.generic.markup = ( function () {
       '<form id="editform" class="generic form-group content" onsubmit="return false;">'
     );
 
-    if (!(node && 'Memo' === node.type)) {
-      if (!option.flock) {
-        html.push(
-          '<div class="w3-row">',
-          '  <textarea id="label" name="label" class="w3-col s12 edit-value" rows="' + rowcount(label) + '" ',
-          '      placeholder="' + t('Label') + '">' + label + '</textarea>',
-          '</div>',
-          '<div class="w3-row">',
-          '  <label class="w3-col s5">' + t('align') + '</label>',
-          labelAlignIcons(fontAlign, 's7'),
-          '</div>'
-        );
-      }
+    if (!(node && 'Memo' === node.type) && !option.flock) {
+      html.push(wuwei.edit.style.markup.labelRows({
+        label: label,
+        align: fontAlign,
+        labelSize: 's5',
+        alignSize: 's7'
+      }));
     }
 
     if (node.label || 'PageMarker' === node.type || 'Segment' === node.type || 'Topic' === node.type || 'Content' === node.type) {
       html.push(
-        '<div class="w3-row" id="style_label_width-row">',
-        '  <label for="style_label_width" class="w3-col s3">' + t('width') + '</label>',
-        '  <input type="number" id="style_label_width" name="style.label.width" value="' + labelStyleWidth + '" class="w3-col s3 edit-value" min="1" step="1">',
-        '  <label for="style_label_lines" class="w3-col s3">' + t('lines') + '</label>',
-        '  <input type="number" id="style_label_lines" name="style.label.lines" value="' + labelStyleLines + '" class="w3-col s3 edit-value" min="1" step="1">',
-        '</div>',
-        '<div class="w3-row" id="style_label_offset_x-row">',
-        '  <label for="style_label_offset_x" class="w3-col s3">' + t('offset X') + '</label>',
-        '  <input type="number" id="style_label_offset_x" name="style.label.offset.x" value="' + labelOffsetX + '" class="w3-col s3 edit-value" step="1">',
-        '  <label for="style_label_offset_y" class="w3-col s3">' + t('offset Y') + '</label>',
-        '  <input type="number" id="style_label_offset_y" name="style.label.offset.y" value="' + labelOffsetY + '" class="w3-col s3 edit-value" step="1">',
-        '</div>'
+        wuwei.edit.style.markup.labelLayoutRows({
+          width: labelStyleWidth,
+          lines: labelStyleLines,
+          offsetX: labelOffsetX,
+          offsetY: labelOffsetY
+        })
       );
     }
 
     if (!option.flock) {
       html.push(
-        '<div class="w3-row">',
-        '  <textarea id="description_body" name="description.body" class="w3-col s12 edit-value" rows="' + rowcount(value || '') + '">' + (value || '') + '</textarea>',
-        '</div>',
+        wuwei.edit.style.markup.descriptionRows({
+          format: (node.description && node.description.format) || 'plain/text',
+          body: value || ''
+        }),
         '<hr>'
       );
     }
@@ -335,22 +324,11 @@ wuwei.edit.generic.markup = ( function () {
     }
 
     html.push(
-      '<div class="w3-row" style="display:' + ('MEMO' === shape ? 'none' : 'block') + '">',
-      '  <label for="shape" class="w3-col s5">' + t('Shape') + '</label>',
-      selectOptions('shape', shape, shapes, '' + t('Shape'),'s7'),
-      '</div>',
-
-      '<div class="w3-row" id="radius" style="display:' + ('CIRCLE' === shape ? 'block' : 'none') + '">',
-      '  <label for="size_radius" class="w3-col s4">' + t('Radius') + '</label>',
-      '  <input type="number" id="size_radius" name="size.radius" value="' + (node.size && node.size.radius) + '" class="w3-col s8 edit-value">',
-      '</div>',
-
-      '<div class="w3-row" id="width-height" style="display:' + ('CIRCLE' === shape ? 'none' : 'block') + '">',
-      '  <label for="size_width" class="w3-col s2">' + t('Width') + '</label>',
-      '  <input type="number" id="size_width" name="size.width" value="' + (node.size && node.size.width) + '" class="w3-col s4 edit-value">',
-      '  <label for="size_height" class="w3-col s2">' + t('Height') + '</label>',
-      '  <input type="number" id="size_height" name="size.height" value="' + (node.size && node.size.height) + '" class="w3-col s4 edit-value">',
-      '</div>'
+      wuwei.edit.style.markup.shapeSizeRows({
+        shape: shape,
+        size: node.size,
+        options: shapes
+      })
     );
 
     if ('Memo' === node.type) {
@@ -372,18 +350,12 @@ wuwei.edit.generic.markup = ( function () {
     }
 
     html.push(
-      '<div class="w3-row">',
-      '  <label for="style_fill" class="w3-col s4">' + t('Background') + '</label>',
-      '  <input type="color" id="style_fill" name="style.fill" value="' + (style.fill) + '" class="w3-col s4 pointer edit-value">',
-      '  <div id="style_fill_palette" name="style_fill_palette" class="w3-col s4 pointer"></div>',
-      '</div>',
-
-      '<div class="w3-row">',
-      '  <label for="style_font_color" class="w3-col s3">' + t('Text') + '</label>',
-      '  <input type="color" id="style_font_color" name="style.font.color" value="' + (font && font.color) + '" class="w3-col s3 pointer edit-value">',
-      '  <div id="style_font_color_palette" name="style_font_color_palette" class="w3-col s3 pointer"></div>',
-      selectOptions('style.font.size', fontSizeValue, fontSizes, 'Select font size', 's3'),
-      '</div>'
+      wuwei.edit.style.markup.paintRows({
+        style: style,
+        fontSize: fontSizeValue,
+        fillPaletteId: 'style_fill_palette',
+        fontPaletteId: 'style_font_color_palette'
+      })
     );
 
     if ('Topic' === node.type && !option.flock) {
@@ -400,23 +372,8 @@ wuwei.edit.generic.markup = ( function () {
     return html.join('\n');
   };
 
-  function labelAlignIcons(value, size) {
-    value = String(value || 'center').toLowerCase();
-    return [
-      '<div class="nFont_text-anchor w3-col ' + (size || 's8') + '">',
-      '  <i class="nFont_text-anchor start fas fa-align-left ' + (('left' === value) ? 'checked' : '') + '" title="left"></i>',
-      '  <i class="nFont_text-anchor middle fas fa-align-center ' + (('center' === value) ? 'checked' : '') + '" title="center"></i>',
-      '  <i class="nFont_text-anchor end fas fa-align-right ' + (('right' === value) ? 'checked' : '') + '" title="right"></i>',
-      '</div>'
-    ].join('');
-  }
-
   function selectOptions(name, value, options, placeholder, size) {
     return wuwei.edit.markup.selectOptions(name, value, options, placeholder, size);
-  }
-
-  function rowcount(str) {
-    return wuwei.edit.markup.rowcount(str);
   }
 
   function t(str) {

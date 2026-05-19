@@ -17,32 +17,14 @@ wuwei.edit.video = wuwei.edit.video || {};
   const draw = wuwei.draw;
 
   function initColorPalettePicker(param) {
-    $('#style_fill_palette').colorPalettePicker({
-      lines: 6,
-      bootstrap: 4,
-      dropdownTitle: wuwei.nls.translate('Standard colours'),
-      buttonClass: 'btn btn-light btn-sm dropdown-toggle',
-      buttonPreviewName: 'nodeColorPaletteSelected',
-      onSelected: function (color) {
-        var input = document.getElementById('style_fill');
-        if (input) {
-          input.value = color; input.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-      }
-    });
-    $('#style_font_color_palette').colorPalettePicker({
-      lines: 6,
-      bootstrap: 4,
-      dropdownTitle: wuwei.nls.translate('Standard colours'),
-      buttonClass: 'btn btn-light btn-sm dropdown-toggle',
-      buttonPreviewName: 'textColorPaletteSelected',
-      onSelected: function (color) {
-        var input = document.getElementById('style_font_color');
-        if (input) {
-          input.value = color;
-          input.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-      }
+    if (!wuwei.edit.style || !wuwei.edit.style.markup ||
+      typeof wuwei.edit.style.markup.initPalettes !== 'function') {
+      return;
+    }
+    wuwei.edit.style.markup.initPalettes({
+      target: param && param.node,
+      fillPaletteId: 'style_fill_palette',
+      fontPaletteId: 'style_font_color_palette'
     });
   }
 

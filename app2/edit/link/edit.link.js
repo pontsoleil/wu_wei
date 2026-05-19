@@ -14,34 +14,12 @@ wuwei.edit.link = wuwei.edit.link || {};
 (function (ns) {
 
   function initColorPalettePicker(param) {
-    $('#style_line_color_palette').colorPalettePicker({
-      lines: 6,
-      bootstrap: 4,
-      dropdownTitle: wuwei.nls.translate('Standard colours'),
-      buttonClass: 'btn btn-light btn-sm dropdown-toggle',
-      buttonPreviewName: 'linkColorPaletteSelected',
-      onSelected: function (color) {
-        var input = document.getElementById('style_line_color');
-        if (input) {
-          input.value = color;
-          input.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-      }
-    });
-    $('#style_font_color_palette').colorPalettePicker({
-      lines: 6,
-      bootstrap: 4,
-      dropdownTitle: wuwei.nls.translate('Standard colours'),
-      buttonClass: 'btn btn-light btn-sm dropdown-toggle',
-      buttonPreviewName: 'textColorPaletteSelected',
-      onSelected: function (color) {
-        var input = document.getElementById('style_font_color');
-        if (input) {
-          input.value = color;
-          input.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-      }
-    });
+    if (!wuwei.edit.style || !wuwei.edit.style.markup ||
+      typeof wuwei.edit.style.markup.initPalette !== 'function') {
+      return;
+    }
+    wuwei.edit.style.markup.initPalette('style_line_color_palette', 'style_line_color');
+    wuwei.edit.style.markup.initPalette('style_font_color_palette', 'style_font_color');
   }
 
   function open(param) {

@@ -204,33 +204,25 @@ wuwei.edit.uploaded.markup = ( function () {
       : '';
     var html = `
 <form id="editform" class="uploaded form-group content" onsubmit="return false;">
-  <div class="w3-row">
-    <textarea id="label" name="label" class="w3-col s12 edit-value" rows="${rowcount(node.label || '')}" 
-        placeholder="${t('Label')}">${node.label || ''}</textarea>
-  </div>
-  <div class="w3-row">
-    <label class="w3-col s6">${t('align')}</label>
-    ${labelAlignIcons(fontAlign, 's6')}
-  </div>
+  ${wuwei.edit.style.markup.labelRows({
+    label: node.label || '',
+    align: fontAlign,
+    labelSize: 's6',
+    alignSize: 's6'
+  })}
   ${node.label || 'PageMarker' === node.type || 'Segment' === node.type || 'Topic' === node.type || 'Content' === node.type
-    ? `<div class="w3-row" id="style_label_width-row">
-        <label for="style_label_width" class="w3-col s3">${t('width')}</label>  
-        <input type="number" id="style_label_width" name="style.label.width" value="${labelStyleWidth}" class="w3-col s3 edit-value" min="1" step="1">
-        <label for="style_label_lines" class="w3-col s3">${t('lines')}</label>  
-        <input type="number" id="style_label_lines" name="style.label.lines" value="${labelStyleLines}" class="w3-col s3 edit-value" min="1" step="1">
-      </div>
-      <div class="w3-row" id="style_label_offset_x-row">
-        <label for="style_label_offset_x" class="w3-col s3">${t('offset X')}</label>  
-        <input type="number" id="style_label_offset_x" name="style.label.offset.x" value="${labelOffsetX}" class="w3-col s3 edit-value" step="1">
-        <label for="style_label_offset_y" class="w3-col s3">${t('offset Y')}</label>  
-        <input type="number" id="style_label_offset_y" name="style.label.offset.y" value="${labelOffsetY}" class="w3-col s3 edit-value" step="1">
-      </div>`
+    ? wuwei.edit.style.markup.labelLayoutRows({
+        width: labelStyleWidth,
+        lines: labelStyleLines,
+        offsetX: labelOffsetX,
+        offsetY: labelOffsetY
+      })
     : ''
-  }  
-  <div class="w3-row">
-    <textarea id="description_body" name="description.body" class="w3-col s12 edit-value" rows="${rowcount(value || '')}"
-    placeholder="${t('Comment')}\nAsciiDoc examples\n*bold text*\n_italic text_\n[.underline]#underlined text#\n[.line-through]#strikethrough text#\n^superscript^\n~subscript~\n* unordered list item\n. ordered list item\n== Heading level 1\n=== Heading level 2\n====== Heading level 5\n[source]\n----\nsource code\n----">${value}</textarea>
-  </div>
+  }
+  ${wuwei.edit.style.markup.descriptionRows({
+    format: (node.description && node.description.format) || 'plain/text',
+    body: value || ''
+  })}
   <div class="w3-row">
     <label for="pdfPage" class="w3-col s6">Page:</label>
     <input type="text" id="pdfPage" name="pdfPage" class="w3-col s6" value="${page ? page : ''}">
@@ -303,33 +295,17 @@ wuwei.edit.uploaded.markup = ( function () {
     : ''
   }
   ${node ?
-  `<div class="w3-row">
-    <label for="shape" class="w3-col s4">${t('Shape')}</label>
-    ${selectOptions('shape', node.shape, shapes, 'Select shape')}
-  </div>
-  <div class="w3-row" id="radius"
-      style="display:${'CIRCLE' === shape ? 'block' : 'none'}">
-    <label for="size_radius" class="w3-col s4">${t('Radius')}</label>  
-    <input type="number" id="size_radius" name="size.radius"  value="${node.size && node.size.radius}" class="w3-col s8 edit-value">
-  </div>
-  <div class="w3-row" id="width-height"
-      style="display:${'CIRCLE' === shape ? 'none' : 'block'}">
-    <label for="size_width" class="w3-col s2">${t('Width')}</label>  
-    <input type="number" id="size_width" name="size.width" value="${node.size && node.size.width}" class="w3-col s4 edit-value">
-    <label for="size_height" class="w3-col s2">${t('Height')}</label>  
-    <input type="number" id="size_height" name="size.height" value="${node.size && node.size.height}" class="w3-col s4 edit-value">
-  </div>
-  <div class="w3-row">
-    <label for="style_fill" class="w3-col s4">${t('Background')}</label>  
-    <input type="color" id="style_fill" name="style.fill" value="${style.fill}" class="w3-col s4 pointer edit-value">
-    <div id="style_fill_palette" name="style_fill_palette" class="w3-col s4 pointer"></div>
-  </div>
-  <div class="w3-row">
-    <label for="style_font_color" class="w3-col s3">${t('Text')}</label>  
-    <input type="color" id="style_font_color" name="style.font.color" value="${font && font.color}" class="w3-col s3 pointer edit-value">
-    <div id="style_font_color_palette" name="style_font_color_palette" class="w3-col s3 pointer"></div>
-    ${selectOptions('style.font.size', fontSizeValue, fontSizes, 'Select font size', 's3')}
-  </div>
+  `${wuwei.edit.style.markup.shapeSizeRows({
+    shape: shape,
+    size: node.size,
+    options: shapes
+  })}
+  ${wuwei.edit.style.markup.paintRows({
+    style: style,
+    fontSize: fontSizeValue,
+    fillPaletteId: 'style_fill_palette',
+    fontPaletteId: 'style_font_color_palette'
+  })}
   <div class="w3-row">
     <label for="group" class="w3-col s4">${t('Group')}</label>  
     <input type="text" id="group" name="group" value="${node.group || ''}" class="w3-col s8 edit-value">
@@ -339,25 +315,6 @@ wuwei.edit.uploaded.markup = ( function () {
 </form>`;
     return html;
   };
-
-  function labelAlignIcons(value, size) {
-    value = String(value || 'center').toLowerCase();
-    return [
-      '<div class="nFont_text-anchor w3-col ' + (size || 's8') + '">',
-      '  <i class="nFont_text-anchor start fas fa-align-left ' + (('left' === value) ? 'checked' : '') + '" title="left"></i>',
-      '  <i class="nFont_text-anchor middle fas fa-align-center ' + (('center' === value) ? 'checked' : '') + '" title="center"></i>',
-      '  <i class="nFont_text-anchor end fas fa-align-right ' + (('right' === value) ? 'checked' : '') + '" title="right"></i>',
-      '</div>'
-    ].join('');
-  }
-
-  function selectOptions(name, value, options, placeholder, size) { 
-    return wuwei.edit.markup.selectOptions(name, value, options, placeholder, size);
-  }
-
-  function rowcount(str) {
-    return wuwei.edit.markup.rowcount(str);
-  }
 
   function t(str) {
     return wuwei.nls.translate(str);

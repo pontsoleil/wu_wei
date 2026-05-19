@@ -11,11 +11,14 @@ wuwei.edit.contents.markup = (function () {
   function axisPanelHtml() {
     return [
       '<section id="edit-contents-axis" class="edit-panel edit-contents-panel content" style="display:none;">',
+        '<h3 class="edit-panel-title">' + t('Edit perspective') + '</h3>',
         '<input type="hidden" id="editContentsAxisId">',
+        '<h4 class="edit-section-title">' + t('Perspective info') + '</h4>',
         '<div class="edit-field">',
           '<label for="editContentsAxisLabel" class="w3-col s4">' + t('Label') + '</label>',
           '<input id="editContentsAxisLabel" class="w3-col s8 edit-value" type="text">',
         '</div>',
+        '<h4 class="edit-section-title">' + t('Representative appearance') + '</h4>',
         '<div class="edit-field">',
           '<label for="editContentsRepShape" class="w3-col s4">' + t('Shape') + '</label>',
           selectOptions('editContentsRepShape', 'RECTANGLE', nodeShapeOptions(), 'Shape', 's8'),
@@ -30,6 +33,7 @@ wuwei.edit.contents.markup = (function () {
           '<label for="editContentsRepSizeHeight" class="w3-col s2">' + t('Height') + '</label>',
           '<input id="editContentsRepSizeHeight" class="w3-col s4 edit-value" type="number" step="1" min="1">',
         '</div>',
+        '<h4 class="edit-section-title">' + t('Axis properties') + '</h4>',
         '<div class="edit-field">',
           '<label for="editContentsAxisDirection" class="w3-col s4">' + t('Direction') + '</label>',
           '<select id="editContentsAxisDirection" class="w3-col s8 edit-value">',
@@ -70,12 +74,17 @@ wuwei.edit.contents.markup = (function () {
         // '<h3 class="edit-panel-title">' + t('Contents PageMarker') + '</h3>',
         '<form id="editform" class="contents-page-marker form-group content" onsubmit="return false;">',
           '<input type="hidden" id="editContentsPageMarkerId">',
-          '<div class="w3-row">',
-            '<textarea id="label" name="label" class="w3-col s12 edit-value" rows="1" placeholder="' + t('Label') + '"></textarea>',
-          '</div>',
-          '<div class="w3-row">',
-            '<textarea id="description_body" name="description.body" class="w3-col s12 edit-value" rows="1"></textarea>',
-          '</div>',
+          wuwei.edit.style.markup.labelRows({
+            label: '',
+            align: 'center',
+            labelSize: 's4',
+            alignLabel: 'Label align',
+            alignSize: 's8'
+          }),
+          wuwei.edit.style.markup.descriptionRows({
+            format: 'plain/text',
+            body: ''
+          }),
           '<div id="documentPageMarkerFields" class="contents-document-marker-fields">',
             '<div id="pageNumberRow" class="w3-row">',
               '<label for="pageNumber" class="w3-col s4">' + t('Page number') + ':</label>',
@@ -88,58 +97,26 @@ wuwei.edit.contents.markup = (function () {
               '<input type="text" id="htmlAnchorHref" name="anchorHref" class="w3-col s8 edit-value" placeholder="#3-xbrl-csv-report-structure">',
             '</div>',
           '</div>',
-          '<div class="w3-row">',
-            '<label for="editContentsPageMarkerShape" class="w3-col s4">' + t('Shape') + '</label>',
-            selectOptions('editContentsPageMarkerShape', 'CIRCLE', nodeShapeOptions(), 'Shape', 's8'),
-          '</div>',
-          '<div id="editContentsPageMarkerSizeRadiusRow" class="w3-row">',
-            '<label for="editContentsPageMarkerSizeRadius" class="w3-col s4">' + t('Radius') + '</label>',
-            '<input type="number" id="editContentsPageMarkerSizeRadius" class="w3-col s8 edit-value" min="1" step="1">',
-          '</div>',
-          '<div id="editContentsPageMarkerSizeWidthHeightRow" class="w3-row" style="display:none;">',
-            '<label for="editContentsPageMarkerSizeWidth" class="w3-col s2">' + t('Width') + '</label>',
-            '<input type="number" id="editContentsPageMarkerSizeWidth" class="w3-col s4 edit-value" min="1" step="1">',
-            '<label for="editContentsPageMarkerSizeHeight" class="w3-col s2">' + t('Height') + '</label>',
-            '<input type="number" id="editContentsPageMarkerSizeHeight" class="w3-col s4 edit-value" min="1" step="1">',
-          '</div>',
+          wuwei.edit.style.markup.shapeSizeRows({
+            prefix: 'editContentsPageMarker',
+            name: 'editContentsPageMarkerShape',
+            shape: 'CIRCLE',
+            size: { radius: 18 },
+            options: nodeShapeOptions()
+          }),
           '<hr>',
-          '<div class="w3-row">',
-            '<label for="style_fill" class="w3-col s4">' + t('Background') + '</label>',
-            '<input type="color" id="style_fill" name="style.fill" class="w3-col s4 pointer edit-value">',
-            '<div id="editContentsPageFillPalette" class="edit-color-palette w3-col s4 pointer"></div>',
-          '</div>',
-          '<div class="w3-row">',
-            '<label for="style_line_width" class="w3-col s3">' + t('Outline') + '</label>',
-            '<input type="number" id="style_line_width" name="style.line.width" class="w3-col s3 edit-value" step="1" min="0">',
-            '<input type="color" id="style_line_color" name="style.line.color" class="w3-col s3 pointer edit-value">',
-            '<div id="editContentsPageOutlinePalette" class="edit-color-palette w3-col s3 pointer"></div>',
-          '</div>',
-          '<div class="w3-row">',
-            '<label for="style_font_color" class="w3-col s3">' + t('Text') + '</label>',
-            '<input type="color" id="style_font_color" name="style.font.color" class="w3-col s3 pointer edit-value">',
-            '<div id="editContentsPageFontPalette" class="edit-color-palette w3-col s3 pointer"></div>',
-            selectOptions('style.font.size', '12pt', wuwei.common.fontSizes, 'Size', 's3'),
-          '</div>',
+          wuwei.edit.style.markup.paintRows({
+            includeLine: true,
+            fillPaletteId: 'editContentsPageFillPalette',
+            linePaletteId: 'editContentsPageOutlinePalette',
+            fontPaletteId: 'editContentsPageFontPalette',
+            fontSize: '12pt'
+          }),
           '<div class="w3-row">',
             '<label class="w3-col s4">' + t('Label align') + '</label>',
-            labelAlignIcons('center', 's8'),
+            wuwei.edit.style.markup.labelAlignIcons('center', 's8'),
           '</div>',
-          '<div class="w3-row">',
-            '<label for="style_label_width" class="w3-col s6">' + t('Label width') + '</label>',
-            '<input type="number" id="style_label_width" name="style.label.width" class="w3-col s6 edit-value" step="1" min="1">',
-          '</div>',
-          '<div class="w3-row">',
-            '<label for="style_label_lines" class="w3-col s6">' + t('Label lines') + '</label>',
-            '<input type="number" id="style_label_lines" name="style.label.lines" class="w3-col s6 edit-value" step="1" min="1">',
-          '</div>',
-          '<div class="w3-row">',
-            '<label for="style_label_offset_x" class="w3-col s6">' + t('Label offset X') + '</label>',
-            '<input type="number" id="style_label_offset_x" name="style.label.offset.x" class="w3-col s6 edit-value" step="1">',
-          '</div>',
-          '<div class="w3-row">',
-            '<label for="style_label_offset_y" class="w3-col s6">' + t('Label offset Y') + '</label>',
-            '<input type="number" id="style_label_offset_y" name="style.label.offset.y" class="w3-col s6 edit-value" step="1">',
-          '</div>',
+          wuwei.edit.style.markup.labelLayoutRows({ width: 120, lines: 1, offsetX: 0, offsetY: 0 }),
           '<div class="w3-row">',
             '<label for="applyToContentsGroup" class="w3-col s10">' + t('Apply to group members') + '</label>',
             '<input type="checkbox" id="applyToContentsGroup" class="w3-col s2">',
@@ -152,18 +129,6 @@ wuwei.edit.contents.markup = (function () {
   function panelsHtml() {
     return [axisPanelHtml(), pageMarkerPanelHtml()].join('\n');
   }
-
-  function labelAlignIcons(value, size) {
-    value = String(value || 'center').toLowerCase();
-    return [
-      '<div class="nFont_text-anchor w3-col ' + (size || 's8') + '">',
-      '  <i class="nFont_text-anchor start fas fa-align-left ' + (('left' === value) ? 'checked' : '') + '" title="left"></i>',
-      '  <i class="nFont_text-anchor middle fas fa-align-center ' + (('center' === value) ? 'checked' : '') + '" title="center"></i>',
-      '  <i class="nFont_text-anchor end fas fa-align-right ' + (('right' === value) ? 'checked' : '') + '" title="right"></i>',
-      '</div>'
-    ].join('');
-  }
-
 
   function nodeShapeOptions() {
     return (wuwei.common.shapes || []).filter(function (item) {
