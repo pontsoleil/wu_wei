@@ -719,6 +719,35 @@ wuwei.menu.note = wuwei.menu.note || {};
     });
   }
 
+  function openBusyModal(message) {
+    if (wuwei.menu.modal && typeof wuwei.menu.modal.open === 'function') {
+      wuwei.menu.modal.open({
+        type: 'info',
+        message: message,
+        timeout: 0
+      });
+    }
+  }
+
+  function closeBusyModal() {
+    if (wuwei.menu.modal && typeof wuwei.menu.modal.close === 'function') {
+      wuwei.menu.modal.close();
+    }
+  }
+
+  function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(function () {
+      URL.revokeObjectURL(url);
+    }, 0);
+  }
+
   function downloadFile() {
     try {
       const current = wuwei.common.current || {};
@@ -727,6 +756,7 @@ wuwei.menu.note = wuwei.menu.note || {};
         wuwei.menu.snackbar.open({ type: 'error', message: 'ERROR NOT LOGGED IN' });
         return;
       }
+      openBusyModal('Exporting note. Please wait...');
       wuwei.note.saveNote().then(function () {
         const noteId = wuwei.common.current && wuwei.common.current.note_id;
         if (!noteId) {
@@ -734,21 +764,32 @@ wuwei.menu.note = wuwei.menu.note || {};
         }
         const action = wuwei.util.getAction('export-note');
         const url = `${action}?id=${encodeURIComponent(noteId)}&user_id=${encodeURIComponent(cu.user_id)}`;
-        const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = makeFileName('.zip');
-        document.body.appendChild(anchor);
-        anchor.click();
-        anchor.remove();
+        return fetch(url, { credentials: 'same-origin' }).then(function (response) {
+          if (!response.ok) {
+            throw new Error('ERROR Failed to export note: HTTP ' + response.status);
+          }
+          const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+          if (contentType.indexOf('text/') === 0 || contentType.indexOf('json') >= 0) {
+            return response.text().then(function (text) {
+              throw new Error(String(text || '').trim() || 'ERROR Failed to export note');
+            });
+          }
+          return response.blob();
+        });
+      }).then(function (blob) {
+        downloadBlob(blob, makeFileName('.zip'));
       }).catch(function (e) {
         console.error(e);
         wuwei.menu.snackbar.open({
           type: 'error',
           message: e && e.message ? e.message : 'ERROR Failed to export note'
         });
+      }).finally(function () {
+        closeBusyModal();
       });
     }
     catch (e) {
+      closeBusyModal();
       console.error(e);
       wuwei.menu.snackbar.open({
         type: 'error',
@@ -823,6 +864,7 @@ wuwei.menu.note = wuwei.menu.note || {};
     const form = new FormData();
     form.append('user_id', cu.user_id);
     form.append('file', file);
+    openBusyModal('Importing note. Please wait...');
     fetch(wuwei.util.getAction('import-note'), {
       method: 'POST',
       body: form,
@@ -851,6 +893,8 @@ wuwei.menu.note = wuwei.menu.note || {};
         type: 'error',
         message: e && e.message ? e.message : 'ERROR Failed to import note bundle'
       });
+    }).finally(function () {
+      closeBusyModal();
     });
   }
 
