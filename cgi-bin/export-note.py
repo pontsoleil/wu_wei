@@ -235,7 +235,8 @@ def zip_file_record(
     derived_from: dict | None = None,
 ) -> dict:
     arc_path = "resources/" + logical
-    zf.write(src, arc_path)
+    if arc_path not in set(zf.namelist()):
+        zf.write(src, arc_path)
     record = {
         "role": role,
         "path": arc_path,
