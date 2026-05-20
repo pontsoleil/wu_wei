@@ -170,7 +170,13 @@ def collect_upload_resources(note: dict) -> list[dict]:
         files = storage.get("files") if isinstance(storage.get("files"), list) else []
         source = str(resource.get("source") or "").lower()
         kind = str(resource.get("kind") or "").lower()
-        if source != "upload" and kind != "upload" and not storage.get("managed"):
+        has_local_file = any(
+            str(file_def.get("sourceArea") or file_def.get("area") or "").lower() in ALLOWED_AREAS
+            and clean_logical_path(str(file_def.get("path") or ""), allow_legacy=True)
+            for file_def in files
+            if isinstance(file_def, dict)
+        )
+        if source != "upload" and kind != "upload" and not storage.get("managed") and not has_local_file:
             continue
         if not files and not isinstance(storage.get("manifest"), dict):
             continue
