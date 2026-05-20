@@ -1404,6 +1404,14 @@ wuwei.edit = wuwei.edit || {};
       }
     }
 
+    if (wuwei.collab && typeof wuwei.collab.canEditObject === 'function' &&
+      !wuwei.collab.canEditObject(node)) {
+      if (typeof wuwei.collab.notifyReadOnly === 'function') {
+        wuwei.collab.notifyReadOnly(node);
+      }
+      return false;
+    }
+
     /*
      * Opening another edit target must terminate the currently active pane
      * session.  Otherwise specialised editors keep stale state and close/info

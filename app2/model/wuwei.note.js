@@ -96,6 +96,19 @@ wuwei.note = (function () {
     };
   }
 
+  function normalizeCollaboration(collaboration) {
+    if (wuwei.collab && typeof wuwei.collab.normalizeMetadata === 'function') {
+      return wuwei.collab.normalizeMetadata(collaboration);
+    }
+    var src = (collaboration && typeof collaboration === 'object') ? collaboration : {};
+    var revision = Number(src.revision);
+    return {
+      enabled: !!src.enabled,
+      revision: Number.isFinite(revision) && revision >= 0 ? Math.floor(revision) : 0,
+      updatedAt: String(src.updatedAt || '')
+    };
+  }
+
   function normalizeTransform(transform) {
     var t = transform || {};
     return {
@@ -826,6 +839,7 @@ wuwei.note = (function () {
       pages: pages,
       resources: resources,
       thumbnail: (typeof src.thumbnail === 'undefined') ? '' : src.thumbnail,
+      collaboration: normalizeCollaboration(src.collaboration),
       audit: normalizeAudit(src.audit, state.currentUser)
     });
   }
@@ -1094,6 +1108,7 @@ wuwei.note = (function () {
       this.currentPage = this.page.id;
       this.resources = cloneArray(param.resources).map(normalizeResourceDefinition);
       this.thumbnail = (typeof param.thumbnail === 'undefined') ? '' : param.thumbnail;
+      this.collaboration = normalizeCollaboration(param.collaboration);
       const portable = (param.bundle && typeof param.bundle === 'object')
         ? param.bundle
         : ((param.portable && typeof param.portable === 'object')
@@ -1202,6 +1217,7 @@ wuwei.note = (function () {
       currentPage: (current.page && current.page.id) || current.currentPage,
       resources: [],
       pages: [],
+      collaboration: normalizeCollaboration(current.collaboration),
       audit: normalizeAudit(current.audit, state.currentUser)
     };
 
@@ -1255,6 +1271,7 @@ wuwei.note = (function () {
       currentPage: (current.page && current.page.id) || current.currentPage,
       resources: cloneArray(current.resources).map(normalizeResourceDefinition),
       pages: [],
+      collaboration: normalizeCollaboration(current.collaboration),
       audit: normalizeAudit(current.audit, state.currentUser)
     };
 
