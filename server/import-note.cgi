@@ -294,7 +294,7 @@ extract_manifest_resource_files() {
   awk '
     BEGIN { RS="[{}]"; OFS="\t" }
     /"role"[[:space:]]*:/ && /"logicalPath"[[:space:]]*:/ && /"path"[[:space:]]*:/ {
-      role=arc=logical=mime=""
+      role=arc=logical=mime=source_area=""
       if (match($0, /"role"[[:space:]]*:[[:space:]]*"[^"]+"/)) {
         role=substr($0, RSTART, RLENGTH); sub(/^.*:"/, "", role); sub(/"$/, "", role)
       }
@@ -304,10 +304,14 @@ extract_manifest_resource_files() {
       if (match($0, /"logicalPath"[[:space:]]*:[[:space:]]*"[^"]+"/)) {
         logical=substr($0, RSTART, RLENGTH); sub(/^.*:"/, "", logical); sub(/"$/, "", logical)
       }
+      if (match($0, /"sourceArea"[[:space:]]*:[[:space:]]*"[^"]+"/)) {
+        source_area=substr($0, RSTART, RLENGTH); sub(/^.*:"/, "", source_area); sub(/"$/, "", source_area)
+      }
       if (match($0, /"mimeType"[[:space:]]*:[[:space:]]*"[^"]+"/)) {
         mime=substr($0, RSTART, RLENGTH); sub(/^.*:"/, "", mime); sub(/"$/, "", mime)
       }
-      if (role != "" && arc ~ /^resources\// && logical != "") print role, arc, logical, mime
+      if (source_area == "") source_area="upload"
+      if (role != "" && arc ~ /^resources\// && logical != "") print role, arc, logical, mime, source_area
     }
   ' "$manifest"
 }
@@ -339,23 +343,33 @@ write_path_index() {
 }
 
 copy_manifest_resource_entries() {
-  upload_base=$1
+  uid=$1
   manifest_file=$2
-  extract_manifest_resource_files "$manifest_file" | while IFS="$(printf '\t')" read -r role arc logical mime; do
+  upload_base=$(area_dir upload "$uid" || true)
+  extract_manifest_resource_files "$manifest_file" | while IFS="$(printf '\t')" read -r role arc logical mime source_area; do
     arc=$(safe_zip_entry "$arc") || error_response 'ERROR INVALID RESOURCE FILE MANIFEST'
     logical=$(safe_rel_path "$logical") || error_response 'ERROR INVALID RESOURCE FILE MANIFEST'
+    case "$source_area" in
+      upload|content|thumbnail|resource|note) ;;
+      *) source_area=upload ;;
+    esac
+    area_base=$(area_dir "$source_area" "$uid" || true)
+    [ -n "$area_base" ] || error_response 'ERROR RESOURCE AREA NOT DEFINED'
+    mkdir -p "$area_base" || error_response 'ERROR RESOURCE AREA NOT DEFINED'
     src_tmp="${Tmp}-resource"
     copy_zip_entry "$arc" "$src_tmp" || error_response 'ERROR RESOURCE FILE NOT FOUND'
-    dst="$upload_base/$logical"
-    case "$dst" in "$upload_base"/*) ;; *) rm -f "$src_tmp"; error_response 'ERROR INVALID UPLOAD PATH' ;; esac
+    dst="$area_base/$logical"
+    case "$dst" in "$area_base"/*) ;; *) rm -f "$src_tmp"; error_response 'ERROR INVALID RESOURCE FILE PATH' ;; esac
     if [ -f "$dst" ] && ! cmp -s "$dst" "$src_tmp"; then
       rm -f "$src_tmp"
-      error_response 'ERROR UPLOAD FILE CONFLICT'
+      error_response "ERROR $(printf '%s' "$source_area" | tr a-z A-Z) FILE CONFLICT"
     fi
     mkdir -p "$(dirname "$dst")"
     cp "$src_tmp" "$dst"
     rm -f "$src_tmp"
-    write_path_index "$upload_base" "$logical"
+    if [ "$source_area" = upload ] && [ -n "$upload_base" ]; then
+      write_path_index "$upload_base" "$logical"
+    fi
   done
 }
 
@@ -369,10 +383,8 @@ rewrite_imported_note_json() {
   sed -E \
     -e "s#\"lastModifiedBy\"[[:space:]]*:[[:space:]]*\"[^\"]*\"#\"lastModifiedBy\":\"${uid}\"#g" \
     -e "s#\"lastModifiedAt\"[[:space:]]*:[[:space:]]*\"[^\"]*\"#\"lastModifiedAt\":\"${ts}\"#g" \
-    -e "s#\"dir_name\"[[:space:]]*:[[:space:]]*\"[^\"]*/upload/([0-9]{4}/[0-9]{2}/[0-9]{2}/[^\"/]+)\"#\"dir_name\":\"data/${uid}/upload/\\1\"#g" \
-    -e "s#\"dir_name\"[[:space:]]*:[[:space:]]*\"[^\"]*/upload/([0-9]{4}/[0-9]{2})\"#\"dir_name\":\"data/${uid}/upload/\\1\"#g" \
-    -e 's#"area"[[:space:]]*:[[:space:]]*"content"#"area":"upload"#g' \
-    -e 's#"area"[[:space:]]*:[[:space:]]*"thumbnail"#"area":"upload"#g' \
+    -e "s#\"dir_name\"[[:space:]]*:[[:space:]]*\"[^\"]*/(upload|content|thumbnail|resource|note)/([0-9]{4}/[0-9]{2}/[0-9]{2}/[^\"/]+)\"#\"dir_name\":\"data/${uid}/\\1/\\2\"#g" \
+    -e "s#\"dir_name\"[[:space:]]*:[[:space:]]*\"[^\"]*/(upload|content|thumbnail|resource|note)/([0-9]{4}/[0-9]{2})\"#\"dir_name\":\"data/${uid}/\\1/\\2\"#g" \
     "$src" > "$dst"
 }
 
@@ -458,10 +470,7 @@ if [ -f "$target_note" ]; then
   fi
 fi
 
-upload_dir=$(area_dir upload "$user_id" || true)
-[ -n "$upload_dir" ] || error_response 'ERROR UPLOAD DIRECTORY NOT FOUND'
-mkdir -p "$upload_dir" || error_response 'ERROR UPLOAD DIRECTORY NOT FOUND'
-copy_manifest_resource_entries "$upload_dir" "$manifest_tmp"
+copy_manifest_resource_entries "$user_id" "$manifest_tmp"
 
 mkdir -p "$(dirname "$target_note")" || error_response 'ERROR NOTE IMPORT FAILED'
 cp "$rewritten_note" "$target_note" || error_response 'ERROR NOTE IMPORT FAILED'

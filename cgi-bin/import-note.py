@@ -25,6 +25,7 @@ from cgi_common import (
 
 NOTE_EXPORT_FORMAT = "wuwei-note-export"
 ALLOWED_ROOTS = {"export-manifest.json", "note", "resources"}
+ALLOWED_AREAS = {"upload", "content", "thumbnail", "resource", "note"}
 
 
 def sha256_file(path: Path) -> str:
@@ -139,9 +140,22 @@ def update_audit(value, user_id: str, timestamp: str) -> None:
             audit["lastModifiedAt"] = timestamp
 
 
-def server_root_dir(user_id: str, logical_path: str) -> str:
+def resource_area(value: str, fallback: str = "upload") -> str:
+    area = str(value or fallback or "upload").lower()
+    return area if area in ALLOWED_AREAS else "upload"
+
+
+def area_root(area: str, user_id: str, upload_root: Path) -> Path:
+    area = resource_area(area)
+    root = environment_path(area, user_id)
+    if root:
+        return Path(root)
+    return upload_root.parent / area
+
+
+def server_root_dir(user_id: str, logical_path: str, area: str = "upload") -> str:
     base = "/".join(clean_rel_path(logical_path).split("/")[:-1])
-    return f"data/{user_id}/upload/{base}"
+    return f"data/{user_id}/{resource_area(area)}/{base}"
 
 
 def manifest_file_map(manifest: dict) -> dict[str, dict[str, dict]]:
@@ -180,11 +194,12 @@ def update_resource_storage_dirs(note: dict, user_id: str, manifest: dict | None
         if manifest and manifest.get("path"):
             manifest_record = resource_manifest.get("manifest")
             logical = clean_rel_path(str((manifest_record or {}).get("logicalPath") or manifest.get("path") or ""))
+            area = resource_area((manifest_record or {}).get("sourceArea") or manifest.get("area") or "upload")
             if logical:
                 manifest["path"] = logical
-                manifest["dir_name"] = server_root_dir(user_id, logical)
+                manifest["dir_name"] = server_root_dir(user_id, logical, area)
                 manifest["file_name"] = logical.rsplit("/", 1)[-1]
-                manifest["area"] = "upload"
+                manifest["area"] = area
                 if manifest_record and manifest_record.get("mimeType"):
                     manifest["mimeType"] = manifest_record.get("mimeType")
         files = storage.get("files") if isinstance(storage.get("files"), list) else []
@@ -196,10 +211,11 @@ def update_resource_storage_dirs(note: dict, user_id: str, manifest: dict | None
             logical = clean_rel_path(str((manifest_record or {}).get("logicalPath") or file_def.get("path") or ""))
             if not logical:
                 continue
+            area = resource_area((manifest_record or {}).get("sourceArea") or file_def.get("area") or ("upload" if role == "original" else "resource"))
             file_def["path"] = logical
-            file_def["dir_name"] = server_root_dir(user_id, logical)
+            file_def["dir_name"] = server_root_dir(user_id, logical, area)
             file_def["file_name"] = logical.rsplit("/", 1)[-1]
-            file_def["area"] = "upload"
+            file_def["area"] = area
             if manifest_record and manifest_record.get("mimeType"):
                 file_def["mimeType"] = manifest_record.get("mimeType")
             if role == "original" and manifest_record and manifest_record.get("derivedFrom"):
@@ -248,7 +264,7 @@ def same_json(path: Path, note: dict) -> bool:
     return strip_import_audit_fields(existing) == strip_import_audit_fields(note)
 
 
-def copy_resource_files(extract_dir: Path, manifest: dict, upload_root: Path) -> None:
+def copy_resource_files(extract_dir: Path, manifest: dict, upload_root: Path, user_id: str) -> None:
     for resource in manifest.get("resources") or []:
         if not isinstance(resource, dict):
             continue
@@ -257,6 +273,7 @@ def copy_resource_files(extract_dir: Path, manifest: dict, upload_root: Path) ->
                 continue
             arc = clean_rel_path(str(file_def.get("path") or ""))
             logical = clean_rel_path(str(file_def.get("logicalPath") or ""))
+            area = resource_area(file_def.get("sourceArea") or file_def.get("area") or "upload")
             if not arc.startswith("resources/") or not logical:
                 script_error("ERROR INVALID RESOURCE FILE MANIFEST")
             src = (extract_dir / arc).resolve()
@@ -269,13 +286,14 @@ def copy_resource_files(extract_dir: Path, manifest: dict, upload_root: Path) ->
             expected_sha = str(file_def.get("sha256") or "")
             if expected_sha and sha256_file(src) != expected_sha:
                 script_error("ERROR RESOURCE FILE SHA256 MISMATCH")
-            dst = (upload_root / logical).resolve()
+            root = area_root(area, user_id, upload_root)
+            dst = (root / logical).resolve()
             try:
-                dst.relative_to(upload_root.resolve())
+                dst.relative_to(root.resolve())
             except ValueError:
-                script_error("ERROR INVALID UPLOAD PATH")
+                script_error("ERROR INVALID RESOURCE FILE PATH")
             if dst.is_file() and sha256_file(dst) != sha256_file(src):
-                script_error("ERROR UPLOAD FILE CONFLICT")
+                script_error(f"ERROR {area.upper()} FILE CONFLICT")
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dst)
 
@@ -284,17 +302,18 @@ def write_path_indexes(manifest: dict, upload_root: Path) -> None:
     for resource in manifest.get("resources") or []:
         if not isinstance(resource, dict):
             continue
-        logical_base = clean_rel_path(str(resource.get("logicalBase") or ""))
-        parts = logical_base.split("/")
-        if len(parts) < 4:
-            continue
-        actual_date = "/".join(parts[:3])
-        upload_id = parts[3]
-        manifest_path = f"{logical_base}/manifest.json"
         for file_def in resource.get("files") or []:
-            logical = clean_rel_path(str(file_def.get("logicalPath") or ""))
-            if not logical:
+            area = resource_area(file_def.get("sourceArea") or file_def.get("area") or "upload")
+            if area != "upload":
                 continue
+            logical = clean_rel_path(str(file_def.get("logicalPath") or ""))
+            parts = logical.split("/")
+            if len(parts) < 5:
+                continue
+            actual_date = "/".join(parts[:3])
+            upload_id = parts[3]
+            logical_base = "/".join(parts[:4])
+            manifest_path = f"{logical_base}/manifest.json"
             index_file = upload_root / "_index" / "path" / (logical + ".json")
             index_file.parent.mkdir(parents=True, exist_ok=True)
             index_file.write_text(json.dumps({
@@ -336,7 +355,7 @@ def main() -> None:
     imported_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     upload_root = Path(upload_root_s)
-    copy_resource_files(extract_dir, manifest, upload_root)
+    copy_resource_files(extract_dir, manifest, upload_root, user_id)
     write_path_indexes(manifest, upload_root)
     update_resource_storage_dirs(note, user_id, manifest)
     update_audit(note, user_id, imported_at)

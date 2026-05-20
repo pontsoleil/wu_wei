@@ -353,10 +353,25 @@ wuwei.note.v0 = (function () {
       m = text.match(/^(data\/[^/]+\/(?:upload|resource|note|thumbnail|content)\/.+)\/[^/]+$/);
       return m ? m[1] : '';
     }
-    if ((area || 'upload') === 'upload') {
-      m = text.match(/^(\d{4}\/\d{2}\/\d{2}\/[^/]+)\/[^/]+$/);
-      if (m && uid) {
-        return 'data/' + uid + '/upload/' + m[1];
+    area = String(area || 'upload').toLowerCase();
+
+    if (uid && /^(upload|resource|note|thumbnail|content)$/.test(area)) {
+      if (area === 'upload') {
+        m = text.match(/^(\d{4}\/\d{2}\/\d{2}\/[^/]+)\/[^/]+$/);
+        if (m) {
+          return 'data/' + uid + '/upload/' + m[1];
+        }
+      }
+
+      /*
+       * Legacy v0 content/thumbnail files are stored as
+       * YYYY/MM/filename.  Do not expand them to YYYY/MM/01/...
+       * because the logical path must continue to match the physical
+       * storage location under data/{user_id}/{area}/YYYY/MM/.
+       */
+      m = text.match(/^(\d{4}\/\d{2})\/[^/]+$/);
+      if (m) {
+        return 'data/' + uid + '/' + area + '/' + m[1];
       }
     }
     return '';
@@ -368,21 +383,17 @@ wuwei.note.v0 = (function () {
   }
 
   function normalizeV0LogicalPath(path, resourceId) {
-    var text = String(path || '').replace(/\\/g, '/').replace(/[?#].*$/, '').replace(/^\/+|\/+$/g, '');
-    var fileUuid = fileUuidFromResourceId(resourceId);
-    var match;
-
-    if (!text) {
-      return '';
-    }
-    if (/^\d{4}\/\d{2}\/\d{2}\/[^/]+\/.+$/.test(text)) {
-      return text;
-    }
-    match = text.match(/^(\d{4})\/(\d{2})\/([^/].*)$/);
-    if (match) {
-      return match[1] + '/' + match[2] + '/01/' + fileUuid + '/' + match[3];
-    }
-    return text;
+    /*
+     * v0 legacy content paths such as YYYY/MM/filename are valid logical
+     * paths in v2 as well.  They must not be complemented to
+     * YYYY/MM/01/file_uuid/filename because the existing physical files are
+     * stored under data/{user_id}/content/YYYY/MM/ or
+     * data/{user_id}/thumbnail/YYYY/MM/.
+     *
+     * New v2 upload resources still use YYYY/MM/DD/file_uuid/filename, but
+     * v0 migration keeps the original legacy path unchanged.
+     */
+    return String(path || '').replace(/\\/g, '/').replace(/[?#].*$/, '').replace(/^\/+|\/+$/g, '');
   }
 
   function addStorageFile(files, role, uri, mimeType, fallbackArea, resourceId) {
@@ -403,8 +414,7 @@ wuwei.note.v0 = (function () {
     sourcePath = path;
     if (area !== 'remote') {
       normalizedPath = normalizeV0LogicalPath(path, resourceId);
-      if (normalizedPath && normalizedPath !== path) {
-        area = 'upload';
+      if (normalizedPath) {
         path = normalizedPath;
       }
     }

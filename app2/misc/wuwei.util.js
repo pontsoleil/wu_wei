@@ -119,6 +119,7 @@ wuwei.util = (function () {
       getResourceFile,
       getResourceFilePath,
       getResourceFileUri,
+      getResourceDirectFileUri,
       getResourcePdfPreviewUri,
       getResourcePreviewUri,
       getResourceOriginalPath,
@@ -3917,50 +3918,105 @@ wuwei.util = (function () {
     return text.replace(/^\/+/, '');
   };
 
-  toPublicResourceUri = function (area, relativePath, userId) {
-    var areaName = String(area || '').replace(/^\/+|\/+$/g, '');
-    var uid = String(userId || getCurrentUserId() || '').trim();
-    var path = String(relativePath || '').replace(/\\/g, '/').trim();
-    var m, query;
+  function stripQueryHashForPath(value) {
+    return String(value || '').replace(/[?#].*$/, '').replace(/\\/g, '/').trim();
+  }
 
-    if (!path || /^https?:\/\//i.test(path)) {
-      return path;
+  function isManagedLogicalPath(value) {
+    return /^\d{4}\/\d{2}(?:\/\d{2}\/[^/]+)?\/.+(?:[?#].*)?$/i.test(String(value || '').replace(/\\/g, '/').trim());
+  }
+
+  function toLogicalResourcePath(value, userId, area) {
+    var text = String(value || '').replace(/\\/g, '/').trim();
+    var uid = String(userId || getCurrentUserId() || '').trim();
+    var areaName = String(area || '').replace(/^\/+|\/+$/g, '').toLowerCase();
+    var parsedUrl, queryPath, queryArea, idx, m, suffix = '';
+
+    if (!text || /^https?:\/\//i.test(text) && text.indexOf('/wu_wei2/') < 0) {
+      return text;
     }
-    if (path.indexOf('/wu_wei2/data/') >= 0) {
-      path = path.replace(/^.*\/wu_wei2\/data\//, '');
-    } else if (path.indexOf('/wu_wei2/') >= 0) {
-      path = path.replace(/^.*\/wu_wei2\//, '');
-    }
-    path = path.replace(/^\/+/, '');
-    if (path.indexOf('data/') === 0) {
-      path = path.slice('data/'.length);
-    }
-    if (uid && path.indexOf(uid + '/') === 0) {
-      path = path.slice(uid.length + 1);
-    }
-    if (!areaName) {
-      m = path.match(/^(upload|resource|note|thumbnail|content)\/(.+)$/);
-      if (m) {
-        areaName = m[1];
-        path = m[2];
-      } else {
-        return path;
+
+    try {
+      if (/^https?:\/\//i.test(text) || text.indexOf('?') >= 0) {
+        parsedUrl = new URL(text, window.location.href);
+        queryPath = parsedUrl.searchParams.get('path');
+        queryArea = parsedUrl.searchParams.get('area');
+        if (queryPath) {
+          if (!areaName && queryArea) {
+            areaName = String(queryArea || '').toLowerCase();
+          }
+          text = queryPath;
+        }
+        else {
+          text = parsedUrl.pathname;
+        }
       }
     }
-    if (path.indexOf(areaName + '/') === 0) {
-      path = path.slice(areaName.length + 1);
+    catch (e) { /* keep raw value */ }
+
+    m = text.match(/([?#].*)$/);
+    if (m) {
+      suffix = m[1];
+      text = text.slice(0, -suffix.length);
     }
-    if (uid && path.indexOf(uid + '/') === 0) {
-      path = path.slice(uid.length + 1);
+
+    idx = text.indexOf('/wu_wei2/');
+    if (idx >= 0) {
+      text = text.slice(idx + '/wu_wei2/'.length);
     }
-    path = toStorageRelativePath(path, uid, areaName);
+
+    text = text.replace(/^\/+/, '');
+    if (text.indexOf('data/') === 0) {
+      text = text.slice('data/'.length);
+    }
+    if (uid && text.indexOf(uid + '/') === 0) {
+      text = text.slice(uid.length + 1);
+    }
+
+    m = text.match(/^(upload|resource|note|thumbnail|content)\/(.+)$/i);
+    if (m) {
+      if (!areaName) {
+        areaName = m[1].toLowerCase();
+      }
+      text = m[2];
+    }
+    if (areaName && text.indexOf(areaName + '/') === 0) {
+      text = text.slice(areaName.length + 1);
+    }
+    if (uid && text.indexOf(uid + '/') === 0) {
+      text = text.slice(uid.length + 1);
+    }
+
+
+    return text.replace(/^\/+/, '') + suffix;
+  }
+
+  toPublicResourceUri = function (area, relativePath, userId, role) {
+    var areaName = String(area || '').replace(/^\/+|\/+$/g, '').toLowerCase();
+    var path = String(relativePath || '').replace(/\\/g, '/').trim();
+    var roleName = String(role || '').replace(/^\/+|\/+$/g, '').toLowerCase();
+    var m, query;
+
+    if (!path || /^https?:\/\//i.test(path) && path.indexOf('/wu_wei2/') < 0) {
+      return path;
+    }
+    if (!areaName) {
+      m = path.replace(/^\/+/, '').match(/^(upload|resource|note|thumbnail|content)\/(.+)$/i);
+      if (m) {
+        areaName = m[1].toLowerCase();
+        path = m[2];
+      } else {
+        areaName = 'upload';
+      }
+    }
+    path = toLogicalResourcePath(path, userId, areaName);
     if (!path || path.indexOf('..') >= 0) {
       return '';
     }
     query = '?area=' + encodeURIComponent(areaName) +
       '&path=' + encodeURIComponent(path);
-    if (uid) {
-      query += '&user_id=' + encodeURIComponent(uid);
+    if (roleName) {
+      query += '&role=' + encodeURIComponent(roleName);
     }
     return getServerUrl('load-file') + query;
   };
@@ -4013,43 +4069,58 @@ wuwei.util = (function () {
   function getResourceOwnerUserId(resource, node) {
     var audit = (resource && resource.audit && 'object' === typeof resource.audit) ? resource.audit : {};
     var rights = (resource && resource.rights && 'object' === typeof resource.rights) ? resource.rights : {};
-    var storage = (resource && resource.storage && 'object' === typeof resource.storage) ? resource.storage : {};
-    var files = Array.isArray(storage.files) ? storage.files : [];
-    var currentUid = String(getCurrentUserId() || '').trim();
-    var kind = String(resource && resource.kind || '').toLowerCase();
-    var isManagedUpload = kind === 'upload';
-    var explicitOwner = String(
-      resource && resource.owner ||
-      rights.owner ||
-      audit.owner ||
-      audit.createdBy ||
-      ''
-    ).trim();
-    var i;
-
-    for (i = 0; !isManagedUpload && i < files.length; i += 1) {
-      if (files[i] && String(files[i].area || '').toLowerCase() === 'upload') {
-        isManagedUpload = true;
-      }
-    }
-
-    if (isManagedUpload) {
-      return explicitOwner || currentUid;
-    }
-
     return String(
-      audit.owner ||
+      (node && node.audit && (node.audit.createdBy || node.audit.owner)) ||
       audit.createdBy ||
+      audit.owner ||
       rights.owner ||
-      (node && node.audit && (node.audit.owner || node.audit.createdBy)) ||
-      currentUid ||
+      getCurrentUserId() ||
       ''
     ).trim();
   }
 
+  function appBasePathForResourceUrl() {
+    var path = (window.location && window.location.pathname) ? window.location.pathname : '/wu_wei2/';
+    var marker = '/wu_wei2/';
+    var idx = path.indexOf(marker);
+    if (idx >= 0) {
+      return path.slice(0, idx + marker.length);
+    }
+    return '/wu_wei2/';
+  }
+
+  function canUseDirectUploadFile(file) {
+    var path = String(file && file.path || '').replace(/\\/g, '/').trim();
+    return /^\d{4}\/\d{2}\/\d{2}\/[^/]+\/.+\.(pdf|doc|docx|xls|xlsx|ppt|pptx)$/i.test(path);
+  }
+
+  function buildDirectUploadFileUri(file) {
+    var dir = String(file && file.dir_name || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    var name = String(file && (file.file_name || file.filename || file.name) || '').replace(/\\/g, '/').replace(/^\/+/, '');
+
+    if (!dir || !name || !canUseDirectUploadFile(file)) {
+      return '';
+    }
+    if (dir.indexOf('wu_wei2/') === 0) {
+      return '/' + dir + '/' + encodeURIComponent(name).replace(/%2F/g, '/');
+    }
+    if (dir.indexOf('data/') === 0) {
+      return appBasePathForResourceUrl() + dir + '/' + encodeURIComponent(name).replace(/%2F/g, '/');
+    }
+    return appBasePathForResourceUrl() + 'data/' + dir + '/' + encodeURIComponent(name).replace(/%2F/g, '/');
+  }
+
+  getResourceDirectFileUri = function (resource, role, node) {
+    var file = getResourceFile(resource, role || 'original');
+    if (!file || String(file.area || 'upload').toLowerCase() !== 'upload') {
+      return '';
+    }
+    return buildDirectUploadFileUri(file);
+  };
+
   getResourceFileUri = function (resource, role, node) {
     var file = getResourceFile(resource, role);
-    var area, path, raw, uid;
+    var area, path, raw;
 
     if (!file) {
       return '';
@@ -4063,18 +4134,17 @@ wuwei.util = (function () {
       return raw;
     }
 
-    area = String(file.area || '').trim();
+    area = String(file.area || '').trim().toLowerCase();
     if (!area) {
-      area = (String(role || '').toLowerCase() === 'original') ? 'upload' : 'note';
+      area = (String(role || '').toLowerCase() === 'original') ? 'upload' : 'resource';
     }
-    uid = getResourceOwnerUserId(resource, node);
-    path = toStorageRelativePath(raw, uid, area);
-    return toPublicResourceUri(area, path, uid);
+    path = toLogicalResourcePath(raw, null, area);
+    return toPublicResourceUri(area, path, null, String(role || file.role || 'original').toLowerCase());
   };
 
   getResourceFilePath = function (resource, role, node) {
     var file = getResourceFile(resource, role);
-    var area, raw, uid;
+    var area, raw;
 
     if (!file) {
       return '';
@@ -4088,12 +4158,11 @@ wuwei.util = (function () {
       return raw;
     }
 
-    area = String(file.area || '').trim();
+    area = String(file.area || '').trim().toLowerCase();
     if (!area) {
-      area = (String(role || '').toLowerCase() === 'original') ? 'upload' : 'note';
+      area = (String(role || '').toLowerCase() === 'original') ? 'upload' : 'resource';
     }
-    uid = getResourceOwnerUserId(resource, node);
-    return toStorageRelativePath(raw, uid, area);
+    return toLogicalResourcePath(raw, null, area);
   };
 
   function isPdfPreviewUri(value) {
@@ -4140,7 +4209,7 @@ wuwei.util = (function () {
   }
 
   function makeResourceFileUri(resource, file, role, node) {
-    var area, raw, uid, path;
+    var area, raw, path;
 
     if (!file) { return ''; }
     raw = chooseResourceFilePathValue(file);
@@ -4148,13 +4217,12 @@ wuwei.util = (function () {
     if (/^https?:\/\//i.test(raw) && raw.indexOf('/wu_wei2/') < 0) {
       return raw;
     }
-    area = String(file.area || '').trim();
+    area = String(file.area || '').trim().toLowerCase();
     if (!area) {
       area = (String(role || file.role || '').toLowerCase() === 'original') ? 'upload' : 'resource';
     }
-    uid = getResourceOwnerUserId(resource, node);
-    path = toStorageRelativePath(raw, uid, area);
-    return toPublicResourceUri(area, path, uid);
+    path = toLogicalResourcePath(raw, null, area);
+    return toPublicResourceUri(area, path, null, String(role || file.role || 'original').toLowerCase());
   }
 
   function derivePdfPreviewCandidatesFromOfficeOriginal(resource, node) {
@@ -4171,7 +4239,7 @@ wuwei.util = (function () {
         return;
       }
       pdfPath = text.replace(/\.(docx?|xlsx?|pptx?)([?#].*)?$/i, '.pdf');
-      candidates.push(toPublicResourceUri(area || 'upload', toStorageRelativePath(pdfPath, uid, area || 'upload'), uid));
+      candidates.push(toPublicResourceUri(area || 'upload', toLogicalResourcePath(pdfPath, uid, area || 'upload'), null, 'preview'));
     }
 
     function addDerivedFromUrl(value) {
@@ -4458,10 +4526,12 @@ wuwei.util = (function () {
     getNodeSize: getNodeSize,
     getCurrentUserId: getCurrentUserId,
     toStorageRelativePath: toStorageRelativePath,
+    toLogicalResourcePath: toLogicalResourcePath,
     toPublicResourceUri: toPublicResourceUri,
       getResourceFile: getResourceFile,
       getResourceFilePath: getResourceFilePath,
       getResourceFileUri: getResourceFileUri,
+      getResourceDirectFileUri: getResourceDirectFileUri,
       getResourcePdfPreviewUri: getResourcePdfPreviewUri,
       getResourcePreviewUri: getResourcePreviewUri,
       getResourceOriginalPath: getResourceOriginalPath,

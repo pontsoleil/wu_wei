@@ -419,11 +419,166 @@
     return resource.videoKind || '';
   }
 
+  function noteCurrentUserId() {
+    var common = wuwei.common || {};
+    var state = common.state || {};
+    var user = state.currentUser || {};
+    return trim(user.user_id || '');
+  }
+
+  function resourceOwnerId(resource) {
+    var audit = isObject(resource.audit) ? resource.audit : {};
+    var rights = isObject(resource.rights) ? resource.rights : {};
+    return trim(noteCurrentUserId() || audit.createdBy || audit.owner || rights.owner);
+  }
+
+  function extractLoadFileParam(value, name) {
+    var text = trim(value);
+    var re, m;
+    if (!text || text.indexOf('?') < 0) {
+      return '';
+    }
+    try {
+      return new URL(text, root.location && root.location.href ? root.location.href : undefined).searchParams.get(name) || '';
+    }
+    catch (e) {
+      re = new RegExp('(?:^|[?&])' + name + '=([^&]*)');
+      m = text.match(re);
+      if (m) {
+        try { return decodeURIComponent(m[1]); } catch (e2) { return m[1]; }
+      }
+    }
+    return '';
+  }
+
+  function logicalUploadPathFromPhysical(path) {
+    /* v2 keeps the upload bundle UUID in the logical path:
+     * YYYY/MM/DD/file_uuid/filename.  Legacy YYYY/MM/filename is also kept. */
+    return trim(path).replace(/\\/g, '/');
+  }
+
+  function normalizeLogicalPath(path, area, resource) {
+    var text = trim(path).replace(/\\/g, '/');
+    var uid = resourceOwnerId(resource);
+    var m;
+
+    if (!text || isHttpUri(text) && text.indexOf('/wu_wei2/') < 0) {
+      return text;
+    }
+
+    m = extractLoadFileParam(text, 'path');
+    if (m) {
+      text = m.replace(/\\/g, '/').replace(/^\/+/, '');
+    }
+    else {
+      text = text.replace(/[?#].*$/, '');
+      m = text.indexOf('/wu_wei2/');
+      if (m >= 0) {
+        text = text.slice(m + '/wu_wei2/'.length);
+      }
+      text = text.replace(/^\/+/, '');
+      if (text.indexOf('data/') === 0) {
+        text = text.slice('data/'.length);
+      }
+      if (uid && text.indexOf(uid + '/') === 0) {
+        text = text.slice(uid.length + 1);
+      }
+      m = text.match(/^[^/]+\/(upload|resource|note|thumbnail|content)\/(.+)$/);
+      if (m) {
+        text = m[1] + '/' + m[2];
+      }
+      m = text.match(/^(upload|resource|note|thumbnail|content)\/(.+)$/);
+      if (m) {
+        text = m[2];
+      }
+    }
+    if (area === 'upload') {
+      text = logicalUploadPathFromPhysical(text);
+    }
+    return text.replace(/^\/+/, '');
+  }
+
+  function deriveDirName(rawPath, area, resource) {
+    var raw = trim(rawPath).replace(/\\/g, '/').replace(/[?#].*$/, '');
+    var uid = resourceOwnerId(resource);
+    var m, text;
+
+    if (!raw || isHttpUri(raw) && raw.indexOf('/wu_wei2/') < 0) {
+      return '';
+    }
+    text = raw;
+    m = text.indexOf('/wu_wei2/');
+    if (m >= 0) {
+      text = text.slice(m + '/wu_wei2/'.length);
+    }
+    text = text.replace(/^\/+/, '');
+    if (text.indexOf('data/') === 0) {
+      m = text.match(/^(data\/[^/]+\/(?:upload|resource|note|thumbnail|content)\/.+)\/[^/]+$/);
+      return m ? m[1] : '';
+    }
+    area = toLower(area || 'upload');
+
+    if (uid && /^(upload|resource|note|thumbnail|content)$/.test(area)) {
+      if (area === 'upload') {
+        m = text.match(/^(\d{4}\/\d{2}\/\d{2}\/[^/]+)\/[^/]+$/);
+        if (m) {
+          return 'data/' + uid + '/upload/' + m[1];
+        }
+      }
+
+      /*
+       * v0 / legacy content resources use YYYY/MM/filename.  Keep this path
+       * form unchanged and derive its directory from the same two-segment
+       * base; do not complement it to YYYY/MM/01/....
+       */
+      m = text.match(/^(\d{4}\/\d{2})\/[^/]+$/);
+      if (m) {
+        return 'data/' + uid + '/' + area + '/' + m[1];
+      }
+    }
+    return '';
+  }
+
   function normalizeStorage(resource, source) {
     var storage = resource.storage;
+    var files;
+    var i;
 
     storage = isObject(storage) ? storage : {};
-    storage.files = ensureArray(storage.files);
+    files = ensureArray(storage.files);
+    storage.files = files.map(function (item) {
+      var out = isObject(item) ? cloneObject(item) : {};
+      var role = toLower(out.role || 'original');
+      var area = toLower(out.area || storage.area || (source === 'upload' ? 'upload' : 'resource'));
+      var rawPath = out.path || out.sourcePath || out.uri || out.url || resource.uri || resource.canonicalUri || '';
+      out.role = role || 'original';
+      out.area = area || 'upload';
+      out.path = normalizeLogicalPath(rawPath, out.area, resource);
+      out.dir_name = out.dir_name || deriveDirName(rawPath, out.area, resource);
+      if (!out.file_name) {
+        if (out.dir_name && rawPath) {
+          out.file_name = stripQueryAndHash(rawPath).replace(/\\/g, '/').split('/').pop();
+        }
+        else if (out.role === 'preview' || out.role === 'pdf-preview') {
+          out.file_name = 'preview.pdf';
+        }
+        else if (out.role === 'thumbnail') {
+          out.file_name = 'thumbnail.jpg';
+        }
+      }
+      if (out.sourcePath) {
+        out.sourcePath = normalizeLogicalPath(out.sourcePath, out.sourceArea || out.area, resource);
+      }
+      return out;
+    }).filter(function (item) {
+      return item.path || item.dir_name || item.file_name;
+    });
+
+    if (source === 'upload') {
+      resource.uri = normalizeLogicalPath(resource.uri || resource.canonicalUri || (files[0] && files[0].path) || '', 'upload', resource);
+      resource.canonicalUri = normalizeLogicalPath(resource.canonicalUri || resource.uri || '', 'upload', resource);
+    }
+
     storage.managed = storage.managed === undefined ? source === 'upload' || source === 'generated' : !!storage.managed;
     storage.copyPolicy = storage.copyPolicy || (source === 'remote' ? 'metadataOnly' : 'reference');
     resource.storage = storage;

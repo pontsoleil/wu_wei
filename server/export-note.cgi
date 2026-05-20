@@ -282,8 +282,8 @@ while IFS="$(printf '\t')" read -r role area path mime; do
   [ -n "$mime" ] || mime=$(mime_for_name "$src")
   size=$(wc -c < "$src" | tr -d '[:space:]')
   sha=$(sha256_of "$src")
-  logical_base=$(printf '%s' "$rel" | awk -F/ '{if (NF >= 4) print $1"/"$2"/"$3"/"$4; else print $1"/"$2}')
-  file_uuid=$(printf '%s' "$rel" | awk -F/ -v fallback="$file_uuid" '{if (NF >= 4) print $4; else print fallback}' | sed 's/^_//')
+  logical_base=$(printf '%s' "$rel" | awk -F/ '{if (NF >= 5) print $1"/"$2"/"$3"/"$4; else print $1"/"$2}')
+  file_uuid=$(printf '%s' "$rel" | awk -F/ '{if (NF >= 5) print $4; else print ""}' | sed 's/^_//')
   if [ "$first_resource" = 0 ]; then
     printf ',\n' >> "$MANIFEST"
   fi

@@ -87,7 +87,19 @@ def clean_logical_path(value: str, allow_legacy: bool = True) -> str:
 
 
 def logical_base_of(logical: str) -> str:
-    return "/".join(clean_logical_path(logical).split("/")[:4])
+    """Return the bundle base without changing the logical path.
+
+    v2 upload paths use YYYY/MM/DD/file_uuid/filename, so the base is the
+    first four segments.  v0 legacy content paths use YYYY/MM/filename, so
+    the base is only YYYY/MM.  Do not complement legacy paths to
+    YYYY/MM/01/....
+    """
+    parts = clean_logical_path(logical).split("/")
+    if len(parts) >= 5 and re.match(r"^\d{4}$", parts[0]) and re.match(r"^\d{2}$", parts[1]) and re.match(r"^\d{2}$", parts[2]):
+        return "/".join(parts[:4])
+    if len(parts) >= 3 and re.match(r"^\d{4}$", parts[0]) and re.match(r"^\d{2}$", parts[1]):
+        return "/".join(parts[:2])
+    return "/".join(parts[:-1])
 
 
 def with_pdf_suffix(logical: str) -> str:
@@ -101,6 +113,12 @@ def is_office_file(path_or_name: str) -> bool:
 
 
 def inferred_legacy_source_path(logical: str) -> str:
+    """Compatibility-only fallback for notes saved by an older migrator.
+
+    New export logic does not normalise YYYY/MM/filename to YYYY/MM/01/....
+    This function is used only to recover already-saved broken paths when the
+    original legacy source path is otherwise unavailable.
+    """
     logical = clean_logical_path(logical, allow_legacy=False)
     parts = logical.split("/")
     if len(parts) >= 5 and parts[2] == "01":
@@ -311,7 +329,8 @@ def add_resource_files(zf: zipfile.ZipFile, upload_root: Path, user_id: str, res
                 manifest_files.append(zip_file_record(zf, pdf_src, "original", pdf_logical, pdf_def, derived_from))
                 update_resource_for_pdf_original(resource, original_def, pdf_logical, Path(pdf_logical).name, original_src)
                 logical_base = logical_base or logical_base_of(pdf_logical)
-                file_uuid = file_uuid or pdf_logical.split("/")[3].lstrip("_")
+                pdf_parts = pdf_logical.split("/")
+                file_uuid = file_uuid or (pdf_parts[3].lstrip("_") if len(pdf_parts) >= 5 else str(resource.get("id") or "").lstrip("_"))
                 office_replaced = True
                 if pdf_tmp:
                     pdf_tmp.cleanup()
