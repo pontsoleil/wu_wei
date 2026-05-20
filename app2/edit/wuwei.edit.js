@@ -955,6 +955,13 @@ wuwei.edit = wuwei.edit || {};
     if (!targetInfo || !targetInfo.object || !path) {
       return false;
     }
+    if (wuwei.collab && typeof wuwei.collab.canEditPath === 'function' &&
+      !wuwei.collab.canEditPath(targetInfo.object, path, targetInfo.kind)) {
+      if (typeof wuwei.collab.notifyReadOnly === 'function') {
+        wuwei.collab.notifyReadOnly();
+      }
+      return false;
+    }
     if ('node' === targetInfo.kind) {
       applyNodeEditPath(targetInfo.object, path, value, el);
     }
@@ -996,6 +1003,10 @@ wuwei.edit = wuwei.edit || {};
         'style.font.align', 'style.label.width', 'style.label.lines',
         'style.label.offset.x', 'style.label.offset.y'].indexOf(path) >= 0) {
       stateMap.selecteds.forEach(function (selectedNode) {
+        if (wuwei.collab && typeof wuwei.collab.canEditPath === 'function' &&
+          !wuwei.collab.canEditPath(selectedNode, path, 'node')) {
+          return;
+        }
         setNodePath(selectedNode, path, value);
         selectedNode.changed = true;
       });

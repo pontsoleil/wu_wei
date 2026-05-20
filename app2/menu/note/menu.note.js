@@ -840,6 +840,14 @@ wuwei.menu.note = wuwei.menu.note || {};
   }
 
   function applyImportedNote(noteJson) {
+    const cu = wuwei.common.state && wuwei.common.state.currentUser || {};
+    noteJson.exchange = Object.assign({}, noteJson.exchange || {}, {
+      imported: true,
+      mode: 'imported',
+      source: 'import',
+      importedBy: cu.user_id || '',
+      importedAt: new Date().toISOString()
+    });
     const current = wuwei.note.updateNote(noteJson);
     const nameEl = document.querySelector('#note_name .name');
     const descEl = document.querySelector('#note_name .description');

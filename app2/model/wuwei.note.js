@@ -110,6 +110,17 @@ wuwei.note = (function () {
     };
   }
 
+  function normalizeExchange(exchange) {
+    var src = (exchange && typeof exchange === 'object') ? exchange : {};
+    return {
+      imported: src.imported === true || src.mode === 'imported' || src.source === 'import',
+      mode: String(src.mode || (src.imported === true ? 'imported' : '')),
+      source: String(src.source || ''),
+      importedBy: String(src.importedBy || ''),
+      importedAt: String(src.importedAt || '')
+    };
+  }
+
   function normalizeRecordState(src) {
     return (src && src.state) ? String(src.state) : 'active';
   }
@@ -872,6 +883,7 @@ wuwei.note = (function () {
       resources: resources,
       thumbnail: (typeof src.thumbnail === 'undefined') ? '' : src.thumbnail,
       collaboration: normalizeCollaboration(src.collaboration),
+      exchange: normalizeExchange(src.exchange),
       audit: normalizeAudit(src.audit, state.currentUser)
     });
   }
@@ -1141,6 +1153,7 @@ wuwei.note = (function () {
       this.resources = cloneArray(param.resources).map(normalizeResourceDefinition);
       this.thumbnail = (typeof param.thumbnail === 'undefined') ? '' : param.thumbnail;
       this.collaboration = normalizeCollaboration(param.collaboration);
+      this.exchange = normalizeExchange(param.exchange);
       const portable = (param.bundle && typeof param.bundle === 'object')
         ? param.bundle
         : ((param.portable && typeof param.portable === 'object')
@@ -1250,6 +1263,7 @@ wuwei.note = (function () {
       resources: [],
       pages: [],
       collaboration: normalizeCollaboration(current.collaboration),
+      exchange: normalizeExchange(current.exchange),
       audit: normalizeAudit(current.audit, state.currentUser)
     };
 
@@ -1304,6 +1318,7 @@ wuwei.note = (function () {
       resources: cloneArray(current.resources).map(normalizeResourceDefinition),
       pages: [],
       collaboration: normalizeCollaboration(current.collaboration),
+      exchange: normalizeExchange(current.exchange),
       audit: normalizeAudit(current.audit, state.currentUser)
     };
 

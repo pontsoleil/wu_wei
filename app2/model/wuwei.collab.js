@@ -25,6 +25,36 @@ wuwei.collab = wuwei.collab || {};
     return !!(target && target.collaboration && target.collaboration.enabled);
   }
 
+  function currentUserId() {
+    return String(
+      (common && common.state && common.state.currentUser && common.state.currentUser.user_id) ||
+      (common && common.state && common.state.user_id) ||
+      ''
+    );
+  }
+
+  function isImportedNote(note) {
+    var target = note || currentNote();
+    var exchange = target && target.exchange;
+    var noteCreator = String(target && target.audit && target.audit.createdBy || '');
+    var uid = currentUserId();
+    if (exchange && typeof exchange === 'object' &&
+      (exchange.imported === true || exchange.mode === 'imported' || exchange.source === 'import')) {
+      return true;
+    }
+    return !!(!isEnabled(target) && uid && noteCreator && noteCreator !== uid);
+  }
+
+  function getMode(note) {
+    if (isEnabled(note)) {
+      return 'collaboration';
+    }
+    if (isImportedNote(note)) {
+      return 'exchange';
+    }
+    return 'personal';
+  }
+
   function normalizeMetadata(value) {
     var src = (value && typeof value === 'object') ? value : {};
     var revision = Number(src.revision);
@@ -113,8 +143,66 @@ wuwei.collab = wuwei.collab || {};
     }
   }
 
+  function isOwnObject(record) {
+    if (!record) {
+      return false;
+    }
+    if (!wuwei.auth || typeof wuwei.auth.canEditRecord !== 'function') {
+      return true;
+    }
+    try {
+      return wuwei.auth.canEditRecord(record);
+    }
+    catch (e) {
+      return false;
+    }
+  }
+
+  function isDisplayPath(kind, path) {
+    var p = String(path || '');
+    if (!p) {
+      return false;
+    }
+    if (kind === 'node') {
+      return p === 'x' || p === 'y' || p === 'visible' ||
+        p === 'shape' || p.indexOf('size.') === 0 ||
+        p.indexOf('style.') === 0 || p.indexOf('text.') === 0;
+    }
+    if (kind === 'link') {
+      return p === 'visible' ||
+        p.indexOf('style.') === 0 || p.indexOf('routing.') === 0;
+    }
+    if (kind === 'group') {
+      return p === 'visible' || p === 'orientation' || p === 'moveTogether' ||
+        p.indexOf('style.') === 0 || p.indexOf('spine.') === 0;
+    }
+    return false;
+  }
+
+  function canEditPath(record, path, kind) {
+    if (!record) {
+      return false;
+    }
+    if (isOwnObject(record)) {
+      return true;
+    }
+    if (isEnabled()) {
+      return false;
+    }
+    if (!isImportedNote()) {
+      return true;
+    }
+    return isDisplayPath(kind, path);
+  }
+
   function canDeleteObject(record) {
-    return canEditObject(record);
+    if (!record) {
+      return false;
+    }
+    if (isOwnObject(record)) {
+      return true;
+    }
+    return !isEnabled();
   }
 
   function canEditSelection(records) {
@@ -125,7 +213,10 @@ wuwei.collab = wuwei.collab || {};
   }
 
   function readOnlyMessage() {
-    return 'This item was created by another user. Add a memo instead of editing it directly.';
+    if (isEnabled()) {
+      return 'This item was created by another user. Add a memo instead of editing it directly.';
+    }
+    return 'This field is protected for imported notes. Only display attributes can be changed.';
   }
 
   function notifyReadOnly() {
@@ -190,12 +281,15 @@ wuwei.collab = wuwei.collab || {};
   ns.start = start;
   ns.stop = stop;
   ns.isEnabled = isEnabled;
+  ns.isImportedNote = isImportedNote;
+  ns.getMode = getMode;
   ns.getRevision = getRevision;
   ns.normalizeMetadata = normalizeMetadata;
   ns.queueOperation = queueOperation;
   ns.sync = sync;
   ns.applyRemoteChanges = applyRemoteChanges;
   ns.canEditObject = canEditObject;
+  ns.canEditPath = canEditPath;
   ns.canDeleteObject = canDeleteObject;
   ns.canEditSelection = canEditSelection;
   ns.readOnlyMessage = readOnlyMessage;

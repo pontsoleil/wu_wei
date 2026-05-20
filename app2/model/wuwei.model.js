@@ -2214,6 +2214,13 @@ wuwei.model = (function () {
     if (!id) {
       return linkids;
     }
+    if (node && wuwei.collab && typeof wuwei.collab.canDeleteObject === 'function' &&
+      !wuwei.collab.canDeleteObject(node)) {
+      if (typeof wuwei.collab.notifyReadOnly === 'function') {
+        wuwei.collab.notifyReadOnly();
+      }
+      return linkids;
+    }
 
     /** remove connected links */
     connectedLinks = findLinksByNode(node);
@@ -3251,6 +3258,13 @@ wuwei.model = (function () {
     var id = param && param.id;
     var link = id ? findLinkById(id) : null;
     if (!id) {
+      return;
+    }
+    if (link && wuwei.collab && typeof wuwei.collab.canDeleteObject === 'function' &&
+      !wuwei.collab.canDeleteObject(link)) {
+      if (typeof wuwei.collab.notifyReadOnly === 'function') {
+        wuwei.collab.notifyReadOnly();
+      }
       return;
     }
     if (link) {
@@ -8560,6 +8574,13 @@ wuwei.model = (function () {
     page.groups.forEach(function (group) {
       if (group && group.id === groupId) {
         removed = group;
+        if (wuwei.collab && typeof wuwei.collab.canDeleteObject === 'function' &&
+          !wuwei.collab.canDeleteObject(group)) {
+          if (typeof wuwei.collab.notifyReadOnly === 'function') {
+            wuwei.collab.notifyReadOnly();
+          }
+          return;
+        }
         markDeletedRecord(group);
       }
     });
