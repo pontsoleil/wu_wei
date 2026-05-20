@@ -247,8 +247,15 @@ wuwei.info.generic.markup = (function () {
   }
 
   function toOfficeViewerFetchUri(uri, node) {
-    var parsed, area, path, uid, basePath;
+    var parsed, area, path, uid, basePath, direct;
     var text = String(uri || '').trim();
+
+    if (wuwei.util && typeof wuwei.util.getResourceDirectFileUri === 'function') {
+      direct = wuwei.util.getResourceDirectFileUri(wuwei.util.getResource ? wuwei.util.getResource(node) : (node && node.resource), 'original', node);
+      if (direct) {
+        return new URL(direct, window.location.origin).href;
+      }
+    }
 
     try {
       parsed = new URL(text, window.location.href);

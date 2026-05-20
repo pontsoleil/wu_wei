@@ -246,6 +246,32 @@ wuwei.note.v1 = (function () {
     return '';
   }
 
+  function mimeTypeFromUri(uri) {
+    var ext = extensionFromUri(uri);
+    if (ext === '.pdf') { return 'application/pdf'; }
+    if (/^\.(html|htm|xhtml)$/.test(ext)) { return 'text/html'; }
+    if (/^\.(txt|text|md|markdown|csv|tsv|log|adoc|asciidoc)$/.test(ext)) { return 'text/plain'; }
+    if (ext === '.json') { return 'application/json'; }
+    if (ext === '.xml') { return 'application/xml'; }
+    if (/^\.(png)$/.test(ext)) { return 'image/png'; }
+    if (/^\.(jpe?g)$/.test(ext)) { return 'image/jpeg'; }
+    if (ext === '.gif') { return 'image/gif'; }
+    if (ext === '.svg') { return 'image/svg+xml'; }
+    if (ext === '.webp') { return 'image/webp'; }
+    if (ext === '.ico') { return 'image/x-icon'; }
+    if (/^\.(doc|dot)$/.test(ext)) { return 'application/msword'; }
+    if (ext === '.docx') { return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'; }
+    if (/^\.(xls|xlt)$/.test(ext)) { return 'application/vnd.ms-excel'; }
+    if (ext === '.xlsx') { return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'; }
+    if (/^\.(ppt|pot)$/.test(ext)) { return 'application/vnd.ms-powerpoint'; }
+    if (ext === '.pptx') { return 'application/vnd.openxmlformats-officedocument.presentationml.presentation'; }
+    if (/^\.(mp4|m4v)$/.test(ext)) { return 'video/mp4'; }
+    if (ext === '.webm') { return 'video/webm'; }
+    if (ext === '.mp3') { return 'audio/mpeg'; }
+    if (ext === '.wav') { return 'audio/wav'; }
+    return '';
+  }
+
   function videoKindFromUri(uri) {
     var text = String(uri || '').toLowerCase();
     if (/(^|\/\/)(www\.)?(youtube\.com|youtu\.be)\//.test(text)) { return 'youtube'; }
@@ -291,20 +317,65 @@ wuwei.note.v1 = (function () {
     );
   }
 
+  function logicalPathFromUri(uri, area) {
+    var text = String(uri || '').replace(/\\/g, '/').trim();
+    if (wuwei.util && typeof wuwei.util.toLogicalResourcePath === 'function') {
+      return wuwei.util.toLogicalResourcePath(text, null, area || 'upload');
+    }
+    return text;
+  }
+
+  function dirNameFromUri(uri, area) {
+    var text = String(uri || '').replace(/\\/g, '/').replace(/[?#].*$/, '').trim();
+    var currentUser = state.currentUser || {};
+    var uid = String(currentUser.user_id || '').trim();
+    var idx, m;
+    if (!text || isHttpUrl(text)) {
+      return '';
+    }
+    idx = text.indexOf('/wu_wei2/');
+    if (idx >= 0) {
+      text = text.slice(idx + '/wu_wei2/'.length);
+    }
+    text = text.replace(/^\/+/, '');
+    if (text.indexOf('data/') === 0) {
+      m = text.match(/^(data\/[^/]+\/(?:upload|resource|note|thumbnail|content)\/.+)\/[^/]+$/);
+      return m ? m[1] : '';
+    }
+    if ((area || 'upload') === 'upload') {
+      m = text.match(/^(\d{4}\/\d{2}\/\d{2}\/_[^/]+)\/[^/]+$/);
+      if (m && uid) {
+        return 'data/' + uid + '/upload/' + m[1];
+      }
+    }
+    return '';
+  }
+
   function addStorageFile(files, role, uri, mimeType, fallbackArea) {
-    var path = stripFileFragment(uri).replace(/\\/g, '/').trim();
+    var raw = stripFileFragment(uri).replace(/\\/g, '/').trim();
     var area;
-    if (!path || isHttpUrl(path) && path.indexOf('/wu_wei2/') < 0) {
+    var path;
+    var dirName;
+
+    if (!raw) {
       return;
     }
-    area = storageAreaFromUri(path, fallbackArea || (role === 'original' ? 'upload' : 'resource'));
+    area = isHttpUrl(raw) ? 'remote' : storageAreaFromUri(raw, fallbackArea || (role === 'original' ? 'upload' : 'resource'));
+    path = area === 'remote' ? raw : logicalPathFromUri(raw, area);
+    dirName = dirNameFromUri(raw, area);
+    if (files.some(function (file) { return file.role === role && file.path === path; })) {
+      return;
+    }
     files.push({
       role: role,
       area: area,
       path: path,
+      dir_name: dirName,
+      file_name: raw.split('/').pop(),
       mimeType: String(mimeType || '')
     });
   }
+
 
   function buildStorageFiles(uri, previewUri, thumbnail, mimeType) {
     var files = [];
@@ -322,14 +393,75 @@ wuwei.note.v1 = (function () {
     return files;
   }
 
-  function previewUriFromV1(node, originalUri) {
-    var value = node && node.value;
-    var res = value && typeof value === 'object' ? value.resource : null;
-    var preview = String((res && res.uri) || '').trim();
-    if (preview && extensionFromUri(preview)) {
-      return preview;
+  function rewriteLegacyLocalUriOrKeep(value) {
+    var raw = cleanLegacyString(value).replace(/\\/g, '/').trim();
+    var rewritten;
+
+    if (!raw) {
+      return '';
     }
-    return originalUri;
+    rewritten = rewriteLegacyLocalUri(raw);
+    return rewritten || raw;
+  }
+
+  function valueObjectFromV1(node) {
+    return node && node.value && typeof node.value === 'object' ? node.value : {};
+  }
+
+  function firstNonEmptyString() {
+    var i;
+    var value;
+
+    for (i = 0; i < arguments.length; i += 1) {
+      value = cleanLegacyString(arguments[i]).trim();
+      if (value) {
+        return value;
+      }
+    }
+    return '';
+  }
+
+  function originalUriFromV1(node) {
+    var value = valueObjectFromV1(node);
+    var file = value.file && typeof value.file === 'object' ? value.file : {};
+    var resource = value.resource && typeof value.resource === 'object' ? value.resource : {};
+
+    return firstNonEmptyString(
+      node && node.uri,
+      node && node.url,
+      node && node.href,
+      node && node.targetHref,
+      node && node.download_url,
+      node && node.downloadUrl,
+      file.uri,
+      file.url,
+      file.href,
+      file.path,
+      file.name && !resource.uri ? file.name : '',
+      resource.originalUri,
+      resource.canonicalUri,
+      resource.uri,
+      resource.url,
+      resource.href,
+      resource.path
+    );
+  }
+
+  function previewUriFromV1(node, originalUri) {
+    var value = valueObjectFromV1(node);
+    var resource = value.resource && typeof value.resource === 'object' ? value.resource : {};
+    var preview = firstNonEmptyString(
+      resource.viewerUri,
+      resource.previewUri,
+      node && node.viewerUri,
+      node && node.previewUri,
+      resource.uri
+    );
+
+    if (!preview || preview === originalUri) {
+      return '';
+    }
+    return preview;
   }
 
   function documentKindFromResource(kind, uri, mimeType) {
@@ -345,29 +477,37 @@ wuwei.note.v1 = (function () {
   }
 
   function resourceFromV1Content(node) {
-    var uri = rewriteLegacyLocalUri(node && (node.uri || node.url || node.download_url));
+    var originalRaw = originalUriFromV1(node);
+    var previewRaw = previewUriFromV1(node, originalRaw);
+    var uri = rewriteLegacyLocalUriOrKeep(originalRaw);
+    var previewUri = rewriteLegacyLocalUriOrKeep(previewRaw);
     var mimeType = cleanLegacyString(node && (node.mimeType || node.format || node.contenttype)).trim();
-    var thumbnail = rewriteLegacyLocalUri(node && (node.thumbnailUri || node.thumbnail));
-    var title = cleanLegacyString(node && (node.label || node.name)).trim() || fileNameFromUri(uri) || uri;
-    var previewUri = rewriteLegacyLocalUri(previewUriFromV1(node, uri));
-    var kind = mediaKindFromUri(uri || previewUri, mimeType);
+    var thumbnail = rewriteLegacyLocalUriOrKeep(node && (node.thumbnailUri || node.thumbnail));
+    var displayUri = uri || originalRaw || previewUri || previewRaw;
+    var logicalDisplayUri;
+    var title = cleanLegacyString(node && (node.label || node.name)).trim() || fileNameFromUri(displayUri) || displayUri;
+    var effectiveMimeType;
+    var kind = mediaKindFromUri(displayUri || previewUri, mimeType);
     var id = (node && (node.resourceRef || node.content_id)) || createUuid();
-    var source = resourceSourceFromUri(uri, node);
+    var source = resourceSourceFromUri(displayUri, node);
+    effectiveMimeType = mimeTypeFromUri(displayUri || previewUri) || mimeType || 'text/plain';
 
     return {
       id: id,
       source: source,
       kind: kind,
-      documentKind: documentKindFromResource(kind, uri || previewUri, mimeType),
-      videoKind: kind === 'video' ? videoKindFromUri(uri || previewUri) : '',
-      canonicalUri: uri,
-      uri: previewUri || uri,
+      documentKind: documentKindFromResource(kind, displayUri || previewUri, mimeType),
+      videoKind: kind === 'video' ? videoKindFromUri(displayUri || previewUri) : '',
+      canonicalUri: logicalDisplayUri,
+      uri: logicalDisplayUri,
       title: title,
-      mimeType: mimeType || 'text/plain',
+      mimeType: effectiveMimeType,
+      viewerUri: previewUri || displayUri,
+      previewUri: previewUri || '',
       storage: {
         managed: source === 'upload',
         copyPolicy: source === 'upload' ? 'snapshot' : 'metadataOnly',
-        files: buildStorageFiles(uri, previewUri, thumbnail, mimeType)
+        files: buildStorageFiles(displayUri, previewUri, thumbnail, effectiveMimeType)
       },
       thumbnailUri: isFileThumbnail(thumbnail) ? thumbnail : '',
       rights: {

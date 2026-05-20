@@ -90,6 +90,96 @@ wuwei.resource = (function () {
     return ajaxRequest(util.getServerUrl('remove-resource'), data, 'POST', 5000);
   };
 
+
+
+  function getNode(nodeOrResource) {
+    return nodeOrResource && nodeOrResource.resource ? nodeOrResource : null;
+  }
+
+  function getResource(nodeOrResource) {
+    if (!nodeOrResource) { return {}; }
+    return nodeOrResource.resource && typeof nodeOrResource.resource === 'object'
+      ? nodeOrResource.resource
+      : nodeOrResource;
+  }
+
+  function getFileByRole(nodeOrResource, role) {
+    const resource = getResource(nodeOrResource);
+    return util && typeof util.getResourceFile === 'function'
+      ? util.getResourceFile(resource, role || 'original')
+      : null;
+  }
+
+  function getLogicalUri(nodeOrResource) {
+    const resource = getResource(nodeOrResource);
+    return String(resource.uri || resource.canonicalUri || '');
+  }
+
+  function getRolePath(nodeOrResource, role) {
+    const node = getNode(nodeOrResource);
+    const resource = getResource(nodeOrResource);
+    if (util && typeof util.getResourceFilePath === 'function') {
+      return util.getResourceFilePath(resource, role || 'original', node) || getLogicalUri(resource);
+    }
+    return getLogicalUri(resource);
+  }
+
+  function getRoleUrl(nodeOrResource, role, opt) {
+    const node = getNode(nodeOrResource);
+    const resource = getResource(nodeOrResource);
+    const source = String(resource.source || '').toLowerCase();
+    const roleName = role || 'original';
+    const storage = resource.storage || {};
+    const file = getFileByRole(resource, roleName) || {};
+    const area = file.area || storage.area || (source === 'upload' ? 'upload' : 'resource');
+    const path = getRolePath(nodeOrResource, roleName);
+    const mode = opt && opt.mode || '';
+    let direct = '';
+
+    if (source === 'remote' || /^https?:\/\//i.test(path)) {
+      return path;
+    }
+
+    if ((mode === 'officeViewer' || mode === 'direct') &&
+        util && typeof util.getResourceDirectFileUri === 'function') {
+      direct = util.getResourceDirectFileUri(resource, roleName, node);
+      if (direct) { return direct; }
+    }
+
+    if (util && typeof util.toPublicResourceUri === 'function') {
+      return util.toPublicResourceUri(area, path, null, roleName);
+    }
+    return path;
+  }
+
+  function getDirectUploadUrl(nodeOrResource, role) {
+    return getRoleUrl(nodeOrResource, role || 'original', { mode: 'direct' });
+  }
+
+  function getOfficeViewerUrl(nodeOrResource, role) {
+    return getRoleUrl(nodeOrResource, role || 'original', { mode: 'officeViewer' });
+  }
+
+  function getOpenUrl(nodeOrResource) {
+    return getRoleUrl(nodeOrResource, 'original');
+  }
+
+  function getViewerUrl(nodeOrResource) {
+    const resource = getResource(nodeOrResource);
+    const sourceRole = resource.contents && resource.contents.sourceRole || '';
+    if (resource.documentKind === 'office') {
+      return getRoleUrl(nodeOrResource, sourceRole || 'preview');
+    }
+    if (resource.documentKind === 'pdf') {
+      return getRoleUrl(nodeOrResource, sourceRole || 'original');
+    }
+    return getRoleUrl(nodeOrResource, sourceRole || 'original');
+  }
+
+  function getThumbnailUrl(nodeOrResource) {
+    return getRoleUrl(nodeOrResource, 'thumbnail');
+  }
+
   function initModule() { }
 
   return {
@@ -98,6 +188,14 @@ wuwei.resource = (function () {
     search: search,
     update: update,
     remove: remove,
+    getLogicalUri: getLogicalUri,
+    getRolePath: getRolePath,
+    getRoleUrl: getRoleUrl,
+    getDirectUploadUrl: getDirectUploadUrl,
+    getOfficeViewerUrl: getOfficeViewerUrl,
+    getOpenUrl: getOpenUrl,
+    getViewerUrl: getViewerUrl,
+    getThumbnailUrl: getThumbnailUrl,
     /** init */
     initModule: initModule
   };

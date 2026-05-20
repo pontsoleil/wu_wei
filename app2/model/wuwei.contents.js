@@ -2180,8 +2180,14 @@ wuwei.contents = wuwei.contents || {};
 
   function isHtmlDocumentNode(documentNode) {
     var resource = (documentNode && documentNode.resource && 'object' === typeof documentNode.resource) ? documentNode.resource : {};
-    return !!(util && typeof util.isDocumentKindByExtension === 'function' &&
-      util.isDocumentKindByExtension(documentNode, resource, '', 'html'));
+    var documentKind = String(resource.documentKind || '').toLowerCase();
+    var contentsType = String(resource.contents && resource.contents.type || '').toLowerCase();
+    return !!(documentNode && documentNode.type === 'Content' && (
+      documentKind === 'html' ||
+      contentsType === 'html' ||
+      (util && typeof util.isDocumentKindByExtension === 'function' &&
+        util.isDocumentKindByExtension(documentNode, resource, '', 'html'))
+    ));
   }
 
   function getHtmlDocumentViewerUrl(documentNode) {
@@ -2204,8 +2210,12 @@ wuwei.contents = wuwei.contents || {};
 
   function isOfficeDocumentNode(documentNode) {
     var resource = (documentNode && documentNode.resource && 'object' === typeof documentNode.resource) ? documentNode.resource : {};
-    return !!(util && typeof util.isDocumentKindByExtension === 'function' &&
-      util.isDocumentKindByExtension(documentNode, resource, '', 'office'));
+    var documentKind = String(resource.documentKind || '').toLowerCase();
+    return !!(documentNode && documentNode.type === 'Content' && (
+      documentKind === 'office' ||
+      (util && typeof util.isDocumentKindByExtension === 'function' &&
+        util.isDocumentKindByExtension(documentNode, resource, '', 'office'))
+    ));
   }
 
   function isPageMarkerContentTarget(contentTarget) {
@@ -2333,4 +2343,4 @@ wuwei.contents = wuwei.contents || {};
   ns.getContentTargetViewerUrl = getDocumentViewerUrl;
   ns.getDocumentViewerUrl = getDocumentViewerUrl;
 })(wuwei.contents);
-// wuwei.contents.js last modified 2026-05-11
+// wuwei.contents.js last modified 2026-05-19

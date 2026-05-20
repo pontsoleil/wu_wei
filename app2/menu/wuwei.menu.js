@@ -1675,8 +1675,15 @@ wuwei.menu = wuwei.menu || {};
   }
 
   function toOfficeViewerFetchUrl(href, node) {
-    var parsed, area, path, uid, basePath;
+    var parsed, area, path, uid, basePath, direct;
     var text = String(href || '').trim();
+
+    if (wuwei.util && typeof wuwei.util.getResourceDirectFileUri === 'function') {
+      direct = wuwei.util.getResourceDirectFileUri(getNodeResource(node), 'original', node);
+      if (direct) {
+        return new URL(direct, window.location.origin).href;
+      }
+    }
 
     try {
       parsed = new URL(text, window.location.href);
