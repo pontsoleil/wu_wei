@@ -470,10 +470,12 @@ mkdir -p "$note_dir" || text_response 'ERROR NOTE DIRECTORY NOT FOUND'
 target_note="$note_dir/$note_rel"
 case "$target_note" in "$note_dir"/*) ;; *) text_response 'ERROR INVALID NOTE PATH' ;; esac
 
+# Import overwrites an existing note with the same note_key by default.
+# Set replace=0 or overwrite=0 only when the caller wants conflict detection.
 replace=$(field_value replace || true)
 [ -n "${replace:-}" ] || replace=$(field_value overwrite || true)
 [ -n "${replace:-}" ] || replace=$(raw_query_param replace || true)
-case "${replace:-}" in 1|true|TRUE|yes|YES|on|ON) replace=1 ;; *) replace=0 ;; esac
+case "${replace:-1}" in 0|false|FALSE|no|NO|off|OFF) replace=0 ;; *) replace=1 ;; esac
 
 copy_zip_entry "$note_entry" "$NOTE_TMP" || text_response 'ERROR NOTE IMPORT FAILED'
 rewrite_note_for_import "$user_id" "$NOTE_TMP" "$NOTE_OUT"
