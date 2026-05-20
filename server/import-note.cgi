@@ -5,7 +5,6 @@
 # The exported note identity is preserved.  Legacy v0/v1 note ids that start
 # with '_' are valid and must not be rejected as UUID errors.
 
-export PATH=".:./bin:/bin:/usr/bin${PATH+:}${PATH-}"
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "${SCRIPT_FILENAME:-$0}")" && pwd) || exit 1
 cd "$SCRIPT_DIR" || exit 1
 mkdir -p log
@@ -13,6 +12,9 @@ exec 2>>"$SCRIPT_DIR/log/cgi.err"
 
 set -eu
 export LC_ALL=C
+if command -v getconf >/dev/null 2>&1; then
+  export PATH=".:./bin:$(command -p getconf PATH)${PATH+:}${PATH-}"
+fi
 export UNIX_STD=2003
 
 Tmp="/tmp/${0##*/}.$$"
@@ -40,11 +42,10 @@ error_response() {
 }
 
 ok_response() {
-  note_file=$1
-  printf '%s\r\n' 'Content-Type: application/json; charset=UTF-8'
-  printf '%s\r\n' 'Cache-Control: no-store'
+  printf '%s\r\n' 'Content-Type: text/plain; charset=UTF-8'
   printf '\r\n'
-  cat "$note_file"
+  printf '%s\n' 'OK NOTE IMPORTED'
+  printf 'note_key=%s\n' "$1"
   exit 0
 }
 
@@ -84,6 +85,7 @@ safe_rel_path() {
   rel=$(printf '%s' "$1" | sed 's#\\#/#g; s#^/*##; s#/*$##')
   case "$rel" in
     ''|/*|*'/../'*|'../'*|*'/..'|'.'|'..'|*'//'*) return 1 ;;
+    *[!A-Za-z0-9._/@+-]*) return 1 ;;
     *) printf '%s\n' "$rel" ;;
   esac
 }
@@ -92,6 +94,7 @@ safe_zip_entry() {
   entry=$(printf '%s' "$1" | sed 's#\\#/#g; s#^/*##')
   case "$entry" in
     ''|/*|*'/../'*|'../'*|*'/..'|'.'|'..'|*'//'*) return 1 ;;
+    *[!A-Za-z0-9._/@+-]*) return 1 ;;
     *) printf '%s\n' "$entry" ;;
   esac
 }
@@ -141,92 +144,61 @@ parse_request() {
 
   case "$ctype" in
     multipart/form-data*)
+      # Shell variables cannot safely hold ZIP binary content.  Save the raw
+      # request body to a file, then use a small Perl binary parser only to
+      # split the multipart body into a file and text fields; the import logic
+      # itself remains this shell script.
       cat > "$RAW_POST"
-      : > "$FIELDS"
-      boundary=$(printf '%s\n' "$ctype" | sed -n 's/.*boundary="\{0,1\}\([^";]*\)"\{0,1\}.*/\1/p')
-      [ -n "$boundary" ] || error_response 'ERROR INVALID MULTIPART BOUNDARY'
-      marker="--$boundary"
-      marker_len=$(printf '%s' "$marker" | wc -c | tr -d '[:space:]')
-      offsets="${Tmp}-offsets"
-      LC_ALL=C grep -abo -- "$marker" "$RAW_POST" | sed 's/:.*//' > "$offsets" || true
-      [ -s "$offsets" ] || error_response 'ERROR INVALID MULTIPART BODY'
-      got_file=0
-      prev=
-      while IFS= read -r off; do
-        if [ -n "${prev:-}" ]; then
-          part_file="${Tmp}-part"
-          seg_start=$((prev + marker_len))
-          seg_len=$((off - seg_start))
-          [ "$seg_len" -gt 0 ] || { prev=$off; continue; }
-          dd if="$RAW_POST" of="$part_file" bs=64K skip="$seg_start" count="$seg_len" iflag=skip_bytes,count_bytes 2>/dev/null || error_response 'ERROR INVALID MULTIPART BODY'
-          header_end=$(od -An -v -t u1 -N 8192 "$part_file" | awk '
-            BEGIN { pos = 0; a = b = c = -1 }
-            {
-              for (i = 1; i <= NF; i++) {
-                d = $i + 0
-                if (a == 13 && b == 10 && c == 13 && d == 10) {
-                  print pos - 3
-                  exit
-                }
-                a = b
-                b = c
-                c = d
-                pos++
-              }
-            }
-          ' 2>/dev/null || true)
-          sep_len=4
-          if [ -z "$header_end" ] || [ "$header_end" -le 0 ] 2>/dev/null; then
-            header_end=$(od -An -v -t u1 -N 8192 "$part_file" | awk '
-              BEGIN { pos = 0; a = -1 }
-              {
-                for (i = 1; i <= NF; i++) {
-                  d = $i + 0
-                  if (a == 10 && d == 10) {
-                    print pos - 1
-                    exit
-                  }
-                  a = d
-                  pos++
-                }
-              }
-            ' 2>/dev/null || true)
-            sep_len=2
-          fi
-          if [ -n "$header_end" ]; then
-            headers="${Tmp}-headers"
-            dd if="$part_file" of="$headers" bs=64K count="$header_end" iflag=count_bytes 2>/dev/null || true
-            disp=$(tr -d '\r' < "$headers" | awk '
-              BEGIN { IGNORECASE = 1 }
-              /^Content-Disposition:[[:space:]]*/ {
-                sub(/^Content-Disposition:[[:space:]]*/, "")
-                print
-                exit
-              }
-            ')
-            name=$(printf '%s\n' "$disp" | sed -n 's/.*name="\([^"]*\)".*/\1/p')
-            filename=$(printf '%s\n' "$disp" | sed -n 's/.*filename="\([^"]*\)".*/\1/p')
-            if [ -n "$name" ]; then
-              part_size=$(wc -c < "$part_file" | tr -d '[:space:]')
-              content_start=$((header_end + sep_len))
-              content_len=$((part_size - content_start))
-              [ "$content_len" -ge 2 ] && content_len=$((content_len - 2))
-              [ "$content_len" -ge 0 ] || content_len=0
-              if [ -n "$filename" ] || [ "$name" = 'file' ]; then
-                dd if="$part_file" of="$UPLOAD_ZIP" bs=64K skip="$content_start" count="$content_len" iflag=skip_bytes,count_bytes 2>/dev/null || error_response 'ERROR FILE NOT UPLOADED'
-                got_file=1
-              else
-                value_file="${Tmp}-field"
-                dd if="$part_file" of="$value_file" bs=64K skip="$content_start" count="$content_len" iflag=skip_bytes,count_bytes 2>/dev/null || true
-                value=$(tr -d '\r' < "$value_file" | sed 's/[=]/%3D/g' | sed -n '1p')
-                printf '%s=%s\n' "$name" "$value" >> "$FIELDS"
-              fi
-            fi
-          fi
-        fi
-        prev=$off
-      done < "$offsets"
-      [ "$got_file" -eq 1 ] || error_response 'ERROR FILE NOT UPLOADED'
+      set +e
+      perl -Mbytes - "$ctype" "$RAW_POST" "$UPLOAD_ZIP" "$FIELDS" <<'PL'
+use strict;
+use warnings;
+binmode STDIN;
+binmode STDOUT;
+my ($ctype, $raw_path, $zip_path, $fields_path) = @ARGV;
+$ctype =~ /boundary=(?:"([^"]+)"|([^;]+))/ or exit 2;
+my $boundary = defined($1) ? $1 : $2;
+$boundary =~ s/^\s+|\s+$//g;
+open my $raw, '<:raw', $raw_path or exit 6;
+my $body = do { local $/; <$raw> };
+close $raw;
+my $marker = "--$boundary";
+open my $fields, '>:raw', $fields_path or exit 3;
+my $got_file = 0;
+for my $part (split(/\Q$marker\E/, $body)) {
+    next if $part =~ /^--/;
+    $part =~ s/^\r?\n//;
+    $part =~ s/\r?\n$//;
+    next if $part eq '';
+    my ($headers, $content) = split(/\r?\n\r?\n/, $part, 2);
+    next unless defined $content;
+    $content =~ s/\r?\n\z//;
+    my $name = '';
+    my $filename = '';
+    for my $h (split(/\r?\n/, $headers)) {
+        if ($h =~ /^Content-Disposition:/i) {
+            $name = $1 if $h =~ /name="([^"]*)"/;
+            $filename = $1 if $h =~ /filename="([^"]*)"/;
+        }
+    }
+    next unless $name ne '';
+    if ($filename ne '' || $name eq 'file') {
+        open my $out, '>:raw', $zip_path or exit 4;
+        print {$out} $content;
+        close $out;
+        $got_file = 1;
+    } else {
+        $content =~ s/[\r\n].*\z//s;
+        $content =~ s/([\r\n=])/sprintf('%%%02X', ord($1))/eg;
+        print {$fields} "$name=$content\n";
+    }
+}
+close $fields;
+exit($got_file ? 0 : 5);
+PL
+      rc=$?
+      set -e
+      [ "$rc" -eq 0 ] || error_response 'ERROR FILE NOT UPLOADED'
       ;;
     application/x-www-form-urlencoded*)
       cat > "$CGIVARS"
@@ -273,121 +245,6 @@ copy_area_entries() {
   done
 }
 
-manifest_value() {
-  key=$1
-  file=$2
-  awk -v key="$key" '
-    BEGIN { RS="\001" }
-    {
-      pat="\"" key "\"[[:space:]]*:[[:space:]]*\""
-      if (match($0, pat)) {
-        s=substr($0, RSTART + RLENGTH)
-        sub(/".*/, "", s)
-        print s
-      }
-    }
-  ' "$file" | head -n 1
-}
-
-extract_manifest_resource_files() {
-  manifest=$1
-  awk '
-    BEGIN { RS="[{}]"; OFS="\t" }
-    /"role"[[:space:]]*:/ && /"logicalPath"[[:space:]]*:/ && /"path"[[:space:]]*:/ {
-      role=arc=logical=mime=source_area=""
-      if (match($0, /"role"[[:space:]]*:[[:space:]]*"[^"]+"/)) {
-        role=substr($0, RSTART, RLENGTH); sub(/^.*:"/, "", role); sub(/"$/, "", role)
-      }
-      if (match($0, /"path"[[:space:]]*:[[:space:]]*"[^"]+"/)) {
-        arc=substr($0, RSTART, RLENGTH); sub(/^.*:"/, "", arc); sub(/"$/, "", arc)
-      }
-      if (match($0, /"logicalPath"[[:space:]]*:[[:space:]]*"[^"]+"/)) {
-        logical=substr($0, RSTART, RLENGTH); sub(/^.*:"/, "", logical); sub(/"$/, "", logical)
-      }
-      if (match($0, /"sourceArea"[[:space:]]*:[[:space:]]*"[^"]+"/)) {
-        source_area=substr($0, RSTART, RLENGTH); sub(/^.*:"/, "", source_area); sub(/"$/, "", source_area)
-      }
-      if (match($0, /"mimeType"[[:space:]]*:[[:space:]]*"[^"]+"/)) {
-        mime=substr($0, RSTART, RLENGTH); sub(/^.*:"/, "", mime); sub(/"$/, "", mime)
-      }
-      if (source_area == "") source_area="upload"
-      if (role != "" && arc ~ /^resources\// && logical != "") print role, arc, logical, mime, source_area
-    }
-  ' "$manifest"
-}
-
-write_path_index() {
-  upload_base=$1
-  logical=$2
-  logical=$(safe_rel_path "$logical") || return 0
-  case "$logical" in
-    [0-9][0-9][0-9][0-9]/[0-9][0-9]/[0-9][0-9]/*) ;;
-    *) return 0 ;;
-  esac
-  actual_date=$(printf '%s' "$logical" | awk -F/ '{print $1"/"$2"/"$3}')
-  upload_id=$(printf '%s' "$logical" | awk -F/ '{print $4}')
-  file_name=$(basename "$logical")
-  logical_base=$(printf '%s' "$logical" | awk -F/ '{print $1"/"$2"/"$3"/"$4}')
-  index_file="$upload_base/_index/path/$logical.json"
-  mkdir -p "$(dirname "$index_file")"
-  {
-    printf '{\n'
-    printf '  "logicalPath": "%s",\n' "$logical"
-    printf '  "upload_id": "%s",\n' "$upload_id"
-    printf '  "actual_date": "%s",\n' "$actual_date"
-    printf '  "date": "%s",\n' "$actual_date"
-    printf '  "file": "%s",\n' "$file_name"
-    printf '  "manifest": "%s/manifest.json"\n' "$logical_base"
-    printf '}\n'
-  } > "$index_file"
-}
-
-copy_manifest_resource_entries() {
-  uid=$1
-  manifest_file=$2
-  upload_base=$(area_dir upload "$uid" || true)
-  extract_manifest_resource_files "$manifest_file" | while IFS="$(printf '\t')" read -r role arc logical mime source_area; do
-    arc=$(safe_zip_entry "$arc") || error_response 'ERROR INVALID RESOURCE FILE MANIFEST'
-    logical=$(safe_rel_path "$logical") || error_response 'ERROR INVALID RESOURCE FILE MANIFEST'
-    case "$source_area" in
-      upload|content|thumbnail|resource|note) ;;
-      *) source_area=upload ;;
-    esac
-    area_base=$(area_dir "$source_area" "$uid" || true)
-    [ -n "$area_base" ] || error_response 'ERROR RESOURCE AREA NOT DEFINED'
-    mkdir -p "$area_base" || error_response 'ERROR RESOURCE AREA NOT DEFINED'
-    src_tmp="${Tmp}-resource"
-    copy_zip_entry "$arc" "$src_tmp" || error_response 'ERROR RESOURCE FILE NOT FOUND'
-    dst="$area_base/$logical"
-    case "$dst" in "$area_base"/*) ;; *) rm -f "$src_tmp"; error_response 'ERROR INVALID RESOURCE FILE PATH' ;; esac
-    if [ -f "$dst" ] && ! cmp -s "$dst" "$src_tmp"; then
-      rm -f "$src_tmp"
-      error_response "ERROR $(printf '%s' "$source_area" | tr a-z A-Z) FILE CONFLICT"
-    fi
-    mkdir -p "$(dirname "$dst")"
-    cp "$src_tmp" "$dst"
-    rm -f "$src_tmp"
-    if [ "$source_area" = upload ] && [ -n "$upload_base" ]; then
-      write_path_index "$upload_base" "$logical"
-    fi
-  done
-}
-
-rewrite_imported_note_json() {
-  src=$1
-  dst=$2
-  uid=$3
-  ts=$4
-  # Keep the note identity stable, but refresh mutable import metadata and
-  # server-side upload directories with sed-based string edits.
-  sed -E \
-    -e "s#\"lastModifiedBy\"[[:space:]]*:[[:space:]]*\"[^\"]*\"#\"lastModifiedBy\":\"${uid}\"#g" \
-    -e "s#\"lastModifiedAt\"[[:space:]]*:[[:space:]]*\"[^\"]*\"#\"lastModifiedAt\":\"${ts}\"#g" \
-    -e "s#\"dir_name\"[[:space:]]*:[[:space:]]*\"[^\"]*/(upload|content|thumbnail|resource|note)/([0-9]{4}/[0-9]{2}/[0-9]{2}/[^\"/]+)\"#\"dir_name\":\"data/${uid}/\\1/\\2\"#g" \
-    -e "s#\"dir_name\"[[:space:]]*:[[:space:]]*\"[^\"]*/(upload|content|thumbnail|resource|note)/([0-9]{4}/[0-9]{2})\"#\"dir_name\":\"data/${uid}/\\1/\\2\"#g" \
-    "$src" > "$dst"
-}
-
 parse_request
 
 session_user_id=$(is-login || true)
@@ -418,13 +275,6 @@ done < "$ENTRIES"
 note_entry=$(grep -E '^note/.+/note\.json$' "$ENTRIES" | head -n 1 || true)
 [ -n "$note_entry" ] || error_response 'ERROR NOTE JSON NOT FOUND'
 
-manifest_entry=$(grep -E '^export-manifest\.json$' "$ENTRIES" | head -n 1 || true)
-[ -n "$manifest_entry" ] || error_response 'ERROR EXPORT MANIFEST NOT FOUND'
-manifest_tmp="${Tmp}-manifest.json"
-copy_zip_entry "$manifest_entry" "$manifest_tmp" || error_response 'ERROR EXPORT MANIFEST NOT FOUND'
-format=$(manifest_value format "$manifest_tmp")
-[ "$format" = 'wuwei-note-export' ] || error_response 'ERROR INVALID EXPORT MANIFEST'
-
 note_rel=${note_entry#note/}
 note_rel=$(safe_rel_path "$note_rel") || error_response 'ERROR INVALID NOTE KEY'
 case "$note_rel" in
@@ -453,26 +303,25 @@ case "${replace:-}" in
   *) replace=0 ;;
 esac
 
-incoming_note="${Tmp}-incoming-note.json"
-rewritten_note="${Tmp}-rewritten-note.json"
-copy_zip_entry "$note_entry" "$incoming_note" || error_response 'ERROR NOTE IMPORT FAILED'
-imported_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-rewrite_imported_note_json "$incoming_note" "$rewritten_note" "$user_id" "$imported_at"
-
 if [ -f "$target_note" ]; then
   existing_tmp="${Tmp}-existing-note"
-  cp "$rewritten_note" "$existing_tmp"
+  copy_zip_entry "$note_entry" "$existing_tmp"
   if cmp -s "$target_note" "$existing_tmp"; then
     rm -f "$existing_tmp"
   else
     rm -f "$existing_tmp"
-    [ "$replace" = 1 ] || error_response 'ERROR NOTE ID / NOTE KEY CONFLICT'
+    [ "$replace" = 1 ] || error_response 'ERROR NOTE ALREADY EXISTS'
   fi
 fi
 
-copy_manifest_resource_entries "$user_id" "$manifest_tmp"
+# Copy managed resource files if the package contains them.  Missing resources
+# are tolerated because legacy exports may contain note JSON only and may refer
+# to already existing data/{createdBy}/content or thumbnail files.
+copy_area_entries content "$user_id"
+copy_area_entries thumbnail "$user_id"
+copy_area_entries upload "$user_id"
+copy_area_entries resource "$user_id"
 
-mkdir -p "$(dirname "$target_note")" || error_response 'ERROR NOTE IMPORT FAILED'
-cp "$rewritten_note" "$target_note" || error_response 'ERROR NOTE IMPORT FAILED'
+copy_zip_entry "$note_entry" "$target_note" || error_response 'ERROR NOTE IMPORT FAILED'
 
-ok_response "$target_note"
+ok_response "$note_key"
