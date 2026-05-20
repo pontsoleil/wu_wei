@@ -281,7 +281,7 @@ extract_manifest_resource_files() {
       re = "\\\"" key "\\\"[[:space:]]*:[[:space:]]*\\\""
       if (!match(seg, re)) { return "" }
       rest = substr(seg, RSTART + RLENGTH)
-      sub(/\\".*/, "", rest)
+      sub(/".*/, "", rest)
       return rest
     }
     { s = s $0 }
@@ -292,7 +292,7 @@ extract_manifest_resource_files() {
       n = split(s, a, "\n")
       for (i = 1; i <= n; i++) {
         seg = a[i]
-        if (seg ~ /\\"path\\"[[:space:]]*:[[:space:]]*\\"resources\//) {
+        if (seg ~ /"path"[[:space:]]*:[[:space:]]*"resources\//) {
           role = json_value(seg, "role")
           arc = json_value(seg, "path")
           logical = json_value(seg, "logicalPath")
