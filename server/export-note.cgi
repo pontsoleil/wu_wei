@@ -1,7 +1,7 @@
 #!/bin/sh
 # export-note.cgi - shell implementation for EC2 CGI.
-# Does not delegate to the Python implementation; JSON field extraction is done
-# with sed/awk because this endpoint must remain deployable as shell CGI.
+# JSON field extraction is done with sed/awk because this endpoint must remain
+# deployable as shell CGI.
 
 export PATH=".:./bin:/bin:/usr/bin${PATH+:}${PATH-}"
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "${SCRIPT_FILENAME:-$0}")" && pwd) || exit 1
@@ -157,7 +157,6 @@ safe_rel_path() {
   rel=$(printf '%s' "$1" | sed 's#\\#/#g; s#^/*##; s#/*$##')
   case "$rel" in
     ''|/*|*'/../'*|'../'*|*'/..'|'.'|'..'|*'//'*) return 1 ;;
-    *[!A-Za-z0-9._/@+-]*) return 1 ;;
     *) printf '%s\n' "$rel" ;;
   esac
 }
@@ -296,49 +295,16 @@ done < "$FILES_TXT"
 printf '\n  ]\n}\n' >> "$MANIFEST"
 
 ZIP_FILE="$WORK/wuwei-note-$note_uuid.zip"
-if command -v zip >/dev/null 2>&1; then
-  (
-    cd "$WORK"
-    zip -qr "$ZIP_FILE" export-manifest.json note resources
-  ) || error_response 'ERROR NOTE EXPORT FAILED'
-elif command -v powershell.exe >/dev/null 2>&1; then
-  if command -v cygpath >/dev/null 2>&1; then
-    ps_work=$(cygpath -w "$WORK")
-    ps_zip=$(cygpath -w "$ZIP_FILE")
-  else
-    ps_work=$(printf '%s' "$WORK" | sed 's#^/c/#C:/#; s#/#\\#g')
-    ps_zip=$(printf '%s' "$ZIP_FILE" | sed 's#^/c/#C:/#; s#/#\\#g')
+command -v zip >/dev/null 2>&1 || error_response 'ERROR ZIP COMMAND NOT FOUND'
+rm -f "$ZIP_FILE"
+(
+  cd "$WORK" || exit 1
+  set -- export-manifest.json note
+  if [ -d resources ]; then
+    set -- "$@" resources
   fi
-  powershell.exe -NoProfile -Command \
-    "Set-Location -LiteralPath '$ps_work'; Compress-Archive -Path 'export-manifest.json','note','resources' -DestinationPath '$ps_zip' -Force" \
-    >/dev/null || error_response 'ERROR NOTE EXPORT FAILED'
-else
-  perl -MArchive::Zip=:ERROR_CODES - "$WORK" "$ZIP_FILE" <<'PL' || error_response 'ERROR NOTE EXPORT FAILED'
-use strict;
-use warnings;
-use Archive::Zip qw(:ERROR_CODES);
-use File::Find;
-use File::Spec;
-my ($root, $zip_path) = @ARGV;
-my $zip = Archive::Zip->new();
-for my $top (qw(export-manifest.json note resources)) {
-    my $path = File::Spec->catfile($root, $top);
-    next unless -e $path;
-    if (-f $path) {
-        $zip->addFile($path, $top);
-        next;
-    }
-    find(sub {
-        return unless -f $_;
-        my $full = $File::Find::name;
-        my $rel = File::Spec->abs2rel($full, $root);
-        $rel =~ s#\\#/#g;
-        $zip->addFile($full, $rel);
-    }, $path);
-}
-exit($zip->writeToFileNamed($zip_path) == AZ_OK ? 0 : 1);
-PL
-fi
+  zip -qr "$ZIP_FILE" "$@"
+) || error_response 'ERROR NOTE EXPORT FAILED'
 
 printf '%s\r\n' 'Content-Type: application/zip'
 printf '%s\r\n' 'Cache-Control: no-store'

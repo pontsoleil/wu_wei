@@ -61,6 +61,62 @@ resolve_env_path() {
   esac
 }
 
+read_meta() {
+  key=$1
+  file=$2
+  awk -v k="$key" '
+    function unquote(s) {
+      if (s ~ /^".*"$/) return substr(s, 2, length(s) - 2)
+      return s
+    }
+    index($0, k " ") == 1 {
+      print unquote(substr($0, length(k) + 2))
+      exit
+    }
+    index($0, k "=") == 1 {
+      print unquote(substr($0, length(k) + 2))
+      exit
+    }
+  ' "$file"
+}
+
+base64_decode() {
+  if base64 --decode >/dev/null 2>&1 </dev/null; then
+    base64 --decode
+  else
+    base64 -d
+  fi
+}
+
+url_decode_value() {
+  key=$1
+  value=$2
+  tmp="${Tmp}-urldecode"
+  printf '%s=%s' "$key" "$value" | cgi-name > "$tmp"
+  nameread "$key" "$tmp" | strip_quotes
+}
+
+legacy_note_json() {
+  file=$1
+  if awk 'BEGIN { ok=0 } NR == 1 { sub(/^\357\273\277/, ""); if ($0 ~ /^[ \t\r\n]*\{/) ok=1 } END { exit ok ? 0 : 1 }' "$file"; then
+    sed '1s/^\xef\xbb\xbf//' "$file"
+    return 0
+  fi
+
+  encoded=$(read_meta json_base64 "$file" || true)
+  if [ -n "${encoded:-}" ]; then
+    printf '%s' "$encoded" | base64_decode
+    return $?
+  fi
+
+  encoded=$(read_meta json "$file" || true)
+  if [ -n "${encoded:-}" ]; then
+    url_decode_value json "$encoded"
+    return 0
+  fi
+
+  return 1
+}
 
 raw_param() {
   key=$1
@@ -153,34 +209,7 @@ find_v1_note_file() {
 
 decode_ver1_json() {
   file=$1
-  python3 - "$file" > "$JSON_OUT" <<'PY'
-import base64, sys
-from pathlib import Path
-from urllib.parse import unquote_plus
-path = Path(sys.argv[1])
-text = path.read_text(encoding='utf-8', errors='ignore').lstrip('\ufeff')
-if text.strip().startswith('{'):
-    print(text.strip(), end='')
-    raise SystemExit(0)
-values = {}
-for raw in text.splitlines():
-    line = raw.rstrip('\r\n')
-    if not line or line.lstrip().startswith('#'):
-        continue
-    if ' ' in line:
-        k, v = line.split(' ', 1)
-    elif '=' in line:
-        k, v = line.split('=', 1)
-    else:
-        continue
-    values[k.strip()] = v.strip().strip('"')
-if values.get('json_base64'):
-    print(base64.b64decode(values['json_base64'].encode('ascii')).decode('utf-8'), end='')
-elif values.get('json'):
-    print(unquote_plus(values['json']), end='')
-else:
-    raise SystemExit('ERROR VER1 JSON NOT FOUND')
-PY
+  legacy_note_json "$file" > "$JSON_OUT"
 }
 
 read_request_params

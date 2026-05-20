@@ -123,6 +123,58 @@ read_meta() {
   ' "$file"
 }
 
+base64_decode() {
+  if base64 --decode >/dev/null 2>&1 </dev/null; then
+    base64 --decode
+  else
+    base64 -d
+  fi
+}
+
+url_decode_value() {
+  key=$1
+  value=$2
+  tmp="${Tmp}-urldecode"
+  printf '%s=%s' "$key" "$value" | cgi-name > "$tmp"
+  nameread "$key" "$tmp" | strip_quotes
+}
+
+legacy_note_json() {
+  file=$1
+  if awk 'BEGIN { ok=0 } NR == 1 { sub(/^\357\273\277/, ""); if ($0 ~ /^[ \t\r\n]*\{/) ok=1 } END { exit ok ? 0 : 1 }' "$file"; then
+    sed '1s/^\xef\xbb\xbf//' "$file"
+    return 0
+  fi
+
+  encoded=$(read_meta json_base64 "$file" || true)
+  if [ -n "${encoded:-}" ]; then
+    printf '%s' "$encoded" | base64_decode
+    return $?
+  fi
+
+  encoded=$(read_meta json "$file" || true)
+  if [ -n "${encoded:-}" ]; then
+    url_decode_value json "$encoded"
+    return 0
+  fi
+
+  return 1
+}
+
+json_has_v0_fields() {
+  file=$1
+  awk '
+    BEGIN { RS=""; found=0 }
+    {
+      if ($0 ~ /"resources"[ \t\r\n]*:[ \t\r\n]*\{/) found=1
+      if ($0 ~ /"associations"[ \t\r\n]*:[ \t\r\n]*\{/) found=1
+      if ($0 ~ /"page"[ \t\r\n]*:[ \t\r\n]*\{/) found=1
+      if ($0 ~ /"idx"[ \t\r\n]*:/) found=1
+    }
+    END { exit found ? 0 : 1 }
+  ' "$file"
+}
+
 json_svg_thumbnail() {
   file=$1
   awk '
@@ -223,126 +275,20 @@ is_listable_ver1_note_file() {
 
 legacy_note_format() {
   file=$1
-  python3 - "$file" <<'PY' 2>/dev/null || printf 'ver1\n'
-import base64, json, sys
-from pathlib import Path
-from urllib.parse import unquote_plus
-path = Path(sys.argv[1])
-text = path.read_text(encoding='utf-8', errors='ignore').lstrip('\ufeff')
-stripped = text.strip()
-if stripped.startswith('{'):
-    raw = stripped
-else:
-    values = {}
-    for line in text.splitlines():
-        line = line.rstrip('\r\n')
-        if not line or line.lstrip().startswith('#'):
-            continue
-        if ' ' in line:
-            k, v = line.split(' ', 1)
-        elif '=' in line:
-            k, v = line.split('=', 1)
-        else:
-            continue
-        values[k.strip()] = v.strip().strip('"')
-    if values.get('json_base64'):
-        raw = base64.b64decode(values['json_base64'].encode('ascii')).decode('utf-8', errors='ignore')
-    elif values.get('json'):
-        raw = unquote_plus(values['json'])
-    else:
-        print('ver1')
-        raise SystemExit(0)
-try:
-    note = json.loads(raw)
-except Exception:
-    print('ver1')
-    raise SystemExit(0)
-def has_v0_fields(note):
-    if not isinstance(note, dict):
-        return False
-    if isinstance(note.get('resources'), dict) and note.get('resources'):
-        return True
-    if isinstance(note.get('associations'), dict) and note.get('associations'):
-        return True
-    if isinstance(note.get('page'), dict):
-        return True
-    pages = note.get('pages')
-    if isinstance(pages, dict):
-        iterable = pages.values()
-    elif isinstance(pages, list):
-        iterable = pages
-    else:
-        iterable = []
-    for page in iterable:
-        if not isinstance(page, dict):
-            continue
-        for item in page.get('nodes') or []:
-            if isinstance(item, dict) and 'idx' in item:
-                return True
-        for item in page.get('links') or []:
-            if isinstance(item, dict) and 'idx' in item:
-                return True
-    return False
-print('ver0' if has_v0_fields(note) else 'ver1')
-PY
+  tmp="${Tmp}-legacy-json"
+  if legacy_note_json "$file" > "$tmp" 2>/dev/null && json_has_v0_fields "$tmp"; then
+    printf 'ver0\n'
+  else
+    printf 'ver1\n'
+  fi
 }
 
 
 legacy_note_thumbnail_from_json() {
   file=$1
-  python3 - "$file" <<'PY_LEGACY_THUMB' 2>/dev/null || true
-import base64, json, sys
-from pathlib import Path
-from urllib.parse import unquote_plus
-path = Path(sys.argv[1])
-text = path.read_text(encoding='utf-8', errors='ignore').lstrip('\ufeff')
-stripped = text.strip()
-if stripped.startswith('{'):
-    raw = stripped
-else:
-    values = {}
-    for line in text.splitlines():
-        line = line.rstrip('\r\n')
-        if not line or line.lstrip().startswith('#'):
-            continue
-        if ' ' in line:
-            k, v = line.split(' ', 1)
-        elif '=' in line:
-            k, v = line.split('=', 1)
-        else:
-            continue
-        values[k.strip()] = v.strip().strip('"')
-    if values.get('json_base64'):
-        raw = base64.b64decode(values['json_base64'].encode('ascii')).decode('utf-8', errors='ignore')
-    elif values.get('json'):
-        raw = unquote_plus(values['json'])
-    else:
-        raise SystemExit(0)
-try:
-    note = json.loads(raw)
-except Exception:
-    raise SystemExit(0)
-thumb = str(note.get('thumbnail') or '').strip() if isinstance(note, dict) else ''
-if not thumb and isinstance(note, dict):
-    pages = note.get('pages')
-    current = str(note.get('currentPage') or '')
-    candidates = []
-    if isinstance(pages, dict):
-        if current and isinstance(pages.get(current), dict):
-            candidates.append(pages[current])
-        candidates.extend(v for v in pages.values() if isinstance(v, dict))
-    elif isinstance(pages, list):
-        if current:
-            candidates.extend(p for p in pages if isinstance(p, dict) and str(p.get('id') or p.get('pp') or '') == current)
-        candidates.extend(p for p in pages if isinstance(p, dict))
-    for page in candidates:
-        thumb = str(page.get('thumbnail') or '').strip()
-        if thumb:
-            break
-decoded_thumb = unquote_plus(thumb)
-if decoded_thumb.startswith('<svg'):
-    print(decoded_thumb, end='')
-PY_LEGACY_THUMB
+  tmp="${Tmp}-legacy-thumb-json"
+  legacy_note_json "$file" > "$tmp" 2>/dev/null || return 0
+  json_svg_thumbnail "$tmp" || true
 }
 
 json_string_field() {

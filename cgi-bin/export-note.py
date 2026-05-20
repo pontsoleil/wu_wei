@@ -100,6 +100,14 @@ def is_office_file(path_or_name: str) -> bool:
     return Path(str(path_or_name or "").split("?", 1)[0]).suffix.lower() in OFFICE_EXTS
 
 
+def inferred_legacy_source_path(logical: str) -> str:
+    logical = clean_logical_path(logical, allow_legacy=False)
+    parts = logical.split("/")
+    if len(parts) >= 5 and parts[2] == "01":
+        return "/".join([parts[0], parts[1], "/".join(parts[4:])])
+    return ""
+
+
 def file_role(file_def: dict, default: str = "") -> str:
     return str(file_def.get("role") or default or "").lower()
 
@@ -175,7 +183,10 @@ def resolve_resource_file(upload_root: Path, user_id: str, file_def: dict) -> tu
     candidates = [root / logical]
     if root != upload_root:
         candidates.append(upload_root / logical)
-    source_logical = clean_logical_path(str(file_def.get("sourcePath") or ""), allow_legacy=True)
+    source_logical = clean_logical_path(
+        str(file_def.get("sourcePath") or inferred_legacy_source_path(logical) or ""),
+        allow_legacy=True,
+    )
     source_area = str(file_def.get("sourceArea") or "").lower()
     if source_logical and source_area:
         source_root = area_root(source_area, user_id, upload_root)
@@ -206,7 +217,10 @@ def zip_file_record(
         "path": arc_path,
         "logicalPath": logical,
         "sourceArea": str(file_def.get("sourceArea") or file_def.get("area") or "upload"),
-        "sourcePath": clean_logical_path(str(file_def.get("sourcePath") or file_def.get("path") or logical), allow_legacy=True),
+        "sourcePath": clean_logical_path(
+            str(file_def.get("sourcePath") or inferred_legacy_source_path(logical) or file_def.get("path") or logical),
+            allow_legacy=True,
+        ),
         "fileName": src.name,
         "mimeType": str(file_def.get("mimeType") or mimetypes.guess_type(src.name)[0] or "application/octet-stream"),
         "size": src.stat().st_size,

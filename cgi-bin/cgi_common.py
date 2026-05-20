@@ -30,6 +30,7 @@ ENV = {
     "trash": "/Apache24/htdocs/wu_wei2/*/trash",
     "upload": "/Apache24/htdocs/wu_wei2/*/upload",
     "thumbnail": "/Apache24/htdocs/wu_wei2/*/thumbnail",
+    "content": "/Apache24/htdocs/wu_wei2/data/*/content",
     "user": "/Apache24/htdocs/wu_wei2",
 }
 
@@ -46,6 +47,7 @@ GUEST_USER_ID = "guest"
 NOTE_JSON_FILENAME = "note.json"
 
 DEBUG_ENABLED = True
+
 
 def script_dir() -> Path:
     script_filename = os.environ.get("SCRIPT_FILENAME", __file__)
@@ -79,7 +81,9 @@ def debug_kv(name: str | None = None, **kwargs) -> None:
     debug(", ".join(parts), name=name)
 
 
-def debug_exception(name: str | None = None, prefix: str = "UNHANDLED EXCEPTION") -> None:
+def debug_exception(
+    name: str | None = None, prefix: str = "UNHANDLED EXCEPTION"
+) -> None:
     debug(prefix, name=name)
     debug(traceback.format_exc(), name=name)
 
@@ -125,7 +129,9 @@ def text_response(
     status: Optional[str] = None,
     extra_headers: Optional[List[str]] = None,
 ) -> None:
-    emit_headers("text/plain; charset=UTF-8", status=status, extra_headers=extra_headers)
+    emit_headers(
+        "text/plain; charset=UTF-8", status=status, extra_headers=extra_headers
+    )
     payload = text if text.endswith("\n") else text + "\n"
     sys.stdout.flush()
     sys.stdout.buffer.write(payload.encode("utf-8"))
@@ -352,9 +358,17 @@ def environment_url(name: str, user_id: str | None = None, *parts: str) -> str:
 
     docroot = "C:/Apache24/htdocs"
     if path_s.lower().startswith(docroot.lower()):
-        host = trim(os.environ.get("HTTP_HOST", "")) or trim(os.environ.get("SERVER_NAME", "")) or "localhost"
-        scheme = "https" if trim(os.environ.get("HTTPS", "")).lower() in {"on", "1", "true"} else "http"
-        url = f"{scheme}://{host}" + path_s[len(docroot):]
+        host = (
+            trim(os.environ.get("HTTP_HOST", ""))
+            or trim(os.environ.get("SERVER_NAME", ""))
+            or "localhost"
+        )
+        scheme = (
+            "https"
+            if trim(os.environ.get("HTTPS", "")).lower() in {"on", "1", "true"}
+            else "http"
+        )
+        url = f"{scheme}://{host}" + path_s[len(docroot) :]
     else:
         url = path_s
 
@@ -376,20 +390,28 @@ def normalise_posint(value: str, default: int) -> int:
 def read_note_meta(path: Path) -> Dict[str, str]:
     meta: Dict[str, str] = {"_file_path": str(path)}
     try:
-        note = json.loads(path.read_text(encoding="utf-8", errors="strict").lstrip("\ufeff"))
+        note = json.loads(
+            path.read_text(encoding="utf-8", errors="strict").lstrip("\ufeff")
+        )
     except Exception:
         return meta
     if not isinstance(note, dict):
         return meta
     audit = note.get("audit") if isinstance(note.get("audit"), dict) else {}
-    meta.update({
-        "id": str(note.get("note_id") or note.get("note_uuid") or ""),
-        "user_id": str((audit or {}).get("owner") or note.get("user_id") or ""),
-        "name": str(note.get("note_name") or ""),
-        "description": str(note.get("description") or ""),
-        "thumbnail": str(note.get("thumbnail") or ""),
-        "saved_at": str((audit or {}).get("lastModifiedAt") or (audit or {}).get("createdAt") or ""),
-    })
+    meta.update(
+        {
+            "id": str(note.get("note_id") or note.get("note_uuid") or ""),
+            "user_id": str((audit or {}).get("owner") or note.get("user_id") or ""),
+            "name": str(note.get("note_name") or ""),
+            "description": str(note.get("description") or ""),
+            "thumbnail": str(note.get("thumbnail") or ""),
+            "saved_at": str(
+                (audit or {}).get("lastModifiedAt")
+                or (audit or {}).get("createdAt")
+                or ""
+            ),
+        }
+    )
     return meta
 
 
@@ -406,7 +428,11 @@ def decode_note_json(meta: Dict[str, str]) -> str:
     if file_path:
         json_file = note_json_path_for_meta(Path(file_path))
         if json_file.is_file():
-            return json_file.read_text(encoding="utf-8", errors="strict").lstrip("\ufeff").strip()
+            return (
+                json_file.read_text(encoding="utf-8", errors="strict")
+                .lstrip("\ufeff")
+                .strip()
+            )
     raise ValueError("JSON NOT FOUND")
 
 
@@ -423,8 +449,10 @@ def note_thumbnail_from_json(meta: Dict[str, str]) -> str:
     if isinstance(pages, list):
         if current_page:
             candidates.extend(
-                page for page in pages
-                if isinstance(page, dict) and str(page.get("id") or page.get("pp") or "") == current_page
+                page
+                for page in pages
+                if isinstance(page, dict)
+                and str(page.get("id") or page.get("pp") or "") == current_page
             )
         candidates.extend(page for page in pages if isinstance(page, dict))
 
@@ -472,8 +500,12 @@ def is_note_file(path: Path) -> bool:
     if "resource" in path.parts:
         return False
     try:
-        note = json.loads(path.read_text(encoding="utf-8", errors="strict").lstrip("\ufeff"))
-        return isinstance(note, dict) and bool(note.get("note_id") or note.get("note_uuid"))
+        note = json.loads(
+            path.read_text(encoding="utf-8", errors="strict").lstrip("\ufeff")
+        )
+        return isinstance(note, dict) and bool(
+            note.get("note_id") or note.get("note_uuid")
+        )
     except Exception:
         return False
 
@@ -534,6 +566,7 @@ def write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
 
+
 # ---------------------------------------------------------------------------
 # App ver1 note envelope helpers
 # ---------------------------------------------------------------------------
@@ -574,7 +607,11 @@ def decode_ver1_note_file(path: Path) -> str:
     b64 = meta.get("json_base64", "").strip()
     if b64:
         try:
-            return base64.b64decode(b64.encode("ascii"), validate=False).decode("utf-8", errors="strict").strip()
+            return (
+                base64.b64decode(b64.encode("ascii"), validate=False)
+                .decode("utf-8", errors="strict")
+                .strip()
+            )
         except Exception as e:
             raise ValueError(f"INVALID VER1 JSON BASE64: {e}") from e
 
@@ -583,7 +620,6 @@ def decode_ver1_note_file(path: Path) -> str:
         return unquote_plus(encoded).strip()
 
     raise ValueError("VER1 JSON NOT FOUND")
-
 
 
 def is_ver1_note_file(path: Path) -> bool:
@@ -596,7 +632,9 @@ def is_ver1_note_file(path: Path) -> bool:
         meta = _read_legacy_named_values(path)
         if meta.get("json_base64") or meta.get("json"):
             return bool(meta.get("id") or path.name)
-        text = path.read_text(encoding="utf-8", errors="ignore").lstrip("\ufeff").strip()
+        text = (
+            path.read_text(encoding="utf-8", errors="ignore").lstrip("\ufeff").strip()
+        )
         return text.startswith("{") and '"pages"' in text
     except Exception:
         return False
@@ -620,8 +658,10 @@ def _legacy_note_thumbnail_from_decoded_json(note: object) -> str:
     elif isinstance(pages, list):
         if current_page:
             candidates.extend(
-                page for page in pages
-                if isinstance(page, dict) and str(page.get("id") or page.get("pp") or "") == current_page
+                page
+                for page in pages
+                if isinstance(page, dict)
+                and str(page.get("id") or page.get("pp") or "") == current_page
             )
         candidates.extend(page for page in pages if isinstance(page, dict))
 
@@ -648,7 +688,9 @@ def read_ver1_note_meta(path: Path) -> Dict[str, str]:
         note = json.loads(decode_ver1_note_file(path))
         if isinstance(note, dict):
             if not out["id"]:
-                out["id"] = str(note.get("note_id") or note.get("note_uuid") or out["id"])
+                out["id"] = str(
+                    note.get("note_id") or note.get("note_uuid") or out["id"]
+                )
             if not out["name"]:
                 out["name"] = str(note.get("note_name") or "")
             if not out["description"]:
@@ -757,9 +799,15 @@ def read_ver0_note_meta(path: Path) -> Dict[str, str]:
     out = read_ver1_note_meta(path)
     note = _decoded_legacy_note(path)
     if isinstance(note, dict):
-        out["id"] = str(note.get("note_id") or note.get("note_uuid") or out.get("id") or path.name)
-        out["name"] = str(note.get("note_name") or note.get("name") or out.get("name") or "")
-        out["description"] = str(note.get("description") or out.get("description") or "")
+        out["id"] = str(
+            note.get("note_id") or note.get("note_uuid") or out.get("id") or path.name
+        )
+        out["name"] = str(
+            note.get("note_name") or note.get("name") or out.get("name") or ""
+        )
+        out["description"] = str(
+            note.get("description") or out.get("description") or ""
+        )
         if not out.get("thumbnail"):
             out["thumbnail"] = _legacy_note_thumbnail_from_decoded_json(note)
     return out
