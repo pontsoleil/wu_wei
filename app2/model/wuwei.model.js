@@ -273,6 +273,39 @@ wuwei.model = (function () {
     };
   }
 
+  function isDeletedRecord(record) {
+    return !!(record && record.state === 'deleted');
+  }
+
+  function normalizeRecordState(record) {
+    if (!record || 'object' !== typeof record) {
+      return record;
+    }
+    record.state = record.state || 'active';
+    if (isDeletedRecord(record)) {
+      record.visible = false;
+    }
+    return record;
+  }
+
+  function markDeletedRecord(record, reason) {
+    var cu = (common.state && common.state.currentUser) ? common.state.currentUser : {};
+    var now = new Date().toISOString();
+    if (!record || 'object' !== typeof record) {
+      return record;
+    }
+    record.state = 'deleted';
+    record.visible = false;
+    record.deleted = record.deleted && 'object' === typeof record.deleted ? record.deleted : {};
+    record.deleted.deletedBy = record.deleted.deletedBy || cu.user_id || common.TEMP_OWNER_ID;
+    record.deleted.deletedAt = record.deleted.deletedAt || now;
+    record.deleted.reason = record.deleted.reason || reason || 'user operation';
+    record.audit = record.audit && 'object' === typeof record.audit ? record.audit : makeAudit();
+    record.audit.lastModifiedBy = cu.user_id || common.TEMP_OWNER_ID;
+    record.audit.lastModifiedAt = now;
+    return record;
+  }
+
   function makeContentResource(kind, title, mimeType) {
     return {
       kind: kind || 'general',
@@ -290,11 +323,11 @@ wuwei.model = (function () {
   }
 
   function isNodeShown(node) {
-    return !!(node && node.visible && !node.filterout);
+    return !!(node && node.visible && !node.filterout && !isDeletedRecord(node));
   }
 
   function isLinkShown(link) {
-    return !!(link && link.visible && !link.filterout);
+    return !!(link && link.visible && !link.filterout && !isDeletedRecord(link));
   }
 
   function setNodeShown(node, shown) {
@@ -1018,8 +1051,12 @@ wuwei.model = (function () {
         body: ('string' === typeof self.value) ? self.value : ''
       };
 
+    self.state = self.state || 'active';
+    self.deleted = (self.deleted && 'object' === typeof self.deleted) ? self.deleted : undefined;
+
     // 最終モデルは visible を直値で持つ
     self.visible = (typeof self.visible === 'boolean') ? self.visible : true;
+    normalizeRecordState(self);
 
     // runtime only
     self.changed = !!self.changed;
@@ -2178,28 +2215,21 @@ wuwei.model = (function () {
       return linkids;
     }
 
-    removeAttachedSemanticGroupsByNodeId(id);
-
-    /** remove from current page nodes */
-    if (page && Array.isArray(page.nodes)) {
-      util.removeById(page.nodes, id);
-      removeNodeFromAllGroups(id);
-    }
-
-    /** remove from graph.nodes */
-    util.removeById(graph.nodes, id);
-
     /** remove connected links */
     connectedLinks = findLinksByNode(node);
     if (connectedLinks) {
       links = connectedLinks.links;
       if (links) {
         for (link of links) {
-          link.visible = false;
           linkids.push(link.id);
-          removeLink(link);
+          removeLink({ id: link.id });
         }
       }
+    }
+    if (node) {
+      markDeletedRecord(node);
+      updateNode(node);
+      d3.select('g.node#' + id).remove();
     }
     return linkids;
   };
@@ -2348,7 +2378,10 @@ wuwei.model = (function () {
     self.y = finiteOr(param.y, 0);
 
     self.shape = param.shape || 'NORMAL';
+    self.state = param.state || 'active';
+    self.deleted = (param.deleted && 'object' === typeof param.deleted) ? param.deleted : undefined;
     self.visible = (typeof param.visible === 'boolean') ? param.visible : true;
+    normalizeRecordState(self);
 
     self.style = (param.style && 'object' === typeof param.style) ? param.style : {};
 
@@ -3216,14 +3249,15 @@ wuwei.model = (function () {
 
   removeLink = function (param) {
     var id = param && param.id;
-    var page = getCurrentPage();
+    var link = id ? findLinkById(id) : null;
     if (!id) {
       return;
     }
-    if (page && Array.isArray(page.links)) {
-      util.removeById(page.links, id);
+    if (link) {
+      markDeletedRecord(link);
+      updateLink(link);
+      d3.select('g.link#' + id).remove();
     }
-    util.removeById(graph.links, id);
   };
 
   updateLink = function (link) {
@@ -5001,6 +5035,11 @@ wuwei.model = (function () {
 
   renderNode = function (node) {
     if (!node) {
+      return null;
+    }
+
+    if (!node.visible || isDeletedRecord(node)) {
+      d3.select(`g.node#${node.id}`).remove();
       return null;
     }
 
@@ -7040,7 +7079,10 @@ wuwei.model = (function () {
    * - menu / hover / drag も link 経由で扱えるため、groupOverlay 依存を減らしやすい。
    */
   renderLink = function (link) {
-    if (!link || !link.visible) {
+    if (!link || !link.visible || isDeletedRecord(link)) {
+      if (link && link.id) {
+        d3.select(`g.link#${link.id}`).remove();
+      }
       return null;
     }
 
@@ -8515,12 +8557,11 @@ wuwei.model = (function () {
       return null;
     }
     var removed = null;
-    page.groups = page.groups.filter(function (group) {
+    page.groups.forEach(function (group) {
       if (group && group.id === groupId) {
         removed = group;
-        return false;
+        markDeletedRecord(group);
       }
-      return true;
     });
     return removed;
   }

@@ -87,13 +87,14 @@ wuwei.note = (function () {
 
   function normalizeAudit(audit, user) {
     var currentUser = user || state.currentUser || {};
-    return {
+    var out = {
       owner: (audit && audit.owner) || currentUser.name || currentUser.login || 'guest',
       createdBy: (audit && audit.createdBy) || currentUser.user_id || common.TEMP_OWNER_ID,
       createdAt: (audit && audit.createdAt) || nowIsoString(),
       lastModifiedBy: (audit && audit.lastModifiedBy) || '',
       lastModifiedAt: (audit && audit.lastModifiedAt) || ''
     };
+    return out;
   }
 
   function normalizeCollaboration(collaboration) {
@@ -106,6 +107,22 @@ wuwei.note = (function () {
       enabled: !!src.enabled,
       revision: Number.isFinite(revision) && revision >= 0 ? Math.floor(revision) : 0,
       updatedAt: String(src.updatedAt || '')
+    };
+  }
+
+  function normalizeRecordState(src) {
+    return (src && src.state) ? String(src.state) : 'active';
+  }
+
+  function normalizeDeletedInfo(src) {
+    var deleted = src && src.deleted && typeof src.deleted === 'object' ? src.deleted : null;
+    if (!deleted) {
+      return undefined;
+    }
+    return {
+      deletedBy: String(deleted.deletedBy || ''),
+      deletedAt: String(deleted.deletedAt || ''),
+      reason: String(deleted.reason || '')
     };
   }
 
@@ -299,6 +316,8 @@ wuwei.note = (function () {
       viewer: normalizeViewer(src.viewer),
       storage: normalizeStorage(src.storage),
       contents: (src.contents && typeof src.contents === 'object') ? util.clone(src.contents) : undefined,
+      state: normalizeRecordState(src),
+      deleted: normalizeDeletedInfo(src),
       rights: {
         owner: String(rights.owner || src.owner || ''),
         copyright: String(rights.copyright || src.copyright || ''),
@@ -384,12 +403,14 @@ wuwei.note = (function () {
       y: Number.isFinite(Number(src.y)) ? Number(src.y) : 0,
       shape: shape,
       size: util.clone(size || {}),
-      visible: (false !== src.visible),
+      visible: (normalizeRecordState(src) === 'deleted') ? false : (false !== src.visible),
       label: String(src.label || ''),
       description: src.description && typeof src.description === 'object'
         ? util.clone(src.description)
         : { format: 'plain/text', body: '' },
       style: util.clone(src.style || {}),
+      state: normalizeRecordState(src),
+      deleted: normalizeDeletedInfo(src),
       audit: normalizeAudit(src.audit, state.currentUser)
     };
 
@@ -514,8 +535,13 @@ wuwei.note = (function () {
         : { format: 'plain', body: String(src.description || '') },
       style: util.clone(src.style || {}),
       routing: util.clone(src.routing || {}),
+      state: normalizeRecordState(src),
+      deleted: normalizeDeletedInfo(src),
       audit: normalizeAudit(src.audit, state.currentUser)
     };
+    if (out.state === 'deleted') {
+      out.visible = false;
+    }
 
     if (Number.isFinite(Number(src.x2))) {
       out.x2 = Number(src.x2);
@@ -612,6 +638,8 @@ wuwei.note = (function () {
         ? util.clone(src.description)
         : { format: 'plain', body: String(src.description || '') },
       visible: (typeof src.visible === 'boolean') ? src.visible : (src.enabled !== false),
+      state: normalizeRecordState(src),
+      deleted: normalizeDeletedInfo(src),
       moveTogether: (false !== src.moveTogether),
       orientation: src.orientation || 'auto',
       spine: {
@@ -671,6 +699,10 @@ wuwei.note = (function () {
       defaultPlayDuration: Number.isFinite(Number(src.defaultPlayDuration)) ? Number(src.defaultPlayDuration) : undefined,
       audit: normalizeAudit(src.audit, state.currentUser)
     };
+    if (out.state === 'deleted') {
+      out.visible = false;
+    }
+    return out;
   }
 
   function normalizePage(page, pp, resourceById) {
