@@ -1516,6 +1516,38 @@ collaboration: {
 
 クライアントは、必要に応じて `clientSeq` 又は `clientChangeId` を送信してよいが、これは重複送信検出、画面表示、診断用の補助情報とする。
 
+クライアントが保持する revision は、ローカルノートが反映済みであるサーバー確定 revision を表す。
+
+これは、ローカルで何回編集したかではなく、最後にサーバーから取得又は送信確認できた `serverRevision` である。
+
+[cols="1,3", options="header"]
+|===
+|項目
+|意味
+
+|`baseRevision`
+|ローカルノート及び共同編集送信用 base snapshot が基準にしているサーバー revision。
+
+|`lastAckRevision`
+|自分が送信した change set がサーバーで受理され、サーバーから返された確定 revision。
+
+|`latestServerRevision`
+|直近の revision check 又は server response で確認したサーバー側 latest revision。
+|===
+
+通常、未反映の他者変更がなく、自分の未送信変更もない場合は、これらは同じ値になる。
+
+[source,text]
+----
+baseRevision = lastAckRevision = latestServerRevision
+----
+
+自分の変更送信が成功した場合は、サーバーから返された `serverRevision` を新しい `baseRevision` とする。
+
+他者変更を取得して反映した場合は、取得済み operation log の最大 `serverRevision` を新しい `baseRevision` とする。
+
+定期確認では、この `baseRevision` とサーバー側 latest revision を比較し、サーバー側 latest revision の方が大きい場合だけ差分 operation log を取得する。
+
 推奨する revision 情報は次のとおりである。
 
 [source,javascript]
@@ -1554,19 +1586,91 @@ latest.json を更新
 note.lock を解放
 ----
 
-`baseRevision` が最新でない場合は、初期実装では自動 merge を行わず、クライアントへ `conflict` 又は `staleRevision` を返す。
+`baseRevision` が最新でない場合は、初期実装ではサーバー上で自動 merge を行わず、クライアントへ `staleRevision` を返す。
 
-クライアントは差分 operation log を取得して画面へ反映し、必要であれば利用者操作を再送する。
+`staleRevision` 応答には、クライアントの `baseRevision` 以降、サーバー最新 revision までの operation log を同梱する。
+
+[source,javascript]
+----
+{
+  "status": "staleRevision",
+  "note_id": "note_uuid",
+  "baseRevision": 128,
+  "latestRevision": 129,
+  "serverTimestamp": "2026-05-21T10:20:00+09:00",
+  "changes": [
+    {
+      "serverRevision": 129,
+      "user_uuid": "user_b",
+      "committedAt": "2026-05-21T10:19:52+09:00",
+      "operations": [
+        {
+          "op": "update",
+          "targetType": "node",
+          "targetId": "_node_b",
+          "after": {
+            "x": 240,
+            "y": 120
+          }
+        }
+      ]
+    }
+  ]
+}
+----
+
+クライアントは `staleRevision` 応答を受け取ったら、同梱された operation log を先にローカルノートへ反映する。
+
+その後、自分の未確定 change set を再評価し、競合がなければ `baseRevision` を `latestRevision` に更新して再送する。
+
+競合がある場合は、自動再送せず、利用者に確認を求める。
+
+処理概要は次のとおりである。
+
+[source,text]
+----
+A baseRevision = 128
+server latestRevision = 129
+  ↓
+A が baseRevision 128 で送信
+  ↓
+server は staleRevision を返し、revision 129 の changes を同梱
+  ↓
+A は同梱 changes をローカルへ反映
+  ↓
+A baseRevision = 129
+  ↓
+A は自分の未確定操作を再評価
+  ↓
+競合がなければ baseRevision 129 で再送
+----
+
+`staleRevision` は単なる失敗ではなく、再送のための同期応答として扱う。
 
 === タイムスタンプと時差補正
 
 共同編集者は、ノートを開いた時点で latest revision と server timestamp を取得する。
 
-クライアントは、受信した server timestamp と参加者環境の現在時刻との差を時差又は時計差として保持できる。
+クライアントは、サーバー応答を受け取るたびに、受信した server timestamp と参加者環境の現在時刻との差を時差又は時計差として保持する。
 
 ただし、operation log の最終的な順序はサーバー採番の `serverRevision` に従う。
 
-クライアントが送信する timestamp は補助情報として扱う。
+クライアントが送信する timestamp は、同期制御ではなく、デバッグ、監査、処理遅延確認のための補助情報として扱う。
+
+時差補正値は次のように推定する。
+
+[source,text]
+----
+requestSentAt = クライアント送信直前時刻
+responseReceivedAt = クライアント受信直後時刻
+serverNow = サーバー応答に含まれる現在時刻
+
+rtt = responseReceivedAt - requestSentAt
+estimatedClientAtServerResponse = requestSentAt + rtt / 2
+serverTimeOffsetMs = serverNow - estimatedClientAtServerResponse
+----
+
+各ローカル処理は、操作発生時に `clientCreatedAt` を記録し、`serverTimeOffsetMs` を使って `estimatedServerCreatedAt` を算出する。
 
 [cols="1,3", options="header"]
 |===
@@ -1579,8 +1683,17 @@ note.lock を解放
 |`estimatedServerCreatedAt`
 |端末側で推定したサーバー時刻。時差補正済みの目安として保存できる。
 
+|`serverTimeOffsetMs`
+|サーバー時刻とクライアント時刻の推定差分。各ローカル操作のデバッグ用 timestamp 補正に使用する。
+
+|`receivedAt`
+|サーバーが `post-note-change.cgi` でリクエストを受信した時刻。
+
+|`committedAt`
+|サーバーが lock 取得、検証、note.json 更新、operation log 保存、latest.json 更新を完了した時刻。
+
 |`serverTimestamp`
-|サーバーが operation log を確定した時刻。履歴表示及び監査上の正本時刻として扱う。
+|サーバー応答時点又は operation log 確定時点のサーバー時刻。履歴表示、監査、デバッグ用として扱う。
 |===
 
 サーバー時刻も厳密なリアルタイム順序を保証するものではないため、順序制御には使用しない。
@@ -2005,20 +2118,62 @@ operation log の例:
 
 [source,text]
 ----
-wuwei.log.savePrevious()
+wuwei.log.captureCollabBase()
+  ↓
+前回サーバー反映済み baseRevision の page snapshot を保持
   ↓
 利用者操作
   ↓
-wuwei.log.recordCurrent()
+送信時 current page を取得
   ↓
-create / modify / remove / groups 差分を抽出
+collabBase.page と current page の差分を抽出
   ↓
-wuwei.collab が共同編集用 change set へ変換
+wuwei.collab が共同編集用 changes へ整形
   ↓
 post-note-change.cgi へ送信
   ↓
 サーバーが検証し operation log として確定
 ----
+
+共同編集送信用には、undo / redo 用の直前操作履歴とは別に、前回サーバー反映済み状態を表す `collabBase` snapshot を保持する。
+
+[source,javascript]
+----
+wuwei.log.collabBase = {
+  note_id: "note_uuid",
+  page_id: "_page_uuid",
+  baseRevision: 129,
+  capturedAt: "2026-05-21T10:20:00+09:00",
+  page: {
+    nodes: [],
+    links: [],
+    groups: []
+  }
+}
+----
+
+共同編集用 changes は、`collabBase.page` と送信時点の `current.page` の差分として生成する。
+
+この方式では、送信前に行われた一時操作は、送信時点の current に差分として残っている場合だけ operation log の対象となる。
+
+たとえば、ノードを作成し、送信前にすぐ削除した場合、base snapshot と current snapshot の間に差分がないため、共同編集用 changes は生成しない。
+
+[source,text]
+----
+baseRevision の状態:
+  node A は存在しない
+
+送信時 current の状態:
+  node A は存在しない
+
+結果:
+  changes は空
+  post-note-change.cgi は呼び出さない
+----
+
+ローカル undo / redo 用の `wuwei.log` は、この一時操作を保持してよい。
+
+ただし、サーバー operation log とは分離する。
 
 `wuwei.log` 由来の差分を operation log へ変換する場合、次の情報を補う。
 
@@ -2034,6 +2189,35 @@ post-note-change.cgi へ送信
 * 対象種別
 * 対象 ID
 * 変更前後の必要最小限の値
+
+推奨する `wuwei.log` 拡張 API は次のとおりである。
+
+[source,javascript]
+----
+wuwei.log.captureCollabBase({
+  baseRevision: 129,
+  page: wuwei.common.current.page
+});
+
+wuwei.log.buildCollabChanges({
+  baseRevision: 129,
+  page: wuwei.common.current.page
+});
+
+wuwei.log.applyRemoteToCollabBase({
+  serverRevision: 129,
+  operations: []
+});
+
+wuwei.log.rebasePendingChanges({
+  latestRevision: 129,
+  remoteChanges: []
+});
+----
+
+`staleRevision` 応答を受け取った場合は、同梱された remote changes をまず current page と `collabBase.page` の双方に反映し、`collabBase.baseRevision` を latest revision に更新する。
+
+その後、利用者の未確定操作を current page に再適用し、`collabBase.page` と current page の差分から changes を再生成する。
 
 `wuwei.log` の `previous` / `current` 全体 snapshot は、undo / redo には有用である。
 
