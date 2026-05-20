@@ -1,0 +1,486 @@
+=== ノートの Export / Import
+
+ノートの Export / Import は、通常のファイル upload / download とは区別する。
+
+upload / download は、個別の Content resource に対応するファイル操作である。
+一方、Export / Import は、ノート本体、ノート内の upload resource、及び upload 時に生成された thumbnail や preview PDF などを、交換可能な package として扱う処理である。
+
+==== 基本方針
+
+Export では、次の情報を zip package にまとめる。
+
+* note JSON
+* export manifest
+* upload resource の original file
+* upload resource から生成された preview file
+* upload resource から生成された thumbnail file
+* その他 `resource.storage.files[]` に定義された role 別ファイル
+
+remote resource は、原則として実体ファイルを package に含めない。
+remote resource は、`resource.uri` 又は `resource.canonicalUri` に記録された URL をそのまま保持する。
+
+Import では、zip package を一時的に次の public 作業領域へ展開する。
+
+[source,text]
+----
+data/public/YYYY/MM/DD/package_uuid/
+----
+
+この public 領域は、Export / Import の一時作業領域であり、Import 後の正式な保存先ではない。
+
+Import 後、upload resource の実体ファイルは import 実行ユーザの保存領域へコピーする。
+
+[source,text]
+----
+data/{import_user_uuid}/upload/YYYY/MM/DD/file_uuid/
+----
+
+==== UUID の扱い
+
+SVG 描画対象となる `node.id`、`link.id`、`group.id` などは、SVG / DOM 上の識別子として使用されるため、次の形式とする。
+
+[source,javascript]
+----
+"_" + uuid.v4()
+----
+
+一方、`note_uuid`、`file_uuid`、`package_uuid` は、論理識別子及びディレクトリ名として使用するため、先頭に `_` を付けず、次の形式とする。
+
+[source,javascript]
+----
+uuid.v4()
+----
+
+例:
+
+[source,text]
+----
+node.id:
+  _6c799e9d-1b5b-4a6e-bf4d-d61f7c9fd8be
+
+note_uuid:
+  5c1f594a-315b-4bab-9075-62b1bebed7eb
+
+file_uuid:
+  8ed59104-779e-4907-9978-6f0f1acb8cf5
+----
+
+==== note_uuid と note_key
+
+`note_uuid` は、エクスポート対象ノートの UUID とする。
+
+`note_key` は、ノートの論理保存位置を示す user-independent な path とする。
+
+[source,javascript]
+----
+note_uuid: '5c1f594a-315b-4bab-9075-62b1bebed7eb',
+note_key: '2026/05/19/5c1f594a-315b-4bab-9075-62b1bebed7eb/note.json'
+----
+
+`note_key` には、元の user UUID や物理ディレクトリを含めない。
+
+Import 後の物理保存先は、import 実行ユーザの領域に対応して次のようになる。
+
+[source,text]
+----
+data/{import_user_uuid}/note/2026/05/19/5c1f594a-315b-4bab-9075-62b1bebed7eb/note.json
+----
+
+`note_uuid` 及び `note_key` は、Export / Import の前後で原則として変更しない。
+
+==== file_uuid
+
+`file_uuid` は、エクスポート対象ノート内の upload resource に定義されている UUID とする。
+
+具体的には、`resource.storage.files[]` の `path` に含まれる次の `file_uuid` を使用する。
+
+[source,text]
+----
+YYYY/MM/DD/file_uuid/filename
+----
+
+例:
+
+[source,text]
+----
+2026/05/19/8ed59104-779e-4907-9978-6f0f1acb8cf5/example.pdf
+----
+
+`file_uuid` は、Export / Import の前後で原則として変更しない。
+
+Import 時に `file_uuid` を変更すると、`resource.uri`、`resource.canonicalUri`、`resource.storage.files[].path`、thumbnail、preview PDF、PageMarker、contents などの参照を一括して書き換える必要があり、バグを招きやすいためである。
+
+==== Export package の構成
+
+Export package は、次の構成とする。
+
+[source,text]
+----
+wuwei-note-export.zip
+  export-manifest.json
+  note/
+    YYYY/MM/DD/note_uuid/note.json
+  resources/
+    YYYY/MM/DD/file_uuid/
+      original file
+      preview.pdf
+      thumbnail.jpg
+      ...
+----
+
+例:
+
+[source,text]
+----
+wuwei-note-export.zip
+  export-manifest.json
+  note/
+    2026/05/19/5c1f594a-315b-4bab-9075-62b1bebed7eb/note.json
+  resources/
+    2026/05/05/8ed59104-779e-4907-9978-6f0f1acb8cf5/
+      example.pdf
+      preview.pdf
+      thumbnail.jpg
+----
+
+==== Content resource の保存形式
+
+Upload resource は、v2 resource 形式を保持する。
+
+[source,javascript]
+----
+{
+  id: '...',
+  type: 'Content',
+  label: '...',
+  description: {...},
+  resource: {
+    id: '8ed59104-779e-4907-9978-6f0f1acb8cf5',
+    source: 'upload',
+    kind: 'document',
+    documentKind: 'pdf',
+    videoKind: '',
+    canonicalUri: '2026/05/19/8ed59104-779e-4907-9978-6f0f1acb8cf5/example.pdf',
+    uri: '2026/05/19/8ed59104-779e-4907-9978-6f0f1acb8cf5/example.pdf',
+    title: 'example.pdf',
+    mimeType: 'application/pdf',
+    storage: {
+      files: [
+        {
+          role: 'original',
+          area: 'upload',
+          path: '2026/05/19/8ed59104-779e-4907-9978-6f0f1acb8cf5/example.pdf',
+          dir_name: 'data/{user_uuid}/upload/2026/05/19/8ed59104-779e-4907-9978-6f0f1acb8cf5',
+          file_name: 'example.pdf',
+          mimeType: 'application/pdf'
+        },
+        {
+          role: 'thumbnail',
+          area: 'upload',
+          path: '2026/05/19/8ed59104-779e-4907-9978-6f0f1acb8cf5/thumbnail.jpg',
+          dir_name: 'data/{user_uuid}/upload/2026/05/19/8ed59104-779e-4907-9978-6f0f1acb8cf5',
+          file_name: 'thumbnail.jpg',
+          mimeType: 'image/jpeg'
+        },
+        {
+          role: 'preview',
+          area: 'upload',
+          path: '2026/05/19/8ed59104-779e-4907-9978-6f0f1acb8cf5/preview.pdf',
+          dir_name: 'data/{user_uuid}/upload/2026/05/19/8ed59104-779e-4907-9978-6f0f1acb8cf5',
+          file_name: 'preview.pdf',
+          mimeType: 'application/pdf'
+        }
+      ]
+    }
+  }
+}
+----
+
+`resource.uri`、`resource.canonicalUri`、`resource.storage.files[].path` は論理 path である。
+
+[source,text]
+----
+YYYY/MM/DD/file_uuid/filename
+----
+
+`resource.storage.files[].dir_name` は、サーバルート下の物理相対ディレクトリである。
+
+[source,text]
+----
+data/{user_uuid}/upload/YYYY/MM/DD/file_uuid
+----
+
+Import 時には、`resource.uri`、`resource.canonicalUri`、`resource.storage.files[].path` は原則として変更しない。
+変更するのは、import 実行ユーザに依存する `resource.storage.files[].dir_name` である。
+
+==== resource.storage.files[] の role 指定
+
+`resource.storage.files[role='thumbnail']` は、`storage.files` 配列のうち `role` が `thumbnail` であるファイル定義を示す概念的な選択表現である。
+
+JavaScript 実装では、`Array.prototype.find()` 又は共通 helper 関数により取得する。
+
+[source,javascript]
+----
+function getResourceFileByRole(resource, role) {
+  const files = resource &&
+    resource.storage &&
+    Array.isArray(resource.storage.files)
+      ? resource.storage.files
+      : [];
+
+  return files.find(function (file) {
+    return file && file.role === role;
+  }) || null;
+}
+----
+
+同一 resource 内では、次の role は原則としてそれぞれ 0..1 件とする。
+
+* `original`
+* `preview`
+* `thumbnail`
+* `pdf-preview`
+
+==== export-manifest.json
+
+Export package には `export-manifest.json` を含める。
+
+[source,json]
+----
+{
+  "format": "wuwei-note-export",
+  "version": "1.0",
+  "exportedAt": "2026-05-19T12:00:00Z",
+  "package_uuid": "b8d04230-fc6e-4b77-94a1-b5b8da5a2bb1",
+  "note": {
+    "note_uuid": "5c1f594a-315b-4bab-9075-62b1bebed7eb",
+    "note_key": "2026/05/19/5c1f594a-315b-4bab-9075-62b1bebed7eb/note.json",
+    "name": "XBRL GL Next"
+  },
+  "resources": [
+    {
+      "resourceId": "8ed59104-779e-4907-9978-6f0f1acb8cf5",
+      "file_uuid": "8ed59104-779e-4907-9978-6f0f1acb8cf5",
+      "source": "upload",
+      "kind": "document",
+      "documentKind": "pdf",
+      "logicalBase": "2026/05/19/8ed59104-779e-4907-9978-6f0f1acb8cf5",
+      "files": [
+        {
+          "role": "original",
+          "path": "resources/2026/05/19/8ed59104-779e-4907-9978-6f0f1acb8cf5/example.docx",
+          "logicalPath": "2026/05/19/8ed59104-779e-4907-9978-6f0f1acb8cf5/example.docx",
+          "fileName": "example.docx",
+          "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "size": 123456,
+          "sha256": "..."
+        },
+        {
+          "role": "thumbnail",
+          "path": "resources/2026/05/19/8ed59104-779e-4907-9978-6f0f1acb8cf5/thumbnail.jpg",
+          "logicalPath": "2026/05/19/8ed59104-779e-4907-9978-6f0f1acb8cf5/thumbnail.jpg",
+          "fileName": "thumbnail.jpg",
+          "mimeType": "image/jpeg",
+          "size": 12345,
+          "sha256": "..."
+        },
+        {
+          "role": "pdf-preview",
+          "path": "resources/2026/05/19/8ed59104-779e-4907-9978-6f0f1acb8cf5/preview.pdf",
+          "logicalPath": "2026/05/19/8ed59104-779e-4907-9978-6f0f1acb8cf5/preview.pdf",
+          "fileName": "preview.pdf",
+          "mimeType": "application/pdf",
+          "size": 12345,
+          "sha256": "..."
+        }
+      ]
+    }
+  ]
+}
+----
+
+`sha256` は、Import 時の衝突確認に使用する。
+ただし、SHA map による重複 upload 管理は、この Export / Import 仕様の対象外とする。
+
+==== Export 処理
+
+Export 処理は次の手順で行う。
+
+[source,text]
+----
+1. 対象 note を完全 v2 形式に正規化する。
+2. note_uuid 及び note_key を確認する。
+3. note JSON を取得する。
+4. note 内の Content node を走査する。
+5. resource.source === 'upload' の resource を抽出する。
+6. resource.storage.files[] を role ごとに確認する。
+7. original / preview / thumbnail / pdf-preview などの実体ファイルを export 作業領域へコピーする。
+8. note JSON を note/YYYY/MM/DD/note_uuid/note.json として配置する。
+9. export-manifest.json を作成する。
+10. 作業領域を zip 化する。
+11. zip package を利用者に返す。
+----
+
+Export 作業領域は次の形式とする。
+
+[source,text]
+----
+data/public/YYYY/MM/DD/package_uuid/
+----
+
+Export 完了後、この作業領域は一定期間後に削除してよい。
+
+==== Import 処理
+
+Import 処理は次の手順で行う。
+
+[source,text]
+----
+1. zip package を受け取る。
+2. data/public/YYYY/MM/DD/package_uuid/ に安全に展開する。
+3. export-manifest.json を検証する。
+4. note JSON を読み込む。
+5. note_uuid / note_key は原則として変更しない。
+6. upload resource の file_uuid も原則として変更しない。
+7. resources/ 配下のファイル群を import 実行ユーザの upload 領域へコピーする。
+8. resource.storage.files[].dir_name を import 実行ユーザ用に更新する。
+9. audit.lastModifiedBy / audit.lastModifiedAt を import 実行ユーザと処理日時で更新する。
+10. note gallery に note_key を登録する。
+----
+
+Import 後の保存先は次の形式とする。
+
+[source,text]
+----
+data/{import_user_uuid}/note/YYYY/MM/DD/note_uuid/note.json
+data/{import_user_uuid}/upload/YYYY/MM/DD/file_uuid/
+----
+
+==== audit の扱い
+
+Import では、`createdBy` 及び `createdAt` は変更しない。
+
+これらは、対象が最初に作成された履歴を示すためである。
+
+一方、`lastModifiedBy` 及び `lastModifiedAt` は、Import 実行ユーザと Import 処理日時で上書きする。
+
+[source,javascript]
+----
+audit: {
+  createdBy: 'original_user_uuid',
+  createdAt: '2026-05-01T10:00:00Z',
+  lastModifiedBy: 'import_user_uuid',
+  lastModifiedAt: '2026-05-19T12:00:00Z'
+}
+----
+
+この処理は、少なくとも次の対象に適用する。
+
+* note
+* page
+* node
+* resource
+* group
+* link
+
+Import 済みノートを再度 Export し、別ユーザが Import した場合も、`createdBy` / `createdAt` は保持し、`lastModifiedBy` / `lastModifiedAt` は新しい Import 実行ユーザと日時で上書きする。
+
+==== 削除履歴
+
+削除履歴は当面扱わない。
+
+ノート、ノード、リンク、グループ、resource は UUID により識別するため、通常の Export / Import では意図しない衝突は回避できる。
+
+削除履歴、復元履歴、変更履歴が必要になった場合は、将来拡張として `auditHistory` 又は `deletionLog` を別途定義する。
+
+==== 実行時 URL
+
+保存値としての `resource.uri` や `storage.files[].path` は、実体 URL ではない。
+実行時に表示する URL は、`wuwei.resource` により生成する。
+
+保存値:
+
+[source,text]
+----
+resource.uri
+resource.canonicalUri
+resource.storage.files[].path
+  → YYYY/MM/DD/file_uuid/filename
+----
+
+物理補助情報:
+
+[source,text]
+----
+resource.storage.files[].dir_name
+  → data/{user_uuid}/upload/YYYY/MM/DD/file_uuid
+----
+
+実行時 URL:
+
+[source,text]
+----
+Office Viewer / 公開可能 PDF・Office:
+  /wu_wei2/data/{user_uuid}/upload/YYYY/MM/DD/file_uuid/filename
+
+thumbnail / preview image / private / manifest / content legacy:
+  load-file.py / load-file.cgi 経由
+----
+
+`load-file.py` / `load-file.cgi` は、権限確認後、`X-Accel-Redirect` により nginx の内部専用 path へ渡す。
+
+[source,text]
+----
+/_wuwei2_data/{user_uuid}/upload/YYYY/MM/DD/file_uuid/filename
+----
+
+==== セキュリティ要件
+
+Import 時には、zip slip 攻撃を防ぐため、次の path を拒否する。
+
+* `../` を含む path
+* 絶対 path
+* 空 path
+* manifest に存在しない不要な file
+* symbolic link
+* 許可されていない拡張子又は MIME type
+
+Import は、必ず `data/public/YYYY/MM/DD/package_uuid/` の下に展開し、その後、import 実行ユーザの正式領域へコピーする。
+
+`data/public` に展開したファイルを、Import 後の正式 resource として参照し続けてはならない。
+
+==== 衝突処理
+
+Import 先に同じ `note_key` 又は `note_uuid` が存在する場合は、無条件に上書きしない。
+
+次のいずれかとして扱う。
+
+[source,text]
+----
+1. 同一 note と確認できる場合
+   → 利用者確認のうえで再利用又は置換する。
+
+2. 内容が異なる場合
+   → NOTE ID / NOTE KEY CONFLICT として Import を中止する。
+
+3. 別コピーとして取り込みたい場合
+   → 利用者が明示的に指定した場合に限り、新しい note_uuid / note_key を割り当てる。
+----
+
+Upload resource の `file_uuid` が衝突した場合も同様に、manifest、file size、SHA などにより同一性を確認する。
+異なる内容である場合は、自動で `file_uuid` を変更せず、conflict として Import を中止する。
+
+==== UI 表記
+
+通常のファイル操作と区別するため、UI 表記は次とする。
+
+[source,text]
+----
+Export note
+Import note
+
+ノートをエクスポート
+ノートをインポート
+----
+
+`Download note` / `Upload note` という表記は、単体ファイルの download / upload と混同しやすいため使用しない。
