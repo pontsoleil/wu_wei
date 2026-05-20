@@ -848,6 +848,9 @@ wuwei.menu.note = wuwei.menu.note || {};
       importedBy: cu.user_id || '',
       importedAt: new Date().toISOString()
     });
+    noteJson.collabNoteState = 'imported';
+    noteJson.note_scope = 'personal';
+    noteJson.team_id = '';
     const current = wuwei.note.updateNote(noteJson);
     const nameEl = document.querySelector('#note_name .name');
     const descEl = document.querySelector('#note_name .description');

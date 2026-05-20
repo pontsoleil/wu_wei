@@ -1,0 +1,2893 @@
+= WuWei ノート交換編集及びチーム共同作業機能 方式解説書
+:doctype: article
+:sectnums:
+:toc:
+:toclevels: 3
+:lang: ja
+
+== 目的
+
+本書は、WuWei における次の二つの利用形態を整理統合し、共通のデータモデル及び処理方式として実現するための方式を解説する。
+
+. 入手した export ノートを自分の環境に import して編集する機能
+. 複数利用者がチーム用ノートを共有し、非同期更新を中心に、必要に応じて数秒から十数秒程度の遅延で共同作業する機能
+
+両者は、他者が作成したノード、リンク、グループ、Timeline、Contents、PageMarker、Memo、Content resource 等を扱う点で共通する。
+
+一方で、編集制御の方針は異なる。
+
+* 交換ノート編集では、受領者が自分の作業環境で視覚的整理や補足を行うため、一部の表示属性変更を許可する。
+* チーム共同作業では、主として非同期に更新されたノートを共有し、同時作業中は十秒程度の遅延で他者更新を確認する。共同作業モードでは、他者作成要素の変更及び削除を禁止し、必要な指摘は Memo 又はチャットで伝える。
+
+本書では、この二つの利用形態を同じ WuWei v2 データモデル上で扱いながら、モード別の編集制御、チーム用ノートの保存領域、チーム別ノート一覧、及び同期方式を整理する。
+
+== 対象範囲
+
+本書の対象は次のとおりである。
+
+* ノートの export/import
+* import 済みノートの編集制御
+* 共同編集モードでの差分同期
+* チーム共同作業ノートの保存領域
+* チーム所属及び権限区分に基づくアクセス制御
+* サーバー上のチーム管理テーブル
+* システム管理者、チーム管理者、一般編集者、閲覧利用者の役割分担
+* 自分のノート一覧とは別のチーム作業ノート一覧
+* 作成者情報及び最終更新者情報の管理
+* 他者作成要素に対する編集可否判定
+* soft delete による削除履歴管理
+* Memo による修正提案
+* operation log による変更反映
+* `latest.json` の revision を10秒程度の間隔で確認する準リアルタイム同期
+* 共同作業中の利用者間チャット
+
+完全なリアルタイム同時編集、ミリ秒単位のカーソル同期、複数利用者による同一テキストの逐次マージは、初期実装の対象外とする。
+
+== 用語
+
+[cols="1,3", options="header"]
+|===
+|用語
+|説明
+
+|交換ノート編集
+|他者から入手した export ノートを import し、自分の環境で編集する利用形態。
+
+|共同編集
+|複数利用者が同一ノートを開き、数秒程度の遅延で変更を同期しながら作業する利用形態。
+
+|自分の作成要素
+|対象要素の `audit.createdBy` が現在利用者の UUID と一致する要素。
+
+|他者作成要素
+|対象要素の `audit.createdBy` が現在利用者の UUID と一致しない要素。
+
+|soft delete
+|対象要素を JSON から物理削除せず、`state: "deleted"` として残し、削除者及び削除日時を記録する削除方式。
+
+|change set
+|クライアントからサーバーへ送信する変更操作の集合。
+
+|operation log
+|サーバーが revision ごとに保存する確定済み変更操作の記録。
+
+|revision
+|共同編集時にサーバー側で管理するノートの改訂番号。
+
+|revision check
+|クライアントがサーバーに対して、現在保持している revision 以降の operation log の有無を確認する軽量な同期確認。初期実装では10秒程度の間隔で行う。
+
+|chat pane
+|共同編集時に、左下に表示する簡易チャット領域。ノート本体の編集とは分離し、同時作業中の相談や確認に使用する。
+
+|チーム共同作業ノート
+|`data/{team_id}/YYYY/MM/DD/note_uuid/section/*` 配下に配置する、チーム単位の共有ノート。個人ノートとは保存領域を分離する。
+
+|team_id
+|共同作業チームを表すサーバー側の一意な ID。実体値は `"c" + uuid.v4()` で生成する。`team_id` は説明上の仮称であり、実際の保存パスには使用しない。
+
+|チーム所属
+|利用者がどの `team_id` に属するかを示す管理情報。サーバー上のチーム管理テーブルでシステム管理者が管理し、利用者へ通知する。利用者は複数チームに所属可能とする。
+
+|非同期更新
+|同時編集を前提とせず、利用者が異なる時間に更新したノートを他の利用者が後で確認・反映する共同作業形態。
+
+|システム管理者
+|WuWei 全体の利用者、チーム、チーム所属、保存領域、権限設定を管理する管理者。通常のノート内容を共同編集する役割とは分離する。
+
+|チーム管理者
+|特定チーム内の作業ノート、ノート状態、アーカイブ、作業整理を管理する利用者。チーム所属そのものは、初期実装ではシステム管理者が管理する。
+
+|一般編集者
+|チーム共同作業ノートを作成し、自分が作成した要素を編集又は削除できる利用者。他者作成要素は変更又は削除できない。
+
+|閲覧利用者
+|チーム共同作業ノートを閲覧できるが、ノート本体、Memo、チャットへの追加又は変更は原則として行わない利用者。
+|===
+
+== 全体方針
+
+=== 共通原則
+
+交換ノート編集及び共同編集の共通原則は次のとおりである。
+
+[source,text]
+----
+追加は可能。
+削除は物理削除せず履歴管理する。
+変更は、属性単位で変更可能／変更不可を判定する。
+他者の意味構造を不用意に破壊しない。
+----
+
+ただし、共同編集ではより厳格にする。
+
+[source,text]
+----
+共同編集モードでは、他者作成要素の変更及び削除は不可。
+どうしても変更又は削除が必要な場合は、Memo で伝える。
+----
+
+=== 二つの編集モード
+
+本方式では、ノートの状態又は開き方に応じて、次の二つの編集モードを区別する。
+
+[cols="1,2,3", options="header"]
+|===
+|モード
+|主な利用場面
+|編集方針
+
+|交換ノート編集モード
+|他者から受け取った export ノートを import して、自分の環境で整理、補足、再利用する。
+|他者作成要素の意味属性は保護する。一方、通常ノードの位置、リンク style、グループ表示 style など一部の表示属性は変更可能とする。削除は履歴管理する。
+
+|共同編集モード
+|複数利用者がチーム用ノートを共有し、非同期更新を中心に、同時作業時は十秒程度の遅延で他者更新を反映しながら作業する。
+|自分の作成要素のみ変更又は削除可能。他者作成要素は read only とし、修正提案は Memo で伝える。同時作業中の一時的な相談は左下チャットペインで扱う。
+|===
+
+
+=== モード判定
+
+編集モードは、利用者が明示的に切り替えるのではなく、読み込んでいるノートの出所に基づいて判定する。
+
+[cols="1,2,3", options="header"]
+|===
+|判定対象
+|判定結果
+|説明
+
+|個人領域に import された export ノート
+|交換ノート編集モード
+|他者から入手したノートを自分の環境に取り込み、表示調整、補足、再利用を行う。保存先は個人ノート領域である。
+
+|チーム共同作業領域から読み込んだノート
+|共同編集モード
+|`data/{team_id}/YYYY/MM/DD/note_uuid/section/*` から読み込むチームノートである。自分が作成した要素のみ変更又は削除でき、他者作成要素は read only とする。
+|===
+
+判定に使用する情報は、保存パス及び note metadata とする。
+
+`wuwei.collab` 側では、ノート状態を次の三つの名前に統一する。
+
+[cols="1,3", options="header"]
+|===
+|ノート状態
+|意味
+
+|`own`
+|自分で作成した個人ノート。通常個人編集モードで扱う。
+
+|`imported`
+|他者から入手した export ノートを import したノート。交換ノート編集モードで扱う。
+
+|`team`
+|チーム共同作業領域から読み込んだ共同編集ノート。共同編集モードで扱う。
+|===
+
+[source,javascript]
+----
+{
+  collabNoteState: "own" | "imported" | "team",
+  note_scope: "personal" | "team",
+  team_id: "c5c1f594a-315b-4bab-9075-62b1bebed7eb"
+}
+----
+
+`collabNoteState: "own"` の場合は通常個人編集モードとする。
+
+`collabNoteState: "imported"` の場合は交換ノート編集モードとする。
+
+`collabNoteState: "team"` 又は `note_scope: "team"` の場合は共同編集モードとする。
+
+これにより、同じ編集 UI 及び編集可否判定ロジックを使いながら、ノートの読み込み元に応じて制御を切り替えることができる。
+
+`wuwei.collab` では、例えば次の関数で現在のノート状態を返す。
+
+[source,javascript]
+----
+wuwei.collab.getNoteState = function () {
+  return currentNote && currentNote.collabNoteState || 'own';
+};
+
+wuwei.collab.isOwnNote = function () {
+  return wuwei.collab.getNoteState() === 'own';
+};
+
+wuwei.collab.isImportedNote = function () {
+  return wuwei.collab.getNoteState() === 'imported';
+};
+
+wuwei.collab.isTeamNote = function () {
+  return wuwei.collab.getNoteState() === 'team';
+};
+----
+
+
+=== 共同作業の主形態
+
+共同作業用ノートでは、完全な同時編集よりも、非同期更新が主になることを想定する。
+
+[source,text]
+----
+通常の利用:
+  利用者 A がチームノートを更新する
+  ↓
+  後で利用者 B がチームノート一覧又はノート画面で更新を確認する
+  ↓
+  必要に応じて Memo 又は追加ノードで応答する
+
+同時作業中:
+  複数利用者が同じノートを開く
+  ↓
+  10秒程度の間隔で他者更新を確認する
+  ↓
+  必要に応じて左下チャットで短い相談を行う
+----
+
+したがって、初期実装では WebSocket による完全リアルタイム同期ではなく、チームノートの latest revision を軽量に確認する方式を基本とする。
+
+== 共通データモデル
+
+=== note identity
+
+ノートは、利用者間で交換又は共同編集されるため、ノート自体の識別子を保持する。
+
+[source,javascript]
+----
+{
+  note_id: "note_uuid",
+  note_key: "2026/05/20/note_uuid/note.json",
+  modelVersion: "v2"
+}
+----
+
+`note_id` はノートの UUID とする。
+
+`note_key` は利用者に依存しない論理パスとし、次の形式を基本とする。
+
+[source,text]
+----
+YYYY/MM/DD/{note_id}/note.json
+----
+
+
+=== チーム共同作業ノートの保存領域
+
+共同作業用のノートは、個人用ノート領域ではなく、チーム単位の共有領域に配置する。
+
+実際のチーム ID は、次の形式で生成する。
+
+[source,javascript]
+----
+team_id = "c" + uuid.v4();
+----
+
+例:
+
+[source,text]
+----
+c5c1f594a-315b-4bab-9075-62b1bebed7eb
+----
+
+`team_id` は説明上の仮称であり、実際の保存パスには使用しない。実際の保存領域では、生成済みの `team_id` を使用する。
+
+基本形式は次のとおりである。
+
+[source,text]
+----
+data/{team_id}/YYYY/MM/DD/note_uuid/section/*
+----
+
+`section` は、ノート本体、共同作業ログ、チャットログ、添付又は生成ファイルなどを分けるための区分である。
+
+例:
+
+[source,text]
+----
+data/c5c1f594a-315b-4bab-9075-62b1bebed7eb/
+  2026/
+    05/
+      20/
+        note_uuid/
+          note/
+            note.json
+            manifest.json
+          collab/
+            latest.json
+            revisions/
+              000000001.json
+              000000002.json
+          chat/
+            latest.json
+            messages.jsonl
+          upload/
+            file_uuid/
+              original.pdf
+              thumbnail.jpg
+              preview.pdf
+----
+
+論理的な note key は、チーム領域を含む形で管理する。
+
+[source,javascript]
+----
+{
+  note_id: "note_uuid",
+  note_scope: "team",
+  team_id: "c5c1f594a-315b-4bab-9075-62b1bebed7eb",
+  note_key: "c5c1f594a-315b-4bab-9075-62b1bebed7eb/2026/05/20/note_uuid/note/note.json"
+}
+----
+
+個人用ノートとチーム共同作業ノートは、保存領域を分離する。
+
+[cols="1,3", options="header"]
+|===
+|分類
+|保存領域
+
+|個人ノート
+|`data/{user_uuid}/...`
+
+|チーム共同作業ノート
+|`data/{team_id}/YYYY/MM/DD/note_uuid/section/*`
+|===
+
+=== チーム所属管理
+
+利用者がどの `team_id` に所属するかは、サーバー上のチーム管理テーブルで管理する。
+
+チーム管理テーブルはシステム管理者が作成及び更新し、利用者には所属チーム名、`team_id`、及び自分の権限区分を別途通知する。
+
+利用者自身が任意にチームへ参加したり、チーム領域を作成したりすることは、初期実装の対象外とする。
+
+利用者は複数のチームに所属可能とする。
+
+[source,text]
+----
+userA:
+  c5c1f594a-315b-4bab-9075-62b1bebed7eb  Project A team
+  c6c2a1b8d-1b5a-4d4d-8d7e-1a2b3c4d5e6f  Project B team
+
+userB:
+  c5c1f594a-315b-4bab-9075-62b1bebed7eb  Project A team
+----
+
+サーバー側 API は、チームノートへアクセスする際に、現在利用者が対象チームに所属していることを確認する。
+
+[source,text]
+----
+チームノート API 呼び出し
+  ↓
+currentUser を確認
+  ↓
+currentUser が team_id に所属しているか確認
+  ↓
+teamRole を取得
+  ↓
+所属し、かつ teamRole が操作を許可していれば処理継続
+  ↓
+所属していない、又は権限が不足していれば拒否
+----
+
+判定関数の例は次のとおりである。
+
+[source,javascript]
+----
+wuwei.auth.isMemberOfTeam(user_uuid, team_id)
+wuwei.auth.getTeamRole(user_uuid, team_id)
+wuwei.auth.getUserTeams(user_uuid)
+----
+
+=== サーバー上のチーム管理テーブル
+
+チーム共同作業では、ユーザとチームの対応、チーム内ロール、チーム表示名、チーム状態をサーバー側で一元管理する必要がある。
+
+初期実装では、DB を前提にせず、サーバー上の JSON 管理テーブルとして実装してよい。将来、利用者数やチーム数が増えた場合は、同じ論理構造を DB テーブルへ移行できる。
+
+==== 管理テーブルの配置案
+
+[source,text]
+----
+data/admin/
+  teams.json
+  team-members.json
+  users.json
+----
+
+`teams.json` はチームの基本情報を保持する。
+
+`team-members.json` は、利用者がどのチームに所属し、どの `teamRole` を持つかを保持する。
+
+`users.json` は、利用者 UUID と表示名、全体権限である `systemRole` を保持する。既存のユーザ管理がある場合は、それを参照してよい。
+
+==== teams.json
+
+[source,javascript]
+----
+{
+  "teams": [
+    {
+      "team_id": "c5c1f594a-315b-4bab-9075-62b1bebed7eb",
+      "teamName": "Project A team",
+      "description": "共同作業用チーム A",
+      "status": "active",
+      "createdBy": "system_admin_uuid",
+      "createdAt": "2026-05-20T12:00:00+09:00",
+      "updatedAt": "2026-05-20T12:00:00+09:00"
+    }
+  ]
+}
+----
+
+==== team-members.json
+
+[source,javascript]
+----
+{
+  "memberships": [
+    {
+      "team_id": "c5c1f594a-315b-4bab-9075-62b1bebed7eb",
+      "user_uuid": "userA",
+      "teamRole": "teamAdmin",
+      "status": "active",
+      "joinedAt": "2026-05-20T12:00:00+09:00"
+    },
+    {
+      "team_id": "c5c1f594a-315b-4bab-9075-62b1bebed7eb",
+      "user_uuid": "userB",
+      "teamRole": "editor",
+      "status": "active",
+      "joinedAt": "2026-05-20T12:00:00+09:00"
+    },
+    {
+      "team_id": "c6c2a1b8d-1b5a-4d4d-8d7e-1a2b3c4d5e6f",
+      "user_uuid": "userA",
+      "teamRole": "viewer",
+      "status": "active",
+      "joinedAt": "2026-05-20T12:00:00+09:00"
+    }
+  ]
+}
+----
+
+==== users.json
+
+[source,javascript]
+----
+{
+  "users": [
+    {
+      "user_uuid": "userA",
+      "displayName": "User A",
+      "systemRole": "user",
+      "status": "active"
+    },
+    {
+      "user_uuid": "system_admin_uuid",
+      "displayName": "System administrator",
+      "systemRole": "systemAdmin",
+      "status": "active"
+    }
+  ]
+}
+----
+
+==== 管理テーブルの更新者
+
+チーム管理テーブルは、システム管理者のみが更新できる。
+
+チーム管理者は、初期実装ではチーム所属を直接変更しない。チーム管理者がメンバー追加、削除、権限変更を必要とする場合は、システム管理者へ依頼する。
+
+[source,text]
+----
+システム管理者:
+  teams.json の作成・更新
+  team-members.json の作成・更新
+  users.json 又は既存ユーザ管理情報の更新
+
+チーム管理者:
+  チームノートの作成、状態変更、アーカイブ
+  チーム所属変更はシステム管理者へ依頼
+----
+
+==== API からの参照
+
+チーム関連 API は、必ずチーム管理テーブルを参照してから処理する。
+
+[source,text]
+----
+API 呼び出し
+  ↓
+currentUser を認証
+  ↓
+users.json 又は既存ユーザ管理から systemRole を取得
+  ↓
+teams.json で team_id が active であることを確認
+  ↓
+team-members.json で currentUser の所属及び teamRole を確認
+  ↓
+API 種別に応じた許可判定
+  ↓
+許可された場合のみ処理継続
+----
+
+=== 権限区分
+
+チーム共同作業では、チームに所属しているかどうかだけでなく、チーム内でどの操作を許可するかを区分する。
+
+初期実装では、次の四つの権限区分を定義する。
+
+[cols="1,3", options="header"]
+|===
+|権限区分
+|役割
+
+|システム管理者
+|WuWei 全体の利用者、チーム、チーム所属、保存領域、権限設定を管理する。チーム領域の作成、利用者のチーム所属設定、障害時の保守を担当する。
+
+|チーム管理者
+|特定チーム内の作業ノートを管理する。チームノートの作成、状態変更、アーカイブ、作業整理を行う。ただし、共同作業ルール上、他者が作成したノート要素を直接変更又は削除しない。
+
+|一般編集者
+|チームノートを作成又は編集する通常の共同作業者。自分が作成したノード、リンク、Memo 等は変更又は削除できる。他者作成要素は変更又は削除できず、必要な指摘は Memo 又はチャットで伝える。
+
+|閲覧利用者
+|チームノートを閲覧し、更新内容を確認する利用者。初期実装では、ノート本体、Memo、チャットへの追加又は変更を行わない read only 利用者とする。
+|===
+
+==== 権限区分と操作可否
+
+[cols="2,1,1,1,1", options="header"]
+|===
+|操作
+|システム管理者
+|チーム管理者
+|一般編集者
+|閲覧利用者
+
+|チーム作成及びチーム領域作成
+|可
+|不可
+|不可
+|不可
+
+|利用者のチーム所属設定
+|可
+|不可
+|不可
+|不可
+
+|チーム内の権限区分設定
+|可
+|不可 footnote:[初期実装では、チーム管理者が利用者の権限を変更する機能は設けない。必要であればシステム管理者に依頼する。]
+|不可
+|不可
+
+|チームノート一覧の閲覧
+|可
+|可
+|可
+|可
+
+|チームノートの新規作成
+|可
+|可
+|可
+|不可
+
+|チームノートの状態変更
+|可
+|可
+|不可
+|不可
+
+|チームノートのアーカイブ
+|可
+|可
+|不可
+|不可
+
+|チームノートの物理削除
+|可 footnote:[通常運用では物理削除せず、アーカイブ又は soft delete を優先する。]
+|不可
+|不可
+|不可
+
+|自分が作成した要素の追加、変更、削除
+|可
+|可
+|可
+|不可
+
+|他者が作成した要素の変更、削除
+|不可 footnote:[障害復旧等の保守作業を除く。通常の共同作業では、システム管理者であっても他者作成要素を直接編集しない。]
+|不可
+|不可
+|不可
+
+|他者作成要素への Memo 追加
+|可
+|可
+|可
+|不可
+
+|チャット投稿
+|可
+|可
+|可
+|不可
+
+|チャット閲覧
+|可
+|可
+|可
+|可
+|===
+
+==== チーム所属情報の参照
+
+利用者は複数チームに所属でき、チームごとに異なる権限区分を持つことができる。
+
+所属情報は、サーバー上の `team-members.json` 又は将来の DB テーブルから取得する。
+
+[source,javascript]
+----
+wuwei.auth.getUserTeams("userA")
+// returns:
+[
+  {
+    team_id: "c5c1f594a-315b-4bab-9075-62b1bebed7eb",
+    teamName: "Project A team",
+    teamRole: "teamAdmin"
+  },
+  {
+    team_id: "c6c2a1b8d-1b5a-4d4d-8d7e-1a2b3c4d5e6f",
+    teamName: "Project B team",
+    teamRole: "editor"
+  }
+]
+----
+
+システム管理者は、チーム所属情報をサーバー上のチーム管理テーブルで管理し、利用者へ所属チーム及び権限区分を通知する。
+
+初期実装では、チーム管理者が利用者をチームへ追加又は削除する機能は設けない。
+
+==== API 側の権限判定
+
+チームノート API は、次の順に権限を確認する。
+
+[source,text]
+----
+API 呼び出し
+  ↓
+currentUser を確認
+  ↓
+対象 note_key から team_id を判定
+  ↓
+currentUser が team_id に所属しているか確認
+  ↓
+teamRole を取得
+  ↓
+API 種別及び operation 種別に対して teamRole が許可されるか確認
+  ↓
+共同編集モードでは、対象要素の audit.createdBy が currentUser と一致するか確認
+  ↓
+許可される場合のみ処理継続
+----
+
+判定関数の例は次のとおりである。
+
+[source,javascript]
+----
+wuwei.auth.isMemberOfTeam(user_uuid, team_id)
+wuwei.auth.getTeamRole(user_uuid, team_id)
+wuwei.auth.canCreateTeamNote(user_uuid, team_id)
+wuwei.auth.canEditTeamNote(user_uuid, team_id)
+wuwei.auth.canManageTeamNote(user_uuid, team_id)
+----
+
+共同編集モードでは、チーム管理者であっても、他者作成要素の変更又は削除は許可しない。
+
+[source,text]
+----
+チーム管理者の権限:
+  チームノートの作成、状態変更、アーカイブなどの管理操作は可能
+
+チーム管理者でも不可:
+  他者作成ノード、リンク、グループ、PageMarker 等の直接変更又は削除
+----
+
+=== audit 情報
+
+ノード、リンク、グループ、Timeline、Contents、PageMarker、Memo、resource など、編集対象となる要素には audit 情報を持たせる。
+
+[source,javascript]
+----
+audit: {
+  createdBy: "user_uuid",
+  createdAt: "2026-05-20T12:00:00+09:00",
+  lastModifiedBy: "user_uuid",
+  lastModifiedAt: "2026-05-20T12:00:00+09:00"
+}
+----
+
+`createdBy` 及び `createdAt` は作成履歴であるため、import 時にも保持する。
+
+import 処理又は共同編集同期処理により変更が確定した場合は、必要に応じて `lastModifiedBy` 及び `lastModifiedAt` を更新する。
+
+=== state
+
+各要素は状態を示す `state` を持つ。
+
+[source,javascript]
+----
+state: "active"
+----
+
+`state` が未定義の場合は、読み込み時に `active` とみなす。
+
+削除された要素は次のようにする。
+
+[source,javascript]
+----
+state: "deleted"
+----
+
+=== deleted 情報
+
+削除時には、要素を物理削除せず、削除情報を追加する。
+
+[source,javascript]
+----
+deleted: {
+  deletedBy: "user_uuid",
+  deletedAt: "2026-05-20T12:30:00+09:00",
+  reason: "user operation"
+}
+----
+
+削除済み要素は通常表示では描画対象外とするが、履歴表示、復元、差分確認では参照可能とする。
+
+== description の扱い
+
+=== 基本方針
+
+`description` は、既存データモデルにおける通常の説明項目として扱う。
+
+新規ノート、自分が作成したノード、及び共同編集モードの通常編集では、`description` を一律に配列化しない。
+
+[source,text]
+----
+description の配列化は、全ノードに対する標準正規化処理とはしない。
+----
+
+=== 配列化を行う限定条件
+
+`description` の配列化は、交換ノート編集モードにおいて、import したノート上の他者作成ノードに対し、受領者が説明を追記する場合に限定する。
+
+この場合、元の説明を変更せず、元の説明と追記説明を区別するため、対象ノードの `description` を配列形式へ変換してよい。
+
+[source,text]
+----
+対象:
+  import 済みノート内の他者作成ノード
+
+条件:
+  現在利用者が、そのノードの description に補足説明を追記する場合
+
+処理:
+  既存 description を保持したまま、追記 entry を追加するために配列化する
+----
+
+=== 配列化例
+
+変換前の例:
+
+[source,javascript]
+----
+description: {
+  text: "Original description.",
+  format: "plain"
+}
+----
+
+追記時の変換後の例:
+
+[source,javascript]
+----
+description: [
+  {
+    id: "_desc_original",
+    role: "original",
+    text: "Original description.",
+    format: "plain",
+    audit: {
+      createdBy: "original_user_uuid",
+      createdAt: "2026-05-19T10:00:00+09:00"
+    }
+  },
+  {
+    id: "_desc_added",
+    role: "addition",
+    text: "受領者による補足説明です。",
+    format: "asciidoc",
+    audit: {
+      createdBy: "import_user_uuid",
+      createdAt: "2026-05-20T12:00:00+09:00"
+    }
+  }
+]
+----
+
+=== 配列化しない場合
+
+次の場合は、`description` を配列化しない。
+
+* import 時の一括正規化処理
+* 自分が作成したノードの通常編集
+* 共同編集モードでの他者作成要素への指摘
+* 共同編集モードでの Memo による提案
+* resource、Link、Group 等への通常説明
+
+共同編集モードでは、他者作成要素の説明を直接追記せず、Memo で伝える。
+
+[source,text]
+----
+共同編集モード:
+  他者作成要素の description は変更しない。
+  指摘又は補足は Memo として追加する。
+----
+
+== 交換ノート編集モード
+
+=== 目的
+
+交換ノート編集モードは、他者から入手した export ノートを自分の環境に import し、内容を参照しながら、自分の整理、補足、視覚的調整、再利用を可能にするためのモードである。
+
+このモードでは、他者が作成した意味構造を保護しつつ、利用者が自分の環境で見やすく配置したり、補足説明を追加したりできるようにする。
+
+=== import 時の基本処理
+
+import 時には、次の処理を行う。
+
+[source,text]
+----
+export package を受領
+  ↓
+manifest を確認
+  ↓
+note_id / note_key を保持
+  ↓
+resource ファイルを利用者領域へ配置
+  ↓
+resource.storage.files[].dir_name 等の物理パスを更新
+  ↓
+旧形式データを v2 形式へ正規化
+  ↓
+audit.createdBy / createdAt を保持
+  ↓
+state 未定義なら active を補完
+  ↓
+description は一律配列化しない
+  ↓
+import 完了
+----
+
+import は、元ノートの作成履歴を失わせない。
+
+したがって、`audit.createdBy` 及び `audit.createdAt` は export 元の値を保持し、import 処理では `lastModifiedBy` 及び `lastModifiedAt` のみを必要に応じて更新する。
+
+=== resource path の扱い
+
+upload resource の論理パスは、次の形式を基本とする。
+
+[source,text]
+----
+YYYY/MM/DD/{file_uuid}/filename
+----
+
+`file_uuid` は export/import の前後で原則として変更しない。
+
+import 時には、物理配置先のみ import 先利用者の領域に変更する。
+
+[source,text]
+----
+data/{import_user_uuid}/upload/YYYY/MM/DD/{file_uuid}/filename
+----
+
+ただし、`resource.uri`, `canonicalUri`, `storage.files[].path` は論理パスとして保持する。
+
+=== 他者作成要素の編集方針
+
+交換ノート編集モードでは、他者作成要素であっても、表示上の調整は一定範囲で許可する。
+
+[cols="1,1,3", options="header"]
+|===
+|対象
+|編集可否
+|備考
+
+|通常ノードの `x`, `y`
+|可
+|表示位置の調整として許可する。
+
+|通常ノードの `state`
+|可
+|削除時は soft delete として履歴管理する。
+
+|通常ノードの `description`
+|限定的に追記可
+|import ノート内の他者作成ノードへ補足説明を追記する場合のみ、対象ノードの description を配列化して追記する。
+
+|通常ノードの意味属性
+|不可
+|`id`, `type`, `label`, `resource`, `pageNumber`, `time` 等は保護する。
+
+|Link の style
+|可
+|線色、線種、太さ、`s`, `v`, `h`, `v2`, `h2` 等の表示 style を変更可能とする。
+
+|Link の関係属性
+|不可
+|`source`, `target`, `type`, `role` は保護する。
+
+|グループ代表ノード
+|style のみ可
+|意味属性、位置、状態は変更不可。
+
+|一般グループ構造
+|不可
+|他者定義グループは直接変更しない。
+
+|一般グループの軸線・外周線 style
+|可
+|色、太さ、線種を変更可能とする。
+
+|Timeline / Contents member
+|追加可、削除は履歴管理、既存 member の意味的変更は不可
+|既存の時間、ページ、anchor は変更しない。
+|===
+
+=== グループ再定義
+
+他者が定義した `s` / `v` / `h` / `v2` / `h2` グループの構造を変更したい場合、既存グループを直接変更しない。
+
+[source,text]
+----
+既存の他者定義グループを state: deleted とする
+  ↓
+deletedBy / deletedAt を記録する
+  ↓
+現在利用者が新しいグループとして再定義する
+----
+
+この方式により、元のグループ構造を履歴として保持しながら、自分の整理結果を新しい定義として追加できる。
+
+=== 交換ノート編集モードのまとめ
+
+[source,text]
+----
+他者作成の意味構造は保護する。
+通常ノードの位置や表示 style は必要範囲で変更可能とする。
+削除は履歴管理する。
+description の一律配列化は行わない。
+import ノートで他者作成ノードに追記する場合のみ description を配列化する。
+グループ構造を変える場合は削除して再定義する。
+----
+
+== 共同編集モード
+
+=== 目的
+
+共同編集モードは、複数利用者が同一ノートを開き、数秒程度の遅延で編集結果を相互に反映しながら、共同でノートを作成するためのモードである。
+
+完全なリアルタイム共同編集ではなく、次のような準リアルタイム同期を目的とする。
+
+* `latest.json` の revision を10秒程度の間隔で確認し、他者の変更があれば反映する。
+* ノート全体を毎回上書きせず、change set として差分同期する。
+* 他者作成要素の変更及び削除を禁止し、競合を単純化する。
+* 必要な修正依頼は Memo で伝える。
+
+=== 共同編集での厳格な所有者ルール
+
+共同編集モードでは、自分が作成した要素のみ変更又は削除できる。
+
+[source,text]
+----
+自分が作成した要素:
+  変更可能
+  削除可能
+
+他者が作成した要素:
+  変更不可
+  削除不可
+  必要な指摘は Memo で伝える
+----
+
+対象は次のとおりである。
+
+* Node
+* Link
+* Group
+* Timeline
+* Timeline member
+* Contents
+* Contents member / PageMarker
+* Memo
+* description
+* resource 定義
+
+=== 所有者混在 Link の作成
+
+共同編集モードでは、他者が作成したノードそのものを変更又は削除することはできない。
+
+ただし、自分が作成したノードと他者が作成したノードとの間に、新しい Link を定義することは可能とする。
+
+この場合、端点ノードの一方又は両方が他者作成ノードであっても、Link 自体は現在利用者が新規作成した要素として扱う。
+
+[source,text]
+----
+他者作成ノード A
+  ↓
+自分が作成したノード B と関連付けたい
+  ↓
+自分が Link L を新規作成する
+  ↓
+Link L の audit.createdBy は現在利用者
+----
+
+Link の所有者は、source 又は target の所有者ではなく、Link を作成した利用者で決定する。
+
+[source,javascript]
+----
+{
+  id: "_link_uuid",
+  source: "_other_user_node_uuid",
+  target: "_my_node_uuid",
+  type: "link",
+  state: "active",
+  audit: {
+    createdBy: "current_user_uuid",
+    createdAt: "2026-05-20T12:00:00+09:00",
+    lastModifiedBy: "current_user_uuid",
+    lastModifiedAt: "2026-05-20T12:00:00+09:00"
+  }
+}
+----
+
+=== 端点ノード削除時の Link 処理
+
+Link は、source node と target node の両方が active である場合に有効な関係として表示する。
+
+したがって、Link の端点である source node 又は target node のいずれかが `state: "deleted"` になった場合、その Link も `state: "deleted"` として履歴管理する。
+
+[source,text]
+----
+source node 又は target node が deleted
+  ↓
+そのノードを端点に持つ Link を検索
+  ↓
+該当 Link を state: deleted にする
+  ↓
+deleted.reason に endpointDeleted を記録する
+----
+
+Link が自分の作成した Link であっても、端点ノードが削除された場合は、表示可能な関係ではなくなるため、従属的に削除扱いにする。
+
+[source,javascript]
+----
+{
+  id: "_link_uuid",
+  source: "_other_user_node_uuid",
+  target: "_my_node_uuid",
+  state: "deleted",
+  deleted: {
+    deletedBy: "system",
+    deletedAt: "2026-05-20T12:10:00+09:00",
+    reason: "endpointDeleted",
+    endpointId: "_my_node_uuid"
+  }
+}
+----
+
+この従属削除は、Link の所有者による明示的な削除ではなく、関係を構成する端点が無効になったことによる整合性維持処理である。
+
+=== 他者作成要素への指摘
+
+他者作成要素に問題がある場合、直接変更又は削除せず、対象要素への参照付き Memo を追加する。
+
+[source,text]
+----
+他者作成要素に問題を見つける
+  ↓
+直接変更又は削除しない
+  ↓
+Memo を追加して提案内容を記録する
+  ↓
+作成者又は共同編集者が確認する
+----
+
+Memo の例:
+
+[source,text]
+----
+この PageMarker は、実際には 12 ページではなく 13 ページを指しているようです。
+確認の上、必要であれば作成者側で修正してください。
+----
+
+=== 共同編集モードで許可する操作
+
+[cols="1,2", options="header"]
+|===
+|対象
+|許可する操作
+
+|自分が作成した Node
+|変更、削除、移動、style 変更。
+
+|自分が作成した Link
+|変更、削除、style 変更。端点に他者作成ノードを含む Link であっても、Link 自体を自分が作成した場合は自分の作成要素として扱う。
+
+|自分が作成した Group
+|変更、削除、style 変更。
+
+|自分が作成した Timeline / Contents
+|変更、削除、member 追加。
+
+|他者作成要素
+|閲覧のみ。
+
+|他者作成要素への意見
+|Memo 又は comment の追加。
+
+|所有者混在 Link
+|自分が作成したノードと他者作成ノードを結ぶ Link の新規作成。ただし、他者作成ノード自体は変更しない。
+|===
+
+=== 共同編集モードで禁止する操作
+
+[cols="1,2", options="header"]
+|===
+|対象
+|禁止する操作
+
+|他者作成 Node
+|変更、削除、移動、state 変更、style 変更、description 追記。
+
+|他者作成 Link
+|source / target / style を含む変更、削除。なお、他者作成ノードを端点とする自分作成 Link は、この禁止対象には含めない。
+
+|他者作成 Group
+|構造変更、style 変更、削除。
+
+|他者作成 Timeline member
+|変更、削除。
+
+|他者作成 Contents member / PageMarker
+|変更、削除。
+
+|他者作成 description
+|変更、削除、追記。
+|===
+
+共同編集モードでは、交換ノート編集モードで許可していた他者作成要素の表示 style 変更も禁止する。
+
+== モード別編集可否比較
+
+[cols="1,2,2", options="header"]
+|===
+|対象
+|交換ノート編集モード
+|共同編集モード
+
+|他者作成通常ノードの `x`, `y`
+|変更可能
+|変更不可
+
+|他者作成通常ノードの削除
+|soft delete として履歴管理
+|不可。Memo で伝える
+
+|他者作成通常ノードの description
+|import ノートで追記する場合のみ配列化して追記可能
+|不可。Memo で伝える
+
+|他者作成 Link style
+|変更可能
+|変更不可
+
+|他者作成 Link の source / target
+|変更不可
+|変更不可
+
+|他者定義グループ構造
+|変更不可。必要なら削除して再定義
+|変更不可。削除も不可。Memo で伝える
+
+|他者定義グループの軸線・外周線 style
+|変更可能
+|変更不可
+
+|他者作成 Timeline / Contents member
+|既存 member の意味的変更は不可。削除は履歴管理
+|変更及び削除不可。Memo で伝える
+
+|所有者混在 Link
+|必要に応じて作成可能
+|自分が作成したノードと他者作成ノードを結ぶ Link は作成可能。Link の所有者は Link 作成者とする。
+
+|Memo
+|追加可能
+|他者作成要素への指摘として追加可能
+|===
+
+== 共同編集の同期方式
+
+=== 基本方式
+
+共同編集では、サーバー側に保存される operation log と `latest.json` を基準として、他者の更新有無を確認する。
+
+ただし、本機能の主な利用形態は、完全な同時編集ではなく非同期更新の共有である。したがって、初期実装では、長時間接続を維持する watch / long polling 方式ではなく、10秒程度の間隔で `latest.json` 相当の軽量情報を確認する方式を採用する。
+
+[source,text]
+----
+自分が編集
+  ↓
+change set としてローカルキューへ記録
+  ↓
+短い debounce 後、又は操作確定時に post-note-change.cgi へ送信
+  ↓
+サーバーが所有者及び編集可否を検証
+  ↓
+note.json に反映
+  ↓
+revision を更新
+  ↓
+operation log を保存
+  ↓
+latest.json を更新
+
+他の利用者
+  ↓
+10秒程度の間隔で latest.json を確認
+  ↓
+保持している revision より新しければ差分 operation log を取得
+  ↓
+画面へ反映
+----
+
+=== 10秒程度の revision 確認
+
+他者の更新確認は、厳密なリアルタイム性を要求しない。
+
+共同作業中であっても、他者の更新が10秒程度で反映されれば、ノート作成の協調作業としては十分に自然である。
+
+[source,text]
+----
+通常時:
+  10 秒程度の間隔で revision を確認する。
+
+自分が変更を送信した直後:
+  応答で返る serverRevision を使って即時に自分の revision を更新する。
+
+画面が非アクティブの場合:
+  30 秒から 60 秒程度へ確認間隔を延ばしてもよい。
+
+画面がアクティブに戻った場合:
+  直ちに 1 回 revision を確認する。
+----
+
+=== latest revision check
+
+クライアントは、自分が保持している revision とサーバー側の latest revision を比較する。
+
+[source,text]
+----
+check-note-latest.cgi?note_key=...&clientRevision=128
+----
+
+サーバーは、`latest.json` の内容を確認し、差分の有無だけを返す。
+
+変更がある場合:
+
+[source,javascript]
+----
+{
+  "status": "changed",
+  "serverRevision": 131,
+  "fromRevision": 129,
+  "toRevision": 131,
+  "changeCount": 3
+}
+----
+
+変更がない場合:
+
+[source,javascript]
+----
+{
+  "status": "noChange",
+  "serverRevision": 128
+}
+----
+
+`changed` を受け取ったクライアントは、`get-note-changes.cgi` で差分 operation log を取得する。
+
+[source,text]
+----
+get-note-changes.cgi?note_key=...&fromRevision=129&toRevision=131
+----
+
+=== 確認間隔の調整
+
+更新確認は固定値だけでなく、状態に応じて調整する。
+
+[cols="1,2", options="header"]
+|===
+|状態
+|確認間隔
+
+|共同編集中の通常状態
+|10 秒程度
+
+|自分が直前に変更を送信した後
+|即時に応答 revision を反映し、次回確認は通常間隔に戻す
+
+|他者更新を受信した直後
+|差分反映後、次回確認は通常間隔に戻す
+
+|非アクティブタブ
+|30 秒から 60 秒程度
+
+|通信エラー後
+|10 秒、20 秒、30 秒程度の段階的 backoff
+
+|画面復帰時
+|即時確認
+|===
+
+=== long polling / watch を初期実装にしない理由
+
+watch / long polling は、変更が発生したら即時に返せる利点がある。
+
+一方、CGI 構成では、待受中のプロセスが滞留しやすく、利用者数が増えた場合にサーバー資源を消費しやすい。
+
+本機能では、数秒から10秒程度の遅延を許容できるため、初期実装では10秒程度の軽量 revision 確認を推奨する。
+
+[source,text]
+----
+初期実装:
+  10秒程度の latest revision check
+
+将来拡張:
+  long polling
+  Server-Sent Events
+  WebSocket
+----
+
+=== latest revision marker
+
+同期確認を軽量化するため、サーバー側に最新 revision を示す `latest.json` を持たせる。
+
+[source,text]
+----
+data/{team_id}/YYYY/MM/DD/note_uuid/collab/
+  latest.json
+  revisions/
+    000000128.json
+    000000129.json
+    000000130.json
+----
+
+`latest.json` の例:
+
+[source,javascript]
+----
+{
+  "note_id": "note_uuid",
+  "revision": 131,
+  "updatedAt": "2026-05-20T12:03:00+09:00"
+}
+----
+
+operation log を追加した後、`latest.json` を atomic write で更新する。
+
+クライアントは、10秒程度の間隔で `latest.json` 相当の情報を取得し、保持している revision より大きい場合だけ差分 operation log を取得する。
+
+== revision
+
+ノートには共同編集用 revision を持たせる。
+
+[source,javascript]
+----
+collaboration: {
+  enabled: true,
+  revision: 128,
+  updatedAt: "2026-05-20T12:00:00+09:00"
+}
+----
+
+サーバーは、change set を確定し、operation log を追加するたびに revision を 1 増やす。
+
+== change set
+
+クライアントは、利用者操作を change set として送信する。
+
+[source,javascript]
+----
+{
+  changeId: "change_uuid",
+  note_id: "note_uuid",
+  note_key: "2026/05/20/note_uuid/note.json",
+  baseRevision: 128,
+  user_uuid: "user_b",
+  createdAt: "2026-05-20T12:03:00+09:00",
+  operations: [
+    {
+      op: "addMemo",
+      targetType: "node",
+      targetId: "_target_node_uuid",
+      value: {
+        id: "_memo_uuid",
+        type: "Memo",
+        text: "このリンク先を確認してください。"
+      }
+    }
+  ]
+}
+----
+
+=== operation 種別
+
+[cols="1,3", options="header"]
+|===
+|operation
+|内容
+
+|`add`
+|自分の新規要素を追加する。
+
+|`addLink`
+|Link を新規追加する。source 又は target に他者作成ノードを指定できるが、Link 自体の `audit.createdBy` は現在利用者とする。
+
+|`update`
+|自分が作成した要素の変更可能属性を更新する。
+
+|`style`
+|自分が作成した要素の style を更新する。
+
+|`delete`
+|自分が作成した要素を `state: "deleted"` にする。
+
+|`restore`
+|自分が削除した要素を復元する。
+
+|`addMemo`
+|他者作成要素への指摘又は提案として Memo を追加する。
+|===
+
+共同編集モードでは、他者作成要素への `update`, `style`, `delete`, `restore` は拒否する。
+
+ただし、`addLink` については、端点ノードの所有者が他者であっても、Link 自体を現在利用者が新規作成する操作であれば許可する。
+
+`appendDescription` は共同編集モードの標準 operation とはしない。他者作成要素への補足は Memo で扱う。
+
+== サーバー側処理
+
+=== CGI 構成
+
+共同編集用に、次の CGI を追加する。
+
+[source,text]
+----
+server/
+  list-user-teams.cgi
+  list-team-notes.cgi
+  get-team-role.cgi
+  post-note-change.cgi
+  check-note-latest.cgi
+  get-note-changes.cgi
+----
+
+`list-user-teams.cgi` は、現在利用者が所属するチーム一覧をチーム管理テーブルから返す。
+
+`list-team-notes.cgi` は、現在利用者が所属するチームの作業中ノート一覧を返す。
+
+`get-team-role.cgi` は、現在利用者の対象チームにおける権限区分を返す。UI はこの情報に基づき、作成、編集、管理、閲覧のみの表示を切り替える。
+
+`post-note-change.cgi` は、自分の変更を受け付け、検証し、operation log として確定する。
+
+`check-note-latest.cgi` は、クライアントが保持する revision とサーバー側 latest revision を比較し、差分の有無を返す。
+
+`get-note-changes.cgi` は、指定 revision 範囲の operation log を返す。
+
+
+=== list-user-teams.cgi
+
+処理概要:
+
+[source,text]
+----
+currentUser を確認する
+  ↓
+team-members.json から currentUser の active な所属チームを取得する
+  ↓
+teams.json から teamName / status を取得する
+  ↓
+所属チーム一覧と teamRole を返す
+----
+
+レスポンス例:
+
+[source,javascript]
+----
+{
+  "status": "ok",
+  "teams": [
+    {
+      "team_id": "c5c1f594a-315b-4bab-9075-62b1bebed7eb",
+      "teamName": "Project A team",
+      "teamRole": "teamAdmin",
+      "status": "active"
+    },
+    {
+      "team_id": "c6c2a1b8d-1b5a-4d4d-8d7e-1a2b3c4d5e6f",
+      "teamName": "Project B team",
+      "teamRole": "editor",
+      "status": "active"
+    }
+  ]
+}
+----
+
+=== get-team-role.cgi
+
+処理概要:
+
+[source,text]
+----
+currentUser を確認する
+  ↓
+team_id を受け取る
+  ↓
+currentUser が team_id に所属しているか確認する
+  ↓
+teamRole を返す
+----
+
+レスポンス例:
+
+[source,javascript]
+----
+{
+  "status": "ok",
+  "team_id": "c5c1f594a-315b-4bab-9075-62b1bebed7eb",
+  "teamRole": "editor",
+  "permissions": {
+    "canView": true,
+    "canCreateNote": true,
+    "canPostChange": true,
+    "canManageNote": false,
+    "canPostChat": true
+  }
+}
+----
+
+=== list-team-notes.cgi
+
+処理概要:
+
+[source,text]
+----
+currentUser を確認する
+  ↓
+currentUser が所属する team_id 一覧を取得する
+  ↓
+各 team_id の共同作業ノート一覧を確認する
+  ↓
+note title / latest revision / updatedAt / lastModifiedBy を返す
+----
+
+レスポンス例:
+
+[source,javascript]
+----
+{
+  "status": "ok",
+  "teams": [
+    {
+      "team_id": "c5c1f594a-315b-4bab-9075-62b1bebed7eb",
+      "notes": [
+        {
+          "note_id": "note_uuid",
+          "note_key": "{team_id}/2026/05/20/note_uuid/note/note.json",
+          "title": "共同作業ノート",
+          "revision": 131,
+          "updatedAt": "2026-05-20T12:03:00+09:00",
+          "lastModifiedBy": "user_b"
+        }
+      ]
+    }
+  ]
+}
+----
+
+=== post-note-change.cgi
+
+処理概要:
+
+[source,text]
+----
+change set を受け取る
+  ↓
+note.lock を取得する
+  ↓
+note.json と latest.json を読み込む
+  ↓
+所有者及び編集可否を検証する
+  ↓
+note.json に変更を反映する
+  ↓
+revision を進める
+  ↓
+operation log を保存する
+  ↓
+latest.json を更新する
+  ↓
+note.lock を解放する
+  ↓
+確定 revision を返す
+----
+
+=== check-note-latest.cgi
+
+処理概要:
+
+[source,text]
+----
+clientRevision を受け取る
+  ↓
+latest.json を確認する
+  ↓
+latest.revision > clientRevision なら changed を返す
+  ↓
+そうでなければ noChange を返す
+----
+
+`check-note-latest.cgi` は待機しない。
+
+クライアント側が10秒程度の間隔で呼び出すことで、CGI プロセスを長時間滞留させずに、準リアルタイムの共同編集を実現する。
+
+=== get-note-changes.cgi
+
+処理概要:
+
+[source,text]
+----
+fromRevision / toRevision を受け取る
+  ↓
+collab/revisions/ から該当 operation log を読み込む
+  ↓
+revision 順に配列化する
+  ↓
+クライアントへ返す
+----
+
+=== サーバー検証
+
+サーバーは change set を反映する前に、次を検証する。
+
+. `note_key` が存在すること。
+. チームノートの場合、現在利用者が対象 `team_id` に所属していること。
+. チームノートの場合、現在利用者の `teamRole` が対象 API 及び operation を許可していること。
+. 閲覧利用者からの change set 送信でないこと。
+. `baseRevision` が許容範囲内であること。
+. operation の形式が正しいこと。
+. 操作対象が存在すること。
+. 操作対象が `state: "deleted"` でないこと。
+. 共同編集モードでは、変更又は削除対象の `audit.createdBy` が現在利用者と一致すること。
+. 他者作成要素への変更又は削除でないこと。
+. `addLink` の場合、source 及び target が存在し、いずれも `state: "deleted"` でないこと。
+. `addLink` の場合、Link 自体の `audit.createdBy` が現在利用者であること。
+. `addMemo` の場合、参照先が存在すること。
+. 変更対象属性がモード別編集可否ルールに適合すること。
+
+他者作成要素への変更は拒否する。
+
+[source,javascript]
+----
+if (target.audit.createdBy !== currentUser.uuid) {
+  reject({
+    reason: "notOwner",
+    message: "他者が作成した要素は共同編集モードでは変更又は削除できません。Memo で伝えてください。"
+  });
+}
+----
+
+=== Link 追加時の検証
+
+共同編集モードでは、他者作成ノードを端点に含む Link の新規作成を許可する。
+
+ただし、Link の追加時には次を検証する。
+
+. source node が存在すること。
+. target node が存在すること。
+. source node 及び target node が `state: "deleted"` でないこと。
+. Link 自体の `audit.createdBy` が現在利用者であること。
+. 閲覧利用者による Link 追加でないこと。
+. 現在利用者が対象チームにおいて Link 追加可能な権限を持つこと。
+
+[source,javascript]
+----
+if (op.op === "addLink") {
+  const source = findNode(op.value.source);
+  const target = findNode(op.value.target);
+
+  if (!source || !target) {
+    reject({ reason: "endpointNotFound" });
+  }
+  if (source.state === "deleted" || target.state === "deleted") {
+    reject({ reason: "endpointDeleted" });
+  }
+  if (op.value.audit.createdBy !== currentUser.uuid) {
+    reject({ reason: "invalidOwner" });
+  }
+}
+----
+
+=== ノード削除時の従属 Link 削除
+
+ノードを `state: "deleted"` にする場合、サーバーはそのノードを source 又は target に持つ active Link を検索し、それらも `state: "deleted"` にする。
+
+この処理は、Link の所有者が現在利用者であるかどうかにかかわらず、ノート構造の整合性維持として行う。
+
+[source,text]
+----
+node delete operation を受信
+  ↓
+対象 node の所有者及び削除権限を検証
+  ↓
+node を state: deleted にする
+  ↓
+source 又は target が対象 node である active Link を検索
+  ↓
+該当 Link を state: deleted にする
+  ↓
+operation log に node delete と dependent link delete を記録
+----
+
+operation log には、利用者が明示的に削除した node と、従属的に削除された Link を区別して記録する。
+
+[source,javascript]
+----
+{
+  op: "delete",
+  targetType: "node",
+  targetId: "_node_uuid"
+},
+{
+  op: "delete",
+  targetType: "link",
+  targetId: "_link_uuid",
+  reason: "endpointDeleted",
+  endpointId: "_node_uuid"
+}
+----
+
+=== operation log
+
+サーバーは、確定済み change set を operation log として保存する。
+
+[source,text]
+----
+data/{team_id}/YYYY/MM/DD/note_uuid/
+  note/
+    note.json
+  collab/
+    latest.json
+    revisions/
+      000000128.json
+      000000129.json
+      000000130.json
+----
+
+operation log の例:
+
+[source,javascript]
+----
+{
+  "revision": 129,
+  "note_id": "note_uuid",
+  "user_uuid": "user_b",
+  "createdAt": "2026-05-20T12:03:00+09:00",
+  "operations": [
+    {
+      "op": "addMemo",
+      "targetType": "node",
+      "targetId": "_target_node_uuid",
+      "value": {
+        "id": "_memo_uuid",
+        "type": "Memo",
+        "text": "この PageMarker は 13 ページではないでしょうか。"
+      }
+    }
+  ]
+}
+----
+
+=== ファイル更新の安全性
+
+JSON ファイル更新時には、ノートごとにロックを取得する。
+
+[source,text]
+----
+note.lock を取得
+  ↓
+note.json を読み込む
+  ↓
+change set を検証する
+  ↓
+note.json を更新する
+  ↓
+operation log を保存する
+  ↓
+latest.json を更新する
+  ↓
+note.lock を解放する
+----
+
+`note.json`, `latest.json`, operation log は直接上書きせず、一時ファイルへ書き出した後で rename する。
+
+[source,text]
+----
+*.tmp に書き出し
+  ↓
+flush
+  ↓
+rename *.tmp -> 正式ファイル
+----
+
+== クライアント側処理
+
+=== wuwei.collab.js
+
+共同編集制御用に `wuwei.collab.js` を追加する。
+
+[source,javascript]
+----
+wuwei.collab = {
+  start: function (note) {},
+  stop: function () {},
+  isEnabled: function () {},
+  getRevision: function () {},
+  queueOperation: function (operation) {},
+  flushLocalChanges: function () {},
+  checkLatest: function () {},
+  fetchChanges: function (fromRevision, toRevision) {},
+  applyRemoteChanges: function (changes) {},
+  canEditObject: function (object) {},
+  canDeleteObject: function (object) {},
+  createMemoForTarget: function (target, text) {}
+};
+----
+
+=== canEditObject
+
+共同編集モードでは、自分が作成した要素だけを編集可能とする。
+
+[source,javascript]
+----
+function canEditObject(obj) {
+  if (!wuwei.collab.isEnabled()) {
+    return wuwei.model.canEditObjectInExchangeMode(obj);
+  }
+
+  return obj &&
+    obj.audit &&
+    obj.audit.createdBy === wuwei.auth.getCurrentUserUuid();
+}
+----
+
+=== ローカル変更送信
+
+利用者が操作した場合、固定間隔を待たず、操作確定時又は短い debounce 後に送信する。
+
+[source,text]
+----
+利用者操作
+  ↓
+change set をキューへ追加
+  ↓
+300 ms から 1000 ms 程度 debounce
+  ↓
+post-note-change.cgi へ送信
+  ↓
+確定 revision を受け取る
+----
+
+ドラッグ中の連続変化は逐次送信せず、drag end など操作確定時に 1 つの変更として送信する。
+
+=== 他者変更の受信
+
+他者変更は、10秒程度の間隔で latest revision を確認し、差分がある場合だけ取得する。
+
+[source,text]
+----
+10秒程度の timer
+  ↓
+check-note-latest.cgi で latest revision を確認
+  ↓
+changed 応答なら get-note-changes.cgi で差分取得
+  ↓
+applyRemoteChanges()
+  ↓
+再描画
+  ↓
+次回 timer で再確認
+----
+
+== UI 方針
+
+
+=== チーム作業ノート一覧メニュー
+
+自分のノート一覧とは別に、チームで作業中のノート一覧を確認できるメニューを新設する。
+
+[source,text]
+----
+Notes
+  My notes
+  Team notes
+    Project A team (c5c1f594a-315b-4bab-9075-62b1bebed7eb)
+    Project B team (c6c2a1b8d-1b5a-4d4d-8d7e-1a2b3c4d5e6f)
+----
+
+利用者が複数チームに所属する場合、所属チームごとに作業中ノート一覧を表示する。
+
+[cols="1,3", options="header"]
+|===
+|項目
+|内容
+
+|チーム名
+|チーム管理テーブル上の `teamName` 及び `team_id`。表示名には `teamName` を使い、処理には `team_id` を使う。
+
+|ノートタイトル
+|チーム共同作業ノートのタイトル又は label。
+
+|最終更新日時
+|チームノートの `updatedAt` 又は latest revision の更新日時。
+
+|最終更新者
+|最後に operation log を追加した利用者。
+
+|未読更新
+|利用者が最後に開いた revision より新しい revision があるかどうか。
+
+|状態
+|作業中、確認待ち、完了、アーカイブなどの任意状態。
+
+|自分の権限
+|対象チームにおける `teamRole`。例: チーム管理者、一般編集者、閲覧利用者。
+|===
+
+チームノート一覧は、同時編集のためだけではなく、非同期更新を確認する入口として扱う。
+
+[source,text]
+----
+チームノート一覧を開く
+  ↓
+所属チームごとに latest 情報を確認
+  ↓
+未読更新又は最近更新されたノートを表示
+  ↓
+利用者が必要なノートを開く
+----
+
+
+=== 交換ノート編集モード UI
+
+交換ノート編集モードでは、他者作成要素について、変更不可属性を read only 表示する。
+
+一方、モード上許可された表示属性は編集可能にする。
+
+例:
+
+* 通常ノードの `x`, `y`
+* Link style
+* グループ代表ノード style
+* グループ軸線及び外周線 style
+* import ノート内の他者作成ノードへの description 追記
+
+=== 共同編集モード UI
+
+共同編集モードでは、他者作成要素を選択した場合、編集欄を read only とする。
+
+代替操作として、`Memo で伝える` ボタンを表示する。
+
+[source,text]
+----
+この要素は他の利用者が作成したため、共同編集モードでは変更できません。
+修正が必要な場合は Memo で伝えてください。
+
+[Memo で伝える]
+----
+
+=== 同期状態表示
+
+共同編集モードでは、同期状態を表示する。
+
+[source,text]
+----
+共同編集中 | revision 131 | 最終確認 12:05:03 | 未送信 0
+----
+
+他者の変更を受信した場合は、短時間通知する。
+
+[source,text]
+----
+他の利用者による変更 3 件を反映しました。
+----
+
+10秒確認で変更がない場合は通常通知しない。
+
+通信エラーが継続する場合のみ通知する。
+
+== 共同編集チャット機能
+
+=== 目的
+
+共同編集モードでは、他者作成要素を直接変更又は削除できない。
+
+そのため、同時に作業している利用者間で、軽い相談、確認、作業分担、修正依頼を行うためのチャット機能を提供する。
+
+チャットは、ノート本体の意味構造を変更する機能ではなく、共同作業中の補助的なコミュニケーション機能として扱う。
+
+=== Memo との違い
+
+Memo とチャットは役割を分ける。
+
+[cols="1,3", options="header"]
+|===
+|機能
+|位置づけ
+
+|Memo
+|ノート上に残す修正提案、注釈、確認依頼。対象ノードやリンクに関連付けて保存する。
+
+|チャット
+|共同作業中の会話、作業分担、短い確認。必ずしもノート本体の意味構造として残さない。
+|===
+
+修正依頼として後から参照すべき内容は Memo にする。
+
+一時的な相談や確認はチャットで扱う。
+
+[source,text]
+----
+チャット:
+  「この PageMarker は確認中です」
+  「この資料の Contents を私が追加します」
+
+Memo:
+  「この PageMarker は 13 ページではないでしょうか。確認してください。」
+----
+
+=== 画面配置
+
+チャットペインは、画面左下に配置する。
+
+[source,text]
+----
++------------------------------------------------------+
+|                                                      |
+|                    canvas / note                     |
+|                                                      |
+|                                                      |
+| [chat pane]                                          |
+| 共同編集チャット                                     |
+| message list                                         |
+| input                                                |
++------------------------------------------------------+
+----
+
+左下配置とする理由は次のとおりである。
+
+* 右側の edit pane / info pane と競合しにくい。
+* ノートの主編集領域を大きく妨げない。
+* 折りたたみ表示にしやすい。
+* 共同編集状態表示と近接させやすい。
+
+=== チャットペインの表示状態
+
+チャットペインは、次の状態を持つ。
+
+[cols="1,3", options="header"]
+|===
+|状態
+|説明
+
+|closed
+|通常は小さなアイコン又はバーとして表示する。
+
+|compact
+|直近数件のメッセージだけを表示する。
+
+|open
+|メッセージ一覧と入力欄を表示する。
+|===
+
+新着メッセージがある場合、closed 又は compact 状態では未読件数を表示する。
+
+=== チャットデータ
+
+チャットメッセージは、operation log とは分離して保存する。
+
+operation log はノート本体の変更履歴であり、チャットは共同作業中の会話であるためである。
+
+[source,text]
+----
+data/{team_id}/YYYY/MM/DD/note_uuid/
+  collab/
+    latest.json
+    revisions/
+      000000128.json
+      000000129.json
+  chat/
+    latest.json
+    messages.jsonl
+----
+
+チャットメッセージの例:
+
+[source,javascript]
+----
+{
+  "messageId": "chat_message_uuid",
+  "note_id": "note_uuid",
+  "chatSeq": 42,
+  "user_uuid": "user_b",
+  "displayName": "User B",
+  "createdAt": "2026-05-20T12:10:00+09:00",
+  "text": "この Contents は私が追加します。",
+  "targetRef": null
+}
+----
+
+対象要素に関する会話の場合は、任意で `targetRef` を設定できる。
+
+[source,javascript]
+----
+{
+  "messageId": "chat_message_uuid",
+  "note_id": "note_uuid",
+  "chatSeq": 43,
+  "user_uuid": "user_b",
+  "createdAt": "2026-05-20T12:11:00+09:00",
+  "text": "この PageMarker は確認が必要です。",
+  "targetRef": {
+    "targetType": "node",
+    "targetId": "_page_marker_uuid"
+  }
+}
+----
+
+=== チャット同期
+
+チャットも厳密なリアルタイム性は不要とする。
+
+ノート本体の更新確認と同様に、10秒程度の間隔で新着確認する。
+
+[source,text]
+----
+10秒程度の timer
+  ↓
+check-chat-latest.cgi で最新 chatSeq を確認
+  ↓
+新着があれば get-chat-messages.cgi で取得
+  ↓
+左下チャットペインに反映
+----
+
+自分がメッセージを送信した場合は、10秒確認を待たず、即時に `post-chat-message.cgi` へ送信する。
+
+=== チャット API
+
+初期実装では、次の CGI を用意する。
+
+[cols="1,3", options="header"]
+|===
+|API
+|概要
+
+|`post-chat-message.cgi`
+|チャットメッセージを追加し、chatSeq を進める。
+
+|`check-chat-latest.cgi`
+|クライアントが保持する chatSeq とサーバー側 latest chatSeq を比較する。
+
+|`get-chat-messages.cgi`
+|指定 chatSeq 以降のチャットメッセージを取得する。
+|===
+
+ノート本体の operation log とチャット log は分けるが、UI 上の同期タイマーは共通化してよい。
+
+[source,text]
+----
+共同編集 timer 10 秒
+  ↓
+check-note-latest.cgi
+check-chat-latest.cgi
+  ↓
+必要な差分だけ取得
+----
+
+=== 保存期間
+
+チャットは一時的な共同作業支援として扱う。
+
+初期実装では、次のいずれかを選択できる。
+
+[cols="1,3", options="header"]
+|===
+|方式
+|説明
+
+|セッション保存
+|共同編集セッション中のみ保持する。ノート export には含めない。
+
+|ノート付随保存
+|`collab/chat/` に保存し、必要に応じて共同編集履歴として参照可能にする。
+
+|要約保存
+|チャットそのものは保持せず、必要な内容だけ Memo として残す。
+|===
+
+推奨は、初期段階では `collab/chat/` に保存するが、ノート本体の意味構造とは分離する方式である。
+
+重要な指摘は、チャットではなく Memo として残す。
+
+== 既存モジュールとの関係
+
+=== wuwei.note
+
+`wuwei.note` は、ノートデータの読み込み、保存、import 正規化、共同編集 metadata の保持を担当する。
+
+主な責務は次のとおりである。
+
+* 旧形式ノートを v2 形式へ正規化する。
+* `state` 未定義の要素に `active` を補完する。
+* import 時に `createdBy` 及び `createdAt` を保持する。
+* `description` は import 時に一律配列化しない。
+* import ノートで他者作成ノードに追記する場合のみ、対象ノードの `description` を配列化する。
+* `collaboration.revision` を保持する。
+
+=== wuwei.model
+
+`wuwei.model` は、モード別の編集可否判定を担当する。
+
+[source,text]
+----
+交換ノート編集モード:
+  他者作成要素の意味属性は保護する。
+  許可された表示属性は変更可能とする。
+  他者作成ノードへの description 追記は限定的に許可する。
+
+共同編集モード:
+  自分の作成要素のみ変更・削除可能とする。
+  他者作成要素は read only とする。
+  他者作成要素への指摘は Memo 追加で対応する。
+----
+
+=== wuwei.edit
+
+`wuwei.edit` は、編集 UI の read only 制御を担当する。
+
+* 変更不可属性を read only 表示する。
+* 交換ノート編集モードでは許可された表示属性を編集可能にする。
+* 交換ノート編集モードでは、他者作成ノードへの description 追記 UI を表示する。
+* 共同編集モードでは他者作成要素を read only にする。
+* 共同編集モードでは `Memo で伝える` ボタンを表示する。
+
+=== wuwei.draw
+
+`wuwei.draw` は、描画対象の選別及び受信差分の反映を担当する。
+
+* `state: "deleted"` の要素を通常描画から除外する。
+* remoteChanges による追加、削除、style 変更を画面に反映する。
+* 受信変更を短時間ハイライトする。
+
+=== wuwei.collab
+
+`wuwei.collab` は、共同編集同期制御を担当する。
+
+* 共同編集モードの開始・停止
+* revision 管理
+* change set キュー管理
+* `post-note-change.cgi` との通信
+* `check-note-latest.cgi` による更新有無確認
+* `get-note-changes.cgi` による差分取得
+* remoteChanges の適用
+* 変更拒否時の通知
+
+=== wuwei.chat
+
+`wuwei.chat` は、共同編集時のチャットペイン及びチャット同期を担当する。
+
+* 左下チャットペインの表示、折りたたみ、未読件数表示
+* `post-chat-message.cgi` への送信
+* `check-chat-latest.cgi` による新着確認
+* `get-chat-messages.cgi` による差分取得
+* 対象要素への `targetRef` 付きメッセージ表示
+* 必要に応じた Memo 作成への誘導
+
+
+=== wuwei.team
+
+`wuwei.team` は、利用者が所属する共同作業チーム及びチームノート一覧の取得を担当する。
+
+主な責務は次のとおりである。
+
+* 現在利用者が所属する team list を取得する。
+* チームごとの作業中ノート一覧を取得する。
+* チームごとの `teamRole` を取得する。
+* 権限区分に応じて、ノート作成、管理、編集、閲覧のみの UI を切り替える。
+* チームノートの latest revision、最終更新日時、未読更新状態を表示用に整形する。
+* チームノートを開く際に `team_id` と `note_key` を `wuwei.collab` に渡す。
+
+== 実装ステップ
+
+実装は、最初からチーム共同作業全体を一括して実装するのではなく、次の段階で進める。
+
+[source,text]
+----
+第1段階: 編集制御基盤の確認
+  第1A段階: import 済み export ノート編集の確認
+  第1B段階: チーム共同編集モードの編集制限確認
+
+第2段階: チーム共同作業基盤の確認
+  第2A段階: 集団作業、非同期更新、operation log の確認
+  第2B段階: チーム管理、権限、チーム別ノート一覧の確認
+----
+
+第1段階には、二つの利用ケースが含まれる。
+
+一つ目は、他者から入手した export ノートを import して利用するケースである。
+
+二つ目は、共同編集用のチーム領域からノートを読み込み、共同編集モードとして操作するケースである。
+
+実装順序としては、まず import して利用するケースを実装する。その後、その機能をより厳格に制限する形で共同編集モードを実装する。
+
+[source,text]
+----
+import 済み export ノート編集
+  ↓
+表示属性や補足追記など、限定的な他者要素操作を確認
+  ↓
+同じ編集可否判定を利用
+  ↓
+共同編集モードでは、他者作成要素への操作をさらに制限
+  ↓
+他者作成要素は read only
+  ↓
+必要な指摘は Memo 又はチャットで伝える
+----
+
+モードの違いは、使用しているノートが import した個人領域のノートか、共同編集用のチーム領域から読み込んだノートかで判定する。
+
+=== 実装段階の全体像
+
+[cols="1,2,4", options="header"]
+|===
+|段階
+|確認対象
+|目的
+
+|第1A段階
+|import 済み export ノート編集の確認
+|他者から入手したノートを個人領域へ import し、交換ノート編集モードとして、表示調整、補足追記、soft delete、編集可否判定が安全に動作することを確認する。
+
+|第1B段階
+|チーム共同編集モードの編集制限確認
+|チーム領域から読み込んだノートを共同編集モードとして扱い、他者作成要素の変更及び削除を禁止し、自分の作成要素のみ変更又は削除できることを確認する。同期処理はこの段階では最小限又は未実装でもよい。
+
+|第2A段階
+|集団作業の確認
+|チームノートを複数利用者で開き、非同期更新、operation log、latest revision 確認、Memo、チャットが動作することを確認する。
+
+|第2B段階
+|チーム管理の確認
+|`teams.json`, `team-members.json`, `users.json` を用いたチーム所属、権限区分、チーム別ノート一覧、アクセス制御が動作することを確認する。
+|===
+
+=== 第1段階: 編集制御基盤の確認
+
+第1段階では、共同作業の同期機構を実装する前に、ノートの出所に応じて編集モードを判定し、モード別の編集可否判定が正しく動作することを確認する。
+
+第1段階は、次の二つに分ける。
+
+* 第1A段階: import 済み export ノート編集の確認
+* 第1B段階: チーム共同編集モードの編集制限確認
+
+==== Step 1.1: 共通データ正規化
+
+* note に `note_id`, `note_key`, `modelVersion` を確認又は補完する。
+* 各 node, link, group, resource に `audit` を補完する。
+* 各要素に `state` を補完する。
+* `state` 未定義の要素は `active` とみなす。
+* `description` は一律配列化しない。
+* import ノートで他者作成ノードに補足説明を追記する場合のみ、必要に応じて `description` を配列形式に変換する。
+* note metadata に `collabNoteState` 及び必要に応じて `note_scope` / `team_id` を保持できるようにする。
+
+[source,javascript]
+----
+{
+  collabNoteState: "imported",
+  note_scope: "personal"
+}
+----
+
+又は、チームノートの場合は次のようにする。
+
+[source,javascript]
+----
+{
+  collabNoteState: "team",
+  note_scope: "team",
+  team_id: "c5c1f594a-315b-4bab-9075-62b1bebed7eb"
+}
+----
+
+==== Step 1.2: モード判定処理
+
+ノート読込時に、保存領域及び metadata に基づいて編集モードを判定する。
+
+[cols="1,2,2", options="header"]
+|===
+|読込元
+|metadata
+|編集モード
+
+|個人ノート領域
+|`collabNoteState: "own"`
+|通常個人編集モード
+
+|個人ノート領域
+|`collabNoteState: "imported"`
+|交換ノート編集モード
+
+|チームノート領域
+|`collabNoteState: "team"` 又は `note_scope: "team"`
+|共同編集モード
+|===
+
+処理概要は次のとおりである。
+
+[source,text]
+----
+ノート読込
+  ↓
+保存パスと note metadata を確認
+  ↓
+個人領域 + import 由来なら交換ノート編集モード
+  ↓
+チーム領域 + team_id ありなら共同編集モード
+  ↓
+wuwei.model / wuwei.edit の編集可否判定へモードを渡す
+----
+
+==== Step 1.3: 個人ノートの通常編集確認
+
+* 既存の個人ノートを開けることを確認する。
+* Topic, Content, Memo, Link の追加、変更、削除が従来どおり動作することを確認する。
+* 通常ノードの `x`, `y`, `state`, `style` が正しく保存及び復元されることを確認する。
+* link style の色、線種、太さ、`s`, `v`, `h`, `v2`, `h2` などの変更が正しく描画されることを確認する。
+* グループ代表ノード、グループ軸線、外周線 style の描画が既存ノートで破綻しないことを確認する。
+
+==== Step 1.4: soft delete の確認
+
+* ノード削除時に物理削除せず、`state: "deleted"` になることを確認する。
+* リンク削除時に物理削除せず、`state: "deleted"` になることを確認する。
+* グループ削除時に物理削除せず、削除履歴が付くことを確認する。
+* `deleted.deletedBy`, `deleted.deletedAt` が記録されることを確認する。
+* 通常描画では `state: "deleted"` の要素が非表示になることを確認する。
+* 管理表示又は履歴確認モードでは、削除済み要素を確認できることを確認する。
+
+=== 第1A段階: import 済み export ノート編集の確認
+
+第1A段階では、他者から入手した export ノートを import して利用するケースを先に実装する。
+
+この段階は、共同編集モードの基礎になる。
+
+==== Step 1A.1: export ノートの import
+
+* export package を import して開けることを確認する。
+* `note_id` 及び `note_key` を保持する。
+* `file_uuid`, `resource.uri`, `resource.canonicalUri`, `resource.storage.files[]` を不必要に変更しない。
+* import 先では、物理配置に必要な `dir_name` などの環境依存項目のみ更新する。
+* import 済みノートには `collabNoteState: "imported"` を設定する。
+* import 済みノートには `note_scope: "personal"` を設定する。
+* import 済みノートの `team_id` は空文字とする。
+* 既存互換のため、旧 `exchange.imported`, `exchange.mode: "imported"`, `exchange.source: "import"` も交換ノート判定に使用する。
+* 旧データで import metadata が未設定の場合は、現在利用者と `audit.createdBy` が異なる個人領域ノートを `imported` とみなす。
+
+==== Step 1A.2: 交換ノート編集モードの編集制御
+
+交換ノート編集モードでは、他者作成要素の意味属性を保護しつつ、表示上の整理や補足を限定的に許可する。
+
+確認項目は次のとおりである。
+
+* 他者作成要素の意味属性が read only になること。
+* 通常ノードの `x`, `y` など、許可された表示属性のみ編集できること。
+* Link style を許可範囲内で変更できること。
+* グループ代表ノード style を変更できること。
+* グループ軸線及び外周線 style を変更できること。
+* 他者定義グループの構造変更はできないこと。
+* 他者作成ノードへの補足説明追記が必要な場合のみ、`description` を配列化して追記できること。
+* 一律の description 配列化が行われないこと。
+
+==== Step 1A.3: import ノート編集の完了条件
+
+[cols="1,4", options="header"]
+|===
+|項目
+|完了条件
+
+|import
+|export package を import し、個人領域で開ける。
+
+|identity
+|`note_id`, `note_key`, `file_uuid` が不必要に変更されない。
+
+|編集制御
+|他者作成要素の意味属性が保護され、許可された表示属性のみ編集できる。
+
+|description
+|一律配列化せず、必要時のみ追記用に配列化される。
+
+|soft delete
+|削除対象が物理削除されず、`state: "deleted"` と削除履歴で管理される。
+|===
+
+=== 第1B段階: チーム共同編集モードの編集制限確認
+
+第1B段階では、第1A段階で実装した交換ノート編集機能を制限する形で、共同編集モードの編集可否判定を実装する。
+
+この段階では、operation log や十秒間隔の更新確認は未実装又は最小限でもよい。重要なのは、チームノートとして読み込まれた場合に、共同編集モードの厳格な編集制限が適用されることである。
+
+==== Step 1B.1: チームノートとしての読込
+
+* `team_id` は `"c" + uuid.v4()` 形式で生成する。
+* `collabo-teamX` は説明上の仮称とし、実際の保存パスには使用しない。
+* チームノートを次の形式で配置する。
++
+[source,text]
+----
+data/{team_id}/YYYY/MM/DD/note_uuid/section/*
+----
+* note metadata に `collabNoteState: "team"`, `note_scope: "team"`, `team_id` を記録する。
+* チーム領域から読み込んだノートは、自動的に共同編集モードとして扱う。
+
+==== Step 1B.2: 共同編集モードの編集制限
+
+共同編集モードでは、他者作成要素の変更及び削除を禁止する。
+
+確認項目は次のとおりである。
+
+* 自分が作成した Node は変更又は削除できる。
+* 自分が作成した Link は変更又は削除できる。
+* 自分が作成した Memo は変更又は削除できる。
+* 他者作成 Node は変更又は削除できない。
+* 他者作成 Link は style を含めて変更又は削除できない。
+* 他者作成 Group は style を含めて変更又は削除できない。
+* 他者作成 Timeline member 及び Contents member は変更又は削除できない。
+* 他者作成要素について修正が必要な場合は、Memo 又はチャットで伝える。
+
+==== Step 1B.3: 所有者混在 Link の確認
+
+共同編集モードでは、他者が作成したノードと自分が作成したノードを結ぶ Link を定義可能とする。
+
+この Link の所有者は、Link を作成した利用者である。
+
+確認項目は次のとおりである。
+
+* 他者作成ノードを source 又は target に含める Link を作成できる。
+* Link の `audit.createdBy` は現在利用者になる。
+* source 又は target のどちらかのノードが `state: "deleted"` になった場合、この Link も `state: "deleted"` として履歴管理される。
+* 端点削除に伴う Link 削除では、`deleted.reason: "endpointDeleted"` を記録する。
+
+==== Step 1B.4: 共同編集モード編集制限の完了条件
+
+[cols="1,4", options="header"]
+|===
+|項目
+|完了条件
+
+|モード判定
+|チーム領域から読み込んだノートが共同編集モードとして扱われる。
+
+|所有者制御
+|自分の作成要素のみ変更又は削除できる。
+
+|他者要素保護
+|他者作成要素は read only となり、変更又は削除できない。
+
+|Memo 連絡
+|他者作成要素への修正提案を Memo として追加できる。
+
+|所有者混在 Link
+|他者ノードと自分ノードを結ぶ Link を作成でき、端点削除時に従属削除される。
+|===
+
+=== 第2段階: チーム共同作業基盤の確認
+
+第2段階では、チーム用ノートを対象として、複数利用者による非同期更新共有を確認する。
+
+この段階は、実装上は次の二つに細分化してよい。
+
+* 第2A段階: 集団作業、非同期更新、operation log の確認
+* 第2B段階: チーム管理、権限、チーム別ノート一覧の確認
+
+=== 第2A段階: 集団作業、非同期更新、operation log の確認
+
+第2A段階では、チーム所属や権限管理を最小限の固定設定とし、複数利用者が同じチームノートを開いたときの共同作業動作を確認する。
+
+==== Step 2A.1: 共同作業 metadata の追加
+
+* note に `collaboration.enabled` を追加する。
+* note に `collaboration.revision` を追加する。
+* operation log 保存ディレクトリを定義する。
+* `collab/latest.json` を定義する。
+* note lock 及び atomic write 方針を実装する。
+
+==== Step 2A.2: operation log と revision 更新
+
+* change set を受信し、operation log として保存する。
+* operation log 保存後に `collaboration.revision` を更新する。
+* `collab/latest.json` に最新 revision、最終更新日時、最終更新者を記録する。
+* note.json には確定済み change set を反映する。
+
+==== Step 2A.3: 十秒程度の更新確認
+
+* クライアントは約十秒間隔で `check-note-latest.cgi` を呼び出す。
+* 自分が保持する revision と `latest.json` の revision を比較する。
+* revision が進んでいる場合のみ `get-note-changes.cgi` を呼び出す。
+* 未取得 operation log を取得し、画面及び current note に反映する。
+
+==== Step 2A.4: 共同作業 API
+
+初期実装では、次の API を用意する。
+
+[cols="1,3", options="header"]
+|===
+|API
+|概要
+
+|`post-note-change.cgi`
+|change set を受け取り、検証後に operation log と note.json へ反映する。
+
+|`check-note-latest.cgi`
+|指定チームノートの最新 revision を返す。
+
+|`get-note-changes.cgi`
+|指定 revision 以降の operation log を返す。
+
+|`list-team-notes.cgi`
+|所属チームで作業中のノート一覧を返す。
+|===
+
+==== Step 2A.5: クライアント同期
+
+* `wuwei.collab.js` を追加する。
+* `queueOperation()` を実装する。
+* `postChanges()` を実装する。
+* `checkLatest()` を実装する。
+* `fetchChanges()` を実装する。
+* `applyRemoteChanges()` を実装する。
+* 他者変更を反映した要素を短時間ハイライトする。
+
+==== Step 2A.6: Memo 及びチャット
+
+* 他者作成要素への修正提案は Memo として保存する。
+* 同時作業中の短い相談は左下チャットペインで行う。
+* チャットログはノート本体とは別に `collab/chat/` 配下へ保存する。
+* 重要な判断又は修正依頼は、チャットではなく Memo として残す。
+
+==== Step 2A.7: 第2A段階の完了条件
+
+[cols="1,4", options="header"]
+|===
+|項目
+|完了条件
+
+|change set
+|自分の編集操作が change set として送信される。
+
+|operation log
+|サーバー側で revision ごとに operation log が保存される。
+
+|latest
+|`latest.json` に最新 revision が反映される。
+
+|更新確認
+|十秒程度の確認で他者更新を検出できる。
+
+|差分反映
+|未取得 operation log を取得し、画面に反映できる。
+
+|Memo / chat
+|修正提案は Memo、同時作業中の短い相談はチャットで扱える。
+|===
+
+=== 第2B段階: チーム管理、権限、チーム別ノート一覧の確認
+
+第2B段階では、チーム所属、チームロール、チーム別ノート一覧、アクセス制御を確認する。
+
+==== Step 2B.1: チーム管理テーブル
+
+サーバー上に次の管理テーブルを用意する。
+
+[source,text]
+----
+data/admin/
+  teams.json
+  team-members.json
+  users.json
+----
+
+`teams.json` には、`team_id`, `teamName`, `description`, `status`, `audit` を記録する。
+
+`team-members.json` には、`team_id`, `user_uuid`, `teamRole`, `status`, `joinedAt` を記録する。
+
+`users.json` には、`user_uuid`, `displayName`, `systemRole`, `status` を記録する。
+
+==== Step 2B.2: チーム所属確認
+
+* 利用者が複数チームに所属できることを確認する。
+* `list-user-teams.cgi` により、現在利用者の所属チーム一覧を取得できることを確認する。
+* 各チームについて `teamRole` を取得できることを確認する。
+
+==== Step 2B.3: 権限区分の確認
+
+権限区分は次の四つとする。
+
+* システム管理者
+* チーム管理者
+* 一般編集者
+* 閲覧利用者
+
+初期実装では、チーム所属及びロール変更はシステム管理者が行う。
+
+チーム管理者は、チームノートの状態管理や作業整理を行うが、メンバー所属変更は行わない。
+
+==== Step 2B.4: チーム別ノート一覧メニュー
+
+* 自分のノート一覧とは別に、チームで作業中のノート一覧メニューを新設する。
+* 所属する複数チームを切り替えて表示できることを確認する。
+* ノート一覧には、note title、最終更新日時、最終更新者、revision、未読更新状態、teamRole を表示する。
+* チームノートを開くと、`team_id`, `note_key`, `collabNoteState: "team"`, `note_scope: "team"` が編集処理に渡されることを確認する。
+
+==== Step 2B.5: アクセス制御確認
+
+* チームに所属しない利用者は、そのチームのノート一覧を取得できないことを確認する。
+* 閲覧利用者は note を開けるが、change set を投稿できないことを確認する。
+* 一般編集者は自分の作成要素を編集できることを確認する。
+* チーム管理者はチームノートの状態変更など、定義された管理操作のみ実行できることを確認する。
+* システム管理者はチーム及び所属管理を実行できることを確認する。
+
+=== 実装段階の推奨順序
+
+推奨順序は次のとおりである。
+
+[source,text]
+----
+1. 個人ノートの既存動作確認
+2. soft delete / audit / state の共通化
+3. import 済み export ノート編集の実装
+4. 交換ノート編集モードの編集可否判定
+5. チームノート読込と共同編集モード判定
+6. 共同編集モードの編集制限
+7. 所有者混在 Link の作成と端点削除時の従属削除
+8. operation log / latest revision / 10秒確認
+9. チーム別ノート一覧
+10. チーム管理テーブルと権限制御
+11. チャットペイン
+12. 非同期更新を含む総合確認
+----
+
+== 実装上の注意
+
+=== 第1段階と第2段階を分離する理由
+
+第1段階で個人レベルの編集制御とデータ正規化を確認しておくことで、第2段階の共同作業機能の問題を、同期処理やチーム管理の問題として切り分けやすくなる。
+
+[source,text]
+----
+第1段階で確認すること:
+  データモデルと編集制御が正しく動くこと
+
+第2段階で確認すること:
+  複数利用者、チーム保存領域、同期、権限管理が正しく動くこと
+----
+
+=== 非同期更新を基本とする理由
+
+チーム共同作業では、同時編集よりも非同期更新の共有が多いと想定する。
+
+そのため、初期実装では WebSocket による完全リアルタイム同期ではなく、10秒程度の latest revision 確認を基本とする。
+
+これにより、実装を単純化しながら、次の要件を満たすことができる。
+
+* 他者の更新に気付ける。
+* 差分がある場合のみ operation log を取得できる。
+* サーバー負荷を抑えられる。
+* CGI ベースの実装に適合しやすい。
+* 将来 WebSocket / SSE / long polling に拡張しやすい。
+
+== 推奨結論
+
+本方式では、交換ノート編集と共同編集を同じデータモデル上で扱う。
+
+共通する基礎は次のとおりである。
+
+[source,text]
+----
+note_id / note_key によるノート識別
+audit.createdBy による所有者判定
+state: deleted による soft delete
+resource の論理パス保持
+operation log による差分管理
+----
+
+`description` については、一律に配列化しない。
+
+[source,text]
+----
+description の配列化:
+  import ノートで他者作成ノードへ追記する場合に限定する。
+
+共同編集モード:
+  他者作成要素への指摘は description 追記ではなく Memo で伝える。
+----
+
+共同作業用ノートは、個人ノートとは分離して `data/{team_id}/YYYY/MM/DD/note_uuid/section/*` に配置する。利用者のチーム所属はシステム管理者が別途管理し、利用者は複数チームに所属可能とする。さらに、チーム共同作業では、システム管理者、チーム管理者、一般編集者、閲覧利用者の権限区分を設け、チーム所属と権限区分の両方でアクセスを制御する。
+
+共同作業は、完全な同時編集よりも非同期更新が多いことを前提とする。同期は、10秒程度の間隔で latest revision を確認し、operation log が追加されている場合だけ差分取得する方式を推奨する。
+
+[source,text]
+----
+自分の変更:
+  操作確定時に post-note-change.cgi へ送信する。
+
+他者の変更:
+  check-note-latest.cgi で latest revision を確認する。
+
+差分取得:
+  changed 応答後に get-note-changes.cgi で取得する。
+----
+
+自分のノート一覧とは別に、チームで作業中のノート一覧を確認できるメニューを新設する。共同編集時の利用者間の相談は、左下チャットペインで扱う。ただし、後から残すべき修正提案は Memo として記録する。
+
+この方式により、export/import によるノート交換と、10秒程度の遅延を許容する共同編集を、同じ WuWei v2 データモデルの上で段階的に実現できる。

@@ -38,15 +38,21 @@ wuwei.collab = wuwei.collab || {};
     var exchange = target && target.exchange;
     var noteCreator = String(target && target.audit && target.audit.createdBy || '');
     var uid = currentUserId();
+    if (String(target && target.collabNoteState || '').toLowerCase() === 'imported') {
+      return true;
+    }
     if (exchange && typeof exchange === 'object' &&
       (exchange.imported === true || exchange.mode === 'imported' || exchange.source === 'import')) {
       return true;
     }
-    return !!(!isEnabled(target) && uid && noteCreator && noteCreator !== uid);
+    return !!(!isTeamNote(target) && uid && noteCreator && noteCreator !== uid);
   }
 
   function isTeamNote(note) {
-    if (isEnabled(note)) {
+    var target = note || currentNote();
+    if (String(target && target.collabNoteState || '').toLowerCase() === 'team' ||
+      String(target && target.note_scope || '').toLowerCase() === 'team' ||
+      isEnabled(target)) {
       return true;
     }
     return false;
@@ -201,7 +207,7 @@ wuwei.collab = wuwei.collab || {};
     if (isOwnObject(record)) {
       return true;
     }
-    if (isEnabled()) {
+    if (isTeamNote()) {
       return false;
     }
     if (!isImportedNote()) {
@@ -217,7 +223,7 @@ wuwei.collab = wuwei.collab || {};
     if (isOwnObject(record)) {
       return true;
     }
-    return !isEnabled();
+    return !isTeamNote();
   }
 
   function canEditSelection(records) {

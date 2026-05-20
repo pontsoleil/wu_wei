@@ -121,6 +121,36 @@ wuwei.note = (function () {
     };
   }
 
+  function normalizeCollabNoteState(param) {
+    var src = (param && typeof param === 'object') ? param : {};
+    var raw = String(src.collabNoteState || '').toLowerCase();
+    var exchange = normalizeExchange(src.exchange);
+    var collaboration = normalizeCollaboration(src.collaboration);
+    var createdBy = String(src.audit && src.audit.createdBy || '');
+    var uid = String(state.currentUser && state.currentUser.user_id || '');
+    if (/^(own|imported|team)$/.test(raw)) {
+      return raw;
+    }
+    if (String(src.note_scope || '').toLowerCase() === 'team' || collaboration.enabled) {
+      return 'team';
+    }
+    if (exchange.imported || exchange.mode === 'imported' || exchange.source === 'import') {
+      return 'imported';
+    }
+    if (uid && createdBy && createdBy !== uid) {
+      return 'imported';
+    }
+    return 'own';
+  }
+
+  function normalizeNoteScope(value, noteState) {
+    var raw = String(value || '').toLowerCase();
+    if (raw === 'team' || noteState === 'team') {
+      return 'team';
+    }
+    return 'personal';
+  }
+
   function normalizeRecordState(src) {
     return (src && src.state) ? String(src.state) : 'active';
   }
@@ -884,6 +914,9 @@ wuwei.note = (function () {
       thumbnail: (typeof src.thumbnail === 'undefined') ? '' : src.thumbnail,
       collaboration: normalizeCollaboration(src.collaboration),
       exchange: normalizeExchange(src.exchange),
+      collabNoteState: normalizeCollabNoteState(src),
+      note_scope: normalizeNoteScope(src.note_scope, normalizeCollabNoteState(src)),
+      team_id: String(src.team_id || ''),
       audit: normalizeAudit(src.audit, state.currentUser)
     });
   }
@@ -1154,6 +1187,9 @@ wuwei.note = (function () {
       this.thumbnail = (typeof param.thumbnail === 'undefined') ? '' : param.thumbnail;
       this.collaboration = normalizeCollaboration(param.collaboration);
       this.exchange = normalizeExchange(param.exchange);
+      this.collabNoteState = normalizeCollabNoteState(param);
+      this.note_scope = normalizeNoteScope(param.note_scope, this.collabNoteState);
+      this.team_id = String(param.team_id || '');
       const portable = (param.bundle && typeof param.bundle === 'object')
         ? param.bundle
         : ((param.portable && typeof param.portable === 'object')
@@ -1264,6 +1300,9 @@ wuwei.note = (function () {
       pages: [],
       collaboration: normalizeCollaboration(current.collaboration),
       exchange: normalizeExchange(current.exchange),
+      collabNoteState: normalizeCollabNoteState(current),
+      note_scope: normalizeNoteScope(current.note_scope, normalizeCollabNoteState(current)),
+      team_id: String(current.team_id || ''),
       audit: normalizeAudit(current.audit, state.currentUser)
     };
 
@@ -1319,6 +1358,9 @@ wuwei.note = (function () {
       pages: [],
       collaboration: normalizeCollaboration(current.collaboration),
       exchange: normalizeExchange(current.exchange),
+      collabNoteState: normalizeCollabNoteState(current),
+      note_scope: normalizeNoteScope(current.note_scope, normalizeCollabNoteState(current)),
+      team_id: String(current.team_id || ''),
       audit: normalizeAudit(current.audit, state.currentUser)
     };
 
