@@ -4368,6 +4368,7 @@ wuwei.util = (function () {
     var resource = getResource(node);
     var viewer = (resource && resource.viewer && 'object' === typeof resource.viewer) ? resource.viewer : {};
     var embed = (viewer.embed && 'object' === typeof viewer.embed) ? viewer.embed : {};
+    var fileUri = String(getResourceFileUri(resource, 'thumbnail', node) || '').trim();
     var explicit = String(
       resource && resource.thumbnailUri ||
       viewer.thumbnailUri ||
@@ -4375,10 +4376,17 @@ wuwei.util = (function () {
       ''
     ).trim();
 
+    if (fileUri) {
+      return fileUri;
+    }
     if (explicit) {
+      if (!/^https?:\/\//i.test(explicit) || explicit.indexOf('/wu_wei2/') >= 0 ||
+          /(?:^|\/)(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i.test(explicit)) {
+        return toPublicResourceUri('thumbnail', toStorageRelativePath(explicit, null, 'thumbnail'), null, 'thumbnail');
+      }
       return explicit;
     }
-    return String(getResourceFileUri(resource, 'thumbnail', node) || '');
+    return '';
   };
 
 

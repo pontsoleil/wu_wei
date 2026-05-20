@@ -192,6 +192,33 @@ wuwei.note = (function () {
     return '';
   }
 
+  function runtimeThumbnailUri(value, ownerUserId) {
+    var text = String(value || '').replace(/\\/g, '/').trim();
+    var uid = String(ownerUserId || state.currentUser && state.currentUser.user_id || '');
+
+    if (!text || isIconThumbnailUri(text)) {
+      return '';
+    }
+    if (/^https?:\/\//i.test(text) && text.indexOf('/wu_wei2/') < 0) {
+      return text;
+    }
+    if (/(?:^|\/)(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i.test(text)) {
+      return toRuntimeFileUrl(text);
+    }
+    if (/^\d{4}\/\d{2}\//.test(text) ||
+        /(?:^|\/)(?:thumbnail|content|upload|resource|note)\//i.test(text) ||
+        /\/wu_wei2\/data\//i.test(text) ||
+        /\/wu_wei2\//i.test(text)) {
+      return toRuntimeFileUrl(util.toPublicResourceUri(
+        'thumbnail',
+        util.toStorageRelativePath(text, uid, 'thumbnail'),
+        uid,
+        'thumbnail'
+      ));
+    }
+    return toRuntimeFileUrl(text);
+  }
+
   function isIconThumbnailUri(value) {
     return /^fa-/.test(String(value || ''));
   }
@@ -199,17 +226,18 @@ wuwei.note = (function () {
   function resolveResourceThumbnailUri(resource, ownerUserId) {
     var viewer = (resource && resource.viewer && typeof resource.viewer === 'object') ? resource.viewer : {};
     var embed = (viewer.embed && typeof viewer.embed === 'object') ? viewer.embed : {};
+    var storageUri = storageFileUrl(resource && resource.storage, 'thumbnail', ownerUserId);
     var candidates = [
-      resource && resource.thumbnailUri,
+      storageUri,
       viewer.thumbnailUri,
       embed.thumbnailUri,
-      storageFileUrl(resource && resource.storage, 'thumbnail', ownerUserId)
+      resource && resource.thumbnailUri
     ];
     var i, value;
 
     for (i = 0; i < candidates.length; i += 1) {
-      value = String(candidates[i] || '').trim();
-      if (value && !isIconThumbnailUri(value)) {
+      value = runtimeThumbnailUri(candidates[i], ownerUserId);
+      if (value) {
         return value;
       }
     }
@@ -364,9 +392,13 @@ wuwei.note = (function () {
         }
       }
 
-      out.thumbnailUri = String(src.thumbnailUri || '') ||
-        (out.resource && out.resource.thumbnailUri) ||
+      out.thumbnailUri =
         resolveResourceThumbnailUri(out.resource, state.currentUser && state.currentUser.user_id);
+      if (!out.thumbnailUri) {
+        out.thumbnailUri = runtimeThumbnailUri(src.thumbnailUri, state.currentUser && state.currentUser.user_id) ||
+          (out.resource && out.resource.thumbnailUri) ||
+          '';
+      }
 
       if (out.thumbnailUri && !src.shape) {
         out.shape = 'THUMBNAIL';
