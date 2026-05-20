@@ -176,6 +176,7 @@ wuwei.note = (function () {
   function storageFileUrl(storage, role, ownerUserId) {
     var files = (storage && Array.isArray(storage.files)) ? storage.files : [];
     var i, file, path, area, uid;
+    role = String(role || '').toLowerCase();
     for (i = 0; i < files.length; i += 1) {
       file = files[i] || {};
       if (String(file.role || '').toLowerCase() !== role) {
@@ -191,10 +192,59 @@ wuwei.note = (function () {
     return '';
   }
 
+  function isIconThumbnailUri(value) {
+    return /^fa-/.test(String(value || ''));
+  }
+
+  function resolveResourceThumbnailUri(resource, ownerUserId) {
+    var viewer = (resource && resource.viewer && typeof resource.viewer === 'object') ? resource.viewer : {};
+    var embed = (viewer.embed && typeof viewer.embed === 'object') ? viewer.embed : {};
+    var candidates = [
+      resource && resource.thumbnailUri,
+      viewer.thumbnailUri,
+      embed.thumbnailUri,
+      storageFileUrl(resource && resource.storage, 'thumbnail', ownerUserId)
+    ];
+    var i, value;
+
+    for (i = 0; i < candidates.length; i += 1) {
+      value = String(candidates[i] || '').trim();
+      if (value && !isIconThumbnailUri(value)) {
+        return value;
+      }
+    }
+    return '';
+  }
+
+  function ensureResourceRuntimeReferences(resource, ownerUserId) {
+    var thumbnailUri;
+
+    if (!resource || typeof resource !== 'object') {
+      return resource;
+    }
+
+    thumbnailUri = resolveResourceThumbnailUri(resource, ownerUserId);
+    if (thumbnailUri) {
+      resource.thumbnailUri = thumbnailUri;
+      resource.viewer = (resource.viewer && typeof resource.viewer === 'object')
+        ? resource.viewer
+        : normalizeViewer(null);
+      resource.viewer.thumbnailUri = thumbnailUri;
+      resource.viewer.embed = (resource.viewer.embed && typeof resource.viewer.embed === 'object')
+        ? resource.viewer.embed
+        : {};
+      if (!resource.viewer.embed.thumbnailUri) {
+        resource.viewer.embed.thumbnailUri = thumbnailUri;
+      }
+    }
+
+    return resource;
+  }
+
   function normalizeResourceDefinition(resource) {
     var src = (resource && typeof resource === 'object') ? resource : {};
     var rights = (src.rights && typeof src.rights === 'object') ? src.rights : {};
-    return {
+    var out = {
       id: src.id || util.createUuid(),
       source: String(src.source || ''),
       kind: String(src.kind || 'other'),
@@ -216,6 +266,8 @@ wuwei.note = (function () {
       },
       audit: normalizeAudit(src.audit, state.currentUser)
     };
+
+    return ensureResourceRuntimeReferences(out, state.currentUser && state.currentUser.user_id);
   }
 
   function isVideoResourceLike(resource, uri) {
@@ -304,9 +356,6 @@ wuwei.note = (function () {
       if (src.resourceRef && resourceById && resourceById[src.resourceRef]) {
         out.resourceRef = src.resourceRef;
         out.resource = runtimeResourceFromDefinition(resourceById[src.resourceRef], src);
-        if (out.resource.thumbnailUri) {
-          out.thumbnailUri = out.resource.thumbnailUri;
-        }
       }
       else {
         out.resource = normalizeResource(src.resource || {}, src);
@@ -315,6 +364,13 @@ wuwei.note = (function () {
         }
       }
 
+      out.thumbnailUri = String(src.thumbnailUri || '') ||
+        (out.resource && out.resource.thumbnailUri) ||
+        resolveResourceThumbnailUri(out.resource, state.currentUser && state.currentUser.user_id);
+
+      if (out.thumbnailUri && !src.shape) {
+        out.shape = 'THUMBNAIL';
+      }
     }
 
     if (src.type === 'Memo') {//} && (src.memoShape || oldView.memoShape)) {
