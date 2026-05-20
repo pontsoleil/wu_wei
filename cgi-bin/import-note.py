@@ -144,31 +144,76 @@ def server_root_dir(user_id: str, logical_path: str) -> str:
     return f"data/{user_id}/upload/{base}"
 
 
-def update_resource_storage_dirs(note: dict, user_id: str) -> None:
+def manifest_file_map(manifest: dict) -> dict[str, dict[str, dict]]:
+    out: dict[str, dict[str, dict]] = {}
+    for resource in manifest.get("resources") or []:
+        if not isinstance(resource, dict):
+            continue
+        rid = str(resource.get("resourceId") or resource.get("file_uuid") or "")
+        file_uuid = str(resource.get("file_uuid") or "")
+        if not rid:
+            continue
+        files_by_role: dict[str, dict] = {}
+        for file_def in resource.get("files") or []:
+            if isinstance(file_def, dict) and file_def.get("role"):
+                files_by_role[str(file_def.get("role")).lower()] = file_def
+        out[rid] = files_by_role
+        if file_uuid and file_uuid != rid:
+            out[file_uuid] = files_by_role
+        if rid.startswith("_"):
+            out[rid.lstrip("_")] = files_by_role
+    return out
+
+
+def update_resource_storage_dirs(note: dict, user_id: str, manifest: dict | None = None) -> None:
+    by_resource = manifest_file_map(manifest or {})
     for obj in iter_dicts(note):
         resource = obj.get("resource") if isinstance(obj.get("resource"), dict) else obj
         if not isinstance(resource, dict):
             continue
+        resource_id = str(resource.get("id") or "")
+        resource_manifest = by_resource.get(resource_id) or by_resource.get(resource_id.lstrip("_")) or {}
         storage = resource.get("storage") if isinstance(resource.get("storage"), dict) else None
         if not storage:
             continue
         manifest = storage.get("manifest") if isinstance(storage.get("manifest"), dict) else None
         if manifest and manifest.get("path"):
-            logical = clean_rel_path(str(manifest.get("path") or ""))
+            manifest_record = resource_manifest.get("manifest")
+            logical = clean_rel_path(str((manifest_record or {}).get("logicalPath") or manifest.get("path") or ""))
             if logical:
+                manifest["path"] = logical
                 manifest["dir_name"] = server_root_dir(user_id, logical)
                 manifest["file_name"] = logical.rsplit("/", 1)[-1]
-                manifest["area"] = manifest.get("area") or "upload"
+                manifest["area"] = "upload"
+                if manifest_record and manifest_record.get("mimeType"):
+                    manifest["mimeType"] = manifest_record.get("mimeType")
         files = storage.get("files") if isinstance(storage.get("files"), list) else []
         for file_def in files:
             if not isinstance(file_def, dict):
                 continue
-            logical = clean_rel_path(str(file_def.get("path") or ""))
+            role = str(file_def.get("role") or "").lower()
+            manifest_record = resource_manifest.get(role)
+            logical = clean_rel_path(str((manifest_record or {}).get("logicalPath") or file_def.get("path") or ""))
             if not logical:
                 continue
+            file_def["path"] = logical
             file_def["dir_name"] = server_root_dir(user_id, logical)
             file_def["file_name"] = logical.rsplit("/", 1)[-1]
-            file_def["area"] = file_def.get("area") or "upload"
+            file_def["area"] = "upload"
+            if manifest_record and manifest_record.get("mimeType"):
+                file_def["mimeType"] = manifest_record.get("mimeType")
+            if role == "original" and manifest_record and manifest_record.get("derivedFrom"):
+                resource["kind"] = "document"
+                resource["documentKind"] = "pdf"
+                resource["mimeType"] = "application/pdf"
+                resource["uri"] = logical
+                resource["canonicalUri"] = logical
+                derived = manifest_record.get("derivedFrom") or {}
+                resource["export"] = {
+                    "originalReplacedByPdf": True,
+                    "originalFileName": derived.get("fileName") or "",
+                    "originalMimeType": derived.get("mimeType") or "",
+                }
 
 
 def note_target(note_root: Path, note_key: str) -> Path:
@@ -293,7 +338,7 @@ def main() -> None:
     upload_root = Path(upload_root_s)
     copy_resource_files(extract_dir, manifest, upload_root)
     write_path_indexes(manifest, upload_root)
-    update_resource_storage_dirs(note, user_id)
+    update_resource_storage_dirs(note, user_id, manifest)
     update_audit(note, user_id, imported_at)
 
     note_root = Path(note_root_s)

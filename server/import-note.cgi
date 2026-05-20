@@ -1,39 +1,29 @@
 #!/bin/sh
 # import-note.cgi
 #
-# Import a WuWei note export package by shell CGI.
-# On success, return the imported note JSON itself, same as cgi-bin/import-note.py.
+# Import a WuWei note export package without delegating to Python.
+# The exported note identity is preserved.  Legacy v0/v1 note ids that start
+# with '_' are valid and must not be rejected as UUID errors.
 
+export PATH=".:./bin:/bin:/usr/bin${PATH+:}${PATH-}"
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "${SCRIPT_FILENAME:-$0}")" && pwd) || exit 1
 cd "$SCRIPT_DIR" || exit 1
 mkdir -p log
 exec 2>>"$SCRIPT_DIR/log/cgi.err"
 
 set -eu
-IMPORT_NOTE_CGI_VERSION="2026-05-20-awk-json-response"
 export LC_ALL=C
-if command -v getconf >/dev/null 2>&1; then
-  export PATH=".:./bin:$(command -p getconf PATH)${PATH+:}${PATH-}"
-fi
 export UNIX_STD=2003
 
 Tmp="/tmp/${0##*/}.$$"
-CGIVARS="${Tmp}-fields"
-RAW_POST="${Tmp}-raw-post"
+CGIVARS="${Tmp}-cgivars"
 UPLOAD_ZIP="${Tmp}-upload.zip"
+FIELDS="${Tmp}-fields"
 ENTRIES="${Tmp}-entries"
-WORK_DIR="${Tmp}-work"
-MANIFEST_JSON="${Tmp}-manifest.json"
-NOTE_JSON_IN="${Tmp}-note-in.json"
-NOTE_JSON_OUT="${Tmp}-note-out.json"
-RESOURCE_LIST="${Tmp}-resources.tsv"
-EXISTING_NORM="${Tmp}-existing.norm"
-INCOMING_NORM="${Tmp}-incoming.norm"
+RAW_POST="${Tmp}-raw-post"
 
 cleanup() {
-  rm -rf "$CGIVARS" "$RAW_POST" "$UPLOAD_ZIP" "$ENTRIES" "$WORK_DIR" \
-         "$MANIFEST_JSON" "$NOTE_JSON_IN" "$NOTE_JSON_OUT" "$RESOURCE_LIST" \
-         "$EXISTING_NORM" "$INCOMING_NORM" "$Tmp"-*
+  rm -f "$CGIVARS" "$UPLOAD_ZIP" "$FIELDS" "$ENTRIES" "$RAW_POST" "$Tmp"-*
 }
 trap cleanup EXIT HUP INT TERM
 
@@ -43,20 +33,18 @@ log_debug() {
 
 error_response() {
   printf '%s\r\n' 'Content-Type: text/plain; charset=UTF-8'
-  printf '%s\r\n' 'Cache-Control: no-store'
   printf '\r\n'
   printf '%s\n' "$1"
   log_debug "$1"
   exit 0
 }
 
-json_response_file() {
+ok_response() {
+  note_file=$1
   printf '%s\r\n' 'Content-Type: application/json; charset=UTF-8'
   printf '%s\r\n' 'Cache-Control: no-store'
-  printf 'X-WuWei-CGI-Version: %s\r\n' "${IMPORT_NOTE_CGI_VERSION:-unknown}"
-  printf '%s\r\n' 'X-WuWei-Import-Response: note-json'
   printf '\r\n'
-  cat "$1"
+  cat "$note_file"
   exit 0
 }
 
@@ -68,14 +56,23 @@ decode_minimal() {
   sed 's/+/ /g; s/%2[Ff]/\//g; s/%2[Dd]/-/g; s/%5[Ff]/_/g; s/%40/@/g; s/%3[Aa]/:/g; s/%20/ /g'
 }
 
+raw_query_param() {
+  key=$1
+  printf '%s' "${QUERY_STRING:-}" |
+    tr '&' '\n' |
+    sed -n "s/^${key}=//p" |
+    head -n 1 |
+    decode_minimal
+}
+
 field_value() {
   key=$1
-  if [ -f "$CGIVARS" ]; then
-    sed -n "s/^${key}=//p" "$CGIVARS" | head -n 1 | decode_minimal
+  if [ -f "$FIELDS" ]; then
+    sed -n "s/^${key}=//p" "$FIELDS" | head -n 1 | decode_minimal
   fi
 }
 
-valid_simple_id() {
+valid_user_id() {
   case "$1" in
     ''|*/*|*..*|ERROR*) return 1 ;;
     *[!A-Za-z0-9._-]*) return 1 ;;
@@ -96,8 +93,8 @@ safe_zip_entry() {
   entry=$(printf '%s' "$1" | sed 's#\\#/#g; s#^/*##')
   case "$entry" in
     ''|/*|*'/../'*|'../'*|*'/..'|'.'|'..'|*'//'*) return 1 ;;
-    export-manifest.json|note/*|resources/*) printf '%s\n' "$entry" ;;
-    *) return 1 ;;
+    *[!A-Za-z0-9._/@+-]*) return 1 ;;
+    *) printf '%s\n' "$entry" ;;
   esac
 }
 
@@ -117,49 +114,23 @@ resolve_env_path() {
   esac
 }
 
-extract_multipart_with_awk() {
-  boundary=$1
-  awk -v boundary="$boundary" -v zip="$UPLOAD_ZIP" -v fields="$CGIVARS" '
-    BEGIN {
-      b = boundary;
-      gsub(/[.[\\*^$()+?{}|]/, "\\\\&", b);
-      RS = "--" b "(--)?\\r?\\n";
-      ORS = "";
-    }
-    NR > 1 {
-      part = $0;
-      sub(/^\\r?\\n/, "", part);
-      if (part ~ /^--/) next;
+area_dir() {
+  area=$1
+  uid=$2
+  path=$(resolve_env_path "$area" "$uid" || true)
+  if [ -n "$path" ]; then
+    printf '%s\n' "$path"
+    return 0
+  fi
 
-      sep = "\r\n\r\n";
-      pos = index(part, sep);
-      if (pos == 0) { sep = "\n\n"; pos = index(part, sep); }
-      if (pos == 0) next;
-
-      header = substr(part, 1, pos - 1);
-      content = substr(part, pos + length(sep));
-      sub(/\\r?\\n$/, "", content);
-
-      name = "";
-      filename = "";
-      if (match(header, /name="[^"]*"/)) {
-        name = substr(header, RSTART + 6, RLENGTH - 7);
-      }
-      if (match(header, /filename="[^"]*"/)) {
-        filename = substr(header, RSTART + 10, RLENGTH - 11);
-      }
-
-      if (name == "file" || filename != "") {
-        printf "%s", content > zip;
-        close(zip);
-        got_file = 1;
-      } else if (name != "") {
-        gsub(/\r|\n/, "", content);
-        print name "=" content "\n" > fields;
-      }
-    }
-    END { exit(got_file ? 0 : 5); }
-  ' "$RAW_POST"
+  # Fallback for areas that are not yet listed in data/environment.
+  # If note is .../data/{user_id}/note, sibling areas are under the same user dir.
+  note_base=$(resolve_env_path note "$uid" || true)
+  if [ -n "$note_base" ]; then
+    printf '%s/%s\n' "$(dirname "$note_base")" "$area"
+    return 0
+  fi
+  return 1
 }
 
 parse_request() {
@@ -172,18 +143,70 @@ parse_request() {
 
   case "$ctype" in
     multipart/form-data*)
+      # Shell variables cannot safely hold ZIP binary content.  Save the raw
+      # request body to a file, then use a small Perl binary parser only to
+      # split the multipart body into a file and text fields; the import logic
+      # itself remains this shell script.
       cat > "$RAW_POST"
-      boundary=$(printf '%s' "$ctype" | sed -n 's/^.*boundary="\{0,1\}\([^";]*\)"\{0,1\}.*$/\1/p')
-      [ -n "$boundary" ] || error_response 'ERROR MULTIPART BOUNDARY NOT FOUND'
-      : > "$CGIVARS"
-      extract_multipart_with_awk "$boundary" || error_response 'ERROR FILE NOT UPLOADED'
+      set +e
+      perl -Mbytes - "$ctype" "$RAW_POST" "$UPLOAD_ZIP" "$FIELDS" <<'PL'
+use strict;
+use warnings;
+binmode STDIN;
+binmode STDOUT;
+my ($ctype, $raw_path, $zip_path, $fields_path) = @ARGV;
+$ctype =~ /boundary=(?:"([^"]+)"|([^;]+))/ or exit 2;
+my $boundary = defined($1) ? $1 : $2;
+$boundary =~ s/^\s+|\s+$//g;
+open my $raw, '<:raw', $raw_path or exit 6;
+my $body = do { local $/; <$raw> };
+close $raw;
+my $marker = "--$boundary";
+open my $fields, '>:raw', $fields_path or exit 3;
+my $got_file = 0;
+for my $part (split(/\Q$marker\E/, $body)) {
+    next if $part =~ /^--/;
+    $part =~ s/^\r?\n//;
+    $part =~ s/\r?\n$//;
+    next if $part eq '';
+    my ($headers, $content) = split(/\r?\n\r?\n/, $part, 2);
+    next unless defined $content;
+    $content =~ s/\r?\n\z//;
+    my $name = '';
+    my $filename = '';
+    for my $h (split(/\r?\n/, $headers)) {
+        if ($h =~ /^Content-Disposition:/i) {
+            $name = $1 if $h =~ /name="([^"]*)"/;
+            $filename = $1 if $h =~ /filename="([^"]*)"/;
+        }
+    }
+    next unless $name ne '';
+    if ($filename ne '' || $name eq 'file') {
+        open my $out, '>:raw', $zip_path or exit 4;
+        print {$out} $content;
+        close $out;
+        $got_file = 1;
+    } else {
+        $content =~ s/[\r\n].*\z//s;
+        $content =~ s/([\r\n=])/sprintf('%%%02X', ord($1))/eg;
+        print {$fields} "$name=$content\n";
+    }
+}
+close $fields;
+exit($got_file ? 0 : 5);
+PL
+      rc=$?
+      set -e
+      [ "$rc" -eq 0 ] || error_response 'ERROR FILE NOT UPLOADED'
+      ;;
+    application/x-www-form-urlencoded*)
+      cat > "$CGIVARS"
+      error_response 'ERROR FILE NOT UPLOADED'
       ;;
     *)
       error_response 'ERROR UNSUPPORTED CONTENT TYPE'
       ;;
   esac
-
-  [ -s "$UPLOAD_ZIP" ] || error_response 'ERROR FILE NOT UPLOADED'
 }
 
 list_zip_entries() {
@@ -201,246 +224,216 @@ copy_zip_entry() {
   unzip -p "$UPLOAD_ZIP" "$entry" > "$target"
 }
 
-extract_safe_entries() {
-  mkdir -p "$WORK_DIR"
-  list_zip_entries || error_response 'ERROR INVALID ZIP FILE'
-  grep -qx 'export-manifest.json' "$ENTRIES" || error_response 'ERROR EXPORT MANIFEST NOT FOUND'
+copy_area_entries() {
+  area=$1
+  uid=$2
+  base=$(area_dir "$area" "$uid" || true)
+  [ -n "$base" ] || return 0
 
-  while IFS= read -r entry; do
-    [ -n "$entry" ] || continue
-    safe=$(safe_zip_entry "$entry") || error_response 'ERROR INVALID ZIP PATH'
+  grep -E "^${area}/" "$ENTRIES" | while IFS= read -r entry; do
+    safe=$(safe_zip_entry "$entry") || continue
     case "$safe" in
       */) continue ;;
     esac
-    copy_zip_entry "$safe" "$WORK_DIR/$safe" || error_response 'ERROR INVALID ZIP FILE'
-  done < "$ENTRIES"
+    rel=${safe#${area}/}
+    rel=$(safe_rel_path "$rel") || continue
+    target="$base/$rel"
+    case "$target" in
+      "$base"/*) copy_zip_entry "$safe" "$target" ;;
+    esac
+  done
 }
 
-json_string_value() {
+manifest_value() {
   key=$1
   file=$2
   awk -v key="$key" '
-    { text = text $0 "\n" }
-    END {
-      pat = "\"" key "\"[[:space:]]*:[[:space:]]*\"";
-      if (!match(text, pat)) exit 1;
-      s = substr(text, RSTART + RLENGTH);
-      esc = 0;
-      out = "";
-      for (i = 1; i <= length(s); i++) {
-        c = substr(s, i, 1);
-        if (esc) {
-          out = out c;
-          esc = 0;
-        } else if (c == "\\") {
-          out = out c;
-          esc = 1;
-        } else if (c == "\"") {
-          print out;
-          exit 0;
-        } else {
-          out = out c;
-        }
+    BEGIN { RS="\001" }
+    {
+      pat="\"" key "\"[[:space:]]*:[[:space:]]*\""
+      if (match($0, pat)) {
+        s=substr($0, RSTART + RLENGTH)
+        sub(/".*/, "", s)
+        print s
       }
-      exit 1;
     }
-  ' "$file"
+  ' "$file" | head -n 1
 }
 
-is_json_object_file() {
-  file=$1
+extract_manifest_resource_files() {
+  manifest=$1
   awk '
-    { text = text $0 "\n" }
-    END {
-      sub(/^\357\273\277/, "", text);
-      gsub(/^[[:space:]]+|[[:space:]]+$/, "", text);
-      exit((substr(text,1,1)=="{" && substr(text,length(text),1)=="}") ? 0 : 1);
+    BEGIN { RS="[{}]"; OFS="\t" }
+    /"role"[[:space:]]*:/ && /"logicalPath"[[:space:]]*:/ && /"path"[[:space:]]*:/ {
+      role=arc=logical=mime=""
+      if (match($0, /"role"[[:space:]]*:[[:space:]]*"[^"]+"/)) {
+        role=substr($0, RSTART, RLENGTH); sub(/^.*:"/, "", role); sub(/"$/, "", role)
+      }
+      if (match($0, /"path"[[:space:]]*:[[:space:]]*"[^"]+"/)) {
+        arc=substr($0, RSTART, RLENGTH); sub(/^.*:"/, "", arc); sub(/"$/, "", arc)
+      }
+      if (match($0, /"logicalPath"[[:space:]]*:[[:space:]]*"[^"]+"/)) {
+        logical=substr($0, RSTART, RLENGTH); sub(/^.*:"/, "", logical); sub(/"$/, "", logical)
+      }
+      if (match($0, /"mimeType"[[:space:]]*:[[:space:]]*"[^"]+"/)) {
+        mime=substr($0, RSTART, RLENGTH); sub(/^.*:"/, "", mime); sub(/"$/, "", mime)
+      }
+      if (role != "" && arc ~ /^resources\// && logical != "") print role, arc, logical, mime
     }
-  ' "$file"
+  ' "$manifest"
 }
 
-load_manifest_and_note() {
-  cp "$WORK_DIR/export-manifest.json" "$MANIFEST_JSON"
-
-  format=$(json_string_value 'format' "$MANIFEST_JSON" || true)
-  [ "$format" = 'wuwei-note-export' ] || error_response 'ERROR INVALID EXPORT MANIFEST'
-
-  NOTE_KEY=$(json_string_value 'note_key' "$MANIFEST_JSON" || true)
-  NOTE_KEY=$(safe_rel_path "$NOTE_KEY") || error_response 'ERROR NOTE KEY NOT FOUND'
-  case "$NOTE_KEY" in
-    */note.json) : ;;
-    *) error_response 'ERROR INVALID NOTE KEY' ;;
+write_path_index() {
+  upload_base=$1
+  logical=$2
+  logical=$(safe_rel_path "$logical") || return 0
+  case "$logical" in
+    [0-9][0-9][0-9][0-9]/[0-9][0-9]/[0-9][0-9]/*) ;;
+    *) return 0 ;;
   esac
-
-  [ -f "$WORK_DIR/note/$NOTE_KEY" ] || error_response 'ERROR NOTE JSON NOT FOUND'
-  cp "$WORK_DIR/note/$NOTE_KEY" "$NOTE_JSON_IN"
-  is_json_object_file "$NOTE_JSON_IN" || error_response 'ERROR INVALID NOTE JSON'
+  actual_date=$(printf '%s' "$logical" | awk -F/ '{print $1"/"$2"/"$3}')
+  upload_id=$(printf '%s' "$logical" | awk -F/ '{print $4}')
+  file_name=$(basename "$logical")
+  logical_base=$(printf '%s' "$logical" | awk -F/ '{print $1"/"$2"/"$3"/"$4}')
+  index_file="$upload_base/_index/path/$logical.json"
+  mkdir -p "$(dirname "$index_file")"
+  {
+    printf '{\n'
+    printf '  "logicalPath": "%s",\n' "$logical"
+    printf '  "upload_id": "%s",\n' "$upload_id"
+    printf '  "actual_date": "%s",\n' "$actual_date"
+    printf '  "date": "%s",\n' "$actual_date"
+    printf '  "file": "%s",\n' "$file_name"
+    printf '  "manifest": "%s/manifest.json"\n' "$logical_base"
+    printf '}\n'
+  } > "$index_file"
 }
 
-manifest_resources_to_tsv() {
-  awk '
-    function value_after(s, key,    pat, p, rest, i, c, out, esc) {
-      pat = "\"" key "\":\"";
-      p = index(s, pat);
-      if (p == 0) return "";
-      rest = substr(s, p + length(pat));
-      out = ""; esc = 0;
-      for (i = 1; i <= length(rest); i++) {
-        c = substr(rest, i, 1);
-        if (esc) { out = out c; esc = 0; }
-        else if (c == "\\") { out = out c; esc = 1; }
-        else if (c == "\"") { return out; }
-        else { out = out c; }
-      }
-      return "";
-    }
-    { json = json $0 }
-    END {
-      gsub(/[[:space:]]+/, "", json);
-      pos = 1; lb = "";
-      while (pos <= length(json)) {
-        rest = substr(json, pos);
-        p_lb = index(rest, "\"logicalBase\"");
-        p_path = index(rest, "\"path\"");
-        if (p_lb == 0 && p_path == 0) break;
-        if (p_lb > 0 && (p_path == 0 || p_lb < p_path)) {
-          lb = value_after(substr(rest, p_lb), "logicalBase");
-          pos += p_lb + 13;
-        } else {
-          seg = substr(rest, p_path);
-          arc = value_after(seg, "path");
-          logical = value_after(seg, "logicalPath");
-          sha = value_after(seg, "sha256");
-          if (arc != "" && logical != "") print lb "\t" arc "\t" logical "\t" sha;
-          pos += p_path + 6;
-        }
-      }
-    }
-  ' "$MANIFEST_JSON" > "$RESOURCE_LIST"
-}
-
-copy_resource_files() {
-  : > "$RESOURCE_LIST"
-  manifest_resources_to_tsv || error_response 'ERROR INVALID RESOURCE FILE MANIFEST'
-
-  while IFS="$(printf '\t')" read -r logical_base arc logical sha rest; do
-    [ -n "${arc:-}" ] || continue
-    arc=$(safe_rel_path "$arc") || error_response 'ERROR INVALID RESOURCE FILE MANIFEST'
+copy_manifest_resource_entries() {
+  upload_base=$1
+  manifest_file=$2
+  extract_manifest_resource_files "$manifest_file" | while IFS="$(printf '\t')" read -r role arc logical mime; do
+    arc=$(safe_zip_entry "$arc") || error_response 'ERROR INVALID RESOURCE FILE MANIFEST'
     logical=$(safe_rel_path "$logical") || error_response 'ERROR INVALID RESOURCE FILE MANIFEST'
-    case "$arc" in resources/*) : ;; *) error_response 'ERROR INVALID RESOURCE FILE MANIFEST' ;; esac
-    src="$WORK_DIR/$arc"
-    [ -f "$src" ] || error_response 'ERROR RESOURCE FILE NOT FOUND'
-    if [ -n "${sha:-}" ]; then
-      actual=$(sha256sum "$src" | awk '{print $1}')
-      [ "$actual" = "$sha" ] || error_response 'ERROR RESOURCE FILE SHA256 MISMATCH'
-    fi
-    dst="$UPLOAD_DIR/$logical"
-    case "$dst" in "$UPLOAD_DIR"/*) : ;; *) error_response 'ERROR INVALID UPLOAD PATH' ;; esac
-    if [ -f "$dst" ]; then
-      old=$(sha256sum "$dst" | awk '{print $1}')
-      new=$(sha256sum "$src" | awk '{print $1}')
-      [ "$old" = "$new" ] || error_response 'ERROR UPLOAD FILE CONFLICT'
+    src_tmp="${Tmp}-resource"
+    copy_zip_entry "$arc" "$src_tmp" || error_response 'ERROR RESOURCE FILE NOT FOUND'
+    dst="$upload_base/$logical"
+    case "$dst" in "$upload_base"/*) ;; *) rm -f "$src_tmp"; error_response 'ERROR INVALID UPLOAD PATH' ;; esac
+    if [ -f "$dst" ] && ! cmp -s "$dst" "$src_tmp"; then
+      rm -f "$src_tmp"
+      error_response 'ERROR UPLOAD FILE CONFLICT'
     fi
     mkdir -p "$(dirname "$dst")"
-    cp -p "$src" "$dst"
-
-    lb=$(safe_rel_path "${logical_base:-}" || true)
-    if [ -n "$lb" ]; then
-      actual_date=$(printf '%s' "$lb" | awk -F/ '{print $1"/"$2"/"$3}')
-      upload_id=$(printf '%s' "$lb" | awk -F/ '{print $4}')
-      if [ -n "$actual_date" ] && [ -n "$upload_id" ]; then
-        idx="$UPLOAD_DIR/_index/path/$logical.json"
-        mkdir -p "$(dirname "$idx")"
-        file_name=$(basename "$logical")
-        manifest_path="$lb/manifest.json"
-        cat > "$idx" <<EOF
-{
-  "logicalPath": "$logical",
-  "upload_id": "$upload_id",
-  "actual_date": "$actual_date",
-  "date": "$actual_date",
-  "file": "$file_name",
-  "manifest": "$manifest_path"
-}
-EOF
-      fi
-    fi
-  done < "$RESOURCE_LIST"
+    cp "$src_tmp" "$dst"
+    rm -f "$src_tmp"
+    write_path_index "$upload_base" "$logical"
+  done
 }
 
-materialise_note_json() {
-  imported_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-  awk -v uid="$USER_ID" -v imported_at="$imported_at" '
-    { text = text $0 "\n" }
-    END {
-      sub(/^\357\273\277/, "", text);
-      gsub(/"lastModifiedBy"[[:space:]]*:[[:space:]]*"[^"]*"/, "\"lastModifiedBy\":\"" uid "\"", text);
-      gsub(/"lastModifiedAt"[[:space:]]*:[[:space:]]*"[^"]*"/, "\"lastModifiedAt\":\"" imported_at "\"", text);
-      printf "%s", text;
-      if (substr(text, length(text), 1) != "\n") printf "\n";
-    }
-  ' "$NOTE_JSON_IN" > "$NOTE_JSON_OUT"
-  is_json_object_file "$NOTE_JSON_OUT" || error_response 'ERROR INVALID NOTE JSON'
-}
-
-normalise_json_for_compare() {
+rewrite_imported_note_json() {
   src=$1
   dst=$2
-  awk '
-    { text = text $0 "\n" }
-    END {
-      sub(/^\357\273\277/, "", text);
-      gsub(/[[:space:]]+/, "", text);
-      gsub(/,?"lastModifiedBy":"[^"]*"/, "", text);
-      gsub(/,?"lastModifiedAt":"[^"]*"/, "", text);
-      gsub(/,?"dir_name":"[^"]*"/, "", text);
-      gsub(/,?"file_name":"[^"]*"/, "", text);
-      print text;
-    }
-  ' "$src" > "$dst"
-}
-
-same_note_json() {
-  existing=$1
-  incoming=$2
-  normalise_json_for_compare "$existing" "$EXISTING_NORM"
-  normalise_json_for_compare "$incoming" "$INCOMING_NORM"
-  cmp -s "$EXISTING_NORM" "$INCOMING_NORM"
+  uid=$3
+  ts=$4
+  # Keep the note identity stable, but refresh mutable import metadata and
+  # server-side upload directories with sed-based string edits.
+  sed -E \
+    -e "s#\"lastModifiedBy\"[[:space:]]*:[[:space:]]*\"[^\"]*\"#\"lastModifiedBy\":\"${uid}\"#g" \
+    -e "s#\"lastModifiedAt\"[[:space:]]*:[[:space:]]*\"[^\"]*\"#\"lastModifiedAt\":\"${ts}\"#g" \
+    -e "s#\"dir_name\"[[:space:]]*:[[:space:]]*\"[^\"]*/upload/([0-9]{4}/[0-9]{2}/[0-9]{2}/[^\"/]+)\"#\"dir_name\":\"data/${uid}/upload/\\1\"#g" \
+    -e "s#\"dir_name\"[[:space:]]*:[[:space:]]*\"[^\"]*/upload/([0-9]{4}/[0-9]{2})\"#\"dir_name\":\"data/${uid}/upload/\\1\"#g" \
+    -e 's#"area"[[:space:]]*:[[:space:]]*"content"#"area":"upload"#g' \
+    -e 's#"area"[[:space:]]*:[[:space:]]*"thumbnail"#"area":"upload"#g' \
+    "$src" > "$dst"
 }
 
 parse_request
 
-SESSION_USER_ID=$(is-login || true)
-REQUESTED_USER_ID=$(field_value user_id || true)
-USER_ID=${REQUESTED_USER_ID:-$SESSION_USER_ID}
+session_user_id=$(is-login || true)
+user_id=$(field_value user_id || true)
+[ -n "${user_id:-}" ] || user_id=$(raw_query_param user_id || true)
+[ -n "${user_id:-}" ] || user_id=${session_user_id:-}
 
-if [ -z "${SESSION_USER_ID:-}" ] || [ -z "${USER_ID:-}" ] || [ "$USER_ID" != "$SESSION_USER_ID" ]; then
-  error_response 'ERROR NOT LOGGED IN'
+[ -n "${user_id:-}" ] || error_response 'ERROR NOT LOGGED IN'
+valid_user_id "$user_id" || error_response 'ERROR INVALID USER ID'
+
+if [ "${user_id}" != 'guest' ]; then
+  [ -n "${session_user_id:-}" ] || error_response 'ERROR NOT LOGGED IN'
+  [ "$user_id" = "$session_user_id" ] || error_response 'ERROR USER MISMATCH'
 fi
-valid_simple_id "$USER_ID" || error_response 'ERROR INVALID USER ID'
 
-NOTE_DIR=$(resolve_env_path note "$USER_ID" || true)
-UPLOAD_DIR=$(resolve_env_path upload "$USER_ID" || true)
-[ -n "${NOTE_DIR:-}" ] || error_response 'ERROR NOTE DIRECTORY NOT DEFINED'
-[ -n "${UPLOAD_DIR:-}" ] || error_response 'ERROR UPLOAD DIRECTORY NOT DEFINED'
-mkdir -p "$NOTE_DIR" "$UPLOAD_DIR"
+[ -s "$UPLOAD_ZIP" ] || error_response 'ERROR FILE NOT UPLOADED'
+if ! unzip -tq "$UPLOAD_ZIP" >/dev/null 2>&1; then
+  error_response 'ERROR INVALID ZIP FILE'
+fi
 
-extract_safe_entries
-load_manifest_and_note
-copy_resource_files
-materialise_note_json
+list_zip_entries || error_response 'ERROR INVALID ZIP FILE'
 
-TARGET="$NOTE_DIR/$NOTE_KEY"
-case "$TARGET" in "$NOTE_DIR"/*) : ;; *) error_response 'ERROR INVALID NOTE KEY' ;; esac
-if [ -f "$TARGET" ]; then
-  if ! same_note_json "$TARGET" "$NOTE_JSON_OUT"; then
-    error_response 'ERROR NOTE ID / NOTE KEY CONFLICT'
+# Reject unsafe paths before writing anything.
+while IFS= read -r entry; do
+  safe_zip_entry "$entry" >/dev/null || error_response 'ERROR INVALID PACKAGE PATH'
+done < "$ENTRIES"
+
+note_entry=$(grep -E '^note/.+/note\.json$' "$ENTRIES" | head -n 1 || true)
+[ -n "$note_entry" ] || error_response 'ERROR NOTE JSON NOT FOUND'
+
+manifest_entry=$(grep -E '^export-manifest\.json$' "$ENTRIES" | head -n 1 || true)
+[ -n "$manifest_entry" ] || error_response 'ERROR EXPORT MANIFEST NOT FOUND'
+manifest_tmp="${Tmp}-manifest.json"
+copy_zip_entry "$manifest_entry" "$manifest_tmp" || error_response 'ERROR EXPORT MANIFEST NOT FOUND'
+format=$(manifest_value format "$manifest_tmp")
+[ "$format" = 'wuwei-note-export' ] || error_response 'ERROR INVALID EXPORT MANIFEST'
+
+note_rel=${note_entry#note/}
+note_rel=$(safe_rel_path "$note_rel") || error_response 'ERROR INVALID NOTE KEY'
+case "$note_rel" in
+  */note.json) ;;
+  *) error_response 'ERROR INVALID NOTE KEY' ;;
+esac
+
+note_key=${note_rel%/note.json}
+[ -n "$note_key" ] || error_response 'ERROR INVALID NOTE KEY'
+
+note_dir=$(area_dir note "$user_id" || true)
+[ -n "$note_dir" ] || error_response 'ERROR NOTE DIRECTORY NOT FOUND'
+mkdir -p "$note_dir" || error_response 'ERROR NOTE DIRECTORY NOT FOUND'
+
+target_note="$note_dir/$note_rel"
+case "$target_note" in
+  "$note_dir"/*) ;;
+  *) error_response 'ERROR INVALID NOTE PATH' ;;
+esac
+
+replace=$(field_value replace || true)
+[ -n "${replace:-}" ] || replace=$(field_value overwrite || true)
+[ -n "${replace:-}" ] || replace=$(raw_query_param replace || true)
+case "${replace:-}" in
+  1|true|TRUE|yes|YES|on|ON) replace=1 ;;
+  *) replace=0 ;;
+esac
+
+incoming_note="${Tmp}-incoming-note.json"
+rewritten_note="${Tmp}-rewritten-note.json"
+copy_zip_entry "$note_entry" "$incoming_note" || error_response 'ERROR NOTE IMPORT FAILED'
+imported_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+rewrite_imported_note_json "$incoming_note" "$rewritten_note" "$user_id" "$imported_at"
+
+if [ -f "$target_note" ]; then
+  existing_tmp="${Tmp}-existing-note"
+  cp "$rewritten_note" "$existing_tmp"
+  if cmp -s "$target_note" "$existing_tmp"; then
+    rm -f "$existing_tmp"
+  else
+    rm -f "$existing_tmp"
+    [ "$replace" = 1 ] || error_response 'ERROR NOTE ID / NOTE KEY CONFLICT'
   fi
 fi
-mkdir -p "$(dirname "$TARGET")"
-cp "$NOTE_JSON_OUT" "$TARGET"
 
-# Success response must be the imported note JSON itself.
-# Do not emit human-readable status lines here; menu.note.js parses this body as JSON.
-is_json_object_file "$NOTE_JSON_OUT" || error_response 'ERROR INVALID IMPORTED NOTE JSON'
-json_response_file "$NOTE_JSON_OUT"
+upload_dir=$(area_dir upload "$user_id" || true)
+[ -n "$upload_dir" ] || error_response 'ERROR UPLOAD DIRECTORY NOT FOUND'
+mkdir -p "$upload_dir" || error_response 'ERROR UPLOAD DIRECTORY NOT FOUND'
+copy_manifest_resource_entries "$upload_dir" "$manifest_tmp"
+
+cp "$rewritten_note" "$target_note" || error_response 'ERROR NOTE IMPORT FAILED'
+
+ok_response "$target_note"

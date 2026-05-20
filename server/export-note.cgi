@@ -1,6 +1,348 @@
 #!/bin/sh
-# export-note.cgi - delegate to the canonical Python implementation.
+# export-note.cgi - shell implementation for EC2 CGI.
+# Does not delegate to the Python implementation; JSON field extraction is done
+# with sed/awk because this endpoint must remain deployable as shell CGI.
 
+export PATH=".:./bin:/bin:/usr/bin${PATH+:}${PATH-}"
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "${SCRIPT_FILENAME:-$0}")" && pwd) || exit 1
-PYTHON=${WUWEI_PYTHON:-python3}
-exec "$PYTHON" "$SCRIPT_DIR/../cgi-bin/export-note.py"
+cd "$SCRIPT_DIR" || exit 1
+mkdir -p log
+exec 2>>"$SCRIPT_DIR/log/cgi.err"
+
+set -eu
+export LC_ALL=C
+export UNIX_STD=2003
+
+Tmp="/tmp/${0##*/}.$$"
+CGIVARS="${Tmp}-cgivars"
+WORK="${Tmp}-work"
+
+cleanup() {
+  rm -f "$CGIVARS"
+  rm -rf "$WORK"
+}
+trap cleanup EXIT HUP INT TERM
+
+error_response() {
+  printf '%s\r\n' 'Content-Type: text/plain; charset=UTF-8'
+  printf '\r\n'
+  printf '%s\n' "$1"
+  exit 0
+}
+
+strip_quotes() {
+  sed 's/^"\(.*\)"$/\1/'
+}
+
+decode_minimal() {
+  sed 's/+/ /g; s/%2[Ff]/\//g; s/%2[Dd]/-/g; s/%5[Ff]/_/g; s/%40/@/g; s/%3[Aa]/:/g; s/%20/ /g'
+}
+
+raw_param() {
+  key=$1
+  printf '%s' "${QUERY_STRING:-}" |
+    tr '&' '\n' |
+    sed -n "s/^${key}=//p" |
+    head -n 1 |
+    decode_minimal
+}
+
+read_request_params() {
+  qs=${QUERY_STRING:-}
+  body=""
+  cl=${CONTENT_LENGTH:-0}
+  if [ "${cl:-0}" -gt 0 ] 2>/dev/null; then
+    body=$(cat || true)
+  fi
+  if [ -n "$qs" ] && [ -n "$body" ]; then
+    printf '%s&%s' "$qs" "$body" | cgi-name > "$CGIVARS"
+  elif [ -n "$qs" ]; then
+    printf '%s' "$qs" | cgi-name > "$CGIVARS"
+  elif [ -n "$body" ]; then
+    printf '%s' "$body" | cgi-name > "$CGIVARS"
+  else
+    : > "$CGIVARS"
+  fi
+}
+
+resolve_env_path() {
+  key=$1
+  uid=${2:-}
+  tpl=$(nameread "$key" data/environment | strip_quotes || true)
+  [ -n "$tpl" ] || return 1
+  if [ -n "$uid" ]; then
+    tpl=$(printf '%s' "$tpl" | sed "s#/*\\*/*#/${uid}/#; s#\\*#${uid}#")
+  fi
+  case "$tpl" in
+    [A-Za-z]:/*|[A-Za-z]:\\*) printf '%s\n' "$tpl" ;;
+    /*) printf '%s\n' "$tpl" ;;
+    wu_wei2/*) printf '%s/%s\n' "$(dirname "$SCRIPT_DIR")" "${tpl#wu_wei2/}" ;;
+    *) printf '%s/%s\n' "$SCRIPT_DIR" "$tpl" ;;
+  esac
+}
+
+area_dir() {
+  area=$1
+  uid=$2
+  path=$(resolve_env_path "$area" "$uid" || true)
+  if [ -n "$path" ]; then
+    printf '%s\n' "$path"
+    return 0
+  fi
+  note_base=$(resolve_env_path note "$uid" || true)
+  [ -n "$note_base" ] || return 1
+  printf '%s/%s\n' "$(dirname "$note_base")" "$area"
+}
+
+valid_simple_id() {
+  case "$1" in
+    ''|*/*|*..*|ERROR*) return 1 ;;
+    *[!A-Za-z0-9._-]*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+valid_note_key() {
+  case "$1" in
+    ''|/*|*..*|*//*|ERROR*) return 1 ;;
+    *[!A-Za-z0-9._/-]*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+normalise_note_key() {
+  printf '%s' "$1" | sed 's#\\#/#g; s#^/*##; s#/*$##; s#/note\.json$##'
+}
+
+find_note_file() {
+  root=$1
+  nid=$2
+  note_key=${3:-}
+  if [ -n "$note_key" ]; then
+    note_key=$(normalise_note_key "$note_key")
+    valid_note_key "$note_key" || return 3
+    if [ -f "$root/$note_key/note.json" ]; then
+      printf '%s\n' "$root/$note_key/note.json"
+      return 0
+    fi
+    return 1
+  fi
+  valid_simple_id "$nid" || return 3
+  found=$(find "$root" -path "*/$nid/note.json" -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | sed 's/^[^ ]* //' || true)
+  count=$(printf '%s\n' "$found" | sed '/^$/d' | wc -l | tr -d '[:space:]')
+  case "$count" in
+    0) return 1 ;;
+    1) printf '%s\n' "$found"; return 0 ;;
+    *) return 2 ;;
+  esac
+}
+
+json_string_value() {
+  key=$1
+  file=$2
+  awk -v key="$key" '
+    BEGIN { RS="\001" }
+    {
+      pat="\"" key "\"[[:space:]]*:[[:space:]]*\""
+      if (match($0, pat)) {
+        s=substr($0, RSTART + RLENGTH)
+        sub(/".*/, "", s)
+        print s
+      }
+    }
+  ' "$file" | head -n 1
+}
+
+safe_rel_path() {
+  rel=$(printf '%s' "$1" | sed 's#\\#/#g; s#^/*##; s#/*$##')
+  case "$rel" in
+    ''|/*|*'/../'*|'../'*|*'/..'|'.'|'..'|*'//'*) return 1 ;;
+    *[!A-Za-z0-9._/@+-]*) return 1 ;;
+    *) printf '%s\n' "$rel" ;;
+  esac
+}
+
+mime_for_name() {
+  case "$(printf '%s' "$1" | sed 's/.*\.//' | tr A-Z a-z)" in
+    pdf) printf '%s\n' 'application/pdf' ;;
+    jpg|jpeg) printf '%s\n' 'image/jpeg' ;;
+    png) printf '%s\n' 'image/png' ;;
+    gif) printf '%s\n' 'image/gif' ;;
+    json) printf '%s\n' 'application/json' ;;
+    txt) printf '%s\n' 'text/plain' ;;
+    doc) printf '%s\n' 'application/msword' ;;
+    docx) printf '%s\n' 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ;;
+    xls) printf '%s\n' 'application/vnd.ms-excel' ;;
+    xlsx) printf '%s\n' 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ;;
+    ppt) printf '%s\n' 'application/vnd.ms-powerpoint' ;;
+    pptx) printf '%s\n' 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ;;
+    *) printf '%s\n' 'application/octet-stream' ;;
+  esac
+}
+
+sha256_of() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
+
+extract_storage_files() {
+  # One JSON object per line is enough for storage.files entries generated by
+  # the app.  This intentionally ignores remote resources.
+  awk '
+    BEGIN { RS="[{}]"; ORS="\n" }
+    /"role"[[:space:]]*:/ && /"path"[[:space:]]*:/ {
+      role=area=path=mime=""
+      if (match($0, /"role"[[:space:]]*:[[:space:]]*"[^"]+"/)) {
+        role=substr($0, RSTART, RLENGTH); sub(/^.*:"/, "", role); sub(/"$/, "", role)
+      }
+      if (match($0, /"area"[[:space:]]*:[[:space:]]*"[^"]+"/)) {
+        area=substr($0, RSTART, RLENGTH); sub(/^.*:"/, "", area); sub(/"$/, "", area)
+      }
+      if (match($0, /"path"[[:space:]]*:[[:space:]]*"[^"]+"/)) {
+        path=substr($0, RSTART, RLENGTH); sub(/^.*:"/, "", path); sub(/"$/, "", path)
+      }
+      if (match($0, /"mimeType"[[:space:]]*:[[:space:]]*"[^"]+"/)) {
+        mime=substr($0, RSTART, RLENGTH); sub(/^.*:"/, "", mime); sub(/"$/, "", mime)
+      }
+      if (role != "" && path ~ /^[0-9][0-9][0-9][0-9]\/[0-9][0-9]\//) {
+        if (area == "") area="upload"
+        print role "\t" area "\t" path "\t" mime
+      }
+    }
+  ' "$1" | sort -u
+}
+
+read_request_params
+
+session_user_id=$(is-login || true)
+user_id=$(nameread user_id "$CGIVARS" | strip_quotes || true)
+[ -n "${user_id:-}" ] || user_id=$(raw_param user_id)
+[ -n "${user_id:-}" ] || user_id=${session_user_id:-}
+id=$(nameread id "$CGIVARS" | strip_quotes || true)
+[ -n "${id:-}" ] || id=$(raw_param id)
+note_key=$(nameread note_key "$CGIVARS" | strip_quotes || true)
+[ -n "${note_key:-}" ] || note_key=$(raw_param note_key)
+
+[ -n "${id:-}${note_key:-}" ] || error_response 'ERROR ID NOT SPECIFIED'
+[ -n "${session_user_id:-}" ] || error_response 'ERROR NOT LOGGED IN'
+[ -n "${user_id:-}" ] || error_response 'ERROR NOT LOGGED IN'
+[ "$user_id" = "$session_user_id" ] || error_response 'ERROR NOT LOGGED IN'
+
+note_dir=$(resolve_env_path note "$user_id" || true)
+[ -n "${note_dir:-}" ] || error_response 'ERROR NOTE DIRECTORY NOT FOUND'
+[ -d "$note_dir" ] || error_response 'ERROR NOTE DIRECTORY NOT FOUND'
+
+set +e
+note_file=$(find_note_file "$note_dir" "${id:-}" "${note_key:-}")
+rc=$?
+set -e
+case "$rc" in
+  0) ;;
+  2) error_response 'ERROR NOTE ID NOT UNIQUE' ;;
+  3) error_response 'ERROR INVALID NOTE KEY' ;;
+  *) error_response 'ERROR NOTE FILE NOT FOUND' ;;
+esac
+
+note_rel=${note_file#"$note_dir"/}
+note_uuid=$(json_string_value note_uuid "$note_file")
+[ -n "$note_uuid" ] || note_uuid=$(json_string_value note_id "$note_file")
+[ -n "$note_uuid" ] || note_uuid=$(basename "$(dirname "$note_file")")
+note_name=$(json_string_value note_name "$note_file")
+package_uuid=$(uuidgen 2>/dev/null | tr A-Z a-z || date '+%Y%m%d%H%M%S')
+exported_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+
+mkdir -p "$WORK/note/$(dirname "$note_rel")" "$WORK/resources"
+cp "$note_file" "$WORK/note/$note_rel"
+
+MANIFEST="$WORK/export-manifest.json"
+FILES_TXT="$WORK/files.tsv"
+extract_storage_files "$note_file" > "$FILES_TXT"
+
+printf '%s\n' '{' > "$MANIFEST"
+printf '  "format": "wuwei-note-export",\n' >> "$MANIFEST"
+printf '  "version": "1.1",\n' >> "$MANIFEST"
+printf '  "exportedAt": "%s",\n' "$exported_at" >> "$MANIFEST"
+printf '  "package_uuid": "%s",\n' "$package_uuid" >> "$MANIFEST"
+printf '  "note": {"note_uuid": "%s", "note_key": "%s", "name": "%s"},\n' "$note_uuid" "$note_rel" "$note_name" >> "$MANIFEST"
+printf '  "resources": [\n' >> "$MANIFEST"
+
+first_resource=1
+while IFS="$(printf '\t')" read -r role area path mime; do
+  [ -n "${role:-}" ] || continue
+  rel=$(safe_rel_path "$path") || continue
+  base=$(area_dir "$area" "$user_id" || true)
+  [ -n "$base" ] || continue
+  src="$base/$rel"
+  [ -f "$src" ] || continue
+  dest="$WORK/resources/$rel"
+  mkdir -p "$(dirname "$dest")"
+  cp "$src" "$dest"
+  [ -n "$mime" ] || mime=$(mime_for_name "$src")
+  size=$(wc -c < "$src" | tr -d '[:space:]')
+  sha=$(sha256_of "$src")
+  logical_base=$(printf '%s' "$rel" | awk -F/ '{if (NF >= 4) print $1"/"$2"/"$3"/"$4; else print $1"/"$2}')
+  file_uuid=$(printf '%s' "$rel" | awk -F/ -v fallback="$file_uuid" '{if (NF >= 4) print $4; else print fallback}' | sed 's/^_//')
+  if [ "$first_resource" = 0 ]; then
+    printf ',\n' >> "$MANIFEST"
+  fi
+  first_resource=0
+  printf '    {"resourceId":"%s","file_uuid":"%s","source":"upload","logicalBase":"%s","copyPolicy":"snapshot","files":[{"role":"%s","path":"resources/%s","logicalPath":"%s","sourceArea":"%s","sourcePath":"%s","fileName":"%s","mimeType":"%s","size":%s,"sha256":"%s"}]}' \
+    "$file_uuid" "$file_uuid" "$logical_base" "$role" "$rel" "$rel" "$area" "$rel" "$(basename "$rel")" "$mime" "$size" "$sha" >> "$MANIFEST"
+done < "$FILES_TXT"
+
+printf '\n  ]\n}\n' >> "$MANIFEST"
+
+ZIP_FILE="$WORK/wuwei-note-$note_uuid.zip"
+if command -v zip >/dev/null 2>&1; then
+  (
+    cd "$WORK"
+    zip -qr "$ZIP_FILE" export-manifest.json note resources
+  ) || error_response 'ERROR NOTE EXPORT FAILED'
+elif command -v powershell.exe >/dev/null 2>&1; then
+  if command -v cygpath >/dev/null 2>&1; then
+    ps_work=$(cygpath -w "$WORK")
+    ps_zip=$(cygpath -w "$ZIP_FILE")
+  else
+    ps_work=$(printf '%s' "$WORK" | sed 's#^/c/#C:/#; s#/#\\#g')
+    ps_zip=$(printf '%s' "$ZIP_FILE" | sed 's#^/c/#C:/#; s#/#\\#g')
+  fi
+  powershell.exe -NoProfile -Command \
+    "Set-Location -LiteralPath '$ps_work'; Compress-Archive -Path 'export-manifest.json','note','resources' -DestinationPath '$ps_zip' -Force" \
+    >/dev/null || error_response 'ERROR NOTE EXPORT FAILED'
+else
+  perl -MArchive::Zip=:ERROR_CODES - "$WORK" "$ZIP_FILE" <<'PL' || error_response 'ERROR NOTE EXPORT FAILED'
+use strict;
+use warnings;
+use Archive::Zip qw(:ERROR_CODES);
+use File::Find;
+use File::Spec;
+my ($root, $zip_path) = @ARGV;
+my $zip = Archive::Zip->new();
+for my $top (qw(export-manifest.json note resources)) {
+    my $path = File::Spec->catfile($root, $top);
+    next unless -e $path;
+    if (-f $path) {
+        $zip->addFile($path, $top);
+        next;
+    }
+    find(sub {
+        return unless -f $_;
+        my $full = $File::Find::name;
+        my $rel = File::Spec->abs2rel($full, $root);
+        $rel =~ s#\\#/#g;
+        $zip->addFile($full, $rel);
+    }, $path);
+}
+exit($zip->writeToFileNamed($zip_path) == AZ_OK ? 0 : 1);
+PL
+fi
+
+printf '%s\r\n' 'Content-Type: application/zip'
+printf '%s\r\n' 'Cache-Control: no-store'
+printf '%s\r\n' "Content-Disposition: attachment; filename=\"wuwei-note-$note_uuid.zip\""
+printf '%s\r\n' "Content-Length: $(wc -c < "$ZIP_FILE" | tr -d '[:space:]')"
+printf '\r\n'
+cat "$ZIP_FILE"

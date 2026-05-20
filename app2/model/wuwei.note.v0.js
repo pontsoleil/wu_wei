@@ -257,6 +257,32 @@ wuwei.note.v0 = (function () {
     return '';
   }
 
+  function mimeTypeFromUri(uri) {
+    var ext = extensionFromUri(uri);
+    if (ext === '.pdf') { return 'application/pdf'; }
+    if (/^\.(html|htm|xhtml)$/.test(ext)) { return 'text/html'; }
+    if (/^\.(txt|text|md|markdown|csv|tsv|log|adoc|asciidoc)$/.test(ext)) { return 'text/plain'; }
+    if (ext === '.json') { return 'application/json'; }
+    if (ext === '.xml') { return 'application/xml'; }
+    if (/^\.(png)$/.test(ext)) { return 'image/png'; }
+    if (/^\.(jpe?g)$/.test(ext)) { return 'image/jpeg'; }
+    if (ext === '.gif') { return 'image/gif'; }
+    if (ext === '.svg') { return 'image/svg+xml'; }
+    if (ext === '.webp') { return 'image/webp'; }
+    if (ext === '.ico') { return 'image/x-icon'; }
+    if (/^\.(doc|dot)$/.test(ext)) { return 'application/msword'; }
+    if (ext === '.docx') { return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'; }
+    if (/^\.(xls|xlt)$/.test(ext)) { return 'application/vnd.ms-excel'; }
+    if (ext === '.xlsx') { return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'; }
+    if (/^\.(ppt|pot)$/.test(ext)) { return 'application/vnd.ms-powerpoint'; }
+    if (ext === '.pptx') { return 'application/vnd.openxmlformats-officedocument.presentationml.presentation'; }
+    if (/^\.(mp4|m4v)$/.test(ext)) { return 'video/mp4'; }
+    if (ext === '.webm') { return 'video/webm'; }
+    if (ext === '.mp3') { return 'audio/mpeg'; }
+    if (ext === '.wav') { return 'audio/wav'; }
+    return '';
+  }
+
   function videoKindFromUri(uri) {
     var text = String(uri || '').toLowerCase();
     if (/(^|\/\/)(www\.)?(youtube\.com|youtu\.be)\//.test(text)) { return 'youtube'; }
@@ -302,33 +328,118 @@ wuwei.note.v0 = (function () {
     );
   }
 
-  function addStorageFile(files, role, uri, mimeType, fallbackArea) {
-    var path = stripFileFragment(uri).replace(/\\/g, '/').trim();
+  function logicalPathFromUri(uri, area) {
+    var text = String(uri || '').replace(/\\/g, '/').trim();
+    if (wuwei.util && typeof wuwei.util.toLogicalResourcePath === 'function') {
+      return wuwei.util.toLogicalResourcePath(text, null, area || 'upload');
+    }
+    return text;
+  }
+
+  function dirNameFromUri(uri, area) {
+    var text = String(uri || '').replace(/\\/g, '/').replace(/[?#].*$/, '').trim();
+    var currentUser = state.currentUser || {};
+    var uid = String(currentUser.user_id || '').trim();
+    var idx, m;
+    if (!text || isHttpUrl(text)) {
+      return '';
+    }
+    idx = text.indexOf('/wu_wei2/');
+    if (idx >= 0) {
+      text = text.slice(idx + '/wu_wei2/'.length);
+    }
+    text = text.replace(/^\/+/, '');
+    if (text.indexOf('data/') === 0) {
+      m = text.match(/^(data\/[^/]+\/(?:upload|resource|note|thumbnail|content)\/.+)\/[^/]+$/);
+      return m ? m[1] : '';
+    }
+    if ((area || 'upload') === 'upload') {
+      m = text.match(/^(\d{4}\/\d{2}\/\d{2}\/[^/]+)\/[^/]+$/);
+      if (m && uid) {
+        return 'data/' + uid + '/upload/' + m[1];
+      }
+    }
+    return '';
+  }
+
+  function fileUuidFromResourceId(resourceId) {
+    var text = String(resourceId || '').replace(/^_+/, '').trim();
+    return text || createUuid().replace(/^_+/, '');
+  }
+
+  function normalizeV0LogicalPath(path, resourceId) {
+    var text = String(path || '').replace(/\\/g, '/').replace(/[?#].*$/, '').replace(/^\/+|\/+$/g, '');
+    var fileUuid = fileUuidFromResourceId(resourceId);
+    var match;
+
+    if (!text) {
+      return '';
+    }
+    if (/^\d{4}\/\d{2}\/\d{2}\/[^/]+\/.+$/.test(text)) {
+      return text;
+    }
+    match = text.match(/^(\d{4})\/(\d{2})\/([^/].*)$/);
+    if (match) {
+      return match[1] + '/' + match[2] + '/01/' + fileUuid + '/' + match[3];
+    }
+    return text;
+  }
+
+  function addStorageFile(files, role, uri, mimeType, fallbackArea, resourceId) {
+    var raw = stripFileFragment(uri).replace(/\\/g, '/').trim();
     var area;
-    if (!path || isHttpUrl(path) && path.indexOf('/wu_wei2/') < 0) {
+    var path;
+    var dirName;
+    var sourceArea;
+    var sourcePath;
+    var normalizedPath;
+
+    if (!raw) {
       return;
     }
-    area = storageAreaFromUri(path, fallbackArea || (role === 'original' ? 'upload' : 'resource'));
-    files.push({
+    area = isHttpUrl(raw) ? 'remote' : storageAreaFromUri(raw, fallbackArea || (role === 'original' ? 'upload' : 'resource'));
+    path = area === 'remote' ? raw : logicalPathFromUri(raw, area);
+    sourceArea = area;
+    sourcePath = path;
+    if (area !== 'remote') {
+      normalizedPath = normalizeV0LogicalPath(path, resourceId);
+      if (normalizedPath && normalizedPath !== path) {
+        area = 'upload';
+        path = normalizedPath;
+      }
+    }
+    dirName = dirNameFromUri(path, area);
+    if (files.some(function (file) { return file.role === role && file.path === path; })) {
+      return;
+    }
+    var fileDef = {
       role: role,
       area: area,
       path: path,
+      dir_name: dirName,
+      file_name: raw.split('/').pop(),
       mimeType: String(mimeType || '')
-    });
+    };
+    if (sourceArea && sourceArea !== area) {
+      fileDef.sourceArea = sourceArea;
+      fileDef.sourcePath = sourcePath;
+    }
+    files.push(fileDef);
   }
 
-  function buildStorageFiles(uri, previewUri, thumbnail, mimeType) {
+
+  function buildStorageFiles(uri, previewUri, thumbnail, mimeType, resourceId) {
     var files = [];
     var previewRole;
 
-    addStorageFile(files, 'original', uri, mimeType, storageAreaFromUri(uri, 'upload'));
+    addStorageFile(files, 'original', uri, mimeType, storageAreaFromUri(uri, 'upload'), resourceId);
     if (previewUri && previewUri !== uri) {
       previewRole = /\.pdf(?:[?#].*)?$/i.test(String(previewUri || '')) ? 'pdf-preview' : 'preview';
       addStorageFile(files, previewRole, previewUri, previewRole === 'pdf-preview' ? 'application/pdf' : '',
-        storageAreaFromUri(previewUri, 'resource'));
+        storageAreaFromUri(previewUri, 'resource'), resourceId);
     }
     if (isFileThumbnail(thumbnail)) {
-      addStorageFile(files, 'thumbnail', thumbnail, 'image/jpeg', storageAreaFromUri(thumbnail, 'thumbnail'));
+      addStorageFile(files, 'thumbnail', thumbnail, 'image/jpeg', storageAreaFromUri(thumbnail, 'thumbnail'), resourceId);
     }
     return files;
   }
@@ -394,38 +505,92 @@ wuwei.note.v0 = (function () {
     return nested || '';
   }
 
-  function previewUriFromV0(resource, originalUri) {
-    var preview = cleanLegacyString(nestedResourceValue(resource, ['previewUri', 'uri'])).trim();
-    if (preview && preview !== originalUri && (extensionFromUri(preview) || preview.indexOf('/_pdf_preview/') >= 0)) {
-      return preview;
+  function firstNonEmptyString() {
+    var i;
+    var value;
+
+    for (i = 0; i < arguments.length; i += 1) {
+      value = cleanLegacyString(arguments[i]).trim();
+      if (value) {
+        return value;
+      }
     }
-    return originalUri;
+    return '';
+  }
+
+  function originalUriFromV0(node, resource) {
+    return firstNonEmptyString(
+      node && node.uri,
+      node && node.url,
+      node && node.href,
+      node && node.targetHref,
+      node && node.download_url,
+      node && node.downloadUrl,
+      resource && resource.originalUri,
+      resource && resource.canonicalUri,
+      nestedResourceValue(resource, ['originalUri', 'canonicalUri']),
+      resource && resource.uri,
+      resource && resource.url,
+      resource && resource.href,
+      resource && resource.path,
+      nestedResourceValue(resource, ['uri', 'url', 'href', 'path'])
+    );
+  }
+
+  function rewriteLegacyLocalUriOrKeep(value) {
+    var raw = cleanLegacyString(value).replace(/\\/g, '/').trim();
+    var rewritten;
+
+    if (!raw) {
+      return '';
+    }
+    rewritten = rewriteLegacyLocalUri(raw);
+    return rewritten || raw;
+  }
+
+  function previewUriFromV0(resource, originalUri) {
+    var preview = cleanLegacyString(nestedResourceValue(resource, ['viewerUri', 'previewUri', 'uri'])).trim();
+    if (!preview || preview === originalUri) {
+      return '';
+    }
+    return preview;
   }
 
   function resourceFromV0Content(node, resource) {
-    var uri = rewriteLegacyLocalUri(mergedNodeValue(node, resource, ['canonicalUri', 'originalUri', 'uri', 'url', 'download_url']));
+    var originalRaw = originalUriFromV0(node, resource);
+    var uri = rewriteLegacyLocalUriOrKeep(originalRaw);
     var mimeType = cleanLegacyString(mergedNodeValue(node, resource, ['mimeType', 'format', 'contenttype'])).trim();
-    var thumbnail = rewriteLegacyLocalUri(mergedNodeValue(node, resource, ['thumbnailUri', 'smallThumbnail', 'thumbnail', 'source']));
-    var title = cleanLegacyString(mergedNodeValue(node, resource, ['label', 'title', 'name']) || fileNameFromUri(uri) || uri).trim();
-    var previewUri = rewriteLegacyLocalUri(previewUriFromV0(resource, uri));
-    var kind = mediaKindFromUri(uri || previewUri, mimeType);
+    var thumbnail = rewriteLegacyLocalUriOrKeep(mergedNodeValue(node, resource, ['thumbnailUri', 'smallThumbnail', 'thumbnail', 'source']));
+    var previewRaw = previewUriFromV0(resource, originalRaw);
+    var previewUri = rewriteLegacyLocalUriOrKeep(previewRaw);
+    var displayUri = uri || originalRaw || previewUri || previewRaw;
+    var logicalDisplayUri;
+    var title = cleanLegacyString(mergedNodeValue(node, resource, ['label', 'title', 'name']) || fileNameFromUri(displayUri) || displayUri).trim();
+    var effectiveMimeType;
+    var kind = mediaKindFromUri(displayUri || previewUri, mimeType);
     var id = (node && (node.resourceRef || node.content_id)) || (resource && resource.id) || createUuid();
-    var source = resourceSourceFromUri(uri, node, resource);
+    var source = resourceSourceFromUri(displayUri, node, resource);
+    effectiveMimeType = mimeTypeFromUri(displayUri || previewUri) || mimeType || 'text/plain';
+    var storageFiles = buildStorageFiles(displayUri, previewUri, thumbnail, effectiveMimeType, id);
+    var originalFile = storageFiles.find(function (file) { return file && file.role === 'original'; }) || {};
+    logicalDisplayUri = source === 'upload' ? (originalFile.path || logicalPathFromUri(displayUri, storageAreaFromUri(displayUri, 'upload'))) : displayUri;
 
     return {
       id: id,
       source: source,
       kind: kind,
-      documentKind: documentKindFromResource(kind, uri || previewUri, mimeType),
-      videoKind: kind === 'video' ? videoKindFromUri(uri || previewUri) : '',
-      canonicalUri: uri,
-      uri: previewUri || uri,
+      documentKind: documentKindFromResource(kind, displayUri || previewUri, mimeType),
+      videoKind: kind === 'video' ? videoKindFromUri(displayUri || previewUri) : '',
+      canonicalUri: logicalDisplayUri,
+      uri: logicalDisplayUri,
       title: title,
-      mimeType: mimeType || 'text/plain',
+      mimeType: effectiveMimeType,
+      viewerUri: previewUri || displayUri,
+      previewUri: previewUri || '',
       storage: {
         managed: source === 'upload',
         copyPolicy: source === 'upload' ? 'snapshot' : 'metadataOnly',
-        files: buildStorageFiles(uri, previewUri, thumbnail, mimeType)
+        files: storageFiles
       },
       thumbnailUri: isFileThumbnail(thumbnail) ? thumbnail : '',
       contents: (resource && resource.contents && typeof resource.contents === 'object') ? clone(resource.contents) : undefined,

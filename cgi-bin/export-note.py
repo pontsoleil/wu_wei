@@ -9,7 +9,10 @@ import io
 import json
 import mimetypes
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 import uuid
 import zipfile
 from datetime import datetime, timezone
@@ -29,6 +32,9 @@ from cgi_common import (
 
 ALLOWED_ROLES = {"original", "preview", "thumbnail", "pdf-preview", "manifest"}
 V2_LOGICAL_RE = re.compile(r"^\d{4}/\d{2}/\d{2}/[^/]+/.+$")
+LEGACY_LOGICAL_RE = re.compile(r"^\d{4}/\d{2}/[^/]+$")
+ALLOWED_AREAS = {"upload", "content", "thumbnail", "resource", "note"}
+OFFICE_EXTS = {".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".odp"}
 
 
 def safe_zip_name(value: str) -> str:
@@ -57,7 +63,7 @@ def server_root_relative(path: Path) -> str:
     return text
 
 
-def clean_logical_path(value: str) -> str:
+def clean_logical_path(value: str, allow_legacy: bool = True) -> str:
     text = str(value or "").replace("\\", "/").strip("/")
     if not text or ".." in Path(text).parts:
         return ""
@@ -73,7 +79,48 @@ def clean_logical_path(value: str) -> str:
     m = re.match(r"^(upload|resource|note|thumbnail|content)/(.+)$", text, re.I)
     if m:
         text = m.group(2)
-    return text if V2_LOGICAL_RE.match(text) else ""
+    if V2_LOGICAL_RE.match(text):
+        return text
+    if allow_legacy and LEGACY_LOGICAL_RE.match(text):
+        return text
+    return ""
+
+
+def logical_base_of(logical: str) -> str:
+    return "/".join(clean_logical_path(logical).split("/")[:4])
+
+
+def with_pdf_suffix(logical: str) -> str:
+    base, _, name = logical.rpartition("/")
+    stem = Path(name).stem or "original"
+    return f"{base}/{stem}.pdf"
+
+
+def is_office_file(path_or_name: str) -> bool:
+    return Path(str(path_or_name or "").split("?", 1)[0]).suffix.lower() in OFFICE_EXTS
+
+
+def file_role(file_def: dict, default: str = "") -> str:
+    return str(file_def.get("role") or default or "").lower()
+
+
+def resource_files(resource: dict) -> list[dict]:
+    storage = resource.get("storage") if isinstance(resource.get("storage"), dict) else {}
+    files = [f for f in (storage.get("files") or []) if isinstance(f, dict)]
+    manifest = storage.get("manifest") if isinstance(storage.get("manifest"), dict) else {}
+    if manifest:
+        manifest_file = dict(manifest)
+        manifest_file.setdefault("role", "manifest")
+        files.append(manifest_file)
+    return files
+
+
+def find_file_by_role(files: list[dict], *roles: str) -> dict | None:
+    wanted = {r.lower() for r in roles}
+    for file_def in files:
+        if file_role(file_def) in wanted:
+            return file_def
+    return None
 
 
 def iter_dicts(value):
@@ -93,11 +140,13 @@ def collect_upload_resources(note: dict) -> list[dict]:
         resource = obj.get("resource") if isinstance(obj.get("resource"), dict) else obj
         if not isinstance(resource, dict):
             continue
-        if str(resource.get("source") or "").lower() != "upload":
-            continue
         storage = resource.get("storage") if isinstance(resource.get("storage"), dict) else {}
         files = storage.get("files") if isinstance(storage.get("files"), list) else []
-        if not files:
+        source = str(resource.get("source") or "").lower()
+        kind = str(resource.get("kind") or "").lower()
+        if source != "upload" and kind != "upload" and not storage.get("managed"):
+            continue
+        if not files and not isinstance(storage.get("manifest"), dict):
             continue
         key = str(resource.get("id") or resource.get("canonicalUri") or resource.get("uri") or id(resource))
         if key in seen:
@@ -107,11 +156,30 @@ def collect_upload_resources(note: dict) -> list[dict]:
     return out
 
 
-def resolve_upload_file(upload_root: Path, file_def: dict) -> tuple[str, Path] | None:
-    logical = clean_logical_path(str(file_def.get("path") or ""))
+def area_root(area: str, user_id: str, upload_root: Path) -> Path:
+    area = str(area or "upload").lower()
+    if area not in ALLOWED_AREAS:
+        area = "upload"
+    root = environment_path(area, user_id)
+    if root:
+        return Path(root)
+    return upload_root.parent / area
+
+
+def resolve_resource_file(upload_root: Path, user_id: str, file_def: dict) -> tuple[str, Path] | None:
+    logical = clean_logical_path(str(file_def.get("path") or file_def.get("logicalPath") or ""))
     if not logical:
         return None
-    candidates = [upload_root / logical]
+    area = str(file_def.get("area") or "upload").lower()
+    root = area_root(area, user_id, upload_root)
+    candidates = [root / logical]
+    if root != upload_root:
+        candidates.append(upload_root / logical)
+    source_logical = clean_logical_path(str(file_def.get("sourcePath") or ""), allow_legacy=True)
+    source_area = str(file_def.get("sourceArea") or "").lower()
+    if source_logical and source_area:
+        source_root = area_root(source_area, user_id, upload_root)
+        candidates.append(source_root / source_logical)
     dir_name = str(file_def.get("dir_name") or "").replace("\\", "/").strip("/")
     file_name = str(file_def.get("file_name") or logical.rsplit("/", 1)[-1])
     if dir_name and file_name:
@@ -123,53 +191,162 @@ def resolve_upload_file(upload_root: Path, file_def: dict) -> tuple[str, Path] |
     return None
 
 
-def add_resource_files(zf: zipfile.ZipFile, upload_root: Path, resource: dict) -> dict | None:
-    storage = resource.get("storage") if isinstance(resource.get("storage"), dict) else {}
-    files = [f for f in (storage.get("files") or []) if isinstance(f, dict)]
-    manifest = storage.get("manifest") if isinstance(storage.get("manifest"), dict) else {}
-    if manifest:
-        manifest_file = dict(manifest)
-        manifest_file.setdefault("role", "manifest")
-        files.append(manifest_file)
+def zip_file_record(
+    zf: zipfile.ZipFile,
+    src: Path,
+    role: str,
+    logical: str,
+    file_def: dict,
+    derived_from: dict | None = None,
+) -> dict:
+    arc_path = "resources/" + logical
+    zf.write(src, arc_path)
+    record = {
+        "role": role,
+        "path": arc_path,
+        "logicalPath": logical,
+        "sourceArea": str(file_def.get("sourceArea") or file_def.get("area") or "upload"),
+        "sourcePath": clean_logical_path(str(file_def.get("sourcePath") or file_def.get("path") or logical), allow_legacy=True),
+        "fileName": src.name,
+        "mimeType": str(file_def.get("mimeType") or mimetypes.guess_type(src.name)[0] or "application/octet-stream"),
+        "size": src.stat().st_size,
+        "sha256": sha256_file(src),
+    }
+    if derived_from:
+        record["derivedFrom"] = derived_from
+    return record
 
+
+def convert_office_to_pdf(src: Path, logical: str) -> tuple[Path, tempfile.TemporaryDirectory[str]] | None:
+    soffice = shutil.which("soffice") or shutil.which("libreoffice")
+    if not soffice:
+        return None
+    tmp = tempfile.TemporaryDirectory()
+    try:
+        subprocess.run(
+            [soffice, "--headless", "--convert-to", "pdf", "--outdir", tmp.name, str(src)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=60,
+        )
+        pdf = Path(tmp.name) / (Path(logical).stem + ".pdf")
+        if pdf.is_file():
+            return pdf, tmp
+    except Exception:
+        pass
+    tmp.cleanup()
+    return None
+
+
+def update_resource_for_pdf_original(resource: dict, original_def: dict, pdf_logical: str, pdf_name: str, original_src: Path) -> None:
+    resource["kind"] = "document"
+    resource["documentKind"] = "pdf"
+    resource["mimeType"] = "application/pdf"
+    resource["uri"] = pdf_logical
+    resource["canonicalUri"] = pdf_logical
+    resource["export"] = {
+        "originalReplacedByPdf": True,
+        "originalFileName": original_src.name,
+        "originalMimeType": str(original_def.get("mimeType") or mimetypes.guess_type(original_src.name)[0] or "application/octet-stream"),
+    }
+    original_def["path"] = pdf_logical
+    original_def["file_name"] = pdf_name
+    original_def["mimeType"] = "application/pdf"
+
+
+def add_resource_files(zf: zipfile.ZipFile, upload_root: Path, user_id: str, resource: dict) -> dict | None:
+    files = resource_files(resource)
     manifest_files = []
+    messages = []
     logical_base = ""
     file_uuid = ""
+    original_present = False
+    office_replaced = False
+
+    original_def = find_file_by_role(files, "original")
+    original_resolved = resolve_resource_file(upload_root, user_id, original_def) if original_def else None
+    if original_def and original_resolved:
+        original_logical, original_src = original_resolved
+        original_present = True
+        if is_office_file(original_src.name):
+            pdf_src = None
+            pdf_tmp = None
+            export_policy = "office-original-replaced-by-pdf"
+            converted = convert_office_to_pdf(original_src, original_logical)
+            if converted:
+                pdf_src, pdf_tmp = converted
+            else:
+                fallback_def = find_file_by_role(files, "pdf-preview") or find_file_by_role(files, "preview")
+                fallback_resolved = resolve_resource_file(upload_root, user_id, fallback_def) if fallback_def else None
+                if fallback_resolved and Path(fallback_resolved[0]).suffix.lower() == ".pdf":
+                    _, pdf_src = fallback_resolved
+                    export_policy = "office-original-replaced-by-existing-preview-pdf"
+            if pdf_src and pdf_src.is_file():
+                pdf_logical = with_pdf_suffix(original_logical)
+                derived_from = {
+                    "role": "original",
+                    "fileName": original_src.name,
+                    "mimeType": str(original_def.get("mimeType") or mimetypes.guess_type(original_src.name)[0] or "application/octet-stream"),
+                    "sourceArea": str(original_def.get("area") or "upload"),
+                    "sourcePath": original_logical,
+                    "exportPolicy": export_policy,
+                }
+                pdf_def = dict(original_def)
+                pdf_def["mimeType"] = "application/pdf"
+                manifest_files.append(zip_file_record(zf, pdf_src, "original", pdf_logical, pdf_def, derived_from))
+                update_resource_for_pdf_original(resource, original_def, pdf_logical, Path(pdf_logical).name, original_src)
+                logical_base = logical_base or logical_base_of(pdf_logical)
+                file_uuid = file_uuid or pdf_logical.split("/")[3].lstrip("_")
+                office_replaced = True
+                if pdf_tmp:
+                    pdf_tmp.cleanup()
+            else:
+                messages.append({"level": "ERROR", "code": "RESOURCE ORIGINAL FILE NOT FOUND", "role": "original"})
+
     for file_def in files:
-        role = str(file_def.get("role") or ("manifest" if file_def is manifest else "")).lower()
+        role = file_role(file_def)
         if role not in ALLOWED_ROLES:
             continue
-        resolved = resolve_upload_file(upload_root, file_def)
+        if role == "original" and office_replaced:
+            continue
+        resolved = resolve_resource_file(upload_root, user_id, file_def)
         if not resolved:
+            messages.append({
+                "level": "ERROR" if role == "original" else "WARNING",
+                "code": "RESOURCE ORIGINAL FILE NOT FOUND" if role == "original" else "RESOURCE FILE NOT FOUND",
+                "role": role,
+                "path": str(file_def.get("path") or ""),
+            })
             continue
         logical, src = resolved
         parts = logical.split("/")
-        base = "/".join(parts[:4])
+        base = "/".join(parts[:4] if len(parts) >= 4 else parts[:2])
         logical_base = logical_base or base
-        file_uuid = file_uuid or parts[3].lstrip("_")
-        arc_path = "resources/" + logical
-        zf.write(src, arc_path)
-        manifest_files.append({
-            "role": role,
-            "path": arc_path,
-            "logicalPath": logical,
-            "fileName": src.name,
-            "mimeType": str(file_def.get("mimeType") or mimetypes.guess_type(src.name)[0] or "application/octet-stream"),
-            "size": src.stat().st_size,
-            "sha256": sha256_file(src),
-        })
+        file_uuid = file_uuid or (parts[3].lstrip("_") if len(parts) >= 4 else str(resource.get("id") or "").lstrip("_"))
+        manifest_files.append(zip_file_record(zf, src, role, logical, file_def))
+        if role == "original":
+            original_present = True
 
-    if not manifest_files:
+    if not manifest_files and not messages:
         return None
-    return {
+    item = {
         "resourceId": str(resource.get("id") or ""),
         "file_uuid": file_uuid,
-        "source": "upload",
+        "source": str(resource.get("source") or resource.get("kind") or "upload"),
         "kind": str(resource.get("kind") or (resource.get("media") or {}).get("kind") or ""),
         "documentKind": str(resource.get("documentKind") or ""),
         "logicalBase": logical_base,
+        "copyPolicy": "snapshot",
         "files": manifest_files,
     }
+    if office_replaced:
+        item["officeOriginalReplacedByPdf"] = True
+    if messages or not original_present:
+        if not original_present:
+            messages.append({"level": "ERROR", "code": "RESOURCE ORIGINAL FILE NOT FOUND", "role": "original"})
+        item["messages"] = messages
+    return item
 
 
 def main() -> None:
@@ -212,7 +389,7 @@ def main() -> None:
     payload = io.BytesIO()
     manifest = {
         "format": "wuwei-note-export",
-        "version": "1.0",
+        "version": "1.1",
         "exportedAt": exported_at,
         "package_uuid": package_uuid,
         "note": {
@@ -224,12 +401,12 @@ def main() -> None:
     }
 
     with zipfile.ZipFile(payload, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("note/" + note_key, json.dumps(note, ensure_ascii=False, separators=(",", ":")) + "\n")
         upload_root = Path(upload_root_s)
         for resource in collect_upload_resources(note):
-            item = add_resource_files(zf, upload_root, resource)
+            item = add_resource_files(zf, upload_root, user_id, resource)
             if item:
                 manifest["resources"].append(item)
+        zf.writestr("note/" + note_key, json.dumps(note, ensure_ascii=False, separators=(",", ":")) + "\n")
         zf.writestr("export-manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
 
     body = payload.getvalue()

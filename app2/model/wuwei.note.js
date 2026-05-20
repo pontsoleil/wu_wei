@@ -135,7 +135,6 @@ wuwei.note = (function () {
       if (out.path) {
         out.path = util.toStorageRelativePath(out.path, state.currentUser && state.currentUser.user_id, area);
       }
-      delete out.sourcePath;
       out.area = area;
       return out;
     }) : [];
@@ -1126,15 +1125,8 @@ wuwei.note = (function () {
     current.resources = noteToSave.resources;
     current.thumbnail = noteToSave.thumbnail;
     const noteJson = JSON.stringify(materializeNoteForV2Storage(noteToSave)).trim();
-
-    // const thumbEl = document.querySelector('div.thumbnail');
-    // const iconHTML = thumbEl
-    //   ? thumbEl.innerHTML.trim().replace(/(\r\n\t|\n|\r\t)/gm, "").replace(/\s\s+/g, " ")
-    //   : '';
     const iconHTML = currentPageThumbnail || '';
-
     const cu = state.currentUser || {};
-
     const action = util.getAction(actionName || 'save-note')
     return ajaxRequest(action, {
       id: current.note_id,
