@@ -45,14 +45,29 @@ wuwei.collab = wuwei.collab || {};
     return !!(!isEnabled(target) && uid && noteCreator && noteCreator !== uid);
   }
 
-  function getMode(note) {
+  function isTeamNote(note) {
     if (isEnabled(note)) {
-      return 'collaboration';
+      return true;
+    }
+    return false;
+  }
+
+  function isOwnNote(note) {
+    return !isTeamNote(note) && !isImportedNote(note);
+  }
+
+  function getNoteState(note) {
+    if (isTeamNote(note)) {
+      return 'team';
     }
     if (isImportedNote(note)) {
-      return 'exchange';
+      return 'imported';
     }
-    return 'personal';
+    return 'own';
+  }
+
+  function getMode(note) {
+    return getNoteState(note);
   }
 
   function normalizeMetadata(value) {
@@ -282,6 +297,9 @@ wuwei.collab = wuwei.collab || {};
   ns.stop = stop;
   ns.isEnabled = isEnabled;
   ns.isImportedNote = isImportedNote;
+  ns.isTeamNote = isTeamNote;
+  ns.isOwnNote = isOwnNote;
+  ns.getNoteState = getNoteState;
   ns.getMode = getMode;
   ns.getRevision = getRevision;
   ns.normalizeMetadata = normalizeMetadata;
