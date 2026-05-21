@@ -3,6 +3,7 @@
 /public/
 /setting/
 /_WIP/
+**/_WIP/
 
 # Generated archives and large local packages
 *.tar
