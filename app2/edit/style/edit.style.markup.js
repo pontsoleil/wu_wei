@@ -203,7 +203,7 @@ wuwei.edit.style.markup = (function () {
       supplementFormat = descriptionSupplementFormat(param.node.description);
       return [
         '<div class="w3-row">',
-        '  <label for="description_original_format" class="w3-col s4">' + t('Markup') + '</label>',
+        '  <label for="description_original_format" class="w3-col s4">' + t('Format') + '</label>',
         '  <input id="description_original_format" class="w3-col s8" value="' + esc(originalFormat) + '" readonly aria-readonly="true">',
         '</div>',
         '<div class="w3-row">',
@@ -211,7 +211,7 @@ wuwei.edit.style.markup = (function () {
         '  <textarea id="description_original_body" class="w3-col s12" rows="' + rowcount(originalBody) + '" readonly aria-readonly="true">' + esc(originalBody) + '</textarea>',
         '</div>',
         '<div class="w3-row">',
-        '  <label for="description_supplement_format" class="w3-col s4">' + t('Markup') + '</label>',
+        '  <label for="description_supplement_format" class="w3-col s4">' + t('Format') + '</label>',
         selectOptions('description.supplementFormat', supplementFormat, descriptionFormatOptions(), null, 's8'),
         '</div>',
         '<div class="w3-row">',
@@ -222,7 +222,7 @@ wuwei.edit.style.markup = (function () {
     }
     return [
       '<div class="w3-row">',
-      '  <label for="description_format" class="w3-col s4">' + t('Markup') + '</label>',
+      '  <label for="description_format" class="w3-col s4">' + t('Format') + '</label>',
       selectOptions('description.format', param.format || 'plain/text', descriptionFormatOptions(), null, 's8'),
       '</div>',
       '<div class="w3-row">',
