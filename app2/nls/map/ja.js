@@ -620,4 +620,7 @@ wuwei.nls.JA = {
   'Description': '説明',
   'Supplement': '追記',
 
+  'Display': '表示',
+  'Source / Rights': '典拠・権利',
+
 };
