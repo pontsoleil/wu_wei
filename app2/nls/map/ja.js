@@ -627,6 +627,7 @@ wuwei.nls.JA = {
   'Owner': '権利者',
   'License': 'ライセンス',
   'Credit': 'クレジット',
+  'Attribution': '帰属表示',
   'Document kind': '文書種別',
   'Video kind': '動画種別',
   'Page count': 'ページ数',

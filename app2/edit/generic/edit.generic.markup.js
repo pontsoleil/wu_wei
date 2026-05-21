@@ -220,7 +220,7 @@ wuwei.edit.generic.markup = ( function () {
       '  <input type="text" id="resource_rights_license" name="resource.rights.license" class="w3-col s7 edit-value" value="' + esc(rights.license || '') + '">',
       '</div>',
       '<div class="w3-row">',
-      '  <label for="resource_rights_attribution" class="w3-col s12">' + t('Credit') + '</label>',
+      '  <label for="resource_rights_attribution" class="w3-col s12">' + t('Attribution') + '</label>',
       '  <textarea id="resource_rights_attribution" name="resource.rights.attribution" class="w3-col s12 edit-value" rows="' + rowcount(rights.attribution || '') + '">' + esc(rights.attribution || '') + '</textarea>',
       '</div>'
     ].join('\n');
