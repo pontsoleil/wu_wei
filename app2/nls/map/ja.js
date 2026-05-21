@@ -623,4 +623,13 @@ wuwei.nls.JA = {
   'Display': '表示',
   'Source / Rights': '典拠・権利',
 
+  'Canonical URL': '正規URL',
+  'Owner': '権利者',
+  'License': 'ライセンス',
+  'Credit': 'クレジット',
+  'Document kind': '文書種別',
+  'Video kind': '動画種別',
+  'Page count': 'ページ数',
+  'Format': '形式',
+
 };
