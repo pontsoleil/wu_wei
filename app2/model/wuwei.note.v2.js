@@ -208,7 +208,11 @@
     node.style.fill = node.style.fill || node.color || '#FFFFF0';
     node.style.line = normalizeLineStyle(node.style.line, node);
     node.style.font = normalizeFontStyle(node.style.font, node);
-    node.style.label = normalizeLabelStyle(node.style.label);
+    if (node.type === 'Memo') {
+      delete node.style.label;
+    } else {
+      node.style.label = normalizeLabelStyle(node.style.label);
+    }
 
     /* Keep legacy convenience fields for modules not yet fully v2-clean. */
     node.color = node.color || node.style.fill;
@@ -745,7 +749,11 @@
     node.x = finiteOr(node.x, 0);
     node.y = finiteOr(node.y, 0);
     node.visible = node.visible === undefined ? true : !!node.visible;
-    node.label = node.label === undefined || node.label === null ? '' : String(node.label);
+    if (node.type === 'Memo') {
+      delete node.label;
+    } else {
+      node.label = node.label === undefined || node.label === null ? '' : String(node.label);
+    }
     node.description = normalizeDescription(node.description);
     node.audit = isObject(node.audit) ? node.audit : {};
 

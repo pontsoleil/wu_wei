@@ -445,7 +445,6 @@ wuwei.note = (function () {
       shape: shape,
       size: util.clone(size || {}),
       visible: (normalizeRecordState(src) === 'deleted') ? false : (false !== src.visible),
-      label: String(src.label || ''),
       description: src.description && typeof src.description === 'object'
         ? util.clone(src.description)
         : { format: 'plain/text', body: '' },
@@ -454,6 +453,9 @@ wuwei.note = (function () {
       deleted: normalizeDeletedInfo(src),
       audit: normalizeAudit(src.audit, state.currentUser)
     };
+    if (src.type !== 'Memo') {
+      out.label = String(src.label || '');
+    }
 
     if (src.type === 'Content') {
       if (src.resourceRef && resourceById && resourceById[src.resourceRef]) {
@@ -482,6 +484,7 @@ wuwei.note = (function () {
 
     if (src.type === 'Memo') {//} && (src.memoShape || oldView.memoShape)) {
       out.style = (out.style && typeof out.style === 'object') ? out.style : {};
+      delete out.style.label;
       out.style.memo = (out.style.memo && typeof out.style.memo === 'object')
         ? util.clone(out.style.memo)
         : {};
@@ -1022,6 +1025,12 @@ wuwei.note = (function () {
   function stripRuntimeNodeForSave(node, resources) {
     var out = stripRuntimeNode(node);
     var compactResource;
+    if (out.type === 'Memo') {
+      delete out.label;
+      if (out.style && typeof out.style === 'object') {
+        delete out.style.label;
+      }
+    }
     if (out.topicKind === 'contents-page' || out.type === 'PageMarker') {
       out = {
         id: out.id,

@@ -182,8 +182,9 @@ wuwei.search.this_note = (function (ns) {
     var contents = resource.contents && typeof resource.contents === 'object' ? resource.contents : {};
     var storage = resource.storage && typeof resource.storage === 'object' ? resource.storage : {};
     var files = Array.isArray(storage.files) ? storage.files : [];
+    var isMemo = obj && obj.type === 'Memo';
     return [
-      obj && obj.label,
+      !isMemo && obj && obj.label,
       obj && obj.title,
       obj && obj.description,
       obj && obj.role,
@@ -229,6 +230,9 @@ wuwei.search.this_note = (function (ns) {
 
   function labelFor(obj) {
     if (!obj) { return ''; }
+    if (obj.type === 'Memo') {
+      return (asText(obj.description).trim().slice(0, 36)) || 'Memo';
+    }
     if (obj.label) { return obj.label; }
     if (obj.name) { return obj.name; }
     if (obj.title) { return obj.title; }

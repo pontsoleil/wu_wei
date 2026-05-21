@@ -595,5 +595,6 @@ wuwei.nls.EN = {
   'PageMarkers': 'PageMarkers',
   'Anchor href': 'Anchor href',
   'Description': 'Description',
+  'Supplement': 'Supplement',
 
 };

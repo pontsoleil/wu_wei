@@ -618,5 +618,6 @@ wuwei.nls.JA = {
   'PageMarkers': 'PageMarker一覧',
   'Anchor href': 'anchor href',
   'Description': '説明',
+  'Supplement': '追記',
 
 };

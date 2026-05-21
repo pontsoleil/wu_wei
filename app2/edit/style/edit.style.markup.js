@@ -110,8 +110,116 @@ wuwei.edit.style.markup = (function () {
     ].join('\n');
   }
 
+  function descriptionEntryBody(entry) {
+    if (!entry || 'object' !== typeof entry) {
+      return '';
+    }
+    return (typeof entry.body === 'string') ? entry.body : String(entry.text || '');
+  }
+
+  function descriptionOriginalBody(description) {
+    var i, entry;
+    if (Array.isArray(description)) {
+      for (i = 0; i < description.length; i += 1) {
+        entry = description[i];
+        if (entry && String(entry.role || 'original') === 'original') {
+          return descriptionEntryBody(entry);
+        }
+      }
+      return descriptionEntryBody(description[0]);
+    }
+    return (description && typeof description.body === 'string') ? description.body : '';
+  }
+
+  function descriptionOriginalFormat(description) {
+    var i, entry;
+    if (Array.isArray(description)) {
+      for (i = 0; i < description.length; i += 1) {
+        entry = description[i];
+        if (entry && String(entry.role || 'original') === 'original') {
+          return String(entry.format || 'asciidoc');
+        }
+      }
+      return String((description[0] && description[0].format) || 'asciidoc');
+    }
+    return String((description && description.format) || 'asciidoc');
+  }
+
+  function descriptionSupplementBody(description) {
+    var uid = String(
+      (wuwei.common && wuwei.common.state && wuwei.common.state.currentUser && wuwei.common.state.currentUser.user_id) ||
+      (wuwei.common && wuwei.common.state && wuwei.common.state.user_id) ||
+      ''
+    ).trim();
+    var i, entry;
+    if (!Array.isArray(description)) {
+      return '';
+    }
+    for (i = description.length - 1; i >= 0; i -= 1) {
+      entry = description[i];
+      if (entry && String(entry.role || '') === 'supplement' &&
+        (!uid || String(entry.createdBy || '') === uid)) {
+        return descriptionEntryBody(entry);
+      }
+    }
+    return '';
+  }
+
+  function descriptionSupplementFormat(description) {
+    var uid = String(
+      (wuwei.common && wuwei.common.state && wuwei.common.state.currentUser && wuwei.common.state.currentUser.user_id) ||
+      (wuwei.common && wuwei.common.state && wuwei.common.state.user_id) ||
+      ''
+    ).trim();
+    var i, entry;
+    if (!Array.isArray(description)) {
+      return 'asciidoc';
+    }
+    for (i = description.length - 1; i >= 0; i -= 1) {
+      entry = description[i];
+      if (entry && String(entry.role || '') === 'supplement' &&
+        (!uid || String(entry.createdBy || '') === uid)) {
+        return String(entry.format || 'asciidoc');
+      }
+    }
+    return 'asciidoc';
+  }
+
   function descriptionRows(param) {
+    var importedSupplement;
+    var originalBody;
+    var originalFormat;
+    var supplementBody;
+    var supplementFormat;
     param = param || {};
+    importedSupplement = !!(param.node &&
+      wuwei.collab &&
+      typeof wuwei.collab.canAppendImportedDescription === 'function' &&
+      wuwei.collab.canAppendImportedDescription(param.node, 'description.body', 'node'));
+    if (importedSupplement) {
+      originalBody = descriptionOriginalBody(param.node.description);
+      originalFormat = descriptionOriginalFormat(param.node.description);
+      supplementBody = descriptionSupplementBody(param.node.description);
+      supplementFormat = descriptionSupplementFormat(param.node.description);
+      return [
+        '<div class="w3-row">',
+        '  <label for="description_original_format" class="w3-col s4">' + t('Markup') + '</label>',
+        '  <input id="description_original_format" class="w3-col s8" value="' + esc(originalFormat) + '" readonly aria-readonly="true">',
+        '</div>',
+        '<div class="w3-row">',
+        '  <label for="description_original_body" class="w3-col s12">' + t('Description') + '</label>',
+        '  <textarea id="description_original_body" class="w3-col s12" rows="' + rowcount(originalBody) + '" readonly aria-readonly="true">' + esc(originalBody) + '</textarea>',
+        '</div>',
+        '<div class="w3-row">',
+        '  <label for="description_supplement_format" class="w3-col s4">' + t('Markup') + '</label>',
+        selectOptions('description.supplementFormat', supplementFormat, descriptionFormatOptions(), null, 's8'),
+        '</div>',
+        '<div class="w3-row">',
+        '  <label for="description_body" class="w3-col s12">' + t('Supplement') + '</label>',
+        '  <textarea id="description_body" name="description.body" class="w3-col s12 edit-value" rows="' + rowcount(supplementBody) + '" placeholder="' + esc(param.placeholder || descriptionPlaceholder()) + '">' + esc(supplementBody) + '</textarea>',
+        '</div>'
+      ].join('\n');
+    }
     return [
       '<div class="w3-row">',
       '  <label for="description_format" class="w3-col s4">' + t('Markup') + '</label>',

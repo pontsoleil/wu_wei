@@ -529,12 +529,120 @@ wuwei.edit = wuwei.edit || {};
     }
   }
 
+  function shouldAppendImportedDescription(node, path) {
+    return !!(
+      wuwei.collab &&
+      typeof wuwei.collab.canAppendImportedDescription === 'function' &&
+      wuwei.collab.canAppendImportedDescription(node, path, 'node')
+    );
+  }
+
+  function getSupplementFormatForEdit(fallback) {
+    var el = document.getElementById('description_supplementFormat');
+    return String((el && el.value) || fallback || 'asciidoc');
+  }
+
+  function makeDescriptionEntry(role, value, format) {
+    var body = String(value || '');
+    return {
+      role: role || 'original',
+      format: format || 'asciidoc',
+      body: body,
+      text: body
+    };
+  }
+
+  function normalizeDescriptionEntries(description) {
+    var entries, body, i, item;
+    if (Array.isArray(description)) {
+      entries = [];
+      for (i = 0; i < description.length; i += 1) {
+        item = (description[i] && 'object' === typeof description[i]) ? Object.assign({}, description[i]) : {};
+        body = (typeof item.body === 'string') ? item.body : String(item.text || '');
+        item.role = item.role || (entries.length ? 'supplement' : 'original');
+        item.format = item.format || 'asciidoc';
+        item.body = body;
+        item.text = (typeof item.text === 'string') ? item.text : body;
+        entries.push(item);
+      }
+      return entries;
+    }
+    if (description && 'object' === typeof description) {
+      body = (typeof description.body === 'string') ? description.body : String(description.text || '');
+      return [makeDescriptionEntry('original', body, description.format || 'asciidoc')];
+    }
+    return [makeDescriptionEntry('original', String(description || ''), 'asciidoc')];
+  }
+
+  function appendImportedDescription(node, value) {
+    var text = String(value || '').trim();
+    var uid = getCurrentUserIdForEdit();
+    var now = (new Date()).toISOString();
+    var format = getSupplementFormatForEdit('asciidoc');
+    var entries, i, entry;
+    entries = normalizeDescriptionEntries(node.description);
+    for (i = entries.length - 1; i >= 0; i -= 1) {
+      entry = entries[i];
+      if (entry && entry.role === 'supplement' && String(entry.createdBy || '') === uid) {
+        if (!text) {
+          entries.splice(i, 1);
+          node.description = entries;
+          return;
+        }
+        entry.body = text;
+        entry.text = text;
+        entry.format = format;
+        entry.modifiedAt = now;
+        node.description = entries;
+        return;
+      }
+    }
+    if (!text) {
+      return;
+    }
+    entries.push({
+      role: 'supplement',
+      format: format,
+      body: text,
+      text: text,
+      createdBy: uid,
+      createdAt: now,
+      source: 'imported-note'
+    });
+    node.description = entries;
+  }
+
+  function setImportedDescriptionSupplementFormat(node, value) {
+    var uid = getCurrentUserIdForEdit();
+    var format = String(value || 'asciidoc');
+    var entries = normalizeDescriptionEntries(node.description);
+    var i, entry;
+    for (i = entries.length - 1; i >= 0; i -= 1) {
+      entry = entries[i];
+      if (entry && entry.role === 'supplement' && String(entry.createdBy || '') === uid) {
+        entry.format = format;
+        entry.modifiedAt = (new Date()).toISOString();
+        node.description = entries;
+        return;
+      }
+    }
+    node.description = entries;
+  }
+
   function setNodePath(node, path, value) {
     if (!node || !path) {
       return;
     }
     if ('resource.kind' === path) {
       applyMediaDetectionToNode(node, value || '');
+      return;
+    }
+    if (shouldAppendImportedDescription(node, path) && path === 'description.supplementFormat') {
+      setImportedDescriptionSupplementFormat(node, value);
+      return;
+    }
+    if (shouldAppendImportedDescription(node, path)) {
+      appendImportedDescription(node, value);
       return;
     }
     setPathValue(node, path, value);

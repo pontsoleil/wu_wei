@@ -635,7 +635,6 @@ wuwei.note.v0 = (function () {
     var legacyResource = legacyResourceForNode(src, resourceMap);
     var type = src.type || 'Topic';
     var nodeId = src.id || createUuid();
-    var label = String(mergedNodeValue(src, legacyResource, ['label', 'name']));
     var description = src.description;
 
     if (typeof description === 'undefined' || description === null || description === '') {
@@ -654,11 +653,15 @@ wuwei.note.v0 = (function () {
       shape: src.shape || (type === 'Memo' ? 'MEMO' : 'RECTANGLE'),
       size: src.size && 'object' === typeof src.size ? clone(src.size) : {},
       visible: (typeof src.visible === 'boolean') ? src.visible : src.hidden !== true && src.filterout !== true,
-      label: label,
       description: descriptionFromV0(description, type === 'Memo' ? 'asciidoc' : 'asciidoc'),
       style: styleFromV0Node(src),
       audit: auditFromV0(src)
     };
+    if (type !== 'Memo') {
+      out.label = String(mergedNodeValue(src, legacyResource, ['label', 'name']));
+    } else if (out.style && typeof out.style === 'object') {
+      delete out.style.label;
+    }
 
     if (type === 'Content' || type === 'Uploaded') {
       var resource = resourceFromV0Content(src, legacyResource);

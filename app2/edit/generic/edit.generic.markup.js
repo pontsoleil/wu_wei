@@ -168,6 +168,89 @@ wuwei.edit.generic.markup = ( function () {
     return Number.isFinite(Number(value)) ? String(Math.floor(Number(value))) : '';
   }
 
+  function readonlyRow(id, label, value, labelSize, valueSize) {
+    return [
+      '<div class="w3-row">',
+      '  <label for="' + id + '" class="w3-col ' + (labelSize || 's5') + '">' + t(label) + '</label>',
+      '  <input type="text" id="' + id + '" class="w3-col ' + (valueSize || 's7') + '" readonly aria-readonly="true" value="' + esc(value || '') + '">',
+      '</div>'
+    ].join('\n');
+  }
+
+  function contentReadonlyRows(node) {
+    var resource = (node && node.resource && typeof node.resource === 'object') ? node.resource : {};
+    var contents = (resource.contents && typeof resource.contents === 'object') ? resource.contents : {};
+    return [
+      readonlyRow('resource_source', 'Source', resource.source || ''),
+      readonlyRow('resource_kind', 'Media type', resource.kind || ''),
+      readonlyRow('resource_documentKind', 'Document kind', resource.documentKind || ''),
+      readonlyRow('resource_videoKind', 'Video kind', resource.videoKind || ''),
+      readonlyRow('resource_title', 'Title', resource.title || ''),
+      readonlyRow('resource_mimeType', 'MIME', resource.mimeType || ''),
+      readonlyRow('resource_uri', 'URL:', resource.uri || ''),
+      readonlyRow('resource_canonicalUri', 'Canonical URI', resource.canonicalUri || ''),
+      readonlyRow('thumbnailUri', 'THUMBNAIL', getEditableThumbnailUri(node)),
+      '<div class="w3-row">',
+      '  <label for="resource_contents_pageOffset" class="w3-col s5">' + t('Page offset') + '</label>',
+      '  <input type="number" id="resource_contents_pageOffset" name="resource.contents.pageOffset" class="w3-col s7 edit-value" step="1" value="' + esc(contents.pageOffset == null ? '' : contents.pageOffset) + '">',
+      '</div>',
+      readonlyRow('resource_contents_pageCount', 'Page count', contents.pageCount == null ? '' : contents.pageCount),
+      readonlyRow('resource_contents_pageMin', 'Page min', contents.pageMin == null ? '' : contents.pageMin),
+      readonlyRow('resource_contents_pageMax', 'Page max', contents.pageMax == null ? '' : contents.pageMax)
+    ].join('\n');
+  }
+
+  function contentRightsRows(node) {
+    var resource = (node && node.resource && typeof node.resource === 'object') ? node.resource : {};
+    var rights = (resource.rights && typeof resource.rights === 'object') ? resource.rights : {};
+    return [
+      readonlyRow('resource_rights_source_title', 'Title', resource.title || ''),
+      readonlyRow('resource_rights_source_uri', 'URL:', resource.uri || ''),
+      readonlyRow('resource_rights_source_canonicalUri', 'Canonical URI', resource.canonicalUri || ''),
+      '<div class="w3-row">',
+      '  <label for="resource_rights_owner" class="w3-col s5">' + t('Owner') + '</label>',
+      '  <input type="text" id="resource_rights_owner" name="resource.rights.owner" class="w3-col s7 edit-value" value="' + esc(rights.owner || '') + '">',
+      '</div>',
+      '<div class="w3-row">',
+      '  <label for="resource_rights_copyright" class="w3-col s12">' + t('Copyright') + '</label>',
+      '  <textarea id="resource_rights_copyright" name="resource.rights.copyright" class="w3-col s12 edit-value" rows="' + rowcount(rights.copyright || '') + '">' + esc(rights.copyright || '') + '</textarea>',
+      '</div>',
+      '<div class="w3-row">',
+      '  <label for="resource_rights_license" class="w3-col s5">' + t('License') + '</label>',
+      '  <input type="text" id="resource_rights_license" name="resource.rights.license" class="w3-col s7 edit-value" value="' + esc(rights.license || '') + '">',
+      '</div>',
+      '<div class="w3-row">',
+      '  <label for="resource_rights_attribution" class="w3-col s12">' + t('Credit') + '</label>',
+      '  <textarea id="resource_rights_attribution" name="resource.rights.attribution" class="w3-col s12 edit-value" rows="' + rowcount(rights.attribution || '') + '">' + esc(rights.attribution || '') + '</textarea>',
+      '</div>'
+    ].join('\n');
+  }
+
+  function tabbedPaneHtml(tabs) {
+    var buttons = [];
+    var panels = [];
+    tabs.forEach(function (tab, index) {
+      buttons.push(
+        '<button type="button" class="w3-button w3-small edit-tab-button' + (index ? '' : ' active w3-blue') + '" data-edit-tab="' + tab.id + '">' +
+        esc(t(tab.label)) +
+        '</button>'
+      );
+      panels.push(
+        '<div class="edit-tab-panel" data-edit-tab-panel="' + tab.id + '" style="display:' + (index ? 'none' : 'block') + ';">' +
+        tab.html +
+        '</div>'
+      );
+    });
+    return [
+      '<div class="edit-tabbed-pane">',
+      '<div class="w3-bar w3-light-grey edit-tab-buttons">',
+      buttons.join('\n'),
+      '</div>',
+      panels.join('\n'),
+      '</div>'
+    ].join('\n');
+  }
+
 
   function getLabelStyleValue(node, path, fallback) {
     var labelStyle = node && node.style && node.style.label;
@@ -232,20 +315,20 @@ wuwei.edit.generic.markup = ( function () {
     var fontSizeValue = normalizeFontSizeValue(font && font.size);
     var memoStyle = (style && style.memo && typeof style.memo === 'object') ? style.memo : {};
     var memoCorner = memoStyle.corner || 'bottom-right';
-    var resourceUriAttrs = '';
-    var storagePathAttrs = isManagedResourceNode(node) ? ' readonly aria-readonly="true"' : '';
     var labelStyleWidth = getLabelStyleValue(node, 'width', getDefaultLabelWidth(node));
     var labelStyleLines = getLabelStyleValue(node, 'lines', getDefaultLabelLines());
     var labelOffsetX = getLabelStyleValue(node, 'offset.x', getDefaultLabelOffsetX());
     var labelOffsetY = getLabelStyleValue(node, 'offset.y', getDefaultLabelOffsetY());
     var html = [];
+    var displayHtml = [];
+    var contentTabs;
 
     html.push(
       '<form id="editform" class="generic form-group content" onsubmit="return false;">'
     );
 
     if (!(node && 'Memo' === node.type) && !option.flock) {
-      html.push(wuwei.edit.style.markup.labelRows({
+      displayHtml.push(wuwei.edit.style.markup.labelRows({
         label: label,
         align: fontAlign,
         labelSize: 's5',
@@ -253,8 +336,8 @@ wuwei.edit.generic.markup = ( function () {
       }));
     }
 
-    if (node.label || 'PageMarker' === node.type || 'Segment' === node.type || 'Topic' === node.type || 'Content' === node.type) {
-      html.push(
+    if ('Memo' !== node.type && (node.label || 'PageMarker' === node.type || 'Segment' === node.type || 'Topic' === node.type || 'Content' === node.type)) {
+      displayHtml.push(
         wuwei.edit.style.markup.labelLayoutRows({
           width: labelStyleWidth,
           lines: labelStyleLines,
@@ -265,8 +348,9 @@ wuwei.edit.generic.markup = ( function () {
     }
 
     if (!option.flock) {
-      html.push(
+      displayHtml.push(
         wuwei.edit.style.markup.descriptionRows({
+          node: node,
           format: (node.description && node.description.format) || 'plain/text',
           body: value || ''
         }),
@@ -274,63 +358,7 @@ wuwei.edit.generic.markup = ( function () {
       );
     }
 
-    if ('Content' === node.type && !option.flock) {
-      html.push(
-        '<div class="w3-row">',
-        '  <label for="resource_uri" class="w3-col s2">URL:</label>',
-        '  <input type="text" id="resource_uri" name="resource.uri" class="w3-col s10 edit-value"',
-        resourceUriAttrs + ' value="' + getEditableResourceUri(node) + '">',
-        '</div>',
-
-        '<div class="w3-row">',
-        '  <label for="resource_kind" class="w3-col s6">' + t('Media type') + '</label>',
-        selectOptions('resource.kind',
-          getMediaKindValue(node),
-          [
-            { value: '', label: 'auto' },
-            { value: 'webpage', label: 'webpage' },
-            { value: 'document', label: 'document' },
-            { value: 'image', label: 'image' },
-            { value: 'video', label: 'video' },
-            { value: 'audio', label: 'audio' }
-          ],
-          null,
-          's6'),
-        '</div>',
-
-        '<div class="w3-row">',
-        '  <label for="resource_contents_pageMin" class="w3-col s5">' + t('Page min') + '</label>',
-        '  <input type="number" id="resource_contents_pageMin" name="resource.contents.pageMin" class="w3-col s7 edit-value"',
-        ' min="1" step="1" value="' + getResourceContentsValue(node, 'pageMin') + '">',
-        '</div>',
-
-        '<div class="w3-row">',
-        '  <label for="resource_contents_pageMax" class="w3-col s5">' + t('Page max') + '</label>',
-        '  <input type="number" id="resource_contents_pageMax" name="resource.contents.pageMax" class="w3-col s7 edit-value"',
-        ' min="1" step="1" value="' + getResourceContentsValue(node, 'pageMax') + '">',
-        '</div>',
-
-        '<div class="w3-row">',
-        '  <label for="thumbnailUri" class="w3-col s5">' + t('THUMBNAIL') + '</label>',
-        '  <input type="text" id="thumbnailUri" name="resource.thumbnailUri" class="w3-col s7 edit-value"',
-        storagePathAttrs + ' value="' + getEditableThumbnailUri(node) + '">',
-        '</div>',
-
-        '<div class="w3-row">',
-        '  <label for="resource_rights_attribution" class="w3-col s5">' + t('Credit') + '</label>',
-        '  <input type="text" id="resource_rights_attribution" name="resource.rights.attribution" class="w3-col s7 edit-value"',
-        ' value="' + ((node.resource && node.resource.rights && node.resource.rights.attribution) || '') + '">',
-        '</div>',
-
-        '<div class="w3-row">',
-        '  <label for="resource_rights_license" class="w3-col s5">' + t('License') + '</label>',
-        '  <input type="text" id="resource_rights_license" name="resource.rights.license" class="w3-col s7 edit-value"',
-        ' value="' + ((node.resource && node.resource.rights && node.resource.rights.license) || '') + '">',
-        '</div>'
-      );
-    }
-
-    html.push(
+    displayHtml.push(
       wuwei.edit.style.markup.shapeSizeRows({
         shape: shape,
         size: node.size,
@@ -339,7 +367,7 @@ wuwei.edit.generic.markup = ( function () {
     );
 
     if ('Memo' === node.type) {
-      html.push(
+      displayHtml.push(
         '<div class="w3-row">',
         '  <label for="style_memo_corner" class="w3-col s5">' + t('Folded corner') + '</label>',
         selectOptions('style.memo.corner',
@@ -352,11 +380,15 @@ wuwei.edit.generic.markup = ( function () {
           ],
           null,
           's7'),
+        '</div>',
+        '<div class="w3-row">',
+        '  <label for="style_memo_foldSize" class="w3-col s5">' + t('Fold size') + '</label>',
+        '  <input type="number" id="style_memo_foldSize" name="style.memo.foldSize" class="w3-col s7 edit-value" min="0" step="1" value="' + esc(memoStyle.foldSize || 32) + '">',
         '</div>'
       );
     }
 
-    html.push(
+    displayHtml.push(
       wuwei.edit.style.markup.paintRows({
         style: style,
         fontSize: fontSizeValue,
@@ -366,12 +398,24 @@ wuwei.edit.generic.markup = ( function () {
     );
 
     if ('Topic' === node.type && !option.flock) {
-      html.push(
+      displayHtml.push(
         '<div class="w3-row">',
         '  <label for="applyToGroup" class="w3-col s10">' + t('Apply to all group members') + '</label>',
         '  <input type="checkbox" id="applyToGroup" name="applyToGroup" class="w3-col s2" ' + ((option && option.applyToGroup) ? 'checked' : '') + '>',
         '</div>'
       );
+    }
+
+    if ('Content' === node.type && !option.flock) {
+      contentTabs = [
+        { id: 'display', label: 'Display', html: displayHtml.join('\n') },
+        { id: 'content', label: 'Content', html: contentReadonlyRows(node) },
+        { id: 'rights', label: 'Source / Rights', html: contentRightsRows(node) }
+      ];
+      html.push(tabbedPaneHtml(contentTabs));
+    }
+    else {
+      html.push(displayHtml.join('\n'));
     }
 
     html.push('</form>');
@@ -381,6 +425,19 @@ wuwei.edit.generic.markup = ( function () {
 
   function selectOptions(name, value, options, placeholder, size) {
     return wuwei.edit.markup.selectOptions(name, value, options, placeholder, size);
+  }
+
+  function esc(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function rowcount(value) {
+    return wuwei.edit.markup.rowcount(value || '');
   }
 
   function t(str) {

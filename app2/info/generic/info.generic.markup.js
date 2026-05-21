@@ -19,16 +19,14 @@ wuwei.info.generic.markup = (function () {
     const util = wuwei.util;
     let uri = resolveViewerUri(node, option);
     let label = node.label || '';
-    let value = '';
+    let descriptionHtml = '';
     let rights = getResourceRights(node);
     let credit = rights.attribution || rights.credit || '';
     let license = rights.license || '';
     let fontSize = (node.style && node.style.font && node.style.font.size) || 14;
     let fontClass = 'font-size-M';
     let thumbnailUri = resolveThumbnailUri(node);
-    if (node.description && typeof node.description.body === 'string') {
-      value = node.description.body;
-    }
+    descriptionHtml = renderDescriptionSections(node.description);
     let width, height;
     if ('object' === typeof node.size && node.size.width) {
       width = +node.size.width;
@@ -83,10 +81,8 @@ wuwei.info.generic.markup = (function () {
   <!--/.Card image-->
   <div class="w3-container ${fontClass}" style="font-size:${Number(fontSize) || 14}px;">
       <!--Card content-->
-      ${value
-        ? `<p class="value">${wuwei.util.encodeHtml(
-            String(value).replace(/\\n/g, '\n')
-          )}</p>`
+      ${descriptionHtml
+        ? descriptionHtml
         : ``
       }
       ${credit
@@ -107,6 +103,114 @@ wuwei.info.generic.markup = (function () {
 
   function t(str) {
     return wuwei.nls.translate(str);
+  }
+
+  function descriptionEntryBody(entry) {
+    if (!entry || 'object' !== typeof entry) {
+      return '';
+    }
+    return (typeof entry.body === 'string') ? entry.body : String(entry.text || '');
+  }
+
+  function normalizeDescriptionEntries(description) {
+    var entries = [];
+    var i, entry;
+    if (Array.isArray(description)) {
+      for (i = 0; i < description.length; i += 1) {
+        entry = description[i] || {};
+        entries.push({
+          role: String(entry.role || (entries.length ? 'supplement' : 'original')),
+          format: String(entry.format || 'plain/text'),
+          body: descriptionEntryBody(entry)
+        });
+      }
+      return entries;
+    }
+    if (description && typeof description === 'object') {
+      return [{
+        role: 'original',
+        format: String(description.format || 'plain/text'),
+        body: descriptionEntryBody(description)
+      }];
+    }
+    return [];
+  }
+
+  function renderFormattedDescription(body, format) {
+    var source = String(body || '');
+    var mode = String(format || 'plain/text').toLowerCase();
+    var html = '';
+    if (!source.trim()) {
+      return '';
+    }
+    if (mode.indexOf('html') >= 0) {
+      html = source;
+    }
+    else if ((mode.indexOf('markdown') >= 0 || mode === 'md') &&
+      window.marked && typeof window.marked.parse === 'function') {
+      try { html = window.marked.parse(source); }
+      catch (e) { html = ''; }
+    }
+    else if ((mode.indexOf('markdown') >= 0 || mode === 'md') &&
+      window.markdownit && typeof window.markdownit === 'function') {
+      try { html = window.markdownit({ html: false, linkify: true }).render(source); }
+      catch (e2) { html = ''; }
+    }
+    else if ((mode.indexOf('asciidoc') >= 0 || mode === 'adoc') &&
+      wuwei.util && typeof wuwei.util.renderAsciiDoc === 'function') {
+      try {
+        html = wuwei.util.renderAsciiDoc(source, {
+          showtitle: false,
+          allowHtml: true
+        });
+      }
+      catch (e3) { html = ''; }
+    }
+    if (!html) {
+      html = '<p>' + wuwei.util.encodeHtml(source)
+        .replace(/\n{2,}/g, '</p><p>')
+        .replace(/\n/g, '<br>') + '</p>';
+    }
+    return sanitizeDescriptionHtml(html);
+  }
+
+  function renderDescriptionSections(description) {
+    var entries = normalizeDescriptionEntries(description);
+    var html = [];
+    var i, entry, bodyHtml, label;
+    for (i = 0; i < entries.length; i += 1) {
+      entry = entries[i];
+      bodyHtml = renderFormattedDescription(entry.body, entry.format);
+      if (!bodyHtml) {
+        continue;
+      }
+      label = entry.role === 'supplement' ? t('Supplement') : t('Description');
+      html.push(
+        '<section class="info-description info-description-' + wuwei.util.encodeHtml(entry.role) + '">',
+        '  <h6>' + wuwei.util.encodeHtml(label) + ' <small>(' + wuwei.util.encodeHtml(entry.format) + ')</small></h6>',
+        '  <div class="value rich-description">' + bodyHtml + '</div>',
+        '</section>'
+      );
+    }
+    return html.join('');
+  }
+
+  function sanitizeDescriptionHtml(html) {
+    var template = document.createElement('template');
+    template.innerHTML = String(html || '');
+    template.content.querySelectorAll('script, style, iframe, object, embed').forEach(function (el) {
+      el.remove();
+    });
+    template.content.querySelectorAll('*').forEach(function (el) {
+      Array.from(el.attributes).forEach(function (attr) {
+        var name = attr.name.toLowerCase();
+        var value = String(attr.value || '');
+        if (name.indexOf('on') === 0 || (/(href|src|xlink:href)/.test(name) && /^\s*javascript:/i.test(value))) {
+          el.removeAttribute(attr.name);
+        }
+      });
+    });
+    return template.innerHTML;
   }
 
   function getResourceRights(node) {

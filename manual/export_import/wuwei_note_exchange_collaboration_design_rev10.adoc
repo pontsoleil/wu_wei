@@ -84,7 +84,7 @@
 |`data/{team_id}/YYYY/MM/DD/note_uuid/section/*` 配下に配置する、チーム単位の共有ノート。個人ノートとは保存領域を分離する。
 
 |team_id
-|共同作業チームを表すサーバー側の一意な ID。実体値は `"c" + uuid.v4()` で生成する。`team_id` は説明上の仮称であり、実際の保存パスには使用しない。
+|共同作業チームを表すサーバー側の一意な ID。実体値は `"t-" + uuid.v4()` で生成する。`team_id` は説明上の仮称であり、実際の保存パスには使用しない。
 
 |チーム所属
 |利用者がどの `team_id` に属するかを示す管理情報。サーバー上のチーム管理テーブルでシステム管理者が管理し、利用者へ通知する。利用者は複数チームに所属可能とする。
@@ -202,7 +202,7 @@
 {
   collabNoteState: "own" | "imported" | "team",
   note_scope: "personal" | "team",
-  team_id: "c5c1f594a-315b-4bab-9075-62b1bebed7eb"
+  team_id: "t-5c1f594a-315b-4bab-9075-62b1bebed7eb"
 }
 ----
 
@@ -292,14 +292,14 @@ YYYY/MM/DD/{note_id}/note.json
 
 [source,javascript]
 ----
-team_id = "c" + uuid.v4();
+team_id = "t-" + uuid.v4();
 ----
 
 例:
 
 [source,text]
 ----
-c5c1f594a-315b-4bab-9075-62b1bebed7eb
+t-5c1f594a-315b-4bab-9075-62b1bebed7eb
 ----
 
 `team_id` は説明上の仮称であり、実際の保存パスには使用しない。実際の保存領域では、生成済みの `team_id` を使用する。
@@ -317,7 +317,7 @@ data/{team_id}/YYYY/MM/DD/note_uuid/section/*
 
 [source,text]
 ----
-data/c5c1f594a-315b-4bab-9075-62b1bebed7eb/
+data/t-5c1f594a-315b-4bab-9075-62b1bebed7eb/
   2026/
     05/
       20/
@@ -347,8 +347,8 @@ data/c5c1f594a-315b-4bab-9075-62b1bebed7eb/
 {
   note_id: "note_uuid",
   note_scope: "team",
-  team_id: "c5c1f594a-315b-4bab-9075-62b1bebed7eb",
-  note_key: "c5c1f594a-315b-4bab-9075-62b1bebed7eb/2026/05/20/note_uuid/note/note.json"
+  team_id: "t-5c1f594a-315b-4bab-9075-62b1bebed7eb",
+  note_key: "t-5c1f594a-315b-4bab-9075-62b1bebed7eb/2026/05/20/note_uuid/note/note.json"
 }
 ----
 
@@ -379,11 +379,11 @@ data/c5c1f594a-315b-4bab-9075-62b1bebed7eb/
 [source,text]
 ----
 userA:
-  c5c1f594a-315b-4bab-9075-62b1bebed7eb  Project A team
-  c6c2a1b8d-1b5a-4d4d-8d7e-1a2b3c4d5e6f  Project B team
+  t-5c1f594a-315b-4bab-9075-62b1bebed7eb  Project A team
+  t-6c2a1b8d-1b5a-4d4d-8d7e-1a2b3c4d5e6f  Project B team
 
 userB:
-  c5c1f594a-315b-4bab-9075-62b1bebed7eb  Project A team
+  t-5c1f594a-315b-4bab-9075-62b1bebed7eb  Project A team
 ----
 
 サーバー側 API は、チームノートへアクセスする際に、現在利用者が対象チームに所属していることを確認する。
@@ -441,7 +441,7 @@ data/admin/
 {
   "teams": [
     {
-      "team_id": "c5c1f594a-315b-4bab-9075-62b1bebed7eb",
+      "team_id": "t-5c1f594a-315b-4bab-9075-62b1bebed7eb",
       "teamName": "Project A team",
       "description": "共同作業用チーム A",
       "status": "active",
@@ -460,21 +460,21 @@ data/admin/
 {
   "memberships": [
     {
-      "team_id": "c5c1f594a-315b-4bab-9075-62b1bebed7eb",
+      "team_id": "t-5c1f594a-315b-4bab-9075-62b1bebed7eb",
       "user_uuid": "userA",
       "teamRole": "teamAdmin",
       "status": "active",
       "joinedAt": "2026-05-20T12:00:00+09:00"
     },
     {
-      "team_id": "c5c1f594a-315b-4bab-9075-62b1bebed7eb",
+      "team_id": "t-5c1f594a-315b-4bab-9075-62b1bebed7eb",
       "user_uuid": "userB",
       "teamRole": "editor",
       "status": "active",
       "joinedAt": "2026-05-20T12:00:00+09:00"
     },
     {
-      "team_id": "c6c2a1b8d-1b5a-4d4d-8d7e-1a2b3c4d5e6f",
+      "team_id": "t-6c2a1b8d-1b5a-4d4d-8d7e-1a2b3c4d5e6f",
       "user_uuid": "userA",
       "teamRole": "viewer",
       "status": "active",
@@ -735,12 +735,12 @@ wuwei.auth.getUserTeams("userA")
 // returns:
 [
   {
-    team_id: "c5c1f594a-315b-4bab-9075-62b1bebed7eb",
+    team_id: "t-5c1f594a-315b-4bab-9075-62b1bebed7eb",
     teamName: "Project A team",
     teamRole: "teamAdmin"
   },
   {
-    team_id: "c6c2a1b8d-1b5a-4d4d-8d7e-1a2b3c4d5e6f",
+    team_id: "t-6c2a1b8d-1b5a-4d4d-8d7e-1a2b3c4d5e6f",
     teamName: "Project B team",
     teamRole: "editor"
   }
@@ -907,7 +907,7 @@ description: [
   },
   {
     id: "_desc_added",
-    role: "addition",
+    role: "supplement",
     text: "受領者による補足説明です。",
     format: "asciidoc",
     audit: {
@@ -917,6 +917,57 @@ description: [
   }
 ]
 ----
+
+=== description markup と TeX 対応の将来計画
+
+`description` の各 entry は、本文と markup 種類をセットで扱う。
+
+通常の `description` オブジェクト、及び配列化された `description` entry のいずれについても、次の形を基本とする。
+
+[source,javascript]
+----
+{
+  role: "original" | "supplement",
+  text: "description body",
+  format: "plain/text" | "asciidoc" | "markdown" | "html" | "tex" | "other"
+}
+----
+
+情報ペインでは、元の `description` と追記 `description` を区別して表示する。
+
+* `plain/text` は、HTML エスケープしたプレーンテキストとして表示する。
+* `asciidoc` は、AsciiDoc として整形して表示する。
+* `markdown` は、Markdown として整形して表示する。
+* `html` は、危険なタグ及びイベント属性を除去した上で表示する。
+* `tex` 及び `other` は、当面はプレーンテキストとして表示する。
+
+TeX 対応は、将来拡張として扱う。
+この場合、TeX を文書全体の組版処理として扱うのではなく、description 内の数式記法をレンダリングする機能として定義する。
+
+将来の markup 指定候補は次のとおりとする。
+
+[source,text]
+----
+plain/text
+plain/text+tex
+markdown
+markdown+tex
+asciidoc
+asciidoc+tex
+html
+html+tex
+tex
+other
+----
+
+`markdown+tex` 又は `asciidoc+tex` の場合、処理順序は次のとおりとする。
+
+. Markdown 又は AsciiDoc を HTML に変換する。
+. 生成 HTML 内の TeX 数式部分を KaTeX 又は MathJax でレンダリングする。
+. 最後に HTML をサニタイズして情報ペインへ表示する。
+
+`tex` 単独指定は、数式中心の短い記述を想定する。
+通常の説明文では、`markdown+tex` 又は `asciidoc+tex` の利用を優先する。
 
 === 配列化しない場合
 
@@ -1728,6 +1779,9 @@ serverTimeOffsetMs = serverNow - estimatedClientAtServerResponse
 }
 ----
 
+Memo は `label` を持たない。`addMemo` の本文は `description.body`、又は operation の簡略表現では `value.text` から生成する。
+import / export / operation log のいずれでも、Memo に `label` 又は `style.label` が含まれている場合は共通 Node 正規化等で付与された不要項目とみなし、読み込み時又は保存時に破棄する。
+
 === operation 種別
 
 [cols="1,3", options="header"]
@@ -1816,13 +1870,13 @@ teams.json から teamName / status を取得する
   "status": "ok",
   "teams": [
     {
-      "team_id": "c5c1f594a-315b-4bab-9075-62b1bebed7eb",
+      "team_id": "t-5c1f594a-315b-4bab-9075-62b1bebed7eb",
       "teamName": "Project A team",
       "teamRole": "teamAdmin",
       "status": "active"
     },
     {
-      "team_id": "c6c2a1b8d-1b5a-4d4d-8d7e-1a2b3c4d5e6f",
+      "team_id": "t-6c2a1b8d-1b5a-4d4d-8d7e-1a2b3c4d5e6f",
       "teamName": "Project B team",
       "teamRole": "editor",
       "status": "active"
@@ -1852,7 +1906,7 @@ teamRole を返す
 ----
 {
   "status": "ok",
-  "team_id": "c5c1f594a-315b-4bab-9075-62b1bebed7eb",
+  "team_id": "t-5c1f594a-315b-4bab-9075-62b1bebed7eb",
   "teamRole": "editor",
   "permissions": {
     "canView": true,
@@ -1887,7 +1941,7 @@ note title / latest revision / updatedAt / lastModifiedBy を返す
   "status": "ok",
   "teams": [
     {
-      "team_id": "c5c1f594a-315b-4bab-9075-62b1bebed7eb",
+      "team_id": "t-5c1f594a-315b-4bab-9075-62b1bebed7eb",
       "notes": [
         {
           "note_id": "note_uuid",
@@ -2407,7 +2461,7 @@ applyRemoteChanges()
 {
   collabNoteState: "team",
   note_scope: "team",
-  team_id: "c5c1f594a-315b-4bab-9075-62b1bebed7eb",
+  team_id: "t-5c1f594a-315b-4bab-9075-62b1bebed7eb",
   collaboration: {
     enabled: true,
     revision: 0,
@@ -2415,7 +2469,7 @@ applyRemoteChanges()
   },
   sharing: {
     visibility: "groups",
-    groups: ["c5c1f594a-315b-4bab-9075-62b1bebed7eb"],
+    groups: ["t-5c1f594a-315b-4bab-9075-62b1bebed7eb"],
     users: ["user_uuid_a", "user_uuid_b"]
   }
 }
@@ -2435,8 +2489,8 @@ applyRemoteChanges()
 Notes
   My notes
   Team notes
-    Project A team (c5c1f594a-315b-4bab-9075-62b1bebed7eb)
-    Project B team (c6c2a1b8d-1b5a-4d4d-8d7e-1a2b3c4d5e6f)
+    Project A team (t-5c1f594a-315b-4bab-9075-62b1bebed7eb)
+    Project B team (t-6c2a1b8d-1b5a-4d4d-8d7e-1a2b3c4d5e6f)
 ----
 
 利用者が複数チームに所属する場合、所属チームごとに作業中ノート一覧を表示する。
@@ -3000,7 +3054,7 @@ import 済み export ノート編集
 {
   collabNoteState: "team",
   note_scope: "team",
-  team_id: "c5c1f594a-315b-4bab-9075-62b1bebed7eb"
+  team_id: "t-5c1f594a-315b-4bab-9075-62b1bebed7eb"
 }
 ----
 
@@ -3123,7 +3177,7 @@ wuwei.model / wuwei.edit の編集可否判定へモードを渡す
 
 ==== Step 1B.1: チームノートとしての読込
 
-* `team_id` は `"c" + uuid.v4()` 形式で生成する。
+* `team_id` は `"t-" + uuid.v4()` 形式で生成する。
 * `collabo-teamX` は説明上の仮称とし、実際の保存パスには使用しない。
 * チームノートを次の形式で配置する。
 +

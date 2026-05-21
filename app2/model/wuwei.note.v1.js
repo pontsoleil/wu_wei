@@ -547,11 +547,15 @@ wuwei.note.v1 = (function () {
       shape: src.shape || (type === 'Memo' ? 'MEMO' : 'RECTANGLE'),
       size: src.size && 'object' === typeof src.size ? clone(src.size) : {},
       visible: (typeof src.visible === 'boolean') ? src.visible : src.hidden !== true,
-      label: String(src.label || src.name || ''),
       description: descriptionFromV1(src.description || src.value, type === 'Memo' ? 'asciidoc' : 'asciidoc'),
       style: styleFromV1Node(src),
       audit: auditFromV1(src)
     };
+    if (type !== 'Memo') {
+      out.label = String(src.label || src.name || '');
+    } else if (out.style && typeof out.style === 'object') {
+      delete out.style.label;
+    }
 
     if (type === 'Content') {
       var resource = resourceFromV1Content(src);

@@ -1042,7 +1042,11 @@ wuwei.model = (function () {
 
     self.id = param.id || util.createUuid();
     self.type = self.type || 'Topic';
-    self.label = ('string' === typeof self.label) ? self.label : '';
+    if ('Memo' === self.type) {
+      delete self.label;
+    } else {
+      self.label = ('string' === typeof self.label) ? self.label : '';
+    }
 
     self.description = (self.description && 'object' === typeof self.description)
       ? self.description
@@ -1113,17 +1117,21 @@ wuwei.model = (function () {
       width: 1
     };
 
-    self.style.label = (self.style.label && 'object' === typeof self.style.label)
-      ? self.style.label
-      : {};
-    if (!Number.isFinite(Number(self.style.label.lines))) {
-      self.style.label.lines = (common.defaultStyle && common.defaultStyle.label && common.defaultStyle.label.lines) || 1;
-    }
-    if (self.style.label.offset && 'object' === typeof self.style.label.offset) {
-      self.style.label.offset = {
-        x: Number.isFinite(Number(self.style.label.offset.x)) ? Number(self.style.label.offset.x) : undefined,
-        y: Number.isFinite(Number(self.style.label.offset.y)) ? Number(self.style.label.offset.y) : undefined
-      };
+    if ('Memo' === self.type) {
+      delete self.style.label;
+    } else {
+      self.style.label = (self.style.label && 'object' === typeof self.style.label)
+        ? self.style.label
+        : {};
+      if (!Number.isFinite(Number(self.style.label.lines))) {
+        self.style.label.lines = (common.defaultStyle && common.defaultStyle.label && common.defaultStyle.label.lines) || 1;
+      }
+      if (self.style.label.offset && 'object' === typeof self.style.label.offset) {
+        self.style.label.offset = {
+          x: Number.isFinite(Number(self.style.label.offset.x)) ? Number(self.style.label.offset.x) : undefined,
+          y: Number.isFinite(Number(self.style.label.offset.y)) ? Number(self.style.label.offset.y) : undefined
+        };
+      }
     }
 
     // runtime mirror for draw/text rendering
@@ -5468,6 +5476,24 @@ wuwei.model = (function () {
       setMultipleLine(item);
     }
 
+    function getDescriptionBody(description) {
+      var parts = [];
+      var i, entry, text;
+      if (Array.isArray(description)) {
+        for (i = 0; i < description.length; i += 1) {
+          entry = description[i] || {};
+          text = (typeof entry.body === 'string') ? entry.body : String(entry.text || '');
+          if (text) {
+            parts.push(text);
+          }
+        }
+        return parts.join('\n\n');
+      }
+      return (description && typeof description.body === 'string')
+        ? description.body
+        : '';
+    }
+
     function renderNodeAdocHtml(node, type) {
       var source = '';
 
@@ -5476,13 +5502,12 @@ wuwei.model = (function () {
       }
 
       if ('Memo' === type) {
-        source = (node.description && typeof node.description.body === 'string')
-          ? node.description.body
-          : '';
+        source = getDescriptionBody(node.description);
       }
       else if ('Content' === type) {
-        if (node.description && typeof node.description.body === 'string' && node.description.body) {
-          source = node.description.body;
+        source = getDescriptionBody(node.description);
+        if (!source) {
+          source = '';
         }
       }
 
@@ -5549,7 +5574,7 @@ wuwei.model = (function () {
 
       var _html;
       if ('Annotation' === type) {
-        _html = node.description && typeof node.description.body === 'string' ? node.description.body : '';
+        _html = getDescriptionBody(node.description);
       }
       else {
         _html = renderNodeAdocHtml(node, type);

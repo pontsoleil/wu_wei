@@ -25,6 +25,27 @@ wuwei.edit.uploaded = wuwei.edit.uploaded || {};
     });
   }
 
+  function initTabs(root) {
+    var host = root || document;
+    var buttons = host.querySelectorAll ? host.querySelectorAll('[data-edit-tab]') : [];
+    buttons.forEach(function (button) {
+      button.addEventListener('click', function () {
+        var tabId = button.getAttribute('data-edit-tab');
+        var pane = button.closest('.edit-tabbed-pane');
+        if (!pane || !tabId) {
+          return;
+        }
+        pane.querySelectorAll('[data-edit-tab]').forEach(function (item) {
+          item.classList.toggle('active', item === button);
+          item.classList.toggle('w3-blue', item === button);
+        });
+        pane.querySelectorAll('[data-edit-tab-panel]').forEach(function (panel) {
+          panel.style.display = (panel.getAttribute('data-edit-tab-panel') === tabId) ? 'block' : 'none';
+        });
+      });
+    });
+  }
+
   function open(param) {
     if ('undefined' == param.option) {
       param.option = {};
@@ -34,6 +55,7 @@ wuwei.edit.uploaded = wuwei.edit.uploaded || {};
       if (el) {
         el.innerHTML = wuwei.edit.uploaded.markup.template(param);
         el.style.display = 'block';
+        initTabs(el);
       }
       initColorPalettePicker(param);
       resolve(el);

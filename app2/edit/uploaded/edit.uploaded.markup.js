@@ -88,6 +88,93 @@ wuwei.edit.uploaded.markup = ( function () {
     return Number.isFinite(Number(value)) ? String(Math.floor(Number(value))) : '';
   }
 
+  function esc(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function rowcount(value) {
+    return wuwei.edit.markup.rowcount(value || '');
+  }
+
+  function readonlyRow(id, label, value, labelSize, valueSize) {
+    return [
+      '<div class="w3-row">',
+      '  <label for="' + id + '" class="w3-col ' + (labelSize || 's5') + '">' + t(label) + '</label>',
+      '  <input type="text" id="' + id + '" class="w3-col ' + (valueSize || 's7') + '" readonly aria-readonly="true" value="' + esc(value || '') + '">',
+      '</div>'
+    ].join('\n');
+  }
+
+  function contentRows(node, page, thumbnailUri) {
+    var resource = (node && node.resource && typeof node.resource === 'object') ? node.resource : {};
+    var contents = (resource.contents && typeof resource.contents === 'object') ? resource.contents : {};
+    return [
+      readonlyRow('resource_source', 'Source', resource.source || ''),
+      readonlyRow('resource_kind', 'Media type', resource.kind || getMediaKindValue(node) || ''),
+      readonlyRow('resource_documentKind', 'Document kind', resource.documentKind || ''),
+      readonlyRow('resource_videoKind', 'Video kind', resource.videoKind || ''),
+      readonlyRow('resource_title', 'Title', resource.title || ''),
+      readonlyRow('resource_mimeType', 'MIME', resource.mimeType || ''),
+      readonlyRow('resource_uri', 'URL:', resource.uri || ''),
+      readonlyRow('resource_canonicalUri', 'Canonical URI', resource.canonicalUri || ''),
+      readonlyRow('thumbnailUri', 'THUMBNAIL', thumbnailUri || ''),
+      page ? readonlyRow('pdfPage', 'Page:', page) : '',
+      '<div class="w3-row">',
+      '  <label for="resource_contents_pageOffset" class="w3-col s5">' + t('Page offset') + '</label>',
+      '  <input type="number" id="resource_contents_pageOffset" name="resource.contents.pageOffset" class="w3-col s7 edit-value" step="1" value="' + esc(contents.pageOffset == null ? '' : contents.pageOffset) + '">',
+      '</div>',
+      readonlyRow('resource_contents_pageCount', 'Page count', contents.pageCount == null ? '' : contents.pageCount),
+      readonlyRow('resource_contents_pageMin', 'Page min', contents.pageMin == null ? '' : contents.pageMin),
+      readonlyRow('resource_contents_pageMax', 'Page max', contents.pageMax == null ? '' : contents.pageMax)
+    ].join('\n');
+  }
+
+  function rightsRows(node) {
+    var resource = (node && node.resource && typeof node.resource === 'object') ? node.resource : {};
+    var rights = (resource.rights && typeof resource.rights === 'object') ? resource.rights : {};
+    return [
+      readonlyRow('resource_rights_source_title', 'Title', resource.title || ''),
+      readonlyRow('resource_rights_source_uri', 'URL:', resource.uri || ''),
+      readonlyRow('resource_rights_source_canonicalUri', 'Canonical URI', resource.canonicalUri || ''),
+      '<div class="w3-row">',
+      '  <label for="resource_rights_owner" class="w3-col s5">' + t('Owner') + '</label>',
+      '  <input type="text" id="resource_rights_owner" name="resource.rights.owner" class="w3-col s7 edit-value" value="' + esc(rights.owner || '') + '">',
+      '</div>',
+      '<div class="w3-row">',
+      '  <label for="resource_rights_copyright" class="w3-col s12">' + t('Copyright') + '</label>',
+      '  <textarea id="resource_rights_copyright" name="resource.rights.copyright" class="w3-col s12 edit-value" rows="' + rowcount(rights.copyright || '') + '">' + esc(rights.copyright || '') + '</textarea>',
+      '</div>',
+      '<div class="w3-row">',
+      '  <label for="resource_rights_license" class="w3-col s5">' + t('License') + '</label>',
+      '  <input type="text" id="resource_rights_license" name="resource.rights.license" class="w3-col s7 edit-value" value="' + esc(rights.license || '') + '">',
+      '</div>',
+      '<div class="w3-row">',
+      '  <label for="resource_rights_attribution" class="w3-col s12">' + t('Credit') + '</label>',
+      '  <textarea id="resource_rights_attribution" name="resource.rights.attribution" class="w3-col s12 edit-value" rows="' + rowcount(rights.attribution || '') + '">' + esc(rights.attribution || '') + '</textarea>',
+      '</div>'
+    ].join('\n');
+  }
+
+  function tabbedPaneHtml(tabs) {
+    return [
+      '<div class="edit-tabbed-pane">',
+      '<div class="w3-bar w3-light-grey edit-tab-buttons">',
+      tabs.map(function (tab, index) {
+        return '<button type="button" class="w3-button w3-small edit-tab-button' + (index ? '' : ' active w3-blue') + '" data-edit-tab="' + tab.id + '">' + esc(t(tab.label)) + '</button>';
+      }).join('\n'),
+      '</div>',
+      tabs.map(function (tab, index) {
+        return '<div class="edit-tab-panel" data-edit-tab-panel="' + tab.id + '" style="display:' + (index ? 'none' : 'block') + ';">' + tab.html + '</div>';
+      }).join('\n'),
+      '</div>'
+    ].join('\n');
+  }
+
   function getLabelStyleValue(node, path, fallback) {
     var labelStyle = node && node.style && node.style.label;
     var offset;
@@ -206,8 +293,7 @@ wuwei.edit.uploaded.markup = ( function () {
     let value = (node.description && typeof node.description.body === 'string')
       ? node.description.body
       : '';
-    var html = `
-<form id="editform" class="uploaded form-group content" onsubmit="return false;">
+    var displayHtml = `
   ${wuwei.edit.style.markup.labelRows({
     label: node.label || '',
     align: fontAlign,
@@ -224,50 +310,10 @@ wuwei.edit.uploaded.markup = ( function () {
     : ''
   }
   ${wuwei.edit.style.markup.descriptionRows({
+    node: node,
     format: (node.description && node.description.format) || 'plain/text',
     body: value || ''
   })}
-  <div class="w3-row">
-    <label for="pdfPage" class="w3-col s6">Page:</label>
-    <input type="text" id="pdfPage" name="pdfPage" class="w3-col s6" value="${page ? page : ''}">
-  </div>
-  <div class="w3-row">
-    <label for="resource_contents_pageMin" class="w3-col s6">${t('Page min')}</label>
-    <input type="number" id="resource_contents_pageMin" name="resource.contents.pageMin" class="w3-col s6 edit-value" min="1" step="1"
-      value="${getResourceContentsValue(node, 'pageMin')}">
-  </div>
-  <div class="w3-row">
-    <label for="resource_contents_pageMax" class="w3-col s6">${t('Page max')}</label>
-    <input type="number" id="resource_contents_pageMax" name="resource.contents.pageMax" class="w3-col s6 edit-value" min="1" step="1"
-      value="${getResourceContentsValue(node, 'pageMax')}">
-  </div>
-
-  <div class="w3-row">
-  <label for="resource_uri" class="w3-col s2">URL:</label>
-  <input type="text" id="resource_uri" name="resource.uri" class="w3-col s10 edit-value"
-      value="${resourceUri || ''}">
-  </div>
-  <div class="w3-row">
-    <label for="resource_kind" class="w3-col s6">${t('Media type')}</label>
-    <input type="text" id="resource_kind" name="resource.kind" class="w3-col s6 edit-value" readonly aria-readonly="true"
-      value="${getMediaKindValue(node) || 'auto'}">
-  </div>
-
-  <div class="w3-row">
-  <label for="thumbnailUri" class="w3-col s4">${t('THUMBNAIL')}</label>
-  <input type="text" id="thumbnailUri" name="resource.thumbnailUri" class="w3-col s8 edit-value"
-      value="${thumbnailUri || ''}">
-  </div>
-  <div class="w3-row">
-    <label for="resource_rights_attribution" class="w3-col s4">${t('Credit')}</label>
-    <input type="text" id="resource_rights_attribution" name="resource.rights.attribution" class="w3-col s8 edit-value"
-      value="${(node.resource && node.resource.rights && node.resource.rights.attribution) || node.resource && node.resource.attribution || ''}">
-  </div>
-  <div class="w3-row">
-    <label for="resource_rights_license" class="w3-col s4">${t('License')}</label>
-    <input type="text" id="resource_rights_license" name="resource.rights.license" class="w3-col s8 edit-value"
-      value="${(node.resource && node.resource.rights && node.resource.rights.license) || node.resource && node.resource.license || ''}">
-  </div>
   ${isVideo
     ? `<div class="w3-row">
         <div class="frame video w3-col s12">
@@ -316,7 +362,16 @@ wuwei.edit.uploaded.markup = ( function () {
   </div>`
   : ``
 }
-</form>`;
+`;
+    var html = [
+      '<form id="editform" class="uploaded form-group content" onsubmit="return false;">',
+      tabbedPaneHtml([
+        { id: 'display', label: 'Display', html: displayHtml },
+        { id: 'content', label: 'Content', html: contentRows(node, page, thumbnailUri) },
+        { id: 'rights', label: 'Source / Rights', html: rightsRows(node) }
+      ]),
+      '</form>'
+    ].join('\n');
     return html;
   };
 

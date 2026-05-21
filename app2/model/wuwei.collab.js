@@ -200,6 +200,18 @@ wuwei.collab = wuwei.collab || {};
     return false;
   }
 
+  function canAppendImportedDescription(record, path, kind) {
+    var p = String(path || '');
+    return !!(
+      record &&
+      kind === 'node' &&
+      (p === 'description.body' || p === 'description.supplementFormat') &&
+      isImportedNote() &&
+      !isTeamNote() &&
+      !isOwnObject(record)
+    );
+  }
+
   function canEditPath(record, path, kind) {
     if (!record) {
       return false;
@@ -211,6 +223,9 @@ wuwei.collab = wuwei.collab || {};
       return false;
     }
     if (!isImportedNote()) {
+      return true;
+    }
+    if (canAppendImportedDescription(record, path, kind)) {
       return true;
     }
     return isDisplayPath(kind, path);
@@ -314,6 +329,7 @@ wuwei.collab = wuwei.collab || {};
   ns.applyRemoteChanges = applyRemoteChanges;
   ns.canEditObject = canEditObject;
   ns.canEditPath = canEditPath;
+  ns.canAppendImportedDescription = canAppendImportedDescription;
   ns.canDeleteObject = canDeleteObject;
   ns.canEditSelection = canEditSelection;
   ns.readOnlyMessage = readOnlyMessage;
