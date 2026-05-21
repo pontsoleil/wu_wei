@@ -623,7 +623,7 @@ wuwei.nls.JA = {
   'Display': '表示',
   'Source / Rights': '典拠・権利',
 
-  'Canonical URL': '正規URL',
+  'Canonical URI': '正規URI',
   'Owner': '権利者',
   'License': 'ライセンス',
   'Credit': 'クレジット',
