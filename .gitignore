@@ -4,6 +4,10 @@
 /setting/
 /_WIP/
 **/_WIP/
+**/Q&A/
+
+# Local working spreadsheets
+**/img/*.xlsx
 
 # Generated archives and large local packages
 *.tar
