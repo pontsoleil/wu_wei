@@ -1,7 +1,7 @@
 = 編集ペインのタブ対応仕様
 三分一信之（三分一技術士事務所）
-:revnumber: 2026-05-22
-:revdate:
+:revnumber: ver 0.0
+:revdate: 2026-05-22
 :revremark:
 :version-label!:
 :doctype: book
