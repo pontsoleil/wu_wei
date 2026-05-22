@@ -551,15 +551,13 @@ wuwei.nls.FI = {
   '{name} created': '{name} loi',
   '{name} modified': '{name} muutti',
   '{name} deleted': '{name} poisti',
+  'First page number': 'Ensimmäisen sivun numero',
   'Physical page 1 corresponds to': 'Fyysinen sivu 1 vastaa näytettävää sivunumeroa',
   'Page offset': 'Sivun siirtymä',
-  'Page max': 'Suurin sivunumero',
-  'Page min': 'Pienin sivunumero',
 
   'Page number is below the valid range.': 'Sivunumero on kelvollisen alueen alapuolella.',
   'Page number is above the valid range.': 'Sivunumero on kelvollisen alueen yläpuolella.',
-  'Corrected to minimum page number': 'Korjattu pienimpään sivunumeroon',
-  'Corrected to maximum page number': 'Korjattu suurimpaan sivunumeroon',
+  'Corrected to valid page number': 'Korjattu kelvolliseksi sivunumeroksi',
 
   'Label position': 'Otsikon sijainti',
   'Label align': 'Selitteen tasaus',

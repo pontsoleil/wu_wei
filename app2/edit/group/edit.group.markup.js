@@ -77,8 +77,7 @@ wuwei.edit.group.markup = (function () {
     <textarea id="description_body" name="description.body" class="w3-col s12 edit-value" rows="1" placeholder="${t('Description')}">${esc(description.body)}</textarea>
   </div>
   <div class="w3-row">
-    <label class="w3-col s6"><input type="checkbox" id="visible" name="visible" class="edit-value"${checked(group && group.visible)}> ${t('Visible')}</label>
-    <label class="w3-col s6"><input type="checkbox" id="moveTogether" name="moveTogether" class="edit-value"${checked(group && group.moveTogether)}> ${t('Move together')}</label>
+    <label class="w3-col s12"><input type="checkbox" id="moveTogether" name="moveTogether" class="edit-value"${checked(group && group.moveTogether)}> ${t('Move together')}</label>
   </div>
   <div class="w3-row">
     <label for="type" class="w3-col s4">${t('Shape')}</label>

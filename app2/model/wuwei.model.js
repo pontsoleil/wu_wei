@@ -139,7 +139,6 @@ wuwei.model = (function () {
     getCurrent,
     getCurrentPage,
     setGraphFromCurrentPage,
-    syncPageFromGraph,
     wrapWithPageSync,
     /** constant */
     MENU_TIMEOUT = 1000,
@@ -1816,24 +1815,31 @@ wuwei.model = (function () {
     node = createNode({
       id: option && option.id,
       type: 'Topic',
-      label: (option && option.label) || group.name || 'Group',
-      description: (option && option.description) || description,
-      shape: 'RECTANGLE',
-      x: Number.isFinite(Number(option && option.x)) ? Number(option.x) : Number(anchor.x || 0),
-      y: Number.isFinite(Number(option && option.y)) ? Number(option.y) : Number(anchor.y || 0),
-      style: topicStyle,
+      topicKind: (option && option.topicKind) || 'group-representative',
       groupRef: group.id,
       groupRole: 'representative',
       representativeOf: {
         kind: 'group',
         id: group.id
       },
-      topicKind: (option && option.topicKind) || 'group-representative',
       representativeType: (option && option.representativeType) ||
         group.type ||
         group.orientation ||
         'group',
-      axisPos: Number.isFinite(Number(option && option.axisPos)) ? Number(option.axisPos) : undefined
+      label: (option && option.label) || group.name || 'Group',
+      description: (option && option.description) || description,
+      x: Number.isFinite(Number(option && option.x)) ? Number(option.x) : Number(anchor.x || 0),
+      y: Number.isFinite(Number(option && option.y)) ? Number(option.y) : Number(anchor.y || 0),
+      axisPos: Number.isFinite(Number(option && option.axisPos)) ? Number(option.axisPos) : undefined,
+      state: 'active',
+      visible: (false !== group.visible && false !== group.enabled),
+      shape: 'RECTANGLE',
+      size: {
+        width: common.defaultSize.width,
+        height: common.defaultSize.height
+      },
+      style: topicStyle,
+      audit: makeAudit()
     });
 
     if (node) {
@@ -2023,9 +2029,30 @@ wuwei.model = (function () {
       return null;
     }
 
+    node.type = 'Topic';
     node.groupRef = group.id;
     node.groupRole = 'representative';
     node.representativeOf = { kind: 'group', id: group.id };
+    node.topicKind = node.topicKind ||
+      (group.type === 'timeline'
+        ? 'timeline-representative'
+        : (group.type === 'contents'
+          ? 'contents-representative'
+          : 'group-representative'));
+    node.representativeType = node.representativeType ||
+      group.type ||
+      group.orientation ||
+      'group';
+    node.state = node.state || 'active';
+    node.visible = (false !== group.visible && false !== group.enabled);
+    node.shape = node.shape || 'RECTANGLE';
+    node.size = (node.size && 'object' === typeof node.size) ? node.size : {};
+    if (!Number.isFinite(Number(node.size.width))) {
+      node.size.width = common.defaultSize.width;
+    }
+    if (!Number.isFinite(Number(node.size.height))) {
+      node.size.height = common.defaultSize.height;
+    }
     node.style = node.style || {};
     node.style.line = node.style.line || {};
     node.style.line.kind = 'DASHED';
@@ -9823,30 +9850,6 @@ wuwei.model = (function () {
     return page;
   }
 
-  function syncPageFromGraph() {
-    const current = getCurrent();
-    const page = getCurrentPage();
-    if (!current || !page) {
-      return page;
-    }
-    page.nodes = (graph.nodes || []).filter(function (node) {
-      return !(node && node.pseudo);
-    });
-    page.links = (graph.links || []).filter(function (link) {
-      return !(link && link.pseudo);
-    });
-    current.page = page;
-    var pages = normalizePagesForCurrent(current);
-    var idx = pages.findIndex(function (item) { return item && item.id === page.id; });
-    if (idx < 0) {
-      pages.push(page);
-    } else {
-      pages[idx] = page;
-    }
-    normalizePagesForCurrent(current);
-    return page;
-  }
-
   function wrapWithPageSync(fnOrName, afterRefresh) {
     var fn = fnOrName;
 
@@ -9860,7 +9863,11 @@ wuwei.model = (function () {
 
     return function () {
       var result = fn.apply(this, arguments);
-      syncPageFromGraph();
+      /*
+       * common.current.page is the authoritative note model, and graph is
+       * only a drawing expansion. Wrapped operations are expected to update
+       * current.page objects directly.
+       */
       if (afterRefresh && wuwei.draw) {
         if (graph.mode === 'simulation') {
           restartCurrentDraw();
@@ -10372,7 +10379,6 @@ wuwei.model = (function () {
     getCurrentPage: getCurrentPage,
 
     setGraphFromCurrentPage: setGraphFromCurrentPage,
-    syncPageFromGraph: syncPageFromGraph,
     wrapWithPageSync: wrapWithPageSync,
     /** CMND */
     cut: cut,

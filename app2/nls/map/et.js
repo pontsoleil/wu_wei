@@ -551,15 +551,13 @@ wuwei.nls.ET = {
   '{name} created': '{name} lõi',
   '{name} modified': '{name} muutis',
   '{name} deleted': '{name} kustutas',
+  'First page number': 'Esimese lehekülje number',
   'Physical page 1 corresponds to': 'Füüsiline lehekülg 1 vastab kuvatavale leheküljele',
   'Page offset': 'Lehekülje nihe',
-  'Page max': 'Maksimaalne lehekülg',
-  'Page min': 'Minimaalne lehekülg',
 
   'Page number is below the valid range.': 'Leheküljenumber on kehtivast vahemikust väiksem.',
   'Page number is above the valid range.': 'Leheküljenumber on kehtivast vahemikust suurem.',
-  'Corrected to minimum page number': 'Parandatud vähimaks leheküljenumbriks',
-  'Corrected to maximum page number': 'Parandatud suurimaks leheküljenumbriks',
+  'Corrected to valid page number': 'Parandatud kehtivaks leheküljenumbriks',
 
   'Label position': 'Sildi asukoht',
   'Label align': 'Sildi joondus',

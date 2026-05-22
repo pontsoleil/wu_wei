@@ -2198,7 +2198,7 @@ wuwei.menu = wuwei.menu || {};
     var requestedNodeIds;
 
     // ContextOperate() から渡された selectedNodes を先に id 化して保持する。
-    // syncPageFromGraph() の前後で node object 自体は差し替わり得るため、
+    // group 定義は common.current.page を正本として行うため、
     // 以後の member 解決は object 参照ではなく node id を正本にする。
     requestedNodeIds = Array.isArray(selectedNodes)
       ? selectedNodes
@@ -2206,10 +2206,8 @@ wuwei.menu = wuwei.menu || {};
         .map(function (n) { return n.id; })
       : [];
 
-    // 画面上で作成済みだが未同期の real node を先に page.nodes へ戻す。
-    // group 定義時に setGraphFromCurrentPage() が走るため、ここで同期しないと
-    // 直前に追加した Topic / Content が page 正本に無く、消えたように見える。
-    model.syncPageFromGraph();
+    // common.graph は common.current.page から展開した描画用データであり、
+    // graph.nodes / graph.links から page.nodes / page.links へは戻さない。
     page = getCurrentPage();
 
     var isHorizontal = ('topicGroupHorizontal' === kind);

@@ -599,7 +599,17 @@
     }
     viewer.defaultMode = viewer.defaultMode || 'infoPane';
     viewer.embed = isObject(viewer.embed) ? viewer.embed : {};
-    viewer.thumbnailUri = viewer.thumbnailUri || resource.thumbnailUri || viewer.embed.thumbnailUri || '';
+    if (viewer.embed.uri) {
+      viewer.embed.uri = normalizeLogicalPath(viewer.embed.uri, 'upload', resource);
+    }
+    if (viewer.embed.thumbnailUri) {
+      viewer.embed.thumbnailUri = normalizeLogicalPath(viewer.embed.thumbnailUri, 'thumbnail', resource);
+    }
+    viewer.thumbnailUri = normalizeLogicalPath(
+      viewer.thumbnailUri || resource.thumbnailUri || viewer.embed.thumbnailUri || '',
+      'thumbnail',
+      resource
+    );
     resource.viewer = viewer;
 
     return viewer;
@@ -609,6 +619,8 @@
     var contents = isObject(resource.contents) ? resource.contents : {};
     var preview;
     var pageCount;
+    var firstPageNumber;
+    var media;
 
     if (resource.kind !== 'document') {
       if (Object.keys(contents).length > 0) {
@@ -618,6 +630,7 @@
     }
 
     contents.axis = isObject(contents.axis) ? contents.axis : {};
+    media = isObject(resource.media) ? resource.media : {};
 
     if (resource.documentKind === 'html') {
       contents.type = 'html';
@@ -632,21 +645,31 @@
       contents.axis.unit = 'page';
       contents.axis.nodeType = 'page';
       contents.sourceRole = contents.sourceRole || (preview ? 'preview' : 'original');
-      pageCount = finiteOr(contents.pageCount, 0);
+      pageCount = finiteOr(media.pageCount, finiteOr(contents.pageCount, 0));
       contents.pageCount = pageCount;
       contents.hasPageCount = pageCount > 0;
-      contents.pageOffset = finiteOr(contents.pageOffset, 0);
-      contents.firstPageNumber = finiteOr(contents.firstPageNumber, 1);
+      firstPageNumber = finiteOr(contents.firstPageNumber, 0);
+      if (!(firstPageNumber >= 1)) {
+        firstPageNumber = finiteOr(contents.pageOffset, 0) + 1;
+      }
+      firstPageNumber = Math.max(1, Math.floor(firstPageNumber));
+      contents.firstPageNumber = firstPageNumber;
+      contents.pageOffset = firstPageNumber - 1;
     } else if (resource.documentKind === 'pdf') {
       contents.type = 'pdf';
       contents.axis.unit = 'page';
       contents.axis.nodeType = 'page';
       contents.sourceRole = contents.sourceRole || 'original';
-      pageCount = finiteOr(contents.pageCount, 0);
+      pageCount = finiteOr(media.pageCount, finiteOr(contents.pageCount, 0));
       contents.pageCount = pageCount;
       contents.hasPageCount = pageCount > 0;
-      contents.pageOffset = finiteOr(contents.pageOffset, 0);
-      contents.firstPageNumber = finiteOr(contents.firstPageNumber, 1);
+      firstPageNumber = finiteOr(contents.firstPageNumber, 0);
+      if (!(firstPageNumber >= 1)) {
+        firstPageNumber = finiteOr(contents.pageOffset, 0) + 1;
+      }
+      firstPageNumber = Math.max(1, Math.floor(firstPageNumber));
+      contents.firstPageNumber = firstPageNumber;
+      contents.pageOffset = firstPageNumber - 1;
     } else {
       contents.type = 'text';
       contents.axis.unit = contents.axis.unit || 'anchor';
@@ -655,6 +678,20 @@
       contents.hasPageCount = false;
       contents.sourceRole = contents.sourceRole || 'original';
     }
+
+    Object.keys(contents).forEach(function (key) {
+      if (!{
+        type: true,
+        axis: true,
+        pageCount: true,
+        hasPageCount: true,
+        sourceRole: true,
+        firstPageNumber: true,
+        pageOffset: true
+      }[key]) {
+        delete contents[key];
+      }
+    });
 
     resource.contents = contents;
     return contents;
@@ -674,7 +711,7 @@
     resource.canonicalUri = resource.canonicalUri || resource.url || node.url || '';
     resource.uri = resource.uri || resource.canonicalUri || node.uri || node.url || node.download_url || '';
     resource.mimeType = resource.mimeType || '';
-    resource.thumbnailUri = resource.thumbnailUri || '';
+    resource.thumbnailUri = normalizeLogicalPath(resource.thumbnailUri || '', 'thumbnail', resource);
 
     source = inferSource(resource, oldKind);
     resource.source = source;

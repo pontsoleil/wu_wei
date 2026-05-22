@@ -551,15 +551,13 @@ wuwei.nls.CN = {
   '{name} created': '{name} 已创建',
   '{name} modified': '{name} 已修改',
   '{name} deleted': '{name} 已删除',
+  'First page number': '首页页码',
   'Physical page 1 corresponds to': '物理第1页对应的显示页码',
   'Page offset': '页码偏移',
-  'Page max': '最大页码',
-  'Page min': '最小页码',
 
   'Page number is below the valid range.': '页码小于有效范围。',
   'Page number is above the valid range.': '页码大于有效范围。',
-  'Corrected to minimum page number': '已修正为最小页码',
-  'Corrected to maximum page number': '已修正为最大页码',
+  'Corrected to valid page number': '已修正为有效页码',
 
   'Label position': '标签位置',
   'Label align': '标签对齐',

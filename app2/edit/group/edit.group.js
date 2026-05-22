@@ -120,7 +120,7 @@ wuwei.edit.group = wuwei.edit.group || {};
   function commit() {
     var group = stateMap.group;
     var previousType;
-    var typeEl, nameEl, descriptionEl, visibleEl, moveTogetherEl;
+    var typeEl, nameEl, descriptionEl, moveTogetherEl;
     var spineKindEl, spineWidthEl, spineColorEl, spinePaddingEl, spineVisibleEl;
     var spinePaddingTopEl, spinePaddingRightEl, spinePaddingBottomEl, spinePaddingLeftEl;
     var nextType;
@@ -136,7 +136,6 @@ wuwei.edit.group = wuwei.edit.group || {};
     typeEl = $('type');
     nameEl = $('name');
     descriptionEl = $('description_body');
-    visibleEl = $('visible');
     moveTogetherEl = $('moveTogether');
     spineKindEl = $('spine_kind');
     spineWidthEl = $('spine_width');
@@ -156,9 +155,6 @@ wuwei.edit.group = wuwei.edit.group || {};
       : { format: 'plain', body: '' };
     if (descriptionEl) {
       group.description.body = descriptionEl.value || '';
-    }
-    if (visibleEl) {
-      group.visible = !!visibleEl.checked;
     }
     if (moveTogetherEl) {
       group.moveTogether = !!moveTogetherEl.checked;

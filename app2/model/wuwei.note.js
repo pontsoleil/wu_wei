@@ -176,17 +176,50 @@ wuwei.note = (function () {
     };
   }
 
+  function normalizeStoredResourceUri(value, area) {
+    var text = String(value || '').replace(/\\/g, '/').trim();
+    var uid = String(state.currentUser && state.currentUser.user_id || '');
+
+    if (!text || isIconThumbnailUri(text) || /^data:/i.test(text) || /^blob:/i.test(text)) {
+      return text;
+    }
+    if (/^https?:\/\//i.test(text) && text.indexOf('/wu_wei2/') < 0 &&
+        !/(?:^|\/)(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i.test(text)) {
+      return text;
+    }
+    if (util && typeof util.toStorageRelativePath === 'function') {
+      return util.toStorageRelativePath(text, uid, area || '');
+    }
+    return text
+      .replace(/[?#].*$/, '')
+      .replace(/^https?:\/\/[^/]+\/wu_wei2\//i, '')
+      .replace(/^\/?wu_wei2\//i, '')
+      .replace(/^\/?data\/[^/]+\/(?:upload|resource|note|thumbnail|content)\//i, '')
+      .replace(/^(?:upload|resource|note|thumbnail|content)\//i, '')
+      .replace(/^\/+/, '');
+  }
+
+  function normalizeStoredViewerUri(value, area) {
+    return normalizeStoredResourceUri(value, area);
+  }
+
   function normalizeViewer(viewer) {
     var supported = (viewer && Array.isArray(viewer.supportedModes)) ? viewer.supportedModes.slice() : [];
     var embed = (viewer && viewer.embed && typeof viewer.embed === 'object') ? util.clone(viewer.embed) : {};
     if (!supported.length) {
       supported = ['infoPane', 'newTab', 'newWindow', 'download'];
     }
+    if (embed.uri) {
+      embed.uri = normalizeStoredViewerUri(embed.uri, 'upload');
+    }
+    if (embed.thumbnailUri) {
+      embed.thumbnailUri = normalizeStoredViewerUri(embed.thumbnailUri, 'thumbnail');
+    }
     return {
       supportedModes: supported,
       defaultMode: (viewer && viewer.defaultMode) || supported[0] || 'infoPane',
       embed: embed,
-      thumbnailUri: String((viewer && viewer.thumbnailUri) || embed.thumbnailUri || '')
+      thumbnailUri: normalizeStoredViewerUri(String((viewer && viewer.thumbnailUri) || embed.thumbnailUri || ''), 'thumbnail')
     };
   }
 
@@ -196,6 +229,7 @@ wuwei.note = (function () {
 
   function normalizeStorage(storage) {
     var src = (storage && typeof storage === 'object') ? storage : {};
+    var manifest = (src.manifest && typeof src.manifest === 'object') ? util.clone(src.manifest) : null;
     var files = Array.isArray(src.files) ? src.files.map(function (file) {
       var out = util.clone(file);
       var area = String(out.area || '').trim();
@@ -204,16 +238,43 @@ wuwei.note = (function () {
         area = (role === 'original') ? 'upload' : 'note';
       }
       if (out.path) {
-        out.path = util.toStorageRelativePath(out.path, state.currentUser && state.currentUser.user_id, area);
+        out.path = normalizeStoredResourceUri(out.path, area);
+      }
+      if (out.sourcePath) {
+        out.sourcePath = normalizeStoredResourceUri(out.sourcePath, out.sourceArea || area);
       }
       out.area = area;
       return out;
     }) : [];
-    return {
+    var outStorage = {
       managed: src.managed === true,
       copyPolicy: src.copyPolicy || (src.managed === true ? 'snapshot' : 'metadataOnly'),
       files: files
     };
+    if (manifest) {
+      manifest.area = String(manifest.area || 'upload');
+      if (manifest.path) {
+        manifest.path = normalizeStoredResourceUri(manifest.path, manifest.area);
+      }
+      outStorage.manifest = manifest;
+    }
+    return outStorage;
+  }
+
+  function storedThumbnailFromStorage(storage) {
+    var files = (storage && Array.isArray(storage.files)) ? storage.files : [];
+    var i, file, path;
+    for (i = 0; i < files.length; i += 1) {
+      file = files[i] || {};
+      if (String(file.role || '').toLowerCase() !== 'thumbnail') {
+        continue;
+      }
+      path = normalizeStoredResourceUri(file.path || '', file.area || 'thumbnail');
+      if (path) {
+        return path;
+      }
+    }
+    return '';
   }
 
   function toRuntimeFileUrl(value) {
@@ -349,12 +410,13 @@ wuwei.note = (function () {
       kind: String(src.kind || 'other'),
       documentKind: String(src.documentKind || ''),
       videoKind: String(src.videoKind || ''),
-      canonicalUri: String(src.canonicalUri || src.uri || ''),
-      uri: String(src.uri || src.canonicalUri || ''),
+      canonicalUri: normalizeStoredResourceUri(src.canonicalUri || src.uri || '', 'upload'),
+      uri: normalizeStoredResourceUri(src.uri || src.canonicalUri || '', 'upload'),
       title: String(src.title || ''),
       mimeType: String(src.mimeType || 'text/plain'),
-      thumbnailUri: String(src.thumbnailUri || ''),
+      thumbnailUri: normalizeStoredResourceUri(src.thumbnailUri || '', 'thumbnail'),
       viewer: normalizeViewer(src.viewer),
+      media: (src.media && typeof src.media === 'object') ? util.clone(src.media) : undefined,
       storage: normalizeStorage(src.storage),
       contents: (src.contents && typeof src.contents === 'object') ? util.clone(src.contents) : undefined,
       state: normalizeRecordState(src),
@@ -368,7 +430,23 @@ wuwei.note = (function () {
       audit: normalizeAudit(src.audit, state.currentUser)
     };
 
-    return ensureResourceRuntimeReferences(out, state.currentUser && state.currentUser.user_id);
+    if (!out.thumbnailUri) {
+      out.thumbnailUri = storedThumbnailFromStorage(out.storage);
+    }
+    if (out.viewer) {
+      if (!out.viewer.thumbnailUri) {
+        out.viewer.thumbnailUri = out.thumbnailUri || '';
+      }
+      out.viewer.embed = (out.viewer.embed && typeof out.viewer.embed === 'object') ? out.viewer.embed : {};
+      if (!out.viewer.embed.thumbnailUri) {
+        out.viewer.embed.thumbnailUri = out.thumbnailUri || '';
+      }
+    }
+    if (src.export && typeof src.export === 'object') {
+      out.export = util.clone(src.export);
+    }
+
+    return out;
   }
 
   function isVideoResourceLike(resource, uri) {
@@ -445,6 +523,7 @@ wuwei.note = (function () {
       shape: shape,
       size: util.clone(size || {}),
       visible: (normalizeRecordState(src) === 'deleted') ? false : (false !== src.visible),
+      linkCount: Number.isFinite(Number(src.linkCount)) ? Number(src.linkCount) : 0,
       description: src.description && typeof src.description === 'object'
         ? util.clone(src.description)
         : { format: 'plain/text', body: '' },
@@ -468,6 +547,11 @@ wuwei.note = (function () {
           out.resourceRef = src.resourceRef;
         }
       }
+
+      out.resourceView = (src.resourceView && typeof src.resourceView === 'object')
+        ? util.clone(src.resourceView)
+        : { mode: 'default' };
+      out.resourceView.mode = out.resourceView.mode || 'default';
 
       out.thumbnailUri =
         resolveResourceThumbnailUri(out.resource, state.currentUser && state.currentUser.user_id);
@@ -504,9 +588,14 @@ wuwei.note = (function () {
         ? util.clone(src.description)
         : { format: 'plain/text', body: '' };
       out.time = util.clone(src.time || {});
-      ['mediaStart', 'mediaEnd', 'playDuration'].forEach(function (key) {
+      ['mediaStart', 'mediaEnd', 'playDuration', 'axisPos'].forEach(function (key) {
         if (Number.isFinite(Number(src[key]))) {
           out[key] = Number(src[key]);
+        }
+      });
+      ['mediaRef', 'axisRole'].forEach(function (key) {
+        if (typeof src[key] === 'string' && src[key]) {
+          out[key] = src[key];
         }
       });
     }
@@ -519,8 +608,14 @@ wuwei.note = (function () {
       out.type = 'PageMarker';
       out.topicKind = 'contents-page';
       out.groupRef = out.groupRef || '';
+      if (typeof src.contentsRef === 'string' && src.contentsRef) {
+        out.contentsRef = src.contentsRef;
+      }
       if (typeof src.documentRef === 'string' && src.documentRef) {
         out.documentRef = src.documentRef;
+      }
+      if (typeof src.mediaRef === 'string' && src.mediaRef) {
+        out.mediaRef = src.mediaRef;
       }
       if (Number.isFinite(Number(src.pageNumber))) {
         out.pageNumber = Number(src.pageNumber);
@@ -546,9 +641,15 @@ wuwei.note = (function () {
     if (typeof src.groupRole === 'string' && src.groupRole) {
       out.groupRole = src.groupRole;
       if ('representative' === out.groupRole) {
+        if (typeof src.representativeType === 'string' && src.representativeType) {
+          out.representativeType = src.representativeType;
+        }
+        if (Number.isFinite(Number(src.axisPos))) {
+          out.axisPos = Number(src.axisPos);
+        }
         out.style = out.style || {};
         out.style.line = out.style.line || {};
-        out.style.line.kind = 'DASHED';
+        out.style.line.kind = out.style.line.kind || 'DASHED';
       }
     }
     if (typeof src.axisRole === 'string' && src.axisRole) {
@@ -674,7 +775,7 @@ wuwei.note = (function () {
       });
     }
 
-    return {
+    var out = {
       id: src.id || util.createUuid(),
       type: type,
       name: src.name || '',
@@ -1037,7 +1138,9 @@ wuwei.note = (function () {
         type: 'PageMarker',
         topicKind: 'contents-page',
         groupRef: out.groupRef || '',
+        contentsRef: out.contentsRef || out.groupRef || '',
         documentRef: out.documentRef || '',
+        mediaRef: out.mediaRef || out.documentRef || '',
         axisRole: out.axisRole || 'entry',
         pageNumber: Number.isFinite(Number(out.pageNumber))
           ? Math.max(1, Math.floor(Number(out.pageNumber)))
@@ -1051,22 +1154,19 @@ wuwei.note = (function () {
         color: out.color,
         outline: out.outline,
         outlineWidth: out.outlineWidth,
-        style: out.style,
         font: out.font,
+        linkCount: Number.isFinite(Number(out.linkCount)) ? Number(out.linkCount) : 0,
+        style: out.style,
+        state: out.state || 'active',
+        deleted: out.deleted,
         visible: false !== out.visible,
         audit: out.audit
       };
       if (Number.isFinite(Number(node.axisPos))) {
         out.axisPos = Number(node.axisPos);
       }
-      [
-        'anchorHref',
-        'htmlAnchorHref'
-      ].forEach(function (key) {
-        if (typeof node[key] === 'string' && node[key]) {
-          out[key] = node[key];
-        }
-      });
+      out.anchorHref = String(node.anchorHref || '');
+      out.htmlAnchorHref = String(node.htmlAnchorHref || '');
     }
     if (out.type === 'Content') {
       compactResource = compactResourceForSave(out);
@@ -1076,9 +1176,10 @@ wuwei.note = (function () {
       else {
         delete out.resource;
       }
-      if (!out.resourceView) {
-        out.resourceView = { mode: 'default' };
-      }
+      out.resourceView = (out.resourceView && typeof out.resourceView === 'object')
+        ? util.clone(out.resourceView)
+        : { mode: 'default' };
+      out.resourceView.mode = out.resourceView.mode || 'default';
       delete out.thumbnailUri;
       delete out.resourceRef;
       delete out.uri;
@@ -1622,23 +1723,6 @@ wuwei.note = (function () {
     return PageFactory(base);
   }
 
-  function setGraphFromPage(page) {
-    if (!page) {
-      return null;
-    }
-    current = common.current;
-    current.page = page;
-
-    current.currentPage = page.id || current.currentPage;
-    return setGraphFromCurrentPage(current.currentPage);
-
-    graph.nodes = page.nodes;
-    graph.links = page.links;
-    graph.groups = page.groups || [];
-    graph.transform = normalizeTransform(page.transform);
-    return page;
-  }
-
   function setGraphFromCurrentPage(pageRef) {
     var pp = pageRef;
     // graph 構成は model 側が pseudo group / timeline を含めて管理する。
@@ -1738,28 +1822,19 @@ wuwei.note = (function () {
   }
 
   function captureCurrentMiniatureThumbnail() {
-    var svg, clone, serialized;
+    var currentNote = common.current;
+    var page = currentNote && currentNote.page;
 
-    if (util && typeof util.drawMiniature === 'function') {
-      util.drawMiniature();
+    /*
+     * The live miniature DOM may contain runtime load-file URLs with
+     * user_id query parameters in <image href="...">.  The saved note
+     * thumbnail is storage data, so generate it from the page model instead
+     * of cloning the runtime DOM.
+     */
+    if (page) {
+      return buildPageThumbnail(page, 200, 200);
     }
-
-    svg = document.querySelector('#miniature svg.miniSvg') || document.querySelector('#miniature svg');
-    if (!svg) {
-      return '';
-    }
-
-    clone = svg.cloneNode(true);
-    clone.setAttribute('class', 'miniSvg');
-    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-    clone.setAttribute('width', '200');
-    clone.setAttribute('height', '200');
-    if (!clone.getAttribute('viewBox')) {
-      clone.setAttribute('viewBox', '0 0 200 200');
-    }
-
-    serialized = new XMLSerializer().serializeToString(clone);
-    return serialized;
+    return '';
   }
 
   function updatePageThumbnail(page) {
@@ -1770,9 +1845,6 @@ wuwei.note = (function () {
 
     current = common.current;
     if (!targetPage) {
-      if (wuwei.model && typeof wuwei.model.syncPageFromGraph === 'function') {
-        wuwei.model.syncPageFromGraph();
-      }
       targetPage = current && current.page;
     }
     if (!targetPage) {
@@ -1825,12 +1897,6 @@ wuwei.note = (function () {
     return pagesAsArray(current).length + 1;
   }
 
-  /*  function applyPageState(page) {
-      const activePage = setGraphFromPage(page || wuwei.model.getCurrentPage());
-      updateCanvasTransform(util.getPageTransform(activePage));
-      redrawCurrentPage();
-      return activePage;
-    }*/
   function applyPageState(page) {
     const targetPage = page || wuwei.model.getCurrentPage();
     let activePage;
@@ -1939,10 +2005,6 @@ wuwei.note = (function () {
     let _id, id, sourcePage, copiedPage;
 
     snapshotCurrentPageThumbnail();
-    if (wuwei.model && typeof wuwei.model.syncPageFromGraph === 'function') {
-      wuwei.model.syncPageFromGraph();
-    }
-
     sourcePage = (sourcePageId != null) ? findPageByRef(current, sourcePageId) : (current.page || wuwei.model.getCurrentPage());
     if (!sourcePage) {
       return current.page || null;
@@ -2025,10 +2087,6 @@ wuwei.note = (function () {
     let clonedPage;
 
     snapshotCurrentPageThumbnail();
-    if (wuwei.model && typeof wuwei.model.syncPageFromGraph === 'function') {
-      wuwei.model.syncPageFromGraph();
-    }
-
     clonedPage = PageFactory(Object.assign(util.clone(wuwei.model.getCurrentPage()), { id: util.createUuid(), pp: pages.length + 1 }));
     pages.push(clonedPage);
     refreshPageNumbers(pages);

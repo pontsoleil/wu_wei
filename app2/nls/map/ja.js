@@ -587,15 +587,13 @@ wuwei.nls.JA = {
   'Enter search string': '検索文字列を入力',
 
   'Office document': 'Office文書',
+  'First page number': '先頭ページ番号',
   'Physical page 1 corresponds to': '物理1ページ目の表示ページ番号',
   'Page offset': 'ページオフセット',
-  'Page max': 'ページ最大値',
-  'Page min': 'ページ最小値',
 
   'Page number is below the valid range.': 'ページ番号が有効範囲より小さい値です。',
   'Page number is above the valid range.': 'ページ番号が有効範囲より大きい値です。',
-  'Corrected to minimum page number': '最小ページ番号に修正しました',
-  'Corrected to maximum page number': '最大ページ番号に修正しました',
+  'Corrected to valid page number': '有効なページ番号に修正しました',
 
   'Label position': 'ラベル位置',
   'Label align': 'ラベル揃え',

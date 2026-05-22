@@ -551,15 +551,13 @@ wuwei.nls.KR = {
   '{name} created': '{name}님이 생성했습니다',
   '{name} modified': '{name}님이 변경했습니다',
   '{name} deleted': '{name}님이 삭제했습니다',
+  'First page number': '첫 페이지 번호',
   'Physical page 1 corresponds to': '물리적 1페이지에 해당하는 표시 페이지 번호',
   'Page offset': '페이지 오프셋',
-  'Page max': '최대 페이지',
-  'Page min': '최소 페이지',
 
   'Page number is below the valid range.': '페이지 번호가 유효 범위보다 작습니다.',
   'Page number is above the valid range.': '페이지 번호가 유효 범위보다 큽니다.',
-  'Corrected to minimum page number': '최소 페이지 번호로 수정했습니다',
-  'Corrected to maximum page number': '최대 페이지 번호로 수정했습니다',
+  'Corrected to valid page number': '유효한 페이지 번호로 수정했습니다',
 
   'Label position': '라벨 위치',
   'Label align': '라벨 정렬',

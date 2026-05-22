@@ -104,10 +104,6 @@ wuwei.menu.page = wuwei.menu.page || {};
   function ensurePageThumbnails() {
     const pages = getPages();
 
-    if (wuwei.model && typeof wuwei.model.syncPageFromGraph === 'function') {
-      wuwei.model.syncPageFromGraph();
-    }
-
     if (wuwei.note && typeof wuwei.note.updatePageThumbnail === 'function') {
       wuwei.note.updatePageThumbnail();
       pages.forEach(function (page) {

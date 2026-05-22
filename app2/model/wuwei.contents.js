@@ -202,27 +202,46 @@ wuwei.contents = wuwei.contents || {};
     return findDocumentNodeForGroup(group);
   }
 
-  function getDocumentPageNumberOffset(documentNode) {
+  function getDocumentFirstPageNumber(documentNode) {
     var meta = getResourceContentsMeta(documentNode, false);
-    var value = Number(meta && meta.pageOffset);
-    if (Number.isFinite(value) && value >= 0) {
-      return Math.max(0, Math.floor(value));
+    var value = Number(meta && meta.firstPageNumber);
+
+    if (Number.isFinite(value) && value >= 1) {
+      return Math.floor(value);
     }
-    return 0;
+
+    // Legacy compatibility: older notes may only have pageOffset.
+    value = Number(meta && meta.pageOffset);
+    if (Number.isFinite(value) && value >= 0) {
+      return Math.floor(value) + 1;
+    }
+
+    return 1;
+  }
+
+  function getDocumentPageNumberOffset(documentNode) {
+    return Math.max(0, getDocumentFirstPageNumber(documentNode) - 1);
+  }
+
+  function setDocumentFirstPageNumber(documentNode, firstPageNumber) {
+    var meta;
+
+    if (!documentNode || documentNode.type !== 'Content' || !Number.isFinite(Number(firstPageNumber))) {
+      return false;
+    }
+    firstPageNumber = Math.max(1, Math.floor(Number(firstPageNumber)));
+    meta = getResourceContentsMeta(documentNode, true);
+    meta.firstPageNumber = firstPageNumber;
+    meta.pageOffset = firstPageNumber - 1;
+    documentNode.changed = true;
+    return true;
   }
 
   function setDocumentPageNumberOffset(documentNode, pageOffset) {
-    var meta;
-
-    if (!documentNode || documentNode.type !== 'Content' || !Number.isFinite(Number(pageOffset))) {
+    if (!Number.isFinite(Number(pageOffset))) {
       return false;
     }
-    pageOffset = Math.max(0, Math.floor(Number(pageOffset)));
-    meta = getResourceContentsMeta(documentNode, true);
-    meta.pageOffset = pageOffset;
-    meta.firstPageNumber = pageOffset + 1;
-    documentNode.changed = true;
-    return true;
+    return setDocumentFirstPageNumber(documentNode, Math.max(0, Math.floor(Number(pageOffset))) + 1);
   }
 
   function getPageNumberOffset(group) {
@@ -230,7 +249,7 @@ wuwei.contents = wuwei.contents || {};
   }
 
   function getFirstPageNumber(group) {
-    return getPageNumberOffset(group) + 1;
+    return getDocumentFirstPageNumber(getDocumentNode(group));
   }
 
   function toViewerPageNumber(group, pageNumber) {
@@ -279,10 +298,10 @@ wuwei.contents = wuwei.contents || {};
     return true;
   }
 
-  function updatePageOffsetMapping(group, pageOffset) {
+  function updateFirstPageNumberMapping(group, firstPageNumber) {
     var documentNode, previousOffset, page, documentId, groups;
 
-    if (!group || !Number.isFinite(Number(pageOffset))) {
+    if (!group || !Number.isFinite(Number(firstPageNumber))) {
       return false;
     }
 
@@ -292,9 +311,9 @@ wuwei.contents = wuwei.contents || {};
     }
 
     previousOffset = getDocumentPageNumberOffset(documentNode);
-    pageOffset = Math.max(0, Math.floor(Number(pageOffset)));
+    firstPageNumber = Math.max(1, Math.floor(Number(firstPageNumber)));
 
-    if (!setDocumentPageNumberOffset(documentNode, pageOffset)) {
+    if (!setDocumentFirstPageNumber(documentNode, firstPageNumber)) {
       return false;
     }
 
@@ -315,6 +334,13 @@ wuwei.contents = wuwei.contents || {};
     });
 
     return true;
+  }
+
+  function updatePageOffsetMapping(group, pageOffset) {
+    if (!Number.isFinite(Number(pageOffset))) {
+      return false;
+    }
+    return updateFirstPageNumberMapping(group, Math.max(0, Math.floor(Number(pageOffset))) + 1);
   }
 
   function getContentsAxisPageCount(group) {
@@ -339,13 +365,13 @@ wuwei.contents = wuwei.contents || {};
     return pageCount > 0 ? pageCount : 0;
   }
 
-  function getDocumentPageNumberBounds(documentNode) {
-    var meta = getResourceContentsMeta(documentNode, false) || {};
-    var min = Number(meta.pageMin);
-    var max = Number(meta.pageMax);
+  function getDocumentPageNumberRange(documentNode) {
+    var first = getDocumentFirstPageNumber(documentNode);
+    var count = getDocumentPageCount(documentNode);
+
     return {
-      min: Number.isFinite(min) && min >= 1 ? Math.floor(min) : null,
-      max: Number.isFinite(max) && max >= 1 ? Math.floor(max) : null
+      min: first,
+      max: count > 0 ? first + count - 1 : null
     };
   }
 
@@ -353,9 +379,9 @@ wuwei.contents = wuwei.contents || {};
     var documentNode = getDocumentNode(group);
     var offset = getPageNumberOffset(group);
     var pageCount = getKnownContentsAxisPageCount(group);
-    var bounds = getDocumentPageNumberBounds(documentNode);
-    var min = bounds.min || (pageCount > 0 ? Math.max(1, offset + 1) : 1);
-    var max = bounds.max || (pageCount > 0 ? offset + pageCount : null);
+    var range = getDocumentPageNumberRange(documentNode);
+    var min = range.min || 1;
+    var max = pageCount > 0 ? range.max : null;
 
     if (max != null && max < min) {
       max = min;
@@ -1552,9 +1578,6 @@ wuwei.contents = wuwei.contents || {};
   function createAxisGroup(axis, documentCandidate, option) {
     var page, documentNode, pageCount, pageOffset, firstPageNumber, displayEnd, origin, group, nodes, axisStartPos, parentGroupId;
     option = option || {};
-    if (model && typeof model.syncPageFromGraph === 'function') {
-      model.syncPageFromGraph();
-    }
     page = getCurrentPage();
     if (!page) { return null; }
     ensurePageCollections(page);
@@ -1569,13 +1592,13 @@ wuwei.contents = wuwei.contents || {};
     }
     parentGroupId = getParentGenericGroupIdForNode(documentNode.id);
     pageCount = getDocumentPageCount(documentNode);
-    pageOffset = Number.isFinite(Number(option.pageOffset))
-      ? Math.max(0, Math.floor(Number(option.pageOffset)))
-      : (Number.isFinite(Number(option.firstPageNumber || option.firstDisplayedPageNumber))
-        ? Math.max(0, Math.floor(Number(option.firstPageNumber || option.firstDisplayedPageNumber)) - 1)
-        : getDocumentPageNumberOffset(documentNode));
-    setDocumentPageNumberOffset(documentNode, pageOffset);
-    firstPageNumber = pageOffset + 1;
+    firstPageNumber = Number.isFinite(Number(option.firstPageNumber || option.firstDisplayedPageNumber))
+      ? Math.max(1, Math.floor(Number(option.firstPageNumber || option.firstDisplayedPageNumber)))
+      : (Number.isFinite(Number(option.pageOffset))
+        ? Math.max(1, Math.floor(Number(option.pageOffset)) + 1)
+        : getDocumentFirstPageNumber(documentNode));
+    setDocumentFirstPageNumber(documentNode, firstPageNumber);
+    pageOffset = firstPageNumber - 1;
     displayEnd = firstPageNumber + Math.max(1, pageCount || 1) - 1;
 
     origin = defaultAxisOrigin(documentNode, axis === 'vertical' ? 'vertical' : 'horizontal');
@@ -1706,7 +1729,10 @@ wuwei.contents = wuwei.contents || {};
       group.spine.color = props.strokeColor;
       group.strokeColor = props.strokeColor;
     }
-    if (Number.isFinite(Number(props.pageOffset))) {
+    if (Number.isFinite(Number(props.firstPageNumber))) {
+      updateFirstPageNumberMapping(group, props.firstPageNumber);
+    }
+    else if (Number.isFinite(Number(props.pageOffset))) {
       updatePageOffsetMapping(group, props.pageOffset);
     }
 
@@ -2316,12 +2342,15 @@ wuwei.contents = wuwei.contents || {};
   ns.getDocumentPageCount = getDocumentPageCount;
   ns.hasKnownDocumentPages = hasKnownDocumentPages;
   ns.getFirstPageNumber = getFirstPageNumber;
+  ns.getDocumentFirstPageNumber = getDocumentFirstPageNumber;
+  ns.setDocumentFirstPageNumber = setDocumentFirstPageNumber;
   ns.getPageNumberOffset = getPageNumberOffset;
   ns.toViewerPageNumber = toViewerPageNumber;
   ns.toDisplayedPageNumber = toDisplayedPageNumber;
   ns.getPageMarkerPageNumberRange = getPageMarkerPageNumberRange;
   ns.clampPageMarkerPageNumber = clampPageMarkerPageNumber;
   ns.recomputePageNumbersFromPageNumbers = recomputePageNumbersFromPageNumbers;
+  ns.updateFirstPageNumberMapping = updateFirstPageNumberMapping;
   ns.updatePageOffsetMapping = updatePageOffsetMapping;
   ns.createAxisGroup = createAxisGroup;
   ns.addTableOfContents = addTableOfContents;

@@ -589,11 +589,11 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     }
     if (inputNumber < range.min) {
       message = wuwei.nls.translate('Page number is below the valid range.') + '\n' +
-        wuwei.nls.translate('Corrected to minimum page number') + ': ' + correctedValue;
+        wuwei.nls.translate('Corrected to valid page number') + ': ' + correctedValue;
     }
     else if (inputNumber > range.max) {
       message = wuwei.nls.translate('Page number is above the valid range.') + '\n' +
-        wuwei.nls.translate('Corrected to maximum page number') + ': ' + correctedValue;
+        wuwei.nls.translate('Corrected to valid page number') + ': ' + correctedValue;
     }
     if (message) {
       window.alert(message);
@@ -635,11 +635,11 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     );
     $('editContentsAxisDirection').value = group.orientation || 'horizontal';
     $('editContentsAxisLength').value = Number(group.length || 480);
-    if ($('editContentsPageOffset')) {
-      $('editContentsPageOffset').value = Number(
-        wuwei.contents && typeof wuwei.contents.getPageNumberOffset === 'function'
-          ? wuwei.contents.getPageNumberOffset(group)
-          : 0
+    if ($('editContentsFirstPageNumber')) {
+      $('editContentsFirstPageNumber').value = Number(
+        wuwei.contents && typeof wuwei.contents.getFirstPageNumber === 'function'
+          ? wuwei.contents.getFirstPageNumber(group)
+          : 1
       );
     }
     $('editContentsAxisStrokeWidth').value = Number(group.strokeWidth || (group.spine && group.spine.width) || 4);
@@ -773,7 +773,7 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     axisProps = {
       orientation: $('editContentsAxisDirection').value,
       length: Number($('editContentsAxisLength').value || currentGroup.length || 480),
-      pageOffset: $('editContentsPageOffset') ? Number($('editContentsPageOffset').value || 0) : undefined,
+      firstPageNumber: $('editContentsFirstPageNumber') ? Number($('editContentsFirstPageNumber').value || 1) : undefined,
       strokeWidth: Number($('editContentsAxisStrokeWidth').value || 4),
       strokeColor: $('editContentsAxisStrokeColor').value || '#4c6b8a',
       representativeShape: $('editContentsRepShape') ? $('editContentsRepShape').value : undefined,

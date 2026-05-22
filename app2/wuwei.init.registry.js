@@ -44,7 +44,6 @@ wuwei.init.registry = (function () {
     return [
       { name: 'wuwei.model.getCurrentPage', target: function () { return wuwei.model && wuwei.model.getCurrentPage; } },
       { name: 'wuwei.model.setGraphFromCurrentPage', target: function () { return wuwei.model && wuwei.model.setGraphFromCurrentPage; } },
-      { name: 'wuwei.model.syncPageFromGraph', target: function () { return wuwei.model && wuwei.model.syncPageFromGraph; } },
       { name: 'wuwei.log.savePrevious', target: function () { return wuwei.log && wuwei.log.savePrevious; } },
       { name: 'wuwei.log.resumePrevious', target: function () { return wuwei.log && wuwei.log.resumePrevious; } },
       { name: 'wuwei.log.recordCurrent', target: function () { return wuwei.log && wuwei.log.recordCurrent; } },

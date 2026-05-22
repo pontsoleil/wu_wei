@@ -785,31 +785,20 @@ wuwei.edit = wuwei.edit || {};
     resource.storage = storage;
   }
 
-  function sanitizeContentPageRange(node) {
-    var contents, min, max;
+  function normalizeContentFirstPageNumber(node) {
+    var contents, first;
     if (!node || node.type !== 'Content' || !node.resource || !node.resource.contents) {
       return;
     }
     contents = node.resource.contents;
-    min = Number(contents.pageMin);
-    max = Number(contents.pageMax);
-    if (!Number.isFinite(min) || min < 1) {
-      delete contents.pageMin;
+    first = Number(contents.firstPageNumber);
+    if (!Number.isFinite(first) || first < 1) {
+      first = Number(contents.pageOffset);
+      first = Number.isFinite(first) && first >= 0 ? first + 1 : 1;
     }
-    else {
-      contents.pageMin = Math.floor(min);
-    }
-    if (!Number.isFinite(max) || max < 1) {
-      delete contents.pageMax;
-    }
-    else {
-      contents.pageMax = Math.floor(max);
-    }
-    if (Number.isFinite(Number(contents.pageMin)) &&
-      Number.isFinite(Number(contents.pageMax)) &&
-      Number(contents.pageMax) < Number(contents.pageMin)) {
-      contents.pageMax = contents.pageMin;
-    }
+    first = Math.max(1, Math.floor(first));
+    contents.firstPageNumber = first;
+    contents.pageOffset = first - 1;
   }
 
   function setLinkPath(link, path, value) {
@@ -1122,8 +1111,8 @@ wuwei.edit = wuwei.edit || {};
     else {
       setNodePath(node, path, value);
     }
-    if (path === 'resource.contents.pageMin' || path === 'resource.contents.pageMax') {
-      sanitizeContentPageRange(node);
+    if (path === 'resource.contents.firstPageNumber') {
+      normalizeContentFirstPageNumber(node);
     }
     if (('resource.uri' === path || 'resource.canonicalUri' === path) && node.resource) {
       if (wuwei.util && typeof wuwei.util.toStorageRelativePath === 'function' &&

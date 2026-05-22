@@ -102,12 +102,6 @@ wuwei.timeline = wuwei.timeline || {};
     return getAttachedTimelineGroupsForNode(nodeOrId).length > 0;
   }
 
-  function syncRealNodesFromGraph() {
-    if (model && typeof model.syncPageFromGraph === 'function') {
-      model.syncPageFromGraph();
-    }
-  }
-
   function ensurePageCollections(page) {
     if (!page.nodes) { page.nodes = []; }
     if (!page.links) { page.links = []; }
@@ -1531,7 +1525,6 @@ wuwei.timeline = wuwei.timeline || {};
   }
 
   function createAxisGroup(axis, videoCandidate, option) {
-    syncRealNodesFromGraph();
     var page = getCurrentPage();
     var videoNode, duration, origin, group, startNode, endNode, parentGroupId;
     option = option || {};
@@ -1611,7 +1604,6 @@ wuwei.timeline = wuwei.timeline || {};
   }
 
   function addTimePointToGroup(groupOrId, patch) {
-    syncRealNodesFromGraph();
     var page = getCurrentPage();
     var group = typeof groupOrId === 'string' ? model.findGroupById(groupOrId) : groupOrId;
     var mediaNode, currentTime, provisionalEnd, mediaStart, segmentNode;
@@ -2148,7 +2140,6 @@ wuwei.timeline = wuwei.timeline || {};
   ns.detectMediaSource = detectMediaSource;
   ns.getCurrentPage = getCurrentPage;
   ns.ensurePageCollections = ensurePageCollections;
-  ns.syncRealNodesFromGraph = syncRealNodesFromGraph;
   // ns.reRender = reRender;
   ns.formatTime = formatTime;
   ns.isAxisGroup = isAxisGroup;

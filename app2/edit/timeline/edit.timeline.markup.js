@@ -11,16 +11,13 @@ wuwei.edit.timeline.markup = (function () {
   function axisPanelHtml() {
     return [
       '<section id="edit-timeline-axis" class="edit-panel edit-timeline-panel" style="display:none;">',
-        // '<h3 id="editTimelineAxisTitle" class="edit-panel-title">' + t('Edit perspective') + '</h3>',
         '<input type="hidden" id="editTimelineAxisId">',
         '<input type="hidden" id="editTimelineAxisStart" value="0">',
         '<input type="hidden" id="editTimelineAxisEnd" value="0">',
-        // '<h4 class="edit-section-title">' + t('Source content') + '</h4>',
         '<div id="editTimelineAxisMediaRow" class="edit-field">',
           '<label for="editTimelineAxisMedia" class="w3-col s4">' + t('Media') + '</label>',
           '<input id="editTimelineAxisMedia" class="w3-col s8" type="text" readonly>',
         '</div>',
-        // '<h4 class="edit-section-title">' + t('Axis properties') + '</h4>',
         '<div id="editTimelineAxisDirectionRow" class="edit-field">',
           '<label for="editTimelineAxisDirection" class="w3-col s4">' + t('Direction') + '</label>',
           '<select id="editTimelineAxisDirection" class="w3-col s8">',
@@ -62,7 +59,6 @@ wuwei.edit.timeline.markup = (function () {
 
     return [
       '<section id="edit-timeline-point" class="edit-panel edit-timeline-panel" style="display:none;">',
-        // '<h3 class="edit-panel-title">' + t('Timeline segment') + '</h3>',
         '<input type="hidden" id="editTimelinePointId">',
         '<input type="hidden" id="editTimelinePointMediaStart" value="0">',
         '<input type="hidden" id="editTimelinePointMediaEnd" value="0">',
@@ -105,7 +101,6 @@ wuwei.edit.timeline.markup = (function () {
           body: ''
         }),
 
-        // '<h4 class="edit-section-title">' + t('Representative appearance') + '</h4>',
         wuwei.edit.style.markup.paintRows({
           includeLine: true,
           includeFontSize: false,
@@ -119,9 +114,9 @@ wuwei.edit.timeline.markup = (function () {
           '<input type="checkbox" id="applyToTimelineGroup" class="w3-col s2">',
         '</div>',
         
-        '<div class="edit-actions">',
-          '<button id="editTimelinePointDelete" type="button">' + t('Delete') + '</button>',
-        '</div>',
+        // '<div class="edit-actions">',
+        //   '<button id="editTimelinePointDelete" type="button">' + t('Delete') + '</button>',
+        // '</div>',
       '</section>'
     ].join('\n');
   }

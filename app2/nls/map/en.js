@@ -574,15 +574,13 @@ wuwei.nls.EN = {
   'Enter search string': 'Enter search string',
 
   'Office document': 'Office document',
+  'First page number': 'First page number',
   'Physical page 1 corresponds to': 'Physical page 1 corresponds to',
   'Page offset': 'Page offset',
-  'Page max': 'Page max',
-  'Page min': 'Page min',
 
   'Page number is below the valid range.': 'Page number is below the valid range.',
   'Page number is above the valid range.': 'Page number is above the valid range.',
-  'Corrected to minimum page number': 'Corrected to minimum page number',
-  'Corrected to maximum page number': 'Corrected to maximum page number',
+  'Corrected to valid page number': 'Corrected to valid page number',
 
   'Label position': 'Label position',
   'Label align': 'Label align',

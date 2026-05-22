@@ -71,12 +71,11 @@ wuwei.edit.video.markup = (function () {
       readonlyRow('resource_canonicalUri', 'Canonical URI', resource.canonicalUri || ''),
       readonlyRow('thumbnailUri', 'THUMBNAIL', resource.thumbnailUri || ''),
       '<div class="w3-row">',
-      '  <label for="resource_contents_pageOffset" class="w3-col s5">' + t('Page offset') + '</label>',
-      '  <input type="number" id="resource_contents_pageOffset" name="resource.contents.pageOffset" class="w3-col s7 edit-value" step="1" value="' + escapeHtml(contents.pageOffset == null ? '' : contents.pageOffset) + '">',
+      '  <label for="resource_contents_firstPageNumber" class="w3-col s5">' + t('First page number') + '</label>',
+      '  <input type="number" id="resource_contents_firstPageNumber" name="resource.contents.firstPageNumber" class="w3-col s7 edit-value" min="1" step="1" value="' + escapeHtml(contents.firstPageNumber == null ? '1' : contents.firstPageNumber) + '">',
       '</div>',
-      readonlyRow('resource_contents_pageCount', 'Page count', contents.pageCount == null ? '' : contents.pageCount),
-      readonlyRow('resource_contents_pageMin', 'Page min', contents.pageMin == null ? '' : contents.pageMin),
-      readonlyRow('resource_contents_pageMax', 'Page max', contents.pageMax == null ? '' : contents.pageMax)
+      readonlyRow('resource_contents_pageOffset', 'Page offset', contents.pageOffset == null ? '' : contents.pageOffset),
+      readonlyRow('resource_contents_pageCount', 'Page count', contents.pageCount == null ? '' : contents.pageCount)
     ].join('\n');
   }
 
