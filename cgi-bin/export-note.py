@@ -316,7 +316,7 @@ def add_resource_files(zf: zipfile.ZipFile, upload_root: Path, user_id: str, res
             if converted:
                 pdf_src, pdf_tmp = converted
             else:
-                fallback_def = find_file_by_role(files, "pdf-preview") or find_file_by_role(files, "preview")
+                fallback_def = find_file_by_role(files, "preview") or find_file_by_role(files, "pdf-preview")
                 fallback_resolved = resolve_resource_file(upload_root, user_id, fallback_def) if fallback_def else None
                 if fallback_resolved and Path(fallback_resolved[0]).suffix.lower() == ".pdf":
                     _, pdf_src = fallback_resolved

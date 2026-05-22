@@ -444,8 +444,8 @@ wuwei.note.v0 = (function () {
 
     addStorageFile(files, 'original', uri, mimeType, storageAreaFromUri(uri, 'upload'), resourceId);
     if (previewUri && previewUri !== uri) {
-      previewRole = /\.pdf(?:[?#].*)?$/i.test(String(previewUri || '')) ? 'pdf-preview' : 'preview';
-      addStorageFile(files, previewRole, previewUri, previewRole === 'pdf-preview' ? 'application/pdf' : '',
+      previewRole = 'preview';
+      addStorageFile(files, previewRole, previewUri, /\.pdf(?:[?#].*)?$/i.test(String(previewUri || '')) ? 'application/pdf' : '',
         storageAreaFromUri(previewUri, 'resource'), resourceId);
     }
     if (isFileThumbnail(thumbnail)) {

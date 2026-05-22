@@ -383,8 +383,8 @@ wuwei.note.v1 = (function () {
 
     addStorageFile(files, 'original', uri, mimeType, storageAreaFromUri(uri, 'upload'));
     if (previewUri && previewUri !== uri) {
-      previewRole = /\.pdf(?:[?#].*)?$/i.test(String(previewUri || '')) ? 'pdf-preview' : 'preview';
-      addStorageFile(files, previewRole, previewUri, previewRole === 'pdf-preview' ? 'application/pdf' : '',
+      previewRole = 'preview';
+      addStorageFile(files, previewRole, previewUri, /\.pdf(?:[?#].*)?$/i.test(String(previewUri || '')) ? 'application/pdf' : '',
         storageAreaFromUri(previewUri, 'resource'));
     }
     if (isFileThumbnail(thumbnail)) {

@@ -260,7 +260,7 @@
   }
 
   function getBestPath(resource) {
-    var file = findFirstFile(resource, ['original', 'preview', 'body', 'thumbnail']);
+    var file = findFirstFile(resource, ['original', 'preview', 'pdf-preview', 'body', 'thumbnail']);
     return file && file.path || resource.canonicalUri || resource.uri || '';
   }
 
@@ -275,7 +275,7 @@
   }
 
   function getBestMime(resource) {
-    var file = findFirstFile(resource, ['original', 'preview', 'body']);
+    var file = findFirstFile(resource, ['original', 'preview', 'pdf-preview', 'body']);
     return mimeBase(file && file.mimeType || resource.mimeType || '');
   }
 
@@ -555,6 +555,9 @@
       var role = toLower(out.role || 'original');
       var area = toLower(out.area || storage.area || (source === 'upload' ? 'upload' : 'resource'));
       var rawPath = out.path || out.sourcePath || out.uri || out.url || resource.uri || resource.canonicalUri || '';
+      if (role === 'pdf-preview' || role === 'pdf') {
+        role = 'preview';
+      }
       out.role = role || 'original';
       out.area = area || 'upload';
       out.path = normalizeLogicalPath(rawPath, out.area, resource);
@@ -602,6 +605,9 @@
     if (viewer.embed.uri) {
       viewer.embed.uri = normalizeLogicalPath(viewer.embed.uri, 'upload', resource);
     }
+    if (viewer.embed.sourceRole === 'pdf-preview' || viewer.embed.sourceRole === 'pdf') {
+      viewer.embed.sourceRole = 'preview';
+    }
     if (viewer.embed.thumbnailUri) {
       viewer.embed.thumbnailUri = normalizeLogicalPath(viewer.embed.thumbnailUri, 'thumbnail', resource);
     }
@@ -640,10 +646,13 @@
       contents.hasPageCount = false;
       contents.sourceRole = contents.sourceRole || 'original';
     } else if (resource.documentKind === 'office') {
-      preview = findFile(resource, 'preview');
+      preview = findFirstFile(resource, ['preview', 'pdf-preview']);
       contents.type = 'pdf';
       contents.axis.unit = 'page';
       contents.axis.nodeType = 'page';
+      if (contents.sourceRole === 'pdf-preview' || contents.sourceRole === 'pdf') {
+        contents.sourceRole = 'preview';
+      }
       contents.sourceRole = contents.sourceRole || (preview ? 'preview' : 'original');
       pageCount = finiteOr(media.pageCount, finiteOr(contents.pageCount, 0));
       contents.pageCount = pageCount;
