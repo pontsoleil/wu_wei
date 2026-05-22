@@ -15,7 +15,7 @@ Tmp="/tmp/${0##*/}.$$"
 CGIVARS="${Tmp}-cgivars"
 FOUND="${Tmp}-found"
 SEEN="${Tmp}-seen"
-trap 'rm -f "$CGIVARS" "$FOUND" "$SEEN"' EXIT HUP INT TERM
+trap 'rm -f "$CGIVARS" "$FOUND" "$SEEN" "${Tmp}-records" 2>/dev/null || true' EXIT HUP INT TERM
 
 text_response() {
   printf '%s\r\n\r\n%s\n' 'Content-Type: text/plain; charset=UTF-8' "$1"
@@ -79,10 +79,12 @@ file_rel_url() {
   uid=$1
   area=$2
   rel=$3
+  role=${4:-}
   [ -n "$area" ] || return 0
   [ -n "$rel" ] || return 0
   printf '/wu_wei2/server/load-file.cgi?area=%s&path=%s' \
     "$(url_encode "$area")" "$(url_encode "$rel")"
+  [ -n "$role" ] && printf '&role=%s' "$(url_encode "$role")"
 }
 
 dirname_json() {
@@ -101,6 +103,14 @@ dirname_json() {
 basename_json() {
   rel=$1
   printf '%s' "${rel##*/}"
+}
+
+json_file_object() {
+  file=$1
+  awk '
+    BEGIN { ORS="" }
+    { print }
+  ' "$file"
 }
 
 json_string_field() {
@@ -123,6 +133,50 @@ json_string_field() {
         out = out c
       }
       print out
+    }
+  ' "$file"
+}
+
+json_storage_field() {
+  role=$1
+  key=$2
+  file=$3
+  awk -v role="$role" -v key="$key" '
+    BEGIN { RS="[{}]"; ORS="" }
+    $0 ~ "\"role\"[ \t\r\n]*:[ \t\r\n]*\"" role "\"" {
+      pat = "\"" key "\"[ \t\r\n]*:[ \t\r\n]*\""
+      p = match($0, pat)
+      if (!p) exit
+      s = substr($0, RSTART + RLENGTH)
+      out = ""
+      esc = 0
+      for (i = 1; i <= length(s); i++) {
+        c = substr(s, i, 1)
+        if (esc) { out = out c; esc = 0; continue }
+        if (c == "\\") { out = out c; esc = 1; continue }
+        if (c == "\"") break
+        out = out c
+      }
+      print out
+      exit
+    }
+  ' "$file"
+}
+
+json_storage_number_field() {
+  role=$1
+  key=$2
+  file=$3
+  awk -v role="$role" -v key="$key" '
+    BEGIN { RS="[{}]"; ORS="" }
+    $0 ~ "\"role\"[ \t\r\n]*:[ \t\r\n]*\"" role "\"" {
+      pat = "\"" key "\"[ \t\r\n]*:[ \t\r\n]*[0-9]+"
+      p = match($0, pat)
+      if (!p) exit
+      s = substr($0, RSTART, RLENGTH)
+      sub(/^.*:[ \t\r\n]*/, "", s)
+      print s
+      exit
     }
   ' "$file"
 }
@@ -290,6 +344,92 @@ emit_upload_manifest_record() {
   printf '}'
 }
 
+emit_resource_json_record() {
+  root=$1
+  path=$2
+  uid=$3
+  rel=${path#"$root"/}
+  id=$(json_string_field id "$path")
+  [ -n "$id" ] || id=$(basename "$(dirname "$path")")
+  label=$(json_string_field label "$path")
+  title=$(json_nested_string_field identity title "$path")
+  name=${label:-$title}
+  [ -n "$name" ] || name=$id
+  kind=$(json_string_field kind "$path")
+  media_kind=$(json_nested_string_field media kind "$path")
+  [ -n "$kind" ] || kind=$media_kind
+  [ -n "$kind" ] || kind=upload
+  mime=$(json_string_field mimeType "$path")
+  media_mime=$(json_nested_string_field media mimeType "$path")
+  [ -n "$mime" ] || mime=$media_mime
+  original_path=$(json_storage_field original path "$path")
+  original_area=$(json_storage_field original area "$path")
+  original_mime=$(json_storage_field original mimeType "$path")
+  original_size=$(json_storage_number_field original size "$path")
+  thumb_path=$(json_storage_field thumbnail path "$path")
+  thumb_area=$(json_storage_field thumbnail area "$path")
+  preview_path=$(json_storage_field preview path "$path")
+  preview_area=$(json_storage_field preview area "$path")
+  [ -n "$original_area" ] || original_area=upload
+  [ -n "$thumb_area" ] || thumb_area=upload
+  [ -n "$preview_area" ] || preview_area=upload
+  [ -n "$mime" ] || mime=$original_mime
+  [ -n "$mime" ] || mime=application/octet-stream
+  [ -n "$original_size" ] || original_size=0
+  original_url=$(file_rel_url "$uid" "$original_area" "$original_path" original)
+  thumb_url=$(file_rel_url "$uid" "$thumb_area" "$thumb_path" thumbnail)
+  preview_url=$(file_rel_url "$uid" "$preview_area" "$preview_path" preview)
+  uri=$(json_string_field uri "$path")
+  canonical_uri=$(json_string_field canonicalUri "$path")
+  [ -n "$preview_url" ] || preview_url=$original_url
+  [ -n "$preview_url" ] || preview_url=$canonical_uri
+  [ -n "$preview_url" ] || preview_url=$uri
+  [ -n "$original_url" ] || original_url=$canonical_uri
+  [ -n "$original_url" ] || original_url=$uri
+  viewer=iframe
+  case "$kind:$mime" in
+    video:*|*:video/*) viewer=video ;;
+    image:*|*:image/*) viewer=image ;;
+    *:application/pdf*) viewer=pdf ;;
+    document:application/pdf*) viewer=pdf ;;
+  esac
+  date=$(resource_date_from_rel "$rel")
+  audit_created=$(json_nested_string_field audit createdAt "$path")
+  audit_modified=$(json_nested_string_field audit lastModifiedAt "$path")
+  ts=${audit_modified:-$audit_created}
+  [ -n "$ts" ] || ts=${date}T00:00:00
+
+  printf '{'
+  printf '"id":"%s",' "$(printf '%s' "$id" | json_escape)"
+  printf '"resource":'
+  json_file_object "$path"
+  printf ','
+  printf '"label":"%s",' "$(printf '%s' "$name" | json_escape)"
+  desc_json=$(json_object_field description "$path" || true)
+  [ -n "$desc_json" ] || desc_json='{}'
+  printf '"description":%s,' "$desc_json"
+  printf '"name":"%s",' "$(printf '%s' "$name" | json_escape)"
+  printf '"option":"%s",' "$(printf '%s' "$kind" | json_escape)"
+  printf '"contenttype":"%s",' "$(printf '%s' "$mime" | json_escape)"
+  printf '"uri":"%s",' "$(printf '%s' "$original_url" | json_escape)"
+  printf '"url":"%s",' "$(printf '%s' "$preview_url" | json_escape)"
+  printf '"download_url":"%s",' "$(printf '%s' "$original_url" | json_escape)"
+  printf '"preview_url":"%s",' "$(printf '%s' "$preview_url" | json_escape)"
+  printf '"thumbnail_url":"%s",' "$(printf '%s' "$thumb_url" | json_escape)"
+  printf '"value":{'
+  printf '"lastmodified":"%s",' "$(printf '%s' "$ts" | sed 's/T/ /' | json_escape)"
+  printf '"totalsize":"%s",' "$(printf '%s' "$original_size" | json_escape)"
+  printf '"viewerType":"%s",' "$viewer"
+  printf '"previewUri":"%s",' "$(printf '%s' "$preview_url" | json_escape)"
+  printf '"resource":{"uri":"%s","url":"%s"},' "$(printf '%s' "$original_url" | json_escape)" "$(printf '%s' "$original_url" | json_escape)"
+  if [ -n "$thumb_url" ]; then
+    printf '"thumbnail":{"uri":"%s"},' "$(printf '%s' "$thumb_url" | json_escape)"
+  fi
+  printf '"comment":"","file":""'
+  printf '}'
+  printf '}'
+}
+
 read_params
 session_user_id=$(is-login || true)
 req_user_id=$(nameread user_id "$CGIVARS" | strip_quotes || true)
@@ -298,9 +438,9 @@ if [ -n "${req_user_id:-}" ] && [ "$req_user_id" != "$session_user_id" ]; then
   text_response 'ERROR USER MISMATCH'
 fi
 user_id=$session_user_id
-upload_dir=$(resolve_env_path upload "$user_id" || true)
-[ -n "${upload_dir:-}" ] || text_response 'ERROR UPLOAD DIR NOT DEFINED'
-[ -d "$upload_dir" ] || mkdir -p "$upload_dir"
+resource_dir=$(resolve_env_path resource "$user_id" || true)
+[ -n "${resource_dir:-}" ] || text_response 'ERROR RESOURCE DIR NOT DEFINED'
+[ -d "$resource_dir" ] || mkdir -p "$resource_dir"
 
 year=$(nameread year "$CGIVARS" | strip_quotes || true)
 month=$(nameread month "$CGIVARS" | strip_quotes || true)
@@ -314,8 +454,8 @@ if [ -n "${year:-}" ] && [ -n "${month:-}" ]; then
 fi
 
 : > "$FOUND"
-if [ -n "${upload_dir:-}" ] && [ -d "$upload_dir" ]; then
-  find "$upload_dir" -type f -name manifest.json -printf '%T@ upload %p\n' 2>/dev/null >> "$FOUND"
+if [ -n "${resource_dir:-}" ] && [ -d "$resource_dir" ]; then
+  find "$resource_dir" -type f -name resource.json -printf '%T@ resource %p\n' 2>/dev/null >> "$FOUND"
 fi
 sort -rn "$FOUND" > "$FOUND.sorted" && mv "$FOUND.sorted" "$FOUND"
 : > "$SEEN"
@@ -334,8 +474,8 @@ records_tmp="${Tmp}-records"
 while IFS= read -r found_line; do
   source_type=$(printf '%s' "$found_line" | awk '{print $2}')
   path=$(printf '%s' "$found_line" | awk '{sub(/^[^ ]+ [^ ]+ /,""); print}')
-  [ "$source_type" = "upload" ] || continue
-  root=$upload_dir
+  [ "$source_type" = "resource" ] || continue
+  root=$resource_dir
   rel=${path#"$root"/}
   d=$(resource_date_from_rel "$rel")
   [ -n "$month_key" ] && case "$d" in "$month_key"-*) ;; *) continue ;; esac
@@ -353,7 +493,7 @@ while IFS= read -r found_line; do
   m=${d%-*}
   [ -n "$m" ] && case " $months " in *" $m "*) ;; *) months="${months}${months:+ }$m" ;; esac
   [ "$count" -gt 0 ] && printf ',' >> "$records_tmp"
-  emit_upload_manifest_record "$upload_dir" "$path" "$user_id" >> "$records_tmp"
+  emit_resource_json_record "$resource_dir" "$path" "$user_id" >> "$records_tmp"
   count=$((count + 1))
 done < "$FOUND"
 

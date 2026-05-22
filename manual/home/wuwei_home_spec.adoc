@@ -1,150 +1,136 @@
-= WuWei ホーム画面仕様
+= 仕様署名
+三分一信之（三分一技術士事務所）
+:revnumber: ver 2.0
+:revdate: 2026-05-22
+:revremark:
+:version-label!:
+:doctype: book
 :toc:
 :toclevels: 3
 :sectnums:
 
-この文書は、WuWei ホーム画面の現行仕様を定義します。
+== WuWei ホーム画面仕様
 
-== 目的
-
-ホーム画面は、登録済みコンテンツを探し、選択し、編集中のノートへ追加するための画面です。
-
-対象コンテンツは次の通りです。
-
-* アップロード済みファイル
-* PDF
-* Office 文書
-* 画像
-* 今後登録される Web ページ等の外部コンテンツ
+この文書は、WuWei ホーム画面の現行仕様を定義する。
+ホーム画面は Resource library を一覧し、選択した Resource を現在編集中のノートへ追加、または選択 Resource だけを含む新規ノートを作成する入口である。
 
 == 正本データ
 
-ホーム画面のコンテンツギャラリーは、次の manifest を正本として読み込みます。
+ホーム画面と Resource 検索の正本は、次の `resource.json` である。
 
 [source,text]
 ----
-data/{user_uuid}/upload/YYYY/MM/DD/{upload_uuid}/manifest.json
+data/{user_uuid}/resource/YYYY/MM/DD/{resource_uuid}/resource.json
 ----
 
-`resource/YYYY/MM/DD/{resource_uuid}/resource.json` だけを持つ旧形式データは表示対象外です。
+`upload/YYYY/MM/DD/{upload_uuid}/manifest.json` はアップロード実体の管理用マニフェストであり、ホーム一覧の主入力ではない。
+`resource.json` は `storage.files[]` と `storage.manifest` により、実体ファイル、サムネイル、プレビュー PDF を `upload/` 側へ参照する。
 
-== 表示カード
+== Resource card 生成
 
-各カードは `manifest.json` から次の情報を作成します。
+`list-resource.cgi` と `search-resource.cgi` は `resource/**/resource.json` を走査し、ホーム画面用の card JSON に変換する。
 
-[cols="1,2"]
+主な変換は次の通りである。
+
+[cols="1,3", options="header"]
 |===
-|表示項目 |取得元
+|カード項目 |取得元
 
-|タイトル
-|`title` または `original.display_name`
+|`id`
+|`resource.id`。未定義の場合は resource ディレクトリ名。
 
-|登録日時
-|`created_at`
+|`label`, `name`
+|`resource.label`、`resource.identity.title`、`resource.id` の順に使用する。
 
-|メディア種別
-|`kind`
+|`description`
+|`resource.description`。
 
-|サムネイル
-|`thumbnail.file`
+|`contenttype`
+|`resource.media.mimeType`、`resource.mimeType`、`storage.files[role=original].mimeType`。
 
-|プレビュー
-|`preview.file`
+|`thumbnail_url`
+|`storage.files[role=thumbnail]` から `load-file` URL を生成する。
 
-|元ファイル
-|`original.file`
+|`preview_url`
+|`storage.files[role=preview]` があればそれを使用する。なければ original または外部 URI を使用する。
+
+|`download_url`
+|`storage.files[role=original]` または外部 URI。
+
+|`value.resource`
+|Content node に埋め込む Resource 参照。
 |===
 
-サムネイル URL は `load-file.cgi` 経由で生成します。
+== ファイル参照方式
+
+実体ファイルの配信 URL は、常に `area + path + role` 方式で生成する。
 
 [source,text]
 ----
-area=upload
-path=YYYY/MM/DD/{upload_uuid}/thumbnail.jpg
+/wu_wei2/server/load-file.cgi?area=upload&path=YYYY/MM/DD/{upload_uuid}/thumbnail.jpg&role=thumbnail
 ----
 
-サムネイルが存在しない場合は、壊れた画像を出さず、種別アイコンにフォールバックします。
+`resource_id` を直接指定してファイルを解決する方式は使用しない。
+`resource.json` には OS 絶対パスや公開 URL を保存せず、論理パスを保存する。
 
 == 検索条件
 
-ホーム画面では、日付範囲とキーワードでコンテンツを絞り込みます。
+ホーム画面では、次の条件で `resource.json` を絞り込む。
 
-[cols="1,2"]
+[cols="1,2", options="header"]
 |===
 |条件 |意味
 
-|`year`
-|年単位の絞り込み
-
-|`month`
-|月単位の絞り込み
+|`year`, `month`
+|登録年月で絞り込む。
 
 |`date`
-|日単位の絞り込み
+|登録日で絞り込む。
 
-|`start_date`
-|開始日
-
-|`end_date`
-|終了日
+|`start_date`, `end_date`
+|登録日の範囲で絞り込む。
 
 |`term`
-|タイトル、ファイル名、説明、コメントのキーワード
+|Resource の title、label、URI、説明、ファイル名などを対象にしたキーワード検索。
 |===
 
-カレンダーは `upload/**/manifest.json` が存在する日付を登録日として扱います。
+登録日は、原則として `resource/YYYY/MM/DD/` のパス日付、または `resource.audit.createdAt` / `resource.audit.lastModifiedAt` から判断する。
 
 == CGI
 
-ホーム画面は次の CGI を使います。
-
-[cols="1,2"]
+[cols="1,3", options="header"]
 |===
 |CGI |役割
 
 |`list-resource.cgi`
-|manifest backed resource を日付条件で一覧します。
+|`resource/**/resource.json` を日付条件で一覧する。
 
 |`search-resource.cgi`
-|日付範囲とキーワードで resource を検索します。
-
-|`find-resource.cgi`
-|`search-resource.cgi` と同じ検索仕様の互換入口です。
+|`list-resource.cgi` と同じ実装を使用し、日付範囲とキーワードで Resource を検索する。
 
 |`load-file.cgi`
-|サムネイル、プレビュー、元ファイルを認可付きで配信します。
+|`area`、`path`、`role` を検証し、認可済みファイルを配信する。
 
 |`update-resource.cgi`
-|コメント等、resource に付随する編集情報を更新します。
+|コメント、説明、ホーム表示メタデータなど Resource JSON の編集情報を更新する。
 |===
-
-`find-resource.cgi` と `search-resource.cgi` は同じ条件体系に統合します。
 
 == ノートへの追加
 
-選択したコンテンツをノートへ追加する場合、ファイルはコピーしません。
+ホーム画面から Resource をノートへ追加する場合、アップロード済みファイル本体はコピーしない。
+ノート JSON の Content node には、Resource の compact 定義と `storage.files[]` の参照を保存する。
 
-ノート側には次を追加します。
+== 表示対象外
 
-* `resources[]` にアップロードコンテンツへの参照
-* `pages[].nodes[]` に表示ノード
-* ノードから `resources[]` への `resourceRef`
+次のデータはホーム画面の Resource library には表示しない。
 
-参照先は常に `area=upload` の manifest backed resource です。
+* `resource.json` が存在しないディレクトリ
+* 不正な JSON の `resource.json`
+* `home.hidden` または `hiddenFromHome` が true の Resource
+* `note/new_note/resource/` に一時的に残った旧スナップショット
 
-== 新規ノート作成
+== Office 文書と preview
 
-選択したコンテンツだけを含む新規ノートを作成できます。
-
-この場合も、ファイル本体は `upload/` に置いたまま、ノート JSON には参照だけを保存します。
-
-== 旧形式データ
-
-次のデータはホーム画面には表示しません。
-
-* `manifest.json` がないアップロードディレクトリ
-* `resource.json` のみの旧リソース
-* `note/new_note/resource/` にだけ存在するサムネイル
-* 途中で保存に失敗した空ディレクトリ
-
-今後の実装は、旧形式救済よりも manifest backed resource の整合性を優先します。
+Office 文書は、アップロード時に `preview.pdf` が生成される場合がある。
+ホーム画面、情報ペイン、Contents axis は `storage.files[role=preview]` を参照する。
+旧データの `pdf-preview` role は読み込み互換だけで扱い、新規生成では `preview` に統一する。

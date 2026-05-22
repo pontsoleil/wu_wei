@@ -1,62 +1,73 @@
-= WuWei CGI 役割仕様
+= 仕様署名
+三分一信之（三分一技術士事務所）
+:revnumber: ver 2.0
+:revdate: 2026-05-22
+:revremark:
+:version-label!:
+:doctype: book
 :toc:
 :toclevels: 3
 :sectnums:
 
-この文書は、ノートとリソースを扱う CGI の役割分担を定義します。
+== WuWei CGI 役割仕様
+
+この文書は、ノート、Resource library、アップロード実体を扱う CGI の役割分担を定義する。
 
 == 基本方針
 
-CGI はシェルスクリプトを中心に保守します。
-
-通常のノート保存では、アップロード済みファイルをノート配下へコピーしません。保存するのはノート JSON と参照です。
+* ノート保存では、アップロード済みファイル本体をノート配下へコピーしない。
+* ノートは `note/YYYY/MM/DD/{note_uuid}/note.json` に保存する。
+* Resource library の正本は `resource/YYYY/MM/DD/{resource_uuid}/resource.json` とする。
+* アップロード実体は `upload/YYYY/MM/DD/{upload_uuid}/` に保存し、`manifest.json`、`thumbnail.jpg`、必要に応じて `preview.pdf` を置く。
+* ファイル配信は `load-file.cgi?area=...&path=...&role=...` 方式で行う。
+* `resource_id` だけでファイルを解決する配信方式は使用しない。
 
 == CGI 一覧
 
-[cols="1,2"]
+[cols="1,3", options="header"]
 |===
 |CGI |役割
 
 |`upload.cgi`
-|アップロードファイルを `upload/YYYY/MM/DD/{upload_uuid}/` に保存し、`manifest.json`、`thumbnail.jpg`、必要に応じて `preview.pdf` を作成します。
+|アップロードファイルを `upload/YYYY/MM/DD/{upload_uuid}/` に保存し、upload manifest と Resource library 用 `resource.json` を作成する。
+
+|`upload-video.cgi`
+|動画ファイルを upload bundle として保存し、動画 Resource の `resource.json` を作成する。
 
 |`list-resource.cgi`
-|`upload/**/manifest.json` を読み、ホーム画面用の一覧 JSON を返します。
+|`resource/**/resource.json` を走査し、ホーム画面用の一覧 JSON を返す。
 
 |`search-resource.cgi`
-|日付範囲とキーワードで `upload/**/manifest.json` を検索します。
-
-|`find-resource.cgi`
-|`search-resource.cgi` と同じ仕様の互換入口です。
+|`list-resource.cgi` と同じ実装を使い、日付範囲とキーワードで Resource を検索する。
 
 |`update-resource.cgi`
-|コメント、説明、表示用メタデータを更新します。ファイル本体は移動しません。
+|コメント、説明、ホーム表示状態など、Resource JSON の編集情報を更新する。ファイル本体は移動しない。
 
 |`save-note.cgi`
-|ノート JSON を `note/YYYY/MM/DD/{note_uuid}/note.txt` に保存します。resource は参照保存です。
+|ノート JSON を `note/YYYY/MM/DD/{note_uuid}/note.json` に保存する。アップロード実体は参照保存する。
 
 |`load-note.cgi`
-|保存済みノート JSON を読み込みます。
+|保存済みの `note.json` を読み込み、ノート JSON を返す。
 
 |`list-note.cgi`
-|`note.txt` が存在する保存済みノートだけを一覧します。`ERROR NOTE NOT FOUND` になるディレクトリは表示しません。
+|`note.json` が存在し、読み込み可能なノートだけを一覧する。`ERROR NOTE NOT FOUND` になる空ディレクトリは表示しない。
 
 |`remove-note.cgi`
-|ノートを削除または trash へ移動します。参照先 upload resource は削除しません。
+|ノートを削除または trash へ移動する。参照元の upload resource は削除しない。
 
 |`export-note.cgi`
-|ノート JSON が参照する upload resource を収集し、ZIP 化します。
+|`note.json` と、そのノートが参照する upload/resource bundle を収集して ZIP 化する。
 
 |`import-note.cgi`
-|ZIP からノート JSON と upload resource を復元します。
+|ZIP から `note.json` と upload/resource bundle を復元し、復元後の note JSON を返す。
 
 |`load-file.cgi`
-|`area` と `path` を検証し、認可済みファイルを配信します。
+|`area`、`path`、`role` を検証し、認可済みファイルを配信する。
 |===
 
 == upload.cgi
 
-`upload.cgi` はアップロードコンテンツの正本ディレクトリを作成します。
+`upload.cgi` は、アップロード実体と Resource library の両方を作成する。
 
 [source,text]
 ----
@@ -65,81 +76,63 @@ data/{user_uuid}/upload/YYYY/MM/DD/{upload_uuid}/
   original-file.ext
   thumbnail.jpg
   preview.pdf
+
+data/{user_uuid}/resource/YYYY/MM/DD/{resource_uuid}/
+  resource.json
 ----
 
-`manifest.json` には元ファイルの SHA-256 を `original.sha256` として保存します。
-
-Office 文書では LibreOffice を使って `preview.pdf` を生成し、その先頭ページから `thumbnail.jpg` を作成します。
-
-== save-note.cgi
-
-`save-note.cgi` はノート保存の責務だけを持ちます。
-
-保存対象は次の通りです。
-
-* ノート ID
-* ノート名
-* 説明
-* ページ
-* グループ
-* ノード
-* リンク
-* resource 参照
-* ノートサムネイル
-
-アップロードファイル本体、アップロードサムネイル、Office preview PDF はコピーしません。
+`manifest.json` は upload bundle 内の実体ファイル管理用である。
+`resource.json` はホーム画面、検索、Content node 作成で使用する正本 Resource である。
 
 == list-resource.cgi / search-resource.cgi
 
-リソース一覧は manifest backed resource だけを返します。
+リソース一覧と検索は、次の `resource.json` だけを主入力にする。
 
 [source,text]
 ----
-data/{user_uuid}/upload/YYYY/MM/DD/{upload_uuid}/manifest.json
+data/{user_uuid}/resource/YYYY/MM/DD/{resource_uuid}/resource.json
 ----
 
-旧形式の `resource.json` だけを持つデータは返しません。
-
-== list-note.cgi
-
-ノート一覧は `note.txt` が存在し、読み込み可能なノートだけを返します。
-
-空ディレクトリ、保存失敗ディレクトリ、`new_note` は通常一覧に含めません。
-
-救済表示が必要な場合は、明示的なオプションでのみ `new_note` を対象にします。
-
-== export-note.cgi
-
-ノートダウンロードでは、次を ZIP 化します。
-
-* `note/YYYY/MM/DD/{note_uuid}/note.txt`
-* ノートサムネイル
-* `note.txt` が参照する `upload/YYYY/MM/DD/{upload_uuid}/` ディレクトリ
-
-通常保存時にコピーしない代わりに、ダウンロード時に参照先を収集します。
-
-== import-note.cgi
-
-ノートアップロードでは、ZIP 内の upload resource を復元してから note JSON を保存します。
-
-同じ SHA-256 の upload resource が既に存在する場合は、既存ディレクトリを再利用できます。
+`upload/**/manifest.json` は直接一覧しない。
+manifest は `resource.json` の `storage.manifest` から参照される upload bundle メタデータである。
 
 == load-file.cgi
 
-`load-file.cgi` は、ブラウザから `data/` へ直接アクセスさせないための認可付き配信入口です。
-
-指定形式は次の通りです。
+`load-file.cgi` の指定形式は次の通りである。
 
 [source,text]
 ----
-load-file.cgi?area=upload&path=YYYY/MM/DD/{upload_uuid}/thumbnail.jpg&user_id={user_uuid}
+load-file.cgi?area=upload&path=YYYY/MM/DD/{upload_uuid}/thumbnail.jpg&role=thumbnail
+load-file.cgi?area=upload&path=YYYY/MM/DD/{upload_uuid}/preview.pdf&role=preview
+load-file.cgi?area=upload&path=YYYY/MM/DD/{upload_uuid}/original.pdf&role=original
 ----
 
-`area` は許可された値だけを受け付けます。
+`area` は、許可された論理領域だけを受け付ける。
+`path` は、その領域内の相対パスである。
+`role` は、upload path index または manifest を通じた role 解決に使用できる。
 
-* `upload`
-* `note`
-* `thumbnail`
-* `resource`（旧互換が必要な場合のみ）
+== save-note.cgi
 
-Linux/nginx では `X-Accel-Redirect` により内部パスから配信します。
+`save-note.cgi` は、ノートの構造だけを保存する。
+保存対象は次の通りである。
+
+* ノート ID、名前、説明
+* ページ
+* ノード
+* リンク
+* グループ
+* Content node 内の compact Resource
+* ノートサムネイル
+
+アップロード済みファイル本体、アップロードサムネイル、Office preview PDF はコピーしない。
+ノート JSON には `storage.files[]` の論理参照だけを保存する。
+
+== export-note.cgi / import-note.cgi
+
+ノートのダウンロードでは、`note.json` が参照する upload/resource bundle を収集する。
+ノートのアップロードでは、ZIP 内の bundle を復元し、必要に応じて復元先の論理パスへ参照を調整する。
+
+== 旧形式
+
+旧 `note.txt`、旧 `pdf-preview` role、旧 note resource snapshot は、読み込み互換または移行確認の対象である。
+新規保存、新規アップロード、新規一覧では使用しない。
