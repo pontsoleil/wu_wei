@@ -899,6 +899,8 @@ def main():
                         "nodeType": "page",
                     },
                     "pageCount": page_count,
+                    "firstPageNumber": 1,
+                    "pageOffset": 0,
                     "sourceRole": "preview" if office_pdf and office_pdf.exists() else "original",
                 }
             }

@@ -452,7 +452,7 @@ thumb_sha=""
 [ -f "$thumb_file" ] && thumb_sha="$(sha256sum "$thumb_file" 2>/dev/null | awk '{print $1}')"
 preview_sha=""
 [ -n "$preview_pdf" ] && [ -f "$preview_pdf" ] && preview_sha="$(sha256sum "$preview_pdf" 2>/dev/null | awk '{print $1}')"
-media_kind="general"
+media_kind="other"
 case "$content_type" in
   image/*) media_kind="image" ;;
   video/*) media_kind="video" ;;
@@ -460,6 +460,21 @@ case "$content_type" in
   text/*|application/pdf*) media_kind="document" ;;
 esac
 if is_office_file "$filename"; then media_kind="document"; fi
+lower_filename="$(printf '%s' "$filename" | tr '[:upper:]' '[:lower:]')"
+document_kind=""
+video_kind=""
+case "$content_type" in
+  application/pdf*) document_kind="pdf" ;;
+  text/html*) document_kind="html" ;;
+  text/*) document_kind="text" ;;
+esac
+if is_office_file "$filename"; then
+  document_kind="office"
+fi
+if [ "$media_kind" = "video" ]; then
+  video_kind="${lower_filename##*.}"
+  [ "$video_kind" = "$lower_filename" ] && video_kind=""
+fi
 
 cat >"$manifest_file" <<JSON || die_json "ERROR: cannot write manifest file $manifest_file"
 {
@@ -497,6 +512,10 @@ cat >"$resource_file" <<JSON || die_json "ERROR: cannot write resource file $res
   "id": "$(json_escape "$uuid")",
   "type": "Resource",
   "source": "upload",
+  "kind": "$(json_escape "$media_kind")",
+  "documentKind": "$(json_escape "$document_kind")",
+  "videoKind": "$(json_escape "$video_kind")",
+  "mimeType": "$(json_escape "$content_type")",
   "uri": "$(json_escape "$upload_relpath")",
   "canonicalUri": "$(json_escape "$upload_relpath")",
   "origin": {
@@ -515,7 +534,7 @@ cat >"$resource_file" <<JSON || die_json "ERROR: cannot write resource file $res
     "downloadable": true,
     "duration": null,
     "pageCount": $(if [ "${page_count:-0}" -gt 0 ]; then printf '%s' "$page_count"; else printf 'null'; fi)
-  }$(if [ "${page_count:-0}" -gt 0 ]; then printf ',\n  "contents": {\n    "type": "pdf",\n    "axis": {\n      "unit": "page",\n      "nodeType": "page"\n    },\n    "pageCount": %s,\n    "sourceRole": "%s"\n  }' "$page_count" "$(json_escape "$contents_source_role")"; fi),
+  }$(if [ "${page_count:-0}" -gt 0 ]; then printf ',\n  "contents": {\n    "type": "pdf",\n    "axis": {\n      "unit": "page",\n      "nodeType": "page"\n    },\n    "pageCount": %s,\n    "firstPageNumber": 1,\n    "pageOffset": 0,\n    "sourceRole": "%s"\n  }' "$page_count" "$(json_escape "$contents_source_role")"; fi),
   "viewer": {
     "supportedModes": ["infoPane", "newTab", "newWindow", "download"],
     "defaultMode": "infoPane",

@@ -479,6 +479,7 @@ def main():
     duration = ffprobe_duration(dest_file)
 
     thumbnail_uri = None
+    thumbnail_logical_path = ""
     thumbnail_size = None
 
     if (content_type or "").startswith("video/"):
@@ -541,7 +542,7 @@ def main():
             "downloadable": True,
             "duration": float(duration) if duration else None,
         },
-        "thumbnailUri": thumbnail_uri or "",
+        "thumbnailUri": thumbnail_logical_path or "",
         "viewer": {
             "supportedModes": ["infoPane", "newTab", "newWindow", "download", "player"],
             "defaultMode": "infoPane",

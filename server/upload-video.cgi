@@ -270,11 +270,18 @@ MANIFEST
   "manifest": "$(json_escape "$year/$month/$day/$upload_file_uuid/manifest.json")"
 }
 INDEX
+  lower_filename="$(printf '%s' "$filename" | tr '[:upper:]' '[:lower:]')"
+  video_kind="${lower_filename##*.}"
+  [ "$video_kind" = "$lower_filename" ] && video_kind=""
   cat <<JSON
 {
   "id": "$(json_escape "$uuid")",
   "type": "Resource",
   "source": "upload",
+  "kind": "video",
+  "documentKind": "",
+  "videoKind": "$(json_escape "$video_kind")",
+  "mimeType": "$(json_escape "${contenttype:-application/octet-stream}")",
   "uri": "$(json_escape "$upload_relpath")",
   "canonicalUri": "$(json_escape "$upload_relpath")",
   "origin": {
@@ -293,6 +300,7 @@ INDEX
     "downloadable": true,
     "duration": $(if [ -n "${duration:-}" ]; then printf '%s' "$duration"; else printf 'null'; fi)
   },
+  "thumbnailUri": "$(if [ -f "$thumb_file" ]; then json_escape "$thumb_relpath"; fi)",
   "viewer": {
     "supportedModes": ["infoPane", "newTab", "newWindow", "download", "player"],
     "defaultMode": "infoPane",
