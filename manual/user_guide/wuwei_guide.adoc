@@ -1,11 +1,15 @@
 = WuWei 利用ガイド
+三分一信之（三分一技術士事務所）
+:revnumber: ver 2.0
+:revdate: 2026-05-22
+:revremark:
+:version-label!:
 :doctype: book
-:toc: left
+:toc:
 :toclevels: 3
 :sectnums:
-:lang: ja
 
-このガイドは、2026-05-01 時点の WuWei の利用方法とデータの扱いを説明します。
+このガイドは、2026-05-22 時点の WuWei の利用方法とデータの扱いを説明します。
 
 == WuWei の考え方
 
