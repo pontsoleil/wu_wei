@@ -8,6 +8,7 @@
 :toc:
 :toclevels: 3
 :sectnums:
+:encoding: utf-8
 
 == WuWei CGI 役割仕様
 

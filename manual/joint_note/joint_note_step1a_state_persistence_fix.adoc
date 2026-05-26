@@ -1,0 +1,89 @@
+= WuWei Joint Note Step 1A 状態永続化補正
+三分一信之（三分一技術士事務所）
+:revnumber: ver 1.0
+:revdate: 2026-05-25
+:revremark:
+:version-label!:
+:doctype: book
+:toc:
+:toclevels: 3
+:sectnums:
+
+== Codexレビューへの対応
+
+Step 1A の残課題として指摘された、`jointNoteState` / `note_scope` / `origin.type` / `origin.source` の永続化を補正する。
+
+== 状態項目
+
+[cols="30%,70%",options="header"]
+|===
+|項目 |意味
+
+|`jointNoteState`
+|`own`、`imported`、`team` のいずれか。旧 `collabNoteState` は互換入力としてだけ扱う。
+
+|`note_scope`
+|`personal` 又は `team`。
+
+|`origin.type`
+|ノートの由来。例: `import`、`team`、`personal-copy`。
+
+|`origin.source`
+|由来の具体的な取得元。例: `export-package`、`team-note`。
+|===
+
+== 判定規則
+
+`wuwei.joint.isImportedNote()` は次を見る。
+
+* `jointNoteState == "imported"`
+* `origin.type == "import"`
+* `origin.source == "export-package"`
+* `exchange.imported` / `exchange.mode` / `exchange.source`
+
+`wuwei.joint.isTeamNote()` は次を見る。
+
+* `jointNoteState == "team"`
+* `note_scope == "team"`
+* `joint.enabled`
+* `origin.type == "team"`
+* `origin.source == "team-note"`
+* `team_id`
+
+ただし、`jointNoteState` が `own` 又は `imported` の場合は、`origin.source == "team-note"` が残っていても active team note とは判定しない。
+
+== 保存規則
+
+通常保存及びエキスポートでは、次の note-level 状態を保存する。
+
+[source,json]
+----
+{
+  "jointNoteState": "imported",
+  "note_scope": "personal",
+  "origin": {
+    "type": "import",
+    "source": "export-package"
+  }
+}
+----
+
+== チームノートを個人ノートとして保存する場合
+
+active team note を保存する場合は、保存先では個人ノートとして扱う。
+
+[source,json]
+----
+{
+  "jointNoteState": "own",
+  "note_scope": "personal",
+  "origin": {
+    "type": "personal-copy",
+    "source": "team-note",
+    "sourceNoteId": "...",
+    "sourceTeamId": "..."
+  }
+}
+----
+
+この場合、元の `createdBy` / `createdAt` は保持し、`lastModifiedBy` / `lastModifiedAt` を保存したユーザと保存時刻に更新する。

@@ -3147,9 +3147,10 @@ wuwei.util = (function () {
       }
     }
 
-    push(resource && resource.canonicalUri);
-    push(resource && resource.uri);
-    push(resource && resource.title);
+    push(resource && resource.original && resource.original.url);
+    push(resource && resource.original && resource.original.canonicalUrl);
+    push(resource && resource.canonicalUri); // legacy v0/v1 resource
+    push(resource && resource.uri); // legacy v0/v1 resource
 
     for (i = 0; i < files.length; i += 1) {
       file = files[i] || {};
@@ -4294,7 +4295,8 @@ wuwei.util = (function () {
 
     push(getResourceFileUri(resource, 'preview', node));
     push(getResourceFileUri(resource, 'pdf-preview', node));
-    if (isPdfPreviewUri(resource && resource.uri)) { push(resource.uri); }
+    if (isPdfPreviewUri(resource && resource.original && resource.original.url)) { push(resource.original.url); }
+    if (isPdfPreviewUri(resource && resource.uri)) { push(resource.uri); } // legacy v0/v1 resource
 
     if (isOfficeResourceObject(resource)) {
       candidates = candidates.concat(derivePdfPreviewCandidatesFromOfficeOriginal(resource, node));
@@ -4324,8 +4326,9 @@ wuwei.util = (function () {
       getResourceFileUri(resource, 'preview', node) ||
       getResourceFileUri(resource, 'pdf-preview', node) ||
       getResourceFileUri(resource, 'thumbnail', node) ||
-      resource.uri ||
-      resource.canonicalUri ||
+      resource.original && (resource.original.url || resource.original.canonicalUrl) ||
+      resource.uri || // legacy v0/v1 resource
+      resource.canonicalUri || // legacy v0/v1 resource
       getResourceFileUri(resource, 'original', node) ||
       ''
     );
@@ -4336,8 +4339,9 @@ wuwei.util = (function () {
     var resource = getResource(node);
     return String(
       getResourceFileUri(resource, 'original', node) ||
-      resource.canonicalUri ||
-      resource.uri ||
+      resource.original && (resource.original.url || resource.original.canonicalUrl) ||
+      resource.canonicalUri || // legacy v0/v1 resource
+      resource.uri || // legacy v0/v1 resource
       ''
     );
   };

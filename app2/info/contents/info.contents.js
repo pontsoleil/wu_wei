@@ -19,7 +19,11 @@ wuwei.info.contents = wuwei.info.contents || {};
     var editPane = document.getElementById('edit');
     var hasHeader;
 
-    if (editPane) {
+    if (wuwei.info && typeof wuwei.info.closeEditPaneForInfo === 'function') {
+      wuwei.info.closeEditPaneForInfo();
+    }
+    else if (editPane) {
+      editPane.innerHTML = '';
       editPane.style.display = 'none';
     }
     if (!infoPane) {
@@ -118,7 +122,7 @@ wuwei.info.contents = wuwei.info.contents || {};
 
   function getResourceTextForTypeCheck(node) {
     var resource = (node && node.resource && typeof node.resource === 'object') ? node.resource : {};
-    var contentsMeta = (resource.contents && typeof resource.contents === 'object') ? resource.contents : {};
+    var contentsMeta = (resource.viewpoint && typeof resource.viewpoint === 'object') ? resource.viewpoint : ((resource.contents && typeof resource.contents === 'object') ? resource.contents : {});
     var storageFiles = (resource.storage && Array.isArray(resource.storage.files)) ? resource.storage.files : [];
     var textParts = [
       resource.mimeType,

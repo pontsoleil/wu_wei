@@ -32,6 +32,15 @@ wuwei.file = (function () {
     el.parentNode.removeChild(el);
   }
 
+
+  function getResourceAction(name) {
+    if (util && typeof util.getServerUrl === 'function') {
+      return util.getServerUrl(name);
+    }
+    // Fallback for very old startup orders. New code should use util.getServerUrl().
+    return `server/${name}.cgi`;
+  }
+
   /** File */
   class File {
     constructor(param) {
@@ -88,7 +97,7 @@ wuwei.file = (function () {
     if (date) {
       data.date = date;
     }
-    return ajaxRequest('server/list-resource.cgi', data, 'POST', 30000);
+    return ajaxRequest(getResourceAction('list-resource'), data, 'POST', 30000);
   }
 
   /**
@@ -127,7 +136,7 @@ wuwei.file = (function () {
       count: count || 12,
       term: term
     };
-    return ajaxRequest('server/search-resource.cgi', data, 'POST', 30000);
+    return ajaxRequest(getResourceAction('search-resource'), data, 'POST', 30000);
   }
   /**
    * 
@@ -144,7 +153,7 @@ wuwei.file = (function () {
       token: token,
       id: file_id
     };
-    return ajaxRequest('server/remove-resource.cgi', data, 'POST', 5000);
+    return ajaxRequest(getResourceAction('remove-resource'), data, 'POST', 5000);
   }
 
   function initModule() { }

@@ -1,7 +1,7 @@
 #!/bin/sh
 # import-note.cgi
 # Standalone shell CGI for importing a WuWei note package.
-# Uses only shell, sed, awk, unzip, cp, mkdir and optional sha256sum.
+# Uses shell, sed, awk, unzip, cp, mkdir, python3 and optional sha256sum.
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "${SCRIPT_FILENAME:-$0}")" && pwd) || exit 1
 cd "$SCRIPT_DIR" || exit 1
@@ -417,9 +417,57 @@ rewrite_note_for_import() {
   uid=$1
   src=$2
   dst=$3
-  sed -E \
-    -e "s#\"dir_name\"[[:space:]]*:[[:space:]]*\"data/[^/\"]+/(upload|content|thumbnail|resource|note)#\"dir_name\":\"data/${uid}/\\1#g" \
-    "$src" > "$dst"
+  python3 - "$uid" "$src" "$dst" <<'PY'
+import json
+import sys
+from datetime import datetime, timezone
+
+uid, src, dst = sys.argv[1:4]
+timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+with open(src, "r", encoding="utf-8") as f:
+    note = json.load(f)
+
+def walk(value):
+    if isinstance(value, dict):
+        yield value
+        for child in value.values():
+            yield from walk(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from walk(child)
+
+for obj in walk(note):
+    dir_name = obj.get("dir_name")
+    if isinstance(dir_name, str):
+        parts = dir_name.replace("\\", "/").split("/")
+        if len(parts) >= 4 and parts[0] == "data" and parts[2] in {"upload", "content", "thumbnail", "resource", "note"}:
+            parts[1] = uid
+            obj["dir_name"] = "/".join(parts)
+
+origin = note.get("origin") if isinstance(note.get("origin"), dict) else {}
+origin = dict(origin)
+origin["type"] = "import"
+origin["source"] = "export-package"
+note["origin"] = origin
+note["jointNoteState"] = "imported"
+note.pop("collabNoteState", None)
+note["note_scope"] = "personal"
+note["team_id"] = ""
+
+exchange = note.get("exchange") if isinstance(note.get("exchange"), dict) else {}
+exchange = dict(exchange)
+exchange["imported"] = True
+exchange["mode"] = "imported"
+exchange["source"] = "import"
+exchange["importedBy"] = exchange.get("importedBy") or uid
+exchange["importedAt"] = exchange.get("importedAt") or timestamp
+note["exchange"] = exchange
+
+with open(dst, "w", encoding="utf-8", newline="\n") as f:
+    json.dump(note, f, ensure_ascii=False, separators=(",", ":"))
+    f.write("\n")
+PY
 }
 
 parse_request

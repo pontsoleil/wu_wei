@@ -20,10 +20,14 @@
 ----
 sudo yum update -y
 sudo yum install -y git nginx fcgiwrap python3
-sudo yum install -y ImageMagick poppler-utils
+sudo yum install -y ImageMagick poppler-utils zip unzip file
+# Office preview PDF を生成する場合
+sudo yum install -y libreoffice
 ----
 
-PDF のプレビュー生成や画像処理を使用する場合は `ImageMagick` と `poppler-utils` を使用する。
+PDF のページ数取得、サムネイル生成、画像処理では `poppler-utils` と `ImageMagick` を使用する。
+
+Office 文書から `preview.pdf` を生成する場合は、`soffice` または `libreoffice` コマンドが必要である。Amazon Linux 2 のパッケージ状況によっては、OS 標準パッケージではなく LibreOffice の RPM または別環境での変換を検討する。
 
 動画サムネイルや動画情報取得を使用する場合は `ffmpeg` と `ffprobe` が必要である。導入方法は <<ffmpeg_ffprobe>> を参照する。
 
@@ -43,6 +47,30 @@ sudo chown -R ec2-user:ec2-user /var/www/wu_wei2
 ----
 cd /var/www/wu_wei2
 ----
+
+
+== 現在の保存構造
+
+現在の実装では、アップロード実体、Resource library entry、ノートを分けて保存する。
+
+[source,text]
+----
+data/{user_uuid}/upload/YYYY/MM/DD/{upload_uuid}/
+  manifest.json
+  {original_file}
+  thumbnail.jpg
+  preview.pdf
+
+data/{user_uuid}/resource/YYYY/MM/DD/{resource_uuid}/
+  resource.json
+
+data/{user_uuid}/note/YYYY/MM/DD/{note_uuid}/
+  note.json
+----
+
+ホーム画面とリソース検索は `resource/**/resource.json` を読み込む。`upload/**/manifest.json` はアップロード bundle のメタデータであり、ホーム一覧の主入力ではない。
+
+ノート保存では、通常、Content ノード内に compact resource を保持し、top-level `resources[]` は互換読み込み用として残る。
 
 == データディレクトリの作成
 
@@ -185,6 +213,15 @@ server {
     root /var/www/wu_wei2;
     index index.html;
 
+    location /wu_wei2/data/ {
+        deny all;
+    }
+
+    location /_wuwei2_data/ {
+        internal;
+        alias /var/www/wu_wei2/data/;
+    }
+
     location /wu_wei2/ {
         alias /var/www/wu_wei2/;
         index index.html;
@@ -201,6 +238,8 @@ server {
 ----
 
 `server_name` は利用するドメインまたは EC2 のホスト名に変更する。IP アドレスで確認する場合は、一時的に `_` を指定してもよい。
+
+`/wu_wei2/data/` は直接アクセスを禁止する。`load-file.cgi` が認証とパス検査を行った後、必要に応じて `/_wuwei2_data/` の internal location を経由してファイルを返す。
 
 [source,nginx]
 ----
@@ -266,4 +305,3 @@ chmod +x server/bin/*
 * `server/data/environment` は環境依存設定なので GitHub にコミットしない。
 * `server/bin/ffmpeg` と `server/bin/ffprobe` は EC2 ごとに配置する。
 * GitHub には利用者認証情報、ログ、アップロード実体、公開ノート実体を含めない。
-

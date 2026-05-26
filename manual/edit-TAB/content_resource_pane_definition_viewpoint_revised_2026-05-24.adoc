@@ -1,0 +1,1552 @@
+= WuWei Content resource.kind 別ペイン項目対応表
+三分一信之（三分一技術士事務所）
+:revnumber: ver 2.0
+:revdate: 2026-05-24
+:revremark:
+:version-label!:
+:doctype: book
+:toc:
+:toclevels: 3
+:sectnums:
+
+== 目的
+
+本資料は、WuWei の Content node について、`resource.kind` 別に、編集ペイン、表示ペイン、管理者用ペインで扱う項目を整理する。
+
+本版では、次の設計方針を反映する。
+
+* `resource.contents` は新規データでは使用せず、`resource.viewpoint` を使用する。
+* 旧 Contents group は廃止し、Viewpoint group として扱う。
+* `resource.title`、`resource.uri`、`resource.canonicalUri` は新規データでは使用しない。
+* Content の表示名は `node.label` に一本化する。
+* remote Content の参照元は `resource.original.url`、正規 URL は `resource.original.canonicalUrl` に保存する。
+* upload Content の原本は `resource.original.storageRole` と `resource.storage.files[]` により管理する。
+* `graph` 欄とは別に `svg` 欄を設け、`graph.node` / `graph.link` と、`g.node` / `g.link` / SVG DOM の対応を区別する。
+* 管理者用ペインは read only の診断ペインとし、管理者ロールの場合だけ表示する。
+
+各表では、次の列を用いる。
+
+[cols="2,1,2,2,4",options="header"]
+|===
+|項目名 |更新可 / 参照 |graph |svg |内容
+
+|項目名
+|更新可又は参照
+|`graph.node` 又は `graph.link` の対応属性
+|`g.node`、`g.link`、`text.node-label`、`foreignObject` などの SVG DOM 対応
+|項目の意味
+|===
+
+== 基本方針
+
+=== current.page / graph / svg の三層
+
+WuWei では、保存正本、画面操作用 runtime model、SVG DOM を区別する。
+
+[cols="20%,30%,50%",options="header"]
+|===
+|層 |役割 |主な内容
+
+|`current.page`
+|保存正本
+|保存対象となる `nodes[]`、`links[]`、`groups[]` を保持する。
+
+|`graph`
+|画面操作用 runtime model
+|SVG 描画、選択、ドラッグ、hover、context menu、編集操作の作業対象である。
+
+|SVG DOM
+|実際の描画要素
+|D3 により生成される `g.node`、`g.link`、`rect.shape-node`、`text.node-label`、`foreignObject`、`path`、`image` などである。
+|===
+
+=== current.page と graph の関係
+
+現行実装では、ページ読込時又は graph 再構成時に、`current.page.nodes[]`、`current.page.links[]`、`current.page.groups[]` から `graph.nodes[]`、`graph.links[]`、`graph.groups[]` を構成する。
+
+[source,text]
+----
+current.page.nodes[]  ─┐
+current.page.links[]  ─┼─> graph.nodes[] / graph.links[] / graph.groups[]
+current.page.groups[] ─┘
+----
+
+現在の実装では、可読性及び保守性を優先し、`graph.nodes[]` は `current.page.nodes[]` の node object を参照する構成を基本とする。したがって、通常 node については、`graph.node` と `current.page.nodes[]` の対応 node が同一 object である場合がある。
+
+この場合、操作中は `graph` を作業対象として扱うが、保存 JSON は `current.page` から生成する。`graph` から保存データを直接生成しない。
+
+NOTE: `forward` / `backward` による重なり順変更は、`graph.nodes[]` の表示順を一時的に変更する操作であり、`current.page.nodes[]` の保存順には反映しない。
+
+=== graph に含まれる詳細属性の扱い
+
+現行実装では、`graph.node` に `resource.original`、`resource.storage.files[]`、`resource.viewer`、`resource.media`、`resource.rights.*`、`audit` などの詳細属性が含まれる場合がある。
+
+ただし、これらは SVG 描画そのものに必要な属性ではない。SVG 描画で直接使用する主な属性は、`id`、`type`、`x`、`y`、`visible`、`state`、`label`、`description`、`shape`、`size`、`style`、`thumbnailUrl`、`iconKind` などである。
+
+将来、SVG 描画性能が問題となる場合は、`graph.node` を軽量化し、詳細属性を `current.page.nodes[]` 側のみで保持する設計へ移行できる。ただし、本版では現行実装との整合を優先し、`graph.node` に詳細属性が存在する可能性を許容する。
+
+=== graph と SVG DOM の分離
+
+`graph.node` 及び `graph.link` は、SVG 描画と操作に使う runtime model である。
+
+`g.node` 及び `g.link` は、D3 により SVG 上に生成又は更新される DOM 要素である。
+
+本資料では、`graph` 欄に runtime model の対応属性を記載し、`svg` 欄に SVG DOM 又は D3 selection の対応を記載する。
+
+[cols="1,2,3",options="header"]
+|===
+|区分 |例 |意味
+
+|保存正本
+|`current.page.nodes[]`, `current.page.links[]`, `current.page.groups[]`
+|保存対象となる正本データである。
+
+|graph runtime
+|`graph.node`, `graph.link`
+|SVG 描画、選択、ドラッグ、簡易表示に用いる runtime model である。
+
+|SVG DOM / D3 selection
+|`g.node`, `g.link`, `rect.shape-node`, `text.node-label`, `foreignObject`
+|ブラウザ上で実際に描画される SVG 要素である。
+|===
+
+=== 通常 link と pseudo link
+
+通常 link は `current.page.links[]` に保存される。
+
+一方、group axis、group outline、timeline axis、viewpoint axis / boundary などは、保存対象 link ではなく、`current.page.groups[]` から `graph.links[]` に展開される pseudo link として扱う。
+
+[cols="25%,25%,25%,25%",options="header"]
+|===
+|対象 |current.page |graph |svg
+
+|通常 link
+|`current.page.links[]`
+|`graph.links[]`
+|`g.link`
+
+|group axis
+|`current.page.groups[]`
+|pseudo `graph.link`
+|`g.link` 又は専用 SVG 要素
+
+|group outline / perimeter
+|`current.page.groups[]`
+|pseudo `graph.link`
+|`g.link` 又は専用 SVG 要素
+
+|timeline axis
+|`current.page.groups[]`
+|pseudo `graph.link`
+|timeline axis SVG 要素
+
+|viewpoint axis / boundary
+|`current.page.groups[]`
+|pseudo `graph.link`
+|viewpoint axis / boundary SVG 要素
+|===
+
+pseudo link は `current.page.links[]` に保存しない。context menu で pseudo link を target として受け取った場合は、`target.groupRef` から `current.page.groups[]` の group を解決して操作する。
+
+=== label と description.body
+
+`label` は Node の短い表示名である。
+
+`description.body` は保存正本の本文又は説明文である。
+
+`description.format` は、`description.body` の記法を示す。値は、例えば `plain`、`asciidoc`、`markdown` などである。
+
+現在の SVG 描画では、Memo 及び Content の `description.body` は `description.format` に従って HTML 化され、SVG の `foreignObject` 内に描画される。
+
+[cols="1,1,2,2,4",options="header"]
+|===
+|対象 |表示元 |graph |svg |内容
+
+|Topic
+|`label`
+|`graph.node.label`
+|`g.node text.node-label`
+|概念名を表示する。`description.body` は説明であり、通常は図形内本文としては使用しない。
+
+|Memo
+|`description.body`
+|`graph.node.description.body`
+|`g.node foreignObject`
+|Memo は `label` を持たない。`description.body` を HTML 化して図形内に表示する。
+
+|Content
+|`label` 及び `description.body`
+|`graph.node.label`, `graph.node.description.body`
+|`g.node text.node-label`, `g.node foreignObject`
+|Content の見出しは `label`、図形内説明文は `description.body` である。
+
+|Segment
+|`label`
+|`graph.node.label`
+|`g.node text.node-label`
+|Timeline Segment の表示名を表示する。
+
+|PageMarker
+|`label`
+|`graph.node.label`
+|`g.node text.node-label`
+|Viewpoint group の PageMarker の表示名を表示する。
+|===
+
+NOTE: `graph.node.text` を `description.body` の正本として扱わない。保存正本は `current.page.nodes[].description.body` である。
+
+=== 廃止項目
+
+新規データでは、次の項目を使用しない。
+
+[cols="1,3",options="header"]
+|===
+|項目 |扱い
+
+|`resource.title`
+|定義しない。Content の表示名は `node.label` に一本化する。
+
+|`resource.uri`
+|定義しない。remote Content の参照 URL は `resource.original.url`、upload Content の原本は `resource.original.storageRole` と `resource.storage.files[]` により管理する。
+
+|`resource.canonicalUri`
+|定義しない。remote Content の正規 URL は `resource.original.canonicalUrl` に保存する。
+
+|`resource.contents`
+|新規データでは使用しない。旧 v2 データの legacy 項目としてのみ扱い、読み込み時に `resource.viewpoint` へ移行する。
+|===
+
+=== resource.original
+
+`resource.original` は、Content の原本又は参照元を表す。
+
+==== upload Content の original
+
+upload Content の場合、`resource.original` は登録済み原本ファイルを示す。
+
+実際のファイル情報は `resource.storage.files[]` に保存する。
+
+[source,javascript]
+----
+resource: {
+  source: "upload",
+  kind: "document",
+  documentKind: "pdf",
+
+  original: {
+    type: "upload",
+    storageRole: "original"
+  },
+
+  storage: {
+    files: [
+      {
+        role: "original",
+        path: "2026/05/24/file_uuid/report.pdf",
+        dir_name: "data/user_uuid/upload/2026/05/24/file_uuid/",
+        file_name: "report.pdf",
+        mimeType: "application/pdf",
+        size: 123456,
+        sha256: "..."
+      },
+      {
+        role: "thumbnail",
+        path: "2026/05/24/file_uuid/thumbnail.jpg",
+        file_name: "thumbnail.jpg",
+        mimeType: "image/jpeg"
+      },
+      {
+        role: "pdf-preview",
+        path: "2026/05/24/file_uuid/preview.pdf",
+        file_name: "preview.pdf",
+        mimeType: "application/pdf"
+      }
+    ]
+  }
+}
+----
+
+==== remote Content の original
+
+remote Content の場合、`resource.original` は外部資料の参照情報を示す。
+
+登録時又は現在参照する URL は `resource.original.url` に保存する。
+
+外部資料の正規 URL は `resource.original.canonicalUrl` に保存する。
+
+これらは Content 定義時の入力項目であり、remote Content では編集可能とする。
+
+[source,javascript]
+----
+resource: {
+  source: "remote",
+  kind: "html",
+
+  original: {
+    type: "remote",
+    url: "https://example.com/article?id=123&utm_source=mail",
+    canonicalUrl: "https://example.com/article?id=123",
+    accessedAt: "2026-05-24T10:00:00Z",
+    identifiers: [
+      { scheme: "doi", value: "10.xxxx/yyyy" },
+      { scheme: "ndl", value: "..." }
+    ]
+  }
+}
+----
+
+=== resource.viewpoint と legacy resource.contents
+
+新規データでは `resource.contents` は使用しない。
+
+Document / HTML Content のページ番号、anchor、viewer page 変換、PageMarker / Viewpoint に関係する metadata は `resource.viewpoint` に保存する。
+
+旧 v2 以前のデータに `resource.contents` が存在する場合は、読み込み時又は v2 正規化時に `resource.viewpoint` へ移行し、保存時には `resource.contents` を出力しない。
+
+[source,javascript]
+----
+if (resource.contents && !resource.viewpoint) {
+  resource.viewpoint = resource.contents;
+}
+delete resource.contents;
+----
+
+PDF / Office 文書の例を示す。
+
+[source,javascript]
+----
+resource: {
+  source: "upload",
+  kind: "document",
+  documentKind: "pdf",
+
+  media: {
+    pageCount: 12
+  },
+
+  viewpoint: {
+    firstPageNumber: 1,
+    pageOffset: 0,
+    pageCount: 12
+  }
+}
+----
+
+HTML の例を示す。
+
+[source,javascript]
+----
+resource: {
+  source: "remote",
+  kind: "html",
+
+  viewpoint: {
+    anchorIndex: [
+      { id: "_introduction", label: "Introduction" },
+      { id: "_background", label: "Background" }
+    ]
+  }
+}
+----
+
+== 共通項目
+
+=== 編集ペイン共通項目
+
+[cols="2,1,2,2,4",options="header"]
+|===
+|項目名 |更新可 / 参照 |graph |svg |内容
+
+|`label`
+|更新可
+|`graph.node.label`
+|`g.node text.node-label`
+|Content node の表示名である。`resource.title` とは同期させず、表示名はこの項目に一本化する。
+
+|`description.body`
+|更新可
+|`graph.node.description.body`
+|`g.node foreignObject`
+|Memo の表示本文、Content の図形内説明文である。`description.format` に従って HTML 化し、SVG の `foreignObject` 内に描画する。
+
+|`description.format`
+|更新可
+|`graph.node.description.format`
+|`g.node foreignObject`
+|`description.body` の記法を示す。
+
+|`shape`
+|更新可
+|`graph.node.shape`
+|`g.node rect.shape-node` 等の shape 要素
+|SVG 描画形状である。
+
+|`size.width`, `size.height`, `size.radius`
+|更新可
+|`graph.node.size.*`
+|`g.node rect.shape-node` 等の shape 要素
+|SVG ノードサイズである。
+
+|`style.fill`
+|更新可
+|`graph.node.style.fill`, runtime `graph.node.color`
+|`g.node rect.shape-node` 等の shape 要素
+|背景色である。
+
+|`style.line.*`
+|更新可
+|`graph.node.style.line.*`, runtime `graph.node.outline`, `graph.node.outlineWidth`
+|`g.node rect.shape-node` 等の shape 要素
+|枠線色、枠線幅、線種である。
+
+|`style.font.*`
+|更新可
+|`graph.node.style.font`, runtime `graph.node.font`
+|`g.node text.node-label` / `foreignObject` 内 text
+|フォント設定である。
+
+|`style.label.*`
+|更新可
+|`graph.node.style.label`
+|`g.node text.node-label`
+|ラベル位置、揃え、表示行数、折返しなどの設定である。
+
+|`style.thumbnail.*`
+|更新可
+|`graph.node.style.thumbnail`, `graph.node.thumbnailUrl`
+|`g.node image` 又は `g.node foreignObject` 内 thumbnail
+|サムネイルの表示方法である。画像実体は変更しない。
+
+|`x`, `y`
+|参照
+|`graph.node.x`, `graph.node.y`
+|`g.node` の `transform`
+|編集ペインでは直接変更しない。ノートキャンバス上のドラッグ操作で変更する。
+
+|`visible`
+|参照
+|`graph.node.visible`
+|`g.node` の `display` / `opacity` / class
+|wilt / bloom / root / hide により変更する。
+
+|`state`
+|参照
+|`graph.node.state`
+|`g.node` の `display` / `opacity` / class
+|active, hidden, deleted 等の状態である。
+|===
+
+=== 編集ペイン共通の権利項目
+
+Content では、`resource.rights.*` を編集ペインに表示する。
+
+[cols="2,1,2,2,4",options="header"]
+|===
+|項目名 |更新可 / 参照 |graph |svg |内容
+
+|`resource.rights.owner`
+|更新可
+|`graph.node.resource.rights.owner` 又はなし
+|なし
+|権利者、所有者、著作者、提供元などを記録する。
+
+|`resource.rights.copyright`
+|更新可
+|`graph.node.resource.rights.copyright` 又はなし
+|なし
+|著作権表示を記録する。
+
+|`resource.rights.license`
+|更新可
+|`graph.node.resource.rights.license` 又はなし
+|なし
+|ライセンス名又は利用条件を記録する。
+
+|`resource.rights.attribution`
+|更新可
+|`graph.node.resource.rights.attribution` 又はなし
+|なし
+|表示すべき帰属・クレジット文を記録する。
+|===
+
+NOTE: 現行実装では `graph.node.resource.rights.*` に存在する場合がある。ただし SVG 描画では使用しない。
+
+== resource.kind = document
+
+document は、PDF、Office 文書、テキスト文書などを表す。HTML は `resource.kind = "html"` として別に扱う。
+
+=== 編集ペイン
+
+[cols="2,1,2,2,4",options="header"]
+|===
+|項目名 |更新可 / 参照 |graph |svg |内容
+
+|`resource.kind`
+|参照
+|`graph.node.iconKind` 又は `graph.node.resource.kind`
+|`g.node` の class / icon / thumbnail 表示
+|Content 種別である。値は `document` である。
+
+|`resource.documentKind`
+|参照
+|`graph.node.documentKind` 又は `graph.node.resource.documentKind`
+|`g.node` の class / icon / thumbnail 表示
+|`pdf`, `office`, `text` などの文書種別である。
+
+|`resource.source`
+|参照
+|`graph.node.resource.source` 又はなし
+|なし
+|`upload`, `remote`, `generated`, `embedded` などの取得元種別である。
+
+|`resource.original.type`
+|参照
+|`graph.node.resource.original.type` 又はなし
+|なし
+|`upload` 又は `remote` などの原本種別である。
+
+|`resource.original.storageRole`
+|参照
+|`graph.node.resource.original.storageRole` 又はなし
+|なし
+|upload 原本の storage role である。通常は `original` である。
+
+|`resource.original.url`
+|更新可
+|`graph.node.resource.original.url` 又はなし
+|なし
+|remote 文書の参照 URL である。remote Content 定義時の入力項目であり、編集可能とする。
+
+|`resource.original.canonicalUrl`
+|更新可
+|`graph.node.resource.original.canonicalUrl` 又はなし
+|なし
+|remote 文書の正規 URL である。定義時の入力項目であり、編集可能とする。
+
+|`resource.original.accessedAt`
+|参照
+|`graph.node.resource.original.accessedAt` 又はなし
+|なし
+|登録又は取得日時である。
+
+|`resource.original.identifiers[]`
+|更新可
+|`graph.node.resource.original.identifiers[]` 又はなし
+|なし
+|DOI、NDL、ISBN などの外部識別子である。
+
+|`resource.storage.files[role="original"]`
+|参照
+|`graph.node.resource.storage.files[]` 又はなし
+|なし
+|upload 原本ファイルである。編集ペインでは path を変更しない。
+
+|`resource.storage.files[role="preview"]`
+|参照
+|`graph.node.resource.storage.files[]` 又はなし
+|なし
+|汎用 preview ファイルである。
+
+|`resource.storage.files[role="pdf-preview"]`
+|参照
+|`graph.node.resource.storage.files[]` 又はなし
+|なし
+|Office 文書等から生成した PDF preview である。
+
+|`resource.storage.files[role="thumbnail"]`
+|参照
+|`graph.node.thumbnailUrl` 又は `graph.node.resource.storage.files[]`
+|`g.node image` 又は `g.node foreignObject` 内 thumbnail
+|サムネイルファイルである。SVG には解決済み表示 URL を使う。
+
+|`resource.media.pageCount`
+|参照
+|`graph.node.resource.media.pageCount` 又はなし
+|なし
+|文書の物理ページ数である。
+
+|`resource.viewpoint.firstPageNumber`
+|更新可
+|`graph.node.resource.viewpoint.firstPageNumber` 又はなし
+|なし
+|文書上の最初のページ番号である。
+
+|`resource.viewpoint.pageOffset`
+|参照
+|`graph.node.resource.viewpoint.pageOffset` 又はなし
+|なし
+|`firstPageNumber - 1` により算出する派生値である。
+
+|`resource.viewpoint.pageCount`
+|参照
+|`graph.node.resource.viewpoint.pageCount` 又はなし
+|なし
+|表示・入力範囲確認用ページ数である。通常は `resource.media.pageCount` と同じ値である。
+
+|`resource.viewer.defaultMode`
+|参照
+|`graph.node.resource.viewer.defaultMode` 又はなし
+|なし
+|PDF.js、Office Viewer、external などの既定 viewer である。
+
+|`resource.rights.*`
+|更新可
+|`graph.node.resource.rights.*` 又はなし
+|なし
+|権利・ライセンス・帰属情報である。
+|===
+
+=== 表示ペイン
+
+[cols="2,1,2,2,4",options="header"]
+|===
+|項目名 |更新可 / 参照 |graph |svg |内容
+
+|文書タイトル
+|参照
+|`graph.node.label`
+|`g.node text.node-label`
+|`node.label` を表示する。
+
+|説明
+|参照
+|`graph.node.description.body`
+|`g.node foreignObject`
+|`description.body` を `description.format` に従って表示する。
+
+|原本又は参照 URL
+|参照
+|`graph.node.resource.original.*` 又はなし
+|なし
+|upload では `storage.files[role="original"]`、remote では `resource.original.url` を表示する。
+
+|viewer URL
+|参照
+|なし
+|なし
+|実行時に解決した PDF.js URL、Office Viewer URL、又は external URL を表示する。
+
+|サムネイル
+|参照
+|`graph.node.thumbnailUrl`
+|`g.node image` 又は `g.node foreignObject` 内 thumbnail
+|現在使用中のサムネイルを表示する。
+
+|PageMarker 一覧
+|参照
+|関連 `graph.node` / `graph.link`
+|`g.node` / `g.link`
+|Viewpoint group に属する PageMarker のページ番号、ラベル、説明を表示する。
+
+|権利情報
+|参照
+|`graph.node.resource.rights.*` 又はなし
+|なし
+|`resource.rights.*` を表示する。
+|===
+
+=== 管理者用ペイン
+
+[cols="2,1,2,2,4",options="header"]
+|===
+|項目名 |更新可 / 参照 |graph |svg |内容
+
+|Node JSON
+|参照
+|`graph.node.id`
+|`g.node` の `id`
+|保存正本の Content node JSON を表示する。
+
+|Graph node JSON
+|参照
+|`graph.node`
+|`g.node`
+|SVG 描画用 runtime node を表示する。
+
+|SVG element
+|参照
+|`graph.node.id`
+|`g.node`, `rect.shape-node`, `text.node-label`, `foreignObject`
+|選択対象に対応する SVG DOM 情報を表示する。
+
+|storage 検査
+|参照
+|`graph.node.resource.storage.files[]` 又は page node
+|なし
+|original、thumbnail、preview、pdf-preview の存在を確認する。
+
+|viewer 解決結果
+|参照
+|page node 又は graph node
+|なし
+|PDF.js URL、Office Viewer URL、direct URL を表示する。
+
+|Viewpoint / PageMarker 整合性
+|参照
+|関連 `graph.node` / `graph.link`
+|`g.node` / `g.link`
+|範囲外ページ、documentRef 不整合、欠落参照を確認する。
+
+|legacy 項目検査
+|参照
+|page node 又は graph node
+|なし
+|`resource.contents`、`resource.uri`、`resource.canonicalUri`、`resource.title` の残存を警告する。
+
+|pseudo 混入検査
+|参照
+|`graph.node`, `graph.link`
+|`g.node`, `g.link`
+|pseudo node / pseudo link が `page.nodes[]` / `page.links[]` に混入していないか確認する。
+
+|export/import 対象
+|参照
+|page node 又は graph node
+|なし
+|同梱すべき original、thumbnail、preview、pdf-preview を確認する。
+|===
+
+== resource.kind = video
+
+=== 編集ペイン
+
+[cols="2,1,2,2,4",options="header"]
+|===
+|項目名 |更新可 / 参照 |graph |svg |内容
+
+|`resource.kind`
+|参照
+|`graph.node.iconKind` 又は `graph.node.resource.kind`
+|`g.node` の class / icon / thumbnail 表示
+|値は `video` である。
+
+|`resource.videoKind`
+|参照
+|`graph.node.videoKind` 又は `graph.node.resource.videoKind`
+|`g.node` の class / icon / thumbnail 表示
+|`youtube`, `vimeo`, `mp4` などの動画種別である。
+
+|`resource.original.url`
+|更新可
+|`graph.node.resource.original.url` 又はなし
+|なし
+|remote 動画の参照 URL である。
+
+|`resource.original.canonicalUrl`
+|更新可
+|`graph.node.resource.original.canonicalUrl` 又はなし
+|なし
+|remote 動画の正規 URL である。
+
+|`resource.original.identifiers[]`
+|更新可
+|`graph.node.resource.original.identifiers[]` 又はなし
+|なし
+|YouTube ID、Vimeo ID、DOI などの外部識別子である。
+
+|`resource.storage.files[role="original"]`
+|参照
+|`graph.node.resource.storage.files[]` 又はなし
+|なし
+|upload 動画ファイルである。
+
+|`resource.storage.files[role="thumbnail"]`
+|参照
+|`graph.node.thumbnailUrl` 又は `graph.node.resource.storage.files[]`
+|`g.node image` 又は `g.node foreignObject` 内 thumbnail
+|動画サムネイルである。
+
+|`resource.media.duration`
+|参照
+|`graph.node.resource.media.duration` 又はなし
+|なし
+|再生時間である。
+
+|`resource.viewer.defaultMode`
+|参照
+|`graph.node.resource.viewer.defaultMode` 又はなし
+|なし
+|embedded、external、videoPlayer などの既定 viewer である。
+
+|`resource.viewer.embed`
+|参照
+|`graph.node.resource.viewer.embed` 又はなし
+|なし
+|iframe 埋め込み情報である。
+
+|`resource.rights.*`
+|更新可
+|`graph.node.resource.rights.*` 又はなし
+|なし
+|権利・ライセンス・帰属情報である。
+|===
+
+=== 表示ペイン
+
+[cols="2,1,2,2,4",options="header"]
+|===
+|項目名 |更新可 / 参照 |graph |svg |内容
+
+|動画タイトル
+|参照
+|`graph.node.label`
+|`g.node text.node-label`
+|`node.label` を表示する。
+
+|説明
+|参照
+|`graph.node.description.body`
+|`g.node foreignObject`
+|`description.body` を表示する。
+
+|再生操作
+|参照
+|なし
+|なし
+|実行時に解決した player URL 又は外部 URL を使用する。
+
+|Segment 一覧
+|参照
+|関連 `graph.node` / `graph.link`
+|`g.node` / `g.link`
+|関連 Segment の開始・終了時刻、ラベル、説明を表示する。
+
+|権利情報
+|参照
+|`graph.node.resource.rights.*` 又はなし
+|なし
+|`resource.rights.*` を表示する。
+|===
+
+=== 管理者用ペイン
+
+[cols="2,1,2,2,4",options="header"]
+|===
+|項目名 |更新可 / 参照 |graph |svg |内容
+
+|viewer 解決結果
+|参照
+|page node 又は graph node
+|なし
+|iframe、external、direct video URL を確認する。
+
+|embed 検査
+|参照
+|page node 又は graph node
+|なし
+|X-Frame、埋め込み可否を確認する。
+
+|duration 検査
+|参照
+|page node 又は graph node
+|なし
+|metadata と player 取得値の差異を確認する。
+
+|Segment 整合性
+|参照
+|関連 Segment node / `graph.link`
+|`g.node` / `g.link`
+|範囲外、逆転、欠落を確認する。
+
+|thumbnail 解決
+|参照
+|`graph.node.thumbnailUrl`
+|`g.node image`
+|自動取得、生成、custom thumbnail の使用状態を確認する。
+|===
+
+== resource.kind = image
+
+=== 編集ペイン
+
+[cols="2,1,2,2,4",options="header"]
+|===
+|項目名 |更新可 / 参照 |graph |svg |内容
+
+|`resource.kind`
+|参照
+|`graph.node.iconKind` 又は `graph.node.resource.kind`
+|`g.node` の class / icon / thumbnail 表示
+|値は `image` である。
+
+|`resource.original.url`
+|更新可
+|`graph.node.resource.original.url` 又はなし
+|なし
+|remote 画像の参照 URL である。
+
+|`resource.original.canonicalUrl`
+|更新可
+|`graph.node.resource.original.canonicalUrl` 又はなし
+|なし
+|remote 画像の正規 URL である。
+
+|`resource.storage.files[role="original"]`
+|参照
+|`graph.node.resource.storage.files[]` 又はなし
+|なし
+|upload 原本画像である。
+
+|`resource.storage.files[role="thumbnail"]`
+|参照
+|`graph.node.thumbnailUrl` 又は `graph.node.resource.storage.files[]`
+|`g.node image` 又は `g.node foreignObject` 内 thumbnail
+|thumbnail 画像である。
+
+|`resource.media.width`, `resource.media.height`
+|参照
+|`graph.node.resource.media.*` 又はなし
+|なし
+|原画像の実ピクセルサイズである。
+
+|`resource.media.exif`
+|参照
+|`graph.node.resource.media.exif` 又はなし
+|なし
+|EXIF 等の取得情報である。
+
+|`style.thumbnail.*`
+|更新可
+|`graph.node.style.thumbnail`
+|`g.node image` / thumbnail 表示領域
+|fit、角丸、枠線、crop などの表示方法である。
+
+|`resource.rights.*`
+|更新可
+|`graph.node.resource.rights.*` 又はなし
+|なし
+|権利・ライセンス・帰属情報である。
+|===
+
+=== 表示ペイン
+
+[cols="2,1,2,2,4",options="header"]
+|===
+|項目名 |更新可 / 参照 |graph |svg |内容
+
+|画像タイトル
+|参照
+|`graph.node.label`
+|`g.node text.node-label`
+|`node.label` を表示する。
+
+|説明
+|参照
+|`graph.node.description.body`
+|`g.node foreignObject`
+|`description.body` を表示する。
+
+|画像サイズ
+|参照
+|`graph.node.resource.media.*` 又はなし
+|なし
+|width / height を表示する。
+
+|サムネイル
+|参照
+|`graph.node.thumbnailUrl`
+|`g.node image`
+|現在表示中のサムネイルを表示する。
+
+|権利情報
+|参照
+|`graph.node.resource.rights.*` 又はなし
+|なし
+|`resource.rights.*` を表示する。
+|===
+
+=== 管理者用ペイン
+
+[cols="2,1,2,2,4",options="header"]
+|===
+|項目名 |更新可 / 参照 |graph |svg |内容
+
+|storage 検査
+|参照
+|page node 又は graph node
+|なし
+|original、thumbnail、preview の存在を確認する。
+
+|dimensions 検査
+|参照
+|page node 又は graph node
+|なし
+|原画像と thumbnail のサイズを確認する。
+
+|MIME / extension 判定
+|参照
+|`graph.node.iconKind`
+|なし
+|MIME、拡張子、実体判定の差異を確認する。
+
+|thumbnail 解決
+|参照
+|`graph.node.thumbnailUrl`
+|`g.node image`
+|使用中 role と解決 URL を確認する。
+|===
+
+== resource.kind = audio
+
+=== 編集ペイン
+
+[cols="2,1,2,2,4",options="header"]
+|===
+|項目名 |更新可 / 参照 |graph |svg |内容
+
+|`resource.kind`
+|参照
+|`graph.node.iconKind` 又は `graph.node.resource.kind`
+|`g.node` の class / icon / thumbnail 表示
+|値は `audio` である。
+
+|`resource.audioKind`
+|参照
+|`graph.node.audioKind` 又は `graph.node.resource.audioKind`
+|`g.node` の class / icon / thumbnail 表示
+|`mp3`, `wav`, `m4a` などの音声種別である。
+
+|`resource.original.url`
+|更新可
+|`graph.node.resource.original.url` 又はなし
+|なし
+|remote 音声の参照 URL である。
+
+|`resource.original.canonicalUrl`
+|更新可
+|`graph.node.resource.original.canonicalUrl` 又はなし
+|なし
+|remote 音声の正規 URL である。
+
+|`resource.storage.files[role="original"]`
+|参照
+|`graph.node.resource.storage.files[]` 又はなし
+|なし
+|upload 音声ファイルである。
+
+|`resource.storage.files[role="thumbnail"]`
+|参照
+|`graph.node.thumbnailUrl` 又は `graph.node.resource.storage.files[]`
+|`g.node image` 又は `g.node foreignObject` 内 thumbnail
+|音声アイコン又は波形サムネイルである。
+
+|`resource.storage.files[role="waveform"]`
+|参照
+|`graph.node.resource.storage.files[]` 又はなし
+|なし
+|波形画像を生成する場合の保存ファイルである。
+
+|`resource.media.duration`
+|参照
+|`graph.node.resource.media.duration` 又はなし
+|なし
+|再生時間である。
+
+|`resource.rights.*`
+|更新可
+|`graph.node.resource.rights.*` 又はなし
+|なし
+|権利・ライセンス・帰属情報である。
+|===
+
+=== 表示ペイン
+
+[cols="2,1,2,2,4",options="header"]
+|===
+|項目名 |更新可 / 参照 |graph |svg |内容
+
+|音声タイトル
+|参照
+|`graph.node.label`
+|`g.node text.node-label`
+|`node.label` を表示する。
+
+|説明
+|参照
+|`graph.node.description.body`
+|`g.node foreignObject`
+|`description.body` を表示する。
+
+|再生
+|参照
+|なし
+|なし
+|audio player で再生する。
+
+|Segment 一覧
+|参照
+|関連 `graph.node` / `graph.link`
+|`g.node` / `g.link`
+|関連 Segment の開始・終了時刻、ラベル、説明を表示する。
+
+|権利情報
+|参照
+|`graph.node.resource.rights.*` 又はなし
+|なし
+|`resource.rights.*` を表示する。
+|===
+
+=== 管理者用ペイン
+
+[cols="2,1,2,2,4",options="header"]
+|===
+|項目名 |更新可 / 参照 |graph |svg |内容
+
+|storage 検査
+|参照
+|page node 又は graph node
+|なし
+|original、thumbnail、waveform の存在を確認する。
+
+|duration 検査
+|参照
+|page node 又は graph node
+|なし
+|metadata と player 取得値の差異を確認する。
+
+|waveform 検査
+|参照
+|page node 又は graph node
+|なし
+|波形画像生成状態を確認する。
+
+|Segment 整合性
+|参照
+|関連 Segment node / `graph.link`
+|`g.node` / `g.link`
+|範囲外、逆転、欠落を確認する。
+|===
+
+== resource.kind = html
+
+HTML は文書の一種ではあるが、anchor、iframe、fragment、Viewpoint / PageMarker との関係が重要であるため、`resource.kind = "html"` として独立して扱う。
+
+=== 編集ペイン
+
+[cols="2,1,2,2,4",options="header"]
+|===
+|項目名 |更新可 / 参照 |graph |svg |内容
+
+|`resource.kind`
+|参照
+|`graph.node.iconKind` 又は `graph.node.resource.kind`
+|`g.node` の class / icon / thumbnail 表示
+|値は `html` である。
+
+|`resource.original.url`
+|更新可
+|`graph.node.resource.original.url` 又はなし
+|なし
+|remote HTML の参照 URL である。
+
+|`resource.original.canonicalUrl`
+|更新可
+|`graph.node.resource.original.canonicalUrl` 又はなし
+|なし
+|HTML の正規 URL である。
+
+|`resource.original.accessedAt`
+|参照
+|`graph.node.resource.original.accessedAt` 又はなし
+|なし
+|登録又は取得日時である。
+
+|`resource.original.identifiers[]`
+|更新可
+|`graph.node.resource.original.identifiers[]` 又はなし
+|なし
+|DOI、NDL 等の外部識別子である。
+
+|`resource.storage.files[role="original"]`
+|参照
+|`graph.node.resource.storage.files[]` 又はなし
+|なし
+|upload HTML 原本である。
+
+|`resource.storage.files[role="thumbnail"]`
+|参照
+|`graph.node.thumbnailUrl` 又は `graph.node.resource.storage.files[]`
+|`g.node image` 又は `g.node foreignObject` 内 thumbnail
+|HTML preview thumbnail である。
+
+|`resource.viewer.defaultMode`
+|参照
+|`graph.node.resource.viewer.defaultMode` 又はなし
+|なし
+|iframe、newTab、external などの既定 viewer である。
+
+|`resource.viewer.embed`
+|参照
+|`graph.node.resource.viewer.embed` 又はなし
+|なし
+|iframe 表示可否である。
+
+|`resource.viewpoint.anchorIndex`
+|参照
+|`graph.node.resource.viewpoint.anchorIndex` 又はなし
+|なし
+|HTML から抽出した anchor 一覧である。
+
+|`resource.rights.*`
+|更新可
+|`graph.node.resource.rights.*` 又はなし
+|なし
+|権利・ライセンス・帰属情報である。
+|===
+
+NOTE: PageMarker 側の `anchorHref` 及び `htmlAnchorHref` は、Content ではなく Viewpoint group の PageMarker の内容属性として扱う。
+
+=== 表示ペイン
+
+[cols="2,1,2,2,4",options="header"]
+|===
+|項目名 |更新可 / 参照 |graph |svg |内容
+
+|HTML タイトル
+|参照
+|`graph.node.label`
+|`g.node text.node-label`
+|`node.label` を表示する。
+
+|説明
+|参照
+|`graph.node.description.body`
+|`g.node foreignObject`
+|`description.body` を表示する。
+
+|参照 URL
+|参照
+|`graph.node.resource.original.url` 又はなし
+|なし
+|`resource.original.url` を表示する。
+
+|正規 URL
+|参照
+|`graph.node.resource.original.canonicalUrl` 又はなし
+|なし
+|`resource.original.canonicalUrl` を表示する。
+
+|取得日時
+|参照
+|`graph.node.resource.original.accessedAt` 又はなし
+|なし
+|`resource.original.accessedAt` を表示する。
+
+|viewer URL
+|参照
+|なし
+|なし
+|iframe、new tab、external の解決結果を表示する。
+
+|サムネイル
+|参照
+|`graph.node.thumbnailUrl`
+|`g.node image` 又は `g.node foreignObject` 内 thumbnail
+|HTML preview thumbnail を表示する。
+
+|anchor 一覧
+|参照
+|`graph.node.resource.viewpoint.anchorIndex` 又はなし
+|なし
+|抽出済み id、name、heading anchor を表示する。
+
+|PageMarker 一覧
+|参照
+|関連 `graph.node` / `graph.link`
+|`g.node` / `g.link`
+|Viewpoint group の PageMarker の `anchorHref`、ラベル、説明を表示する。
+
+|権利情報
+|参照
+|`graph.node.resource.rights.*` 又はなし
+|なし
+|`resource.rights.*` を表示する。
+|===
+
+=== 管理者用ペイン
+
+[cols="2,1,2,2,4",options="header"]
+|===
+|項目名 |更新可 / 参照 |graph |svg |内容
+
+|viewer 解決結果
+|参照
+|page node 又は graph node
+|なし
+|iframe、newTab、external の解決結果を表示する。
+
+|base URL 解決
+|参照
+|page node 又は graph node
+|なし
+|相対リンク、fragment、anchor の解決基準を表示する。
+
+|anchor 抽出結果
+|参照
+|`resource.viewpoint.anchorIndex`
+|なし
+|HTML 内の id、name、heading anchor を表示する。
+
+|Viewpoint / PageMarker 整合性
+|参照
+|関連 PageMarker node / `graph.link`
+|`g.node` / `g.link`
+|anchorHref、htmlAnchorHref、documentRef の不整合を確認する。
+
+|CORS / X-Frame 検査
+|参照
+|page node 又は graph node
+|なし
+|iframe 表示不可等を確認する。
+
+|storage 検査
+|参照
+|page node 又は graph node
+|なし
+|upload HTML の original、thumbnail、preview を確認する。
+|===
+
+== 管理者用ペイン
+
+=== 表示条件
+
+管理者用ペインは read only の診断ペインである。
+
+コンテキストメニューの `adminInfo` 操作は、次の条件を満たす場合に表示する。
+
+[source,javascript]
+----
+wuwei.common.state.currentUser &&
+wuwei.common.state.currentUser.role === "admin"
+----
+
+管理者用ペインは編集機能ではないため、保存正本データの直接編集は許可しない。
+
+=== 管理者用ペインの共通表示項目
+
+[cols="2,1,2,2,4",options="header"]
+|===
+|項目名 |更新可 / 参照 |graph |svg |内容
+
+|current.page record
+|参照
+|`graph.node.id` 又は `graph.link.id`
+|対応 SVG 要素の `id`
+|選択対象に対応する保存正本 record を表示する。
+
+|graph record
+|参照
+|`graph.node` 又は `graph.link`
+|対応 SVG 要素の `id`
+|SVG 描画用 runtime record を表示する。
+
+|SVG element
+|参照
+|`graph.node.id` 又は `graph.link.id`
+|`g.node` / `g.link`
+|実際の SVG DOM 要素を表示する。
+
+|input target
+|参照
+|context menu target
+|event target
+|メニュー又はペインを開く契機となった入力 target を表示する。
+
+|legacy warning
+|参照
+|page node 又は graph node
+|なし
+|`resource.contents`、`resource.uri`、`resource.canonicalUri`、`resource.title` などの旧項目残存を表示する。
+
+|pseudo warning
+|参照
+|`graph.node`, `graph.link`
+|`g.node`, `g.link`
+|pseudo node / pseudo link が保存対象へ混入していないか表示する。
+
+|validation
+|参照
+|page node 又は graph node
+|なし
+|欠落ファイル、参照切れ、viewer 解決失敗、PageMarker 不整合などを表示する。
+|===
+
+== graph 反映規則
+
+[cols="2,2,2,2,3",options="header"]
+|===
+|current.page 側 |graph 側 |svg |反映タイミング |備考
+
+|`node.id`
+|`graph.node.id`
+|`g.node` の `id`
+|graph 生成時
+|同一 ID とする。
+
+|`node.type`
+|`graph.node.type`
+|`g.node` の class
+|graph 生成時
+|Content, Memo, Topic 等である。
+
+|`node.label`
+|`graph.node.label`
+|`g.node text.node-label`
+|編集保存時又は graph 再生成時
+|Content, Topic, Segment, PageMarker では主表示文字列として使う。
+
+|`node.description.body`
+|`graph.node.description.body`
+|`g.node foreignObject`
+|graph 生成時又は編集保存時
+|Memo 及び Content では HTML 化して図形内に表示する。
+
+|`node.description.format`
+|`graph.node.description.format`
+|`g.node foreignObject`
+|graph 生成時又は編集保存時
+|`description.body` の HTML 化方法を指定する。
+
+|`node.x`, `node.y`
+|`graph.node.x`, `graph.node.y`
+|`g.node` の `transform`
+|読込時。ドラッグ中は graph 先行
+|ノートキャンバス上のドラッグ操作で変更する。
+
+|`node.shape`
+|`graph.node.shape`
+|`g.node rect.shape-node` 等の shape 要素
+|編集保存時
+|SVG 形状である。
+
+|`node.size`
+|`graph.node.size`
+|`g.node rect.shape-node` 等の shape 要素
+|編集保存時
+|SVG サイズである。
+
+|`node.style.*`
+|`graph.node.style.*`, runtime mirror fields
+|`g.node`
+|編集保存時
+|runtime mirror を再展開する。
+
+|`resource.kind`
+|`graph.node.iconKind` 又は `graph.node.resource.kind`
+|`g.node` の class / icon / thumbnail 表示
+|graph 生成時
+|document, video, image, audio, html を反映する。
+
+|`resource.documentKind`
+|`graph.node.documentKind` 又は `graph.node.resource.documentKind`
+|`g.node` の class / icon / thumbnail 表示
+|graph 生成時
+|pdf, office, text 等を反映する。
+
+|`resource.videoKind`
+|`graph.node.videoKind` 又は `graph.node.resource.videoKind`
+|`g.node` の class / icon / thumbnail 表示
+|graph 生成時
+|youtube, vimeo, mp4 等を反映する。
+
+|`resource.audioKind`
+|`graph.node.audioKind` 又は `graph.node.resource.audioKind`
+|`g.node` の class / icon / thumbnail 表示
+|graph 生成時
+|mp3, wav 等を反映する。
+
+|`resource.storage.files[]`
+|`graph.node.resource.storage.files[]` 又はなし
+|なし
+|graph 生成時
+|現行実装では含まれる場合がある。ただし SVG 描画では直接使用せず、thumbnail URL 等の解決に使用する。
+
+|resolved thumbnail URL
+|`graph.node.thumbnailUrl`
+|`g.node image` 又は `g.node foreignObject` 内 thumbnail
+|graph 生成時又は thumbnail 更新時
+|SVG 表示に必要な URL のみを保持する。
+
+|`resource.viewer`
+|`graph.node.resource.viewer` 又はなし
+|なし
+|graph 生成時
+|表示ペイン又は操作時に解決する。
+
+|`resource.media`
+|`graph.node.resource.media` 又はなし
+|なし
+|graph 生成時
+|表示ペイン又は管理者用ペインで参照する。
+
+|`resource.rights.*`
+|`graph.node.resource.rights.*` 又はなし
+|なし
+|graph 生成時
+|編集ペイン及び表示ペインで扱う。SVG 描画では使用しない。
+
+|`resource.original.*`
+|`graph.node.resource.original.*` 又はなし
+|なし
+|graph 生成時
+|編集ペイン、表示ペイン、管理者用ペインで扱う。SVG 描画では使用しない。
+
+|`resource.viewpoint.*`
+|`graph.node.resource.viewpoint.*` 又はなし
+|なし
+|graph 生成時
+|document / html のページ、anchor、viewer page 変換情報である。
+
+|`audit`
+|`graph.node.audit` 又はなし
+|なし
+|graph 生成時
+|管理者用ペインで参照する。SVG 描画では使用しない。
+|===
+
+== 保存時の検査
+
+remote Content の `resource.original.url` 及び `resource.original.canonicalUrl` は、定義時入力項目であるため更新可とする。
+
+ただし、URL 変更により viewer 解決、thumbnail 取得、PageMarker anchor、Segment、外部埋め込み可否が変わる場合がある。
+
+保存時には次の再検査を行う。
+
+[cols="1,3",options="header"]
+|===
+|検査項目 |内容
+
+|viewer 再解決
+|iframe、external、PDF.js、Office Viewer、video player 等の表示方法を再判定する。
+
+|thumbnail 再取得
+|必要に応じて remote thumbnail を再取得又は再生成する。
+
+|anchor 再検査
+|HTML の場合、Viewpoint group の PageMarker の `anchorHref` と新しい URL の対応を確認する。
+
+|Segment 再検査
+|video / audio の場合、duration が変化したときに Segment の範囲を確認する。
+
+|legacy 項目削除
+|保存時には `resource.contents`、`resource.uri`、`resource.canonicalUri`、`resource.title` を出力しない。
+
+|警告表示
+|URL 変更により既存 PageMarker、Segment、thumbnail が不整合になる可能性を表示する。
+|===
+
+upload Content の原本ファイルは、`resource.storage.files[role="original"]` により管理する。
+
+upload Content では、原本ファイルの論理パスを編集ペインで変更しない。
+
+原本を変更する必要がある場合は、URL や path の直接編集ではなく、Content の再登録又は置換操作として扱う。
+
+== まとめ
+
+本仕様では、Content の表示名を `node.label` に一本化し、`resource.title` は定義しない。
+
+Content の参照元は、upload では `resource.original.storageRole` と `resource.storage.files[]`、remote では `resource.original.url` と `resource.original.canonicalUrl` により管理する。
+
+Document / HTML のページ、anchor、viewer page 変換、PageMarker / Viewpoint 関連 metadata は `resource.viewpoint` に保存する。`resource.contents` は旧 v2 互換の legacy 入力としてのみ扱い、新規保存データには出力しない。
+
+`graph` は画面操作用 runtime model であり、`svg` は実際の SVG DOM である。現行実装では `graph.node` に詳細属性が含まれる場合があるが、SVG 描画で直接使用する属性と、編集ペイン・表示ペイン・管理者用ペインで参照する詳細属性を区別して扱う。

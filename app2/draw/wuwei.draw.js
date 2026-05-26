@@ -536,8 +536,8 @@ wuwei.draw = wuwei.draw || {};
       (
         link.groupType === 'timelineAxis' ||
         link.linkType === 'timeline-axis' ||
-        link.groupType === 'contentsAxis' ||
-        link.linkType === 'contents-axis'
+        link.groupType === 'viewpointAxis' ||
+        link.linkType === 'viewpoint-axis'
       )
     );
   }

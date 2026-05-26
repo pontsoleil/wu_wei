@@ -31,7 +31,7 @@ wuwei.edit.generic.markup = ( function () {
     var resource = (node && node.resource) || {};
     var resourceKind = String(resource.kind || '').toLowerCase();
     var resourceMimeType = String(resource.mimeType || '').toLowerCase();
-    var resourceUri = String(resource.uri || '').toLowerCase();
+    var resourceUri = String(editableResourceUrl(resource.uri || '')).toLowerCase();
     var host = '';
 
     try {
@@ -84,7 +84,7 @@ wuwei.edit.generic.markup = ( function () {
 
   function getEditableResourceUri(node) {
     var resource = node && node.resource || {};
-    var uri = String(resource.uri || resource.canonicalUri || '');
+    var uri = String(resource.uri || editableResourceUrl(resource.canonicalUri || ''));
 
     if (!uri && wuwei.util && typeof wuwei.util.getResourceOriginalPath === 'function') {
       uri = wuwei.util.getResourceOriginalPath(node) || uri;
@@ -162,7 +162,7 @@ wuwei.edit.generic.markup = ( function () {
   }
 
 
-  function getResourceContentsValue(node, key) {
+  function getResourceViewpointValue(node, key) {
     var contents = node && node.resource && node.resource.contents;
     var value = contents && contents[key];
     return Number.isFinite(Number(value)) ? String(Math.floor(Number(value))) : '';
@@ -177,18 +177,52 @@ wuwei.edit.generic.markup = ( function () {
     ].join('\n');
   }
 
+  function isRemoteResource(resource) {
+    resource = resource && typeof resource === 'object' ? resource : {};
+    return String(resource.source || '').toLowerCase() === 'remote' ||
+      !!(resource.original && String(resource.original.type || '').toLowerCase() === 'remote') ||
+      (!!resource.uri && /^https?:\/\//i.test(String(resource.uri || '')));
+  }
+
+  function editableTextRow(id, label, value, labelSize, valueSize, placeholder) {
+    return [
+      '<div class="w3-row">',
+      '  <label for="' + id + '" class="w3-col ' + (labelSize || 's5') + '">' + t(label) + '</label>',
+      '  <input type="text" id="' + id + '" name="' + String(id || '').replace(/_/g, '.') + '" class="w3-col ' + (valueSize || 's7') + ' edit-value" value="' + esc(value || '') + '"' + (placeholder ? (' placeholder="' + esc(placeholder) + '"') : '') + '>',
+      '</div>'
+    ].join('\n');
+  }
+
+  function resourceTextRow(resource, id, label, value, labelSize, valueSize, placeholder) {
+    return isRemoteResource(resource)
+      ? editableTextRow(id, label, value, labelSize, valueSize, placeholder)
+      : readonlyRow(id, label, value, labelSize, valueSize);
+  }
+
+  function thumbnailUriInputRow(node, value) {
+    var visible = String(node && node.shape || '').toUpperCase() === 'THUMBNAIL';
+    value = editableResourceUrl(value);
+    return [
+      '<div class="w3-row thumbnail-uri-row" style="display:' + (visible ? 'block' : 'none') + ';">',
+      '  <label for="resource_thumbnailUri" class="w3-col s5">' + t('URL:') + '</label>',
+      '  <input type="text" id="resource_thumbnailUri" name="resource.thumbnailUri" class="w3-col s7 edit-value" value="' + esc(value || '') + '" placeholder="' + esc('https://... or upload path') + '">',
+      '</div>'
+    ].join('\n');
+  }
+
   function contentReadonlyRows(node) {
     var resource = (node && node.resource && typeof node.resource === 'object') ? node.resource : {};
     var contents = (resource.contents && typeof resource.contents === 'object') ? resource.contents : {};
     return [
       readonlyRow('resource_source', 'Source', resource.source || ''),
       readonlyRow('resource_kind', 'Media type', resource.kind || ''),
-      readonlyRow('resource_documentKind', 'Document kind', resource.documentKind || ''),
-      readonlyRow('resource_videoKind', 'Video kind', resource.videoKind || ''),
-      readonlyRow('resource_title', 'Title', resource.title || ''),
+      resourceTextRow(resource, 'resource_documentKind', 'Document kind', resource.documentKind || '', 's5', 's7', 'pdf / html / office / text'),
+      resourceTextRow(resource, 'resource_videoKind', 'Video kind', resource.videoKind || '', 's5', 's7', 'youtube / vimeo / mp4'),
+      resourceTextRow(resource, 'resource_title', 'Title', resource.title || ''),
       readonlyRow('resource_mimeType', 'MIME', resource.mimeType || ''),
-      readonlyRow('resource_uri', 'URL:', resource.uri || ''),
-      readonlyRow('resource_canonicalUri', 'Canonical URI', resource.canonicalUri || ''),
+      resourceTextRow(resource, 'resource_uri', 'URL:', editableResourceUrl(resource.uri || (resource.original && resource.original.url) || ''), 's5', 's7', 'https://...'),
+      resourceTextRow(resource, 'resource_canonicalUri', 'Canonical URI', editableResourceUrl(resource.canonicalUri || (resource.original && resource.original.canonicalUrl) || '')),
+      resourceTextRow(resource, 'resource_original_url', 'Original URL', editableResourceUrl(resource.original && resource.original.url || resource.uri || ''), 's5', 's7', 'https://...'),
       readonlyRow('thumbnailUri', 'THUMBNAIL', getEditableThumbnailUri(node)),
       '<div class="w3-row">',
       '  <label for="resource_contents_firstPageNumber" class="w3-col s5">' + t('First page number') + '</label>',
@@ -204,8 +238,8 @@ wuwei.edit.generic.markup = ( function () {
     var rights = (resource.rights && typeof resource.rights === 'object') ? resource.rights : {};
     return [
       readonlyRow('resource_rights_source_title', 'Title', resource.title || ''),
-      readonlyRow('resource_rights_source_uri', 'URL:', resource.uri || ''),
-      readonlyRow('resource_rights_source_canonicalUri', 'Canonical URI', resource.canonicalUri || ''),
+      readonlyRow('resource_rights_source_uri', 'URL:', editableResourceUrl(resource.uri || '')),
+      readonlyRow('resource_rights_source_canonicalUri', 'Canonical URI', editableResourceUrl(resource.canonicalUri || '')),
       '<div class="w3-row">',
       '  <label for="resource_rights_owner" class="w3-col s5">' + t('Owner') + '</label>',
       '  <input type="text" id="resource_rights_owner" name="resource.rights.owner" class="w3-col s7 edit-value" value="' + esc(rights.owner || '') + '">',
@@ -362,7 +396,8 @@ wuwei.edit.generic.markup = ( function () {
         shape: shape,
         size: node.size,
         options: shapes
-      })
+      }),
+      thumbnailUriInputRow(node, getEditableThumbnailUri(node))
     );
 
     if ('Memo' === node.type) {
@@ -408,7 +443,7 @@ wuwei.edit.generic.markup = ( function () {
     if ('Content' === node.type && !option.flock) {
       contentTabs = [
         { id: 'display', label: 'Display', html: displayHtml.join('\n') },
-        { id: 'content', label: 'Content', html: contentReadonlyRows(node) },
+        { id: 'content', label: '_Content', html: contentReadonlyRows(node) },
         { id: 'rights', label: 'Source / Rights', html: contentRightsRows(node) }
       ];
       html.push(tabbedPaneHtml(contentTabs));
@@ -441,6 +476,30 @@ wuwei.edit.generic.markup = ( function () {
 
   function t(str) {
     return wuwei.nls.translate(str);
+  }
+
+  function isLoadFileRuntimeUrl(value) {
+    return /(?:^|\/)(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i.test(String(value || ''));
+  }
+
+  function getUrlHash(value) {
+    var s = String(value || '');
+    var index = s.indexOf('#');
+    return index >= 0 ? s.slice(index) : '';
+  }
+
+  function editableResourceUrl(value) {
+    var s = String(value || '').trim();
+    var match;
+
+    if (!s || !isLoadFileRuntimeUrl(s)) {
+      return s;
+    }
+
+    match = s.match(/[?&]path=([^&#]*)/);
+    if (!match) { return s; }
+    try { return decodeURIComponent(match[1]) + getUrlHash(s); }
+    catch (e) { return match[1].replace(/%2F/ig, '/') + getUrlHash(s); }
   }
 
   return {

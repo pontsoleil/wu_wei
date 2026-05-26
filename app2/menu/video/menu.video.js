@@ -85,16 +85,53 @@ wuwei.menu.video = wuwei.menu.video || {};
     return (node && node.resource && typeof node.resource === 'object') ? node.resource : {};
   }
 
+  function getResourceVideoUrl(node, resource) {
+    resource = resource || getResource(node);
+    return String(
+      (resource.original && (resource.original.url || resource.original.sourceUrl || resource.original.canonicalUrl)) ||
+      (resource.origin && (resource.origin.sourceUrl || resource.origin.canonicalUrl)) ||
+      resource.uri ||
+      resource.canonicalUri ||
+      (node && (node.uri || node.url)) ||
+      ''
+    );
+  }
+
+  function getVimeoPlayerUrl(source) {
+    var url = source && (source.url || source.src || source.embedUrl);
+    var id = source && source.id;
+    if (url) {
+      return url;
+    }
+    if (id) {
+      return 'https://vimeo.com/' + id;
+    }
+    return '';
+  }
+
   function getTimeRange(node) {
     return (node && node.timeRange && typeof node.timeRange === 'object') ? node.timeRange : {};
   }
 
   function detectSource(node) {
-    if (wuwei.video && typeof wuwei.video.detectSource === 'function') {
-      return wuwei.video.detectSource(node);
-    }
     var resource = getResource(node);
-    var url = String(resource.canonicalUri || resource.uri || '');
+    var url = getResourceVideoUrl(node, resource);
+    var detected;
+
+    if (wuwei.video && typeof wuwei.video.detectSource === 'function') {
+      detected = wuwei.video.detectSource(node) || {};
+      if (detected.provider === 'vimeo') {
+        detected.url = detected.url || detected.src || url || (detected.id ? ('https://vimeo.com/' + detected.id) : '');
+        if (!detected.id && detected.url) {
+          var detectedVimeo = extractVimeoInfo(detected.url);
+          detected.id = detectedVimeo.id;
+          detected.h = detected.h || detectedVimeo.h;
+        }
+      }
+      if (detected.provider) {
+        return detected;
+      }
+    }
     var kind = String(resource.kind || '').toLowerCase();
     if (isYoutube(url)) {
       return { provider: 'youtube', id: extractYouTubeId(url), url: url };
@@ -258,7 +295,7 @@ wuwei.menu.video = wuwei.menu.video || {};
       return !!(window.Vimeo && window.Vimeo.Player);
     }, 'vimeoApiLoading').then(function () {
       stateMap.vimeoPlayer = new window.Vimeo.Player('videoVimeoPlayer', {
-        url: source.url,
+        url: getVimeoPlayerUrl(source),
         autoplay: true,
         responsive: true,
         title: false,
@@ -278,8 +315,9 @@ wuwei.menu.video = wuwei.menu.video || {};
     }).catch(function () {
       host.innerHTML = ns.template.iframe({
         src: 'https://player.vimeo.com/video/' + encodeURIComponent(source.id) +
-          (source.h ? ('?h=' + encodeURIComponent(source.h)) : '') +
-          '#t=' + Math.floor(start || 0) + 's'
+          '?autoplay=1&title=0&byline=0&portrait=0' +
+          (source.h ? ('&h=' + encodeURIComponent(source.h)) : '') +
+          (Number(start || 0) > 0 ? ('#t=' + Math.floor(start || 0) + 's') : '')
       });
     });
   }

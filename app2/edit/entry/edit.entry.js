@@ -1,7 +1,7 @@
 /*
  * edit.entry.js
  *
- * Contents entry editing extends the generic Topic editor with entry-specific
+ * Viewpoint entry editing extends the generic Topic editor with entry-specific
  * fields supplied by edit.generic.markup.js.
  */
 wuwei.edit.entry = (function (ns) {

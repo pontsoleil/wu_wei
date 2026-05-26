@@ -1,0 +1,71 @@
+= WuWei content edit / shape edit and non-team edit policy
+三分一信之（三分一技術士事務所）
+:revnumber: ver 1.0
+:revdate: 2026-05-25
+:revremark:
+:version-label!:
+:doctype: book
+:toc:
+:toclevels: 3
+:sectnums:
+
+== 編集メニューの整理
+
+Timeline / Viewpoint 系対象では、編集を二種類に分ける。
+
+[cols="25%,25%,50%",options="header"]
+|===
+|表示 |アイコン |対象
+
+|編集
+|鉛筆
+|Timeline / Viewpoint のグループ定義内容、Timeline Segment の時間範囲、Viewpoint PageMarker のページ情報などを編集する。
+
+|形状編集
+|パレット
+|形状、色、線、文字、表示位置などの表示・レイアウト属性を編集する。
+|===
+
+対象は次のとおり。
+
+* Timeline axis
+* Viewpoint axis
+* Timeline representative node
+* Viewpoint representative node
+* Timeline Segment
+* Viewpoint PageMarker
+
+メニューの並び順は、常に次の順とする。
+
+. 編集
+. 形状編集
+
+== 他者作成オブジェクトの編集方針
+
+=== チームノートでない場合
+
+他者が作成したノード等について、現在ユーザの作業用表示として次を許可する。
+
+* 形状変更
+* 色変更
+* フォント変更
+* レイアウト変更
+* description の追記及び追記部分の変更
+
+ただし、次は変更不可とする。
+
+* 名称 / label
+* URL / resource URI
+* resource identity
+* その他の意味的属性
+
+=== チームノートの場合
+
+他者が作成したノード等について、直接の形状変更、色変更、レイアウト編集を許可しない。
+
+== 実装
+
+* `editGroupContent` operation を追加
+* `editShape` operation を表示・レイアウト編集として維持
+* generic `edit` は Timeline / Viewpoint 系対象では非表示にする
+* `wuwei.joint.canEditPath()` で他者作成オブジェクトの意味属性保護を強化

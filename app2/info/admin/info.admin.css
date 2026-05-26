@@ -1,0 +1,102 @@
+/**
+ * info.admin.css
+ * Admin pane styles
+ */
+
+#info-admin {
+  display: none;
+}
+
+#info-admin .admin-diagnostic-pane {
+  padding: 0.8rem 1rem 1.5rem;
+}
+
+#info-admin .admin-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: bold;
+  margin: 0.25rem 0 0.75rem;
+}
+
+#info-admin .admin-warning {
+  border-left: 4px solid #c65;
+  padding: 0.4rem 0.6rem;
+  margin: 0.4rem 0;
+  background: rgba(200, 100, 80, 0.08);
+}
+
+#info-admin details {
+  margin: 0.5rem 0;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  padding: 0.35rem 0.5rem;
+}
+
+#info-admin summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+#info-admin table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.35rem 0;
+  font-size: 0.85rem;
+}
+
+#info-admin th,
+#info-admin td {
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  padding: 0.25rem 0.35rem;
+  vertical-align: top;
+  word-break: break-word;
+}
+
+#info-admin th {
+  width: 50%;
+  text-align: left;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+#info-admin pre {
+  white-space: pre-wrap;
+  overflow: auto;
+  max-height: 22rem;
+  padding: 0.5rem;
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 4px;
+  font-size: 0.78rem;
+}
+
+#info-admin .admin-validation-ok {
+  color: #276627;
+}
+
+#info-admin .admin-validation-warn {
+  color: #a34b2d;
+}
+
+
+/* Admin summary table: keep key/value columns balanced. */
+#info-admin table th,
+#info-admin table td {
+  width: 50%;
+}
+
+
+/* Make the Admin diagnostic content scroll vertically inside the pane. */
+#info-admin {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+#info-admin .admin-diagnostic-pane {
+  box-sizing: border-box;
+  height: 100%;
+  max-height: calc(100vh - 96px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 1rem;
+}

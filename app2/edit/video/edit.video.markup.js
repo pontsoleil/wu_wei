@@ -21,6 +21,30 @@ wuwei.edit.video.markup = (function () {
     return wuwei.nls.translate(str)
   }
 
+  function isLoadFileRuntimeUrl(value) {
+    return /(?:^|\/)(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i.test(String(value || ''));
+  }
+
+  function getUrlHash(value) {
+    var s = String(value || '');
+    var index = s.indexOf('#');
+    return index >= 0 ? s.slice(index) : '';
+  }
+
+  function editableResourceUrl(value) {
+    var s = String(value || '').trim();
+    var match;
+
+    if (!s || !isLoadFileRuntimeUrl(s)) {
+      return s;
+    }
+
+    match = s.match(/[?&]path=([^&#]*)/);
+    if (!match) { return s; }
+    try { return decodeURIComponent(match[1]) + getUrlHash(s); }
+    catch (e) { return match[1].replace(/%2F/ig, '/') + getUrlHash(s); }
+  }
+
   function selectOptions(name, value, options, placeholder, size) {
     return wuwei.edit.markup.selectOptions(name, value, options, placeholder, size);
   }
@@ -45,6 +69,30 @@ wuwei.edit.video.markup = (function () {
     return kind || '';
   }
 
+  function formatSeconds(sec) {
+    sec = Math.max(0, Number(sec) || 0);
+    var h = Math.floor(sec / 3600);
+    var m = Math.floor((sec % 3600) / 60);
+    var s = Math.floor(sec % 60);
+    return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  }
+
+  function getDurationValue(resource, durationStr) {
+    var media = resource && resource.media && typeof resource.media === 'object' ? resource.media : {};
+    var values = [
+      media.durationSeconds,
+      media.duration,
+      resource && resource.duration
+    ];
+    for (var i = 0; i < values.length; i += 1) {
+      var n = Number(values[i]);
+      if (Number.isFinite(n) && n > 0) {
+        return formatSeconds(n);
+      }
+    }
+    return durationStr || '';
+  }
+
   function rowcount(value) {
     return wuwei.edit.markup.rowcount(value || '');
   }
@@ -58,24 +106,116 @@ wuwei.edit.video.markup = (function () {
     ].join('\n');
   }
 
-  function contentRows(resource) {
-    var contents = (resource && resource.contents && typeof resource.contents === 'object') ? resource.contents : {};
+  function isRemoteResource(resource) {
+    resource = resource && typeof resource === 'object' ? resource : {};
+    return String(resource.source || '').toLowerCase() === 'remote' ||
+      !!(resource.original && String(resource.original.type || '').toLowerCase() === 'remote') ||
+      (!!resource.uri && /^https?:\/\//i.test(String(resource.uri || '')));
+  }
+
+  function editableTextRow(id, label, value, labelSize, valueSize, placeholder) {
     return [
+      '<div class="w3-row">',
+      '  <label for="' + id + '" class="w3-col ' + (labelSize || 's5') + '">' + t(label) + '</label>',
+      '  <input type="text" id="' + id + '" name="' + String(id || '').replace(/_/g, '.') + '" class="w3-col ' + (valueSize || 's7') + ' edit-value" value="' + escapeHtml(value || '') + '"' + (placeholder ? (' placeholder="' + escapeHtml(placeholder) + '"') : '') + '>',
+      '</div>'
+    ].join('\n');
+  }
+
+  function resourceTextRow(resource, id, label, value, labelSize, valueSize, placeholder) {
+    return isRemoteResource(resource)
+      ? editableTextRow(id, label, value, labelSize, valueSize, placeholder)
+      : readonlyRow(id, label, value, labelSize, valueSize);
+  }
+
+  function thumbnailUriInputRow(node, value) {
+    var visible = String(node && node.shape || '').toUpperCase() === 'THUMBNAIL';
+    value = editableResourceUrl(value);
+    return [
+      '<div class="w3-row thumbnail-uri-row" style="display:' + (visible ? 'block' : 'none') + ';">',
+      '  <label for="resource_thumbnailUri" class="w3-col s5">' + t('URL:') + '</label>',
+      '  <input type="text" id="resource_thumbnailUri" name="resource.thumbnailUri" class="w3-col s7 edit-value" value="' + escapeHtml(value || '') + '" placeholder="' + escapeHtml('https://... or upload path') + '">',
+      '</div>'
+    ].join('\n');
+  }
+
+
+  function getThumbnailUrl(node, resource) {
+    resource = resource || {};
+    if (wuwei.resource && typeof wuwei.resource.getThumbnailUrl === 'function') {
+      return editableResourceUrl(wuwei.resource.getThumbnailUrl(node) || '');
+    }
+    if (wuwei.util && typeof wuwei.util.getResourceThumbnailUri === 'function') {
+      return editableResourceUrl(wuwei.util.getResourceThumbnailUri(node) || '');
+    }
+    return editableResourceUrl(resource.thumbnailUri || resource.thumbnailUrl || '');
+  }
+
+  function videoPreviewHtml(node) {
+    var template = wuwei.menu && wuwei.menu.video && wuwei.menu.video.template;
+    var source = wuwei.video && typeof wuwei.video.detectSource === 'function'
+      ? wuwei.video.detectSource(node)
+      : { provider: 'unknown' };
+    var resource = (node && node.resource && typeof node.resource === 'object') ? node.resource : {};
+    var title = node && (node.label || resource.title || resource.uri || 'video');
+    var html = '';
+
+    if (!template) {
+      return '';
+    }
+    if (source.provider === 'youtube' && source.id) {
+      html = template.iframe({
+        src: 'https://www.youtube.com/embed/' + encodeURIComponent(source.id) + '?rel=0&playsinline=1',
+        title: title,
+        className: 'edit-video-content-frame'
+      });
+    }
+    else if (source.provider === 'vimeo' && source.id) {
+      html = template.iframe({
+        src: 'https://player.vimeo.com/video/' + encodeURIComponent(source.id) +
+          (source.h ? ('?h=' + encodeURIComponent(source.h)) : ''),
+        title: title,
+        className: 'edit-video-content-frame'
+      });
+    }
+    else if (source.provider === 'html5') {
+      html = template.nativeVideo({
+        src: source.src || source.url,
+        mimeType: resource.mimeType || 'video/mp4',
+        poster: wuwei.util && typeof wuwei.util.getResourceThumbnailUri === 'function'
+          ? wuwei.util.getResourceThumbnailUri(node)
+          : '',
+        className: 'edit-video-content-native'
+      });
+    }
+    if (!html) {
+      return '';
+    }
+    return [
+      '<div class="edit-video-content-preview">',
+      '  <label class="w3-col s12">' + t('Video preview') + '</label>',
+      '  <div class="edit-video-content-preview-host">' + html + '</div>',
+      '</div>'
+    ].join('\n');
+  }
+
+  function contentRows(resource, node, param) {
+    var media = (resource && resource.media && typeof resource.media === 'object') ? resource.media : {};
+    var durationText = getDurationValue(resource, param && param.durationStr);
+    return [
+      videoPreviewHtml(node),
       readonlyRow('resource_source', 'Source', resource.source || ''),
       readonlyRow('resource_kind', 'Media type', resource.kind || getMediaKindValue(resource) || ''),
-      readonlyRow('resource_documentKind', 'Document kind', resource.documentKind || ''),
-      readonlyRow('resource_videoKind', 'Video kind', resource.videoKind || ''),
-      readonlyRow('resource_title', 'Title', resource.title || ''),
+      resourceTextRow(resource, 'resource_videoKind', 'Video kind', resource.videoKind || '', 's5', 's7', 'youtube / vimeo / mp4'),
+      resourceTextRow(resource, 'resource_title', 'Title', resource.title || ''),
       readonlyRow('resource_mimeType', 'MIME', resource.mimeType || ''),
-      readonlyRow('resource_uri', 'URL:', resource.uri || ''),
-      readonlyRow('resource_canonicalUri', 'Canonical URI', resource.canonicalUri || ''),
+      resourceTextRow(resource, 'resource_uri', 'URL:', editableResourceUrl(resource.uri || (resource.original && resource.original.url) || ''), 's5', 's7', 'https://...'),
+      resourceTextRow(resource, 'resource_canonicalUri', 'Canonical URI', editableResourceUrl(resource.canonicalUri || (resource.original && resource.original.canonicalUrl) || '')),
+      resourceTextRow(resource, 'resource_original_url', 'Original URL', editableResourceUrl(resource.original && resource.original.url || resource.uri || ''), 's5', 's7', 'https://...'),
       readonlyRow('thumbnailUri', 'THUMBNAIL', resource.thumbnailUri || ''),
-      '<div class="w3-row">',
-      '  <label for="resource_contents_firstPageNumber" class="w3-col s5">' + t('First page number') + '</label>',
-      '  <input type="number" id="resource_contents_firstPageNumber" name="resource.contents.firstPageNumber" class="w3-col s7 edit-value" min="1" step="1" value="' + escapeHtml(contents.firstPageNumber == null ? '1' : contents.firstPageNumber) + '">',
-      '</div>',
-      readonlyRow('resource_contents_pageOffset', 'Page offset', contents.pageOffset == null ? '' : contents.pageOffset),
-      readonlyRow('resource_contents_pageCount', 'Page count', contents.pageCount == null ? '' : contents.pageCount)
+      readonlyRow('resource_media_provider', 'Provider', media.provider || ''),
+      readonlyRow('resource_media_videoId', 'Video ID', media.videoId || ''),
+      readonlyRow('resource_media_duration', 'Duration', durationText)
     ].join('\n');
   }
 
@@ -83,8 +223,8 @@ wuwei.edit.video.markup = (function () {
     var rights = (resource && resource.rights && typeof resource.rights === 'object') ? resource.rights : {};
     return [
       readonlyRow('resource_rights_source_title', 'Title', resource.title || ''),
-      readonlyRow('resource_rights_source_uri', 'URL:', resource.uri || ''),
-      readonlyRow('resource_rights_source_canonicalUri', 'Canonical URI', resource.canonicalUri || ''),
+      readonlyRow('resource_rights_source_uri', 'URL:', editableResourceUrl(resource.uri || '')),
+      readonlyRow('resource_rights_source_canonicalUri', 'Canonical URI', editableResourceUrl(resource.canonicalUri || '')),
       '<div class="w3-row">',
       '  <label for="resource_rights_owner" class="w3-col s5">' + t('Owner') + '</label>',
       '  <input type="text" id="resource_rights_owner" name="resource.rights.owner" class="w3-col s7 edit-value" value="' + escapeHtml(rights.owner || '') + '">',
@@ -132,15 +272,10 @@ wuwei.edit.video.markup = (function () {
     const font = (node && node.style && node.style.font) || (node && node.font) || {};
     const fontSizeValue = normalizeFontSizeValue(font && font.size);
     const fontAlign = getFontAlign(node);
-    const resourceUri = resource.canonicalUri || resource.uri || '';
+    const resourceUri = resource.canonicalUri || editableResourceUrl(resource.uri || '');
     const description = node && node.description;
     const value = (description && typeof description.body === 'string') ? description.body : '';
     const title = (node && node.label) || resource.title || resourceUri || 'Video';
-    const startStr = param.startStr || '00:00:00';
-    const endStr = param.endStr || '';
-    const durationStr = param.durationStr || '';
-    const previewHtml = param.previewHtml || '';
-    const hosted = !!param.hosted;
     var html = [];
     var displayHtml = [];
     displayHtml.push('<div class="edit">',
@@ -155,16 +290,7 @@ wuwei.edit.video.markup = (function () {
         node: node,
         format: (description && description.format) || 'plain/text',
         body: value
-      }),
-      '<div class="frame video ' + (hosted ? 'hosted' : 'html5') + '">' + previewHtml + '</div>' +
-      '<div class="controls video">' +
-        '<input id="timeRange_start" name="timeRange.start" type="hidden" value="' + escapeHtml(startStr) + '">',
-        '<input id="timeRange_end" name="timeRange.end" type="hidden" value="' + escapeHtml(endStr) + '">',
-        '<div class="video-duration" id="editVideoDuration">' + escapeHtml(durationStr || '00:00:00') + '</div>',
-      '</div>' +
-      '<div class="buttons" style="margin-top:8px;">',
-        '<span class="player-link" id="editVideoOpenPlayer">Open Media Player. <i class="fas fa-external-link-alt"></i></span>',
-      '</div>')
+      }))
     if (node) {
       displayHtml.push(
         wuwei.edit.style.markup.shapeSizeRows({
@@ -172,6 +298,7 @@ wuwei.edit.video.markup = (function () {
           size: node.size,
           options: shapes
         }),
+        thumbnailUriInputRow(node, getThumbnailUrl(node, resource)),
         wuwei.edit.style.markup.paintRows({
           style: style,
           fontSize: fontSizeValue,
@@ -185,7 +312,7 @@ wuwei.edit.video.markup = (function () {
       '<form id="editform" class="video form-group content" onsubmit="return false;">',
       tabbedPaneHtml([
         { id: 'display', label: 'Display', html: displayHtml.join('') },
-        { id: 'content', label: 'Content', html: contentRows(resource) },
+        { id: 'content', label: '_Content', html: contentRows(resource, node, param) },
         { id: 'rights', label: 'Source / Rights', html: rightsRows(resource) }
       ]),
       '</form>'

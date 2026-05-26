@@ -1,0 +1,17 @@
+/* edit.image.css */
+.edit-image-content-preview {
+  margin: 0.5rem 0 1rem 0;
+}
+.edit-image-preview-host {
+  width: 100%;
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid #ddd;
+  background: #fff;
+}
+.edit-image-preview {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}

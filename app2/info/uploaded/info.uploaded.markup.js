@@ -23,6 +23,7 @@ wuwei.info.uploaded.markup = ( function () {
     let uri = resolveInfoUri(node);
     let label = (node && node.label) || "";
     let displayedPageNumber = getDisplayedPageNumber(option);
+    let viewerPageNumber = getViewerPageNumber(node, option, displayedPageNumber);
     let size;
     let width, height;
     if (node && !!node.size) {
@@ -34,14 +35,14 @@ wuwei.info.uploaded.markup = ( function () {
     }
     if (option && (option.contentViewerUri || option.pdfjsUri)) {
       uri = String(option.contentViewerUri || option.pdfjsUri || '');
-      if (hasPageValue(option.page) && !/#page=/i.test(uri) && isPdfLikeUri(uri)) {
-        uri = appendPageFragment(uri, option.page);
+      if (hasPageValue(viewerPageNumber) && !/#page=/i.test(uri) && isPdfLikeUri(uri)) {
+        uri = appendPageFragment(uri, viewerPageNumber);
       }
     }
     else {
       uri = resolveFrameUri(node, uri);
-      if (option && hasPageValue(option.page)) {
-        uri = appendPageFragment(uri, option.page);
+      if (hasPageValue(viewerPageNumber)) {
+        uri = appendPageFragment(uri, viewerPageNumber);
       }
     }
     // Info pane renders the resource body. Stored values may be plain
@@ -118,16 +119,32 @@ wuwei.info.uploaded.markup = ( function () {
       option.displayedPageMarker ||
       option.contentTarget ||
       option.contentTargetPoint ||
-      option.contentsPoint
+      option.viewpointPoint
     );
     var value = point && point.pageNumber;
     if (value == null || value === '') {
-      value = option && (option.pageNumber || option.contentsPageNumber || option.page);
+      value = option && (option.pageNumber || option.viewpointPageNumber || option.page);
     }
     if (value == null || value === '') {
       return '';
     }
     return String(value);
+  }
+
+
+  function getViewerPageNumber(node, option, displayedPageNumber) {
+    var value = option && (option.viewerPage || option.pdfPage || '');
+    if (value == null || value === '') {
+      value = displayedPageNumber || option && option.page || '';
+    }
+    if (value == null || value === '') {
+      return '';
+    }
+    if (wuwei.document && typeof wuwei.document.toViewerPageNumber === 'function' &&
+      wuwei.document.isDocumentNode && wuwei.document.isDocumentNode(node)) {
+      return wuwei.document.toViewerPageNumber(node, value);
+    }
+    return value;
   }
 
   function toText(str) {
@@ -171,35 +188,34 @@ wuwei.info.uploaded.markup = ( function () {
   }
 
   function resolveInfoUri(node) {
+    var helperUri = '';
     var resource = (node && node.resource && 'object' === typeof node.resource) ? node.resource : {};
-    var viewer = (resource.viewer && 'object' === typeof resource.viewer) ? resource.viewer : {};
-    var embed = (viewer.embed && 'object' === typeof viewer.embed) ? viewer.embed : {};
-    var snapshotSources = (resource.snapshotSources && 'object' === typeof resource.snapshotSources)
-      ? resource.snapshotSources
-      : {};
-    if (isOfficeResource(node, resource)) {
-      return resolveOfficeInfoUri(node, resource, viewer, embed, snapshotSources);
+
+    if (wuwei.document && typeof wuwei.document.isDocumentNode === 'function' &&
+      wuwei.document.isDocumentNode(node) && typeof wuwei.document.getViewerUrl === 'function') {
+      helperUri = wuwei.document.getViewerUrl(node) || '';
     }
-    if (isHtmlResource(node, resource)) {
-      return resolveHtmlInfoUri(node, resource, embed, snapshotSources);
+    else if (wuwei.video && typeof wuwei.video.isVideoNode === 'function' &&
+      wuwei.video.isVideoNode(node) && typeof wuwei.video.getVideoSource === 'function') {
+      helperUri = wuwei.video.getVideoSource(node) || '';
     }
-    var previewUri = getOfficePreviewUri(node, resource, viewer, embed, snapshotSources);
-    if (previewUri) {
-      return previewUri;
+    else if (wuwei.audio && typeof wuwei.audio.isAudioNode === 'function' &&
+      wuwei.audio.isAudioNode(node) && typeof wuwei.audio.getAudioSource === 'function') {
+      helperUri = wuwei.audio.getAudioSource(node) || '';
     }
-    if (wuwei.util && typeof wuwei.util.getResourceOriginalUri === 'function' &&
-      (isPdfResource(node, resource) || isInlineMediaByExtension(node, resource))) {
-      return wuwei.util.getResourceOriginalUri(node) || '';
+    else if (wuwei.resource && typeof wuwei.resource.getPrimaryPreviewUrl === 'function') {
+      helperUri = wuwei.resource.getPrimaryPreviewUrl(node) || '';
     }
-    if (wuwei.util && typeof wuwei.util.getResourceUri === 'function') {
-      return wuwei.util.getResourceUri(node) || '';
+
+    if (helperUri) {
+      return helperUri;
     }
+
     return (
-      embed.uri ||
-      snapshotSources.previewUri ||
       resource.uri ||
       resource.canonicalUri ||
-      snapshotSources.originalUri ||
+      resource.previewUri ||
+      resource.thumbnailUri ||
       ''
     );
   }
@@ -243,7 +259,7 @@ wuwei.info.uploaded.markup = ( function () {
     }
     originalUri = wuwei.util && typeof wuwei.util.getResourceOriginalUri === 'function'
       ? wuwei.util.getResourceOriginalUri(node)
-      : (resource.canonicalUri || resource.uri || snapshotSources.originalUri || '');
+      : ((resource.original && resource.original.url) || (resource.original && resource.original.url) || resource.uri || resource.canonicalUri || snapshotSources.originalUri || '');
     if (canUseOfficeViewer(originalUri)) {
       return 'https://view.officeapps.live.com/op/embed.aspx?src=' +
         encodeURIComponent(toOfficeViewerFetchUri(originalUri, node));

@@ -140,6 +140,27 @@ def update_audit(value, user_id: str, timestamp: str) -> None:
             audit["lastModifiedAt"] = timestamp
 
 
+def apply_import_state(note: dict, user_id: str, timestamp: str) -> None:
+    origin = note.get("origin") if isinstance(note.get("origin"), dict) else {}
+    origin = dict(origin)
+    origin["type"] = "import"
+    origin["source"] = "export-package"
+    note["origin"] = origin
+    note["jointNoteState"] = "imported"
+    note.pop("collabNoteState", None)
+    note["note_scope"] = "personal"
+    note["team_id"] = ""
+
+    exchange = note.get("exchange") if isinstance(note.get("exchange"), dict) else {}
+    exchange = dict(exchange)
+    exchange["imported"] = True
+    exchange["mode"] = "imported"
+    exchange["source"] = "import"
+    exchange["importedBy"] = exchange.get("importedBy") or user_id
+    exchange["importedAt"] = exchange.get("importedAt") or timestamp
+    note["exchange"] = exchange
+
+
 def resource_area(value: str, fallback: str = "upload") -> str:
     area = str(value or fallback or "upload").lower()
     return area if area in ALLOWED_AREAS else "upload"
@@ -359,6 +380,7 @@ def main() -> None:
     write_path_indexes(manifest, upload_root)
     update_resource_storage_dirs(note, user_id, manifest)
     update_audit(note, user_id, imported_at)
+    apply_import_state(note, user_id, imported_at)
 
     note_root = Path(note_root_s)
     target = note_target(note_root, note_key)

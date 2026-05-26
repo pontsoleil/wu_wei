@@ -65,6 +65,9 @@
   }
 
   function getResource(node) {
+    if (wuwei.resource && typeof wuwei.resource.getResource === 'function') {
+      return wuwei.resource.getResource(node);
+    }
     return (node && node.resource && typeof node.resource === 'object') ? node.resource : {};
   }
 
@@ -100,7 +103,35 @@
 
   function getVideoSource(node) {
     var resource = getResource(node);
+    if (wuwei.resource && typeof wuwei.resource.getRuntimeUrl === 'function') {
+      return wuwei.resource.getRuntimeUrl(node, 'original');
+    }
     return String(resource.canonicalUri || resource.uri || '');
+  }
+
+  function getDuration(node) {
+    var resource = getResource(node);
+    var media = resource && resource.media && typeof resource.media === 'object' ? resource.media : {};
+    var values = [media.durationSeconds, media.duration, resource.duration];
+    for (var i = 0; i < values.length; i += 1) {
+      var n = Number(values[i]);
+      if (Number.isFinite(n) && n > 0) { return n; }
+    }
+    return 0;
+  }
+
+  function setDuration(node, duration) {
+    var n = Number(duration);
+    var resource;
+    if (!node || !Number.isFinite(n) || n <= 0) { return false; }
+    resource = getResource(node);
+    resource.media = resource.media && typeof resource.media === 'object' ? resource.media : {};
+    resource.media.kind = resource.media.kind || 'video';
+    resource.media.durationSeconds = n;
+    resource.duration = n;
+    node.resource = resource;
+    node.changed = true;
+    return true;
   }
 
   function setVideoSource(node, url) {
@@ -119,15 +150,27 @@
     subtype = getHostedSubtype(text);
     mimeType = getVideoMimeType(text, resource.mimeType);
 
+    resource.source = /^https?:\/\//i.test(text) ? 'remote' : (resource.source || 'remote');
     resource.kind = 'video';
     resource.videoKind = subtype || resource.videoKind || '';
     resource.uri = text;
     resource.canonicalUri = text;
+    resource.original = (resource.original && typeof resource.original === 'object') ? resource.original : {};
+    if (resource.source === 'remote' || /^https?:\/\//i.test(text)) {
+      resource.original.type = 'remote';
+      resource.original.url = text;
+      resource.original.canonicalUrl = resource.original.canonicalUrl || text;
+      resource.original.accessedAt = resource.original.accessedAt || '';
+      resource.original.identifiers = Array.isArray(resource.original.identifiers) ? resource.original.identifiers : [];
+    }
     resource.mimeType = mimeType;
     resource.title = resource.title || node.label || text || 'Video';
     resource.owner = owner;
     resource.copyright = resource.copyright || '';
     if (node.timeRange && Number.isFinite(Number(node.timeRange.end)) && Number(node.timeRange.end) > 0) {
+      resource.media = resource.media && typeof resource.media === 'object' ? resource.media : {};
+      resource.media.kind = resource.media.kind || 'video';
+      resource.media.durationSeconds = Number(node.timeRange.end);
       resource.duration = Number(node.timeRange.end);
     }
     resource.rights = (resource.rights && typeof resource.rights === 'object') ? resource.rights : {};
@@ -182,6 +225,20 @@
     };
   }
 
+  function getEmbedUrl(node) {
+    var source = detectSource(node);
+    if (source.provider === 'youtube' && source.id) {
+      return 'https://www.youtube.com/embed/' + encodeURIComponent(source.id);
+    }
+    if (source.provider === 'vimeo' && source.id) {
+      return 'https://player.vimeo.com/video/' + encodeURIComponent(source.id) +
+        (source.h ? ('?h=' + encodeURIComponent(source.h)) : '');
+    }
+    return '';
+  }
+
+  function initModule() { }
+
   function isVideoNode(node) {
     return !!(node && node.type === 'Content' && detectSource(node).provider !== 'unknown');
   }
@@ -205,9 +262,13 @@
   wuwei.video.extractVimeoInfo = extractVimeoInfo;
   wuwei.video.extractVimeoId = extractVimeoId;
   wuwei.video.getVideoSource = getVideoSource;
+  wuwei.video.getDuration = getDuration;
+  wuwei.video.setDuration = setDuration;
   wuwei.video.setVideoSource = setVideoSource;
   wuwei.video.detectSource = detectSource;
+  wuwei.video.getEmbedUrl = getEmbedUrl;
   wuwei.video.isVideoNode = isVideoNode;
   wuwei.video.open = open;
   wuwei.video.close = close;
+  wuwei.video.initModule = initModule;
 })(window);

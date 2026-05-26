@@ -55,7 +55,7 @@ wuwei.home = (function () {
     findResource,
     applyDateFilter,
     clearDateFilter,
-    populateDummyContents,
+    populateDummyViewpoint,
     isAbsoluteUrl,
     isHostedVimeo,
     isHostedYouTube,
@@ -366,18 +366,27 @@ wuwei.home = (function () {
     const label = safeDecode(file.label || file.name || (resource && resource.label) || file.id || '');
     const resourceId = (resource && resource.id) || file.id;
     const storage = resource && resource.storage && typeof resource.storage === 'object' ? resource.storage : {};
-    const sourceUri = safeDecode(resource.uri || resource.canonicalUri || '');
+    const original = resource && resource.original && typeof resource.original === 'object' ? resource.original : {};
+    const sourceUri = safeDecode(original.url || original.canonicalUrl || resource.uri || resource.canonicalUri || '');
     const previewUri = safeDecode(file.preview_url || value.previewUri || file.url || sourceUri || '');
-    const canonicalUri = safeDecode(resource.canonicalUri || resource.uri || '');
 
     if (resource) {
       resource.id = resourceId;
       resource.label = resource.label || label;
-      resource.title = resource.title || label;
       resource.description = description;
-      resource.uri = sourceUri;
-      resource.canonicalUri = canonicalUri || sourceUri;
       resource.storage = storage;
+      if (!resource.original && sourceUri) {
+        resource.original = {
+          type: /^https?:\/\//i.test(sourceUri) ? 'remote' : 'embedded',
+          url: sourceUri,
+          canonicalUrl: resource.canonicalUri || '',
+          accessedAt: '',
+          identifiers: []
+        };
+      }
+      delete resource.title;
+      delete resource.uri;
+      delete resource.canonicalUri;
     }
 
     value.comment = description.body || value.comment || '';
@@ -415,7 +424,7 @@ wuwei.home = (function () {
     const files = Array.isArray(storage.files) ? storage.files : [];
 
     const resourceId = resource.id || '';
-    const label = safeDecode(file.label || file.name || resource.label || resource.title || '');
+    const label = safeDecode(file.label || file.name || resource.label || '');
     const mimeType = resource.mimeType || file.contenttype || '';
     const kind = resource.kind || file.option || '';
     const hasStorageFile = files.some(function (item) {
@@ -423,7 +432,8 @@ wuwei.home = (function () {
     });
     const manifest = storage.manifest && typeof storage.manifest === 'object' ? storage.manifest : {};
     const hasUploadStorage = !!(hasStorageFile || storage.managed || storage.copyPolicy || manifest.path);
-    const hasResourceUri = !!safeDecode(resource.uri || resource.canonicalUri || '');
+    const original = resource.original && typeof resource.original === 'object' ? resource.original : {};
+    const hasResourceUri = !!safeDecode(original.url || original.canonicalUrl || resource.uri || resource.canonicalUri || '');
 
     if (!resourceId) { return reject('missing resource.id'); }
     if (!label) { return reject('missing label/title'); }
@@ -432,7 +442,7 @@ wuwei.home = (function () {
       if (!hasStorageFile) { return reject('missing storage.files'); }
     }
     else if (!hasResourceUri) {
-      return reject('missing resource.uri/resource.canonicalUri');
+      return reject('missing resource.original.url or upload storage files');
     }
     if (!(kind || mimeType || hasStorageFile)) { return reject('missing media kind/mimeType'); }
     return true;
@@ -504,7 +514,8 @@ wuwei.home = (function () {
       safeDecode(file && file.name ? file.name : ''),
       safeDecode(value && value.label ? value.label : ''),
       safeDecode(descriptionBody),
-      safeDecode(resource.title || ''),
+      safeDecode(resource.original && resource.original.url || ''),
+      safeDecode(resource.original && resource.original.canonicalUrl || ''),
       storageFiles.map(function (item) {
         if (!item) {
           return '';
@@ -1120,7 +1131,7 @@ wuwei.home = (function () {
    * Real operation should continue to use the backend list API.
    * For layout confirmation, uncomment the call inside listFile().
    */
-  populateDummyContents = function (param) {
+  populateDummyViewpoint = function (param) {
     const response = buildDummyResources(param);
     months = response.months || months;
     populateFile(response);
@@ -1988,14 +1999,14 @@ wuwei.home = (function () {
         util.appendById(allFiles, {
           id: file.id,
           resource: file.resource,
-          label: file.label || resource.label || resource.title || '',
+          label: file.label || resource.label || '',
           description: file.description,
           option: file.option || resource.kind || '',
           contenttype: format || resource.mimeType || '',
-          name: safeDecode(file.name || file.label || resource.label || resource.title || ''),
-          url: safeDecode(file.url || file.preview_url || resource.uri || ''),
-          uri: safeDecode(file.uri || resource.uri || ''),
-          preview_url: safeDecode(file.preview_url || file.url || resource.uri || ''),
+          name: safeDecode(file.name || file.label || resource.label || ''),
+          url: safeDecode(file.url || file.preview_url || (resource.original && resource.original.url) || resource.uri || ''),
+          uri: safeDecode(file.uri || (resource.original && resource.original.url) || resource.uri || ''),
+          preview_url: safeDecode(file.preview_url || file.url || (resource.original && resource.original.url) || resource.uri || ''),
           value: value,
           type: type,
           thumbnail: value.thumbnail ? value.thumbnail.uri : ''
@@ -2058,7 +2069,7 @@ wuwei.home = (function () {
     // --- Layout test only -------------------------------------------------
     // When you want to check the home layout without login / backend data,
     // uncomment the next two lines. Comment them out again for real operation.
-    // populateDummyContents({ year: year, month: month, date: date, start: state.start, count: state.count });
+    // populateDummyViewpoint({ year: year, month: month, date: date, start: state.start, count: state.count });
     // return;
 
     if (!currentUser.user_id) { return; }
@@ -2228,7 +2239,7 @@ wuwei.home = (function () {
     findResource: findResource,
     applyDateFilter: applyDateFilter,
     clearDateFilter: clearDateFilter,
-    populateDummyContents: populateDummyContents
+    populateDummyViewpoint: populateDummyViewpoint
   };
 })();
 // wuwei.home.js revised 2026-04-20

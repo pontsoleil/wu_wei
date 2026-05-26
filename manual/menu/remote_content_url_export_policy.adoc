@@ -1,0 +1,46 @@
+= WuWei remote Content URL 保存仕様
+三分一信之（三分一技術士事務所）
+:revnumber: ver 1.0
+:revdate: 2026-05-25
+:revremark:
+:version-label!:
+:doctype: book
+:toc:
+:toclevels: 3
+:sectnums:
+
+== 基本方針
+
+ヘッダーメニューの `コンテンツ` で新規作成する Content は、サーバー上にファイルを持たない参照型 Content であるため、`resource.source = "remote"` として作成する。
+
+一方、`Upload` でサーバーへ登録した Content は、`resource.source = "upload"` として扱う。
+
+== remote Content
+
+remote Content では、内容タブで URL を編集可能とする。
+URL を入力した場合、保存時及びエキスポート時に次の項目を同期する。
+
+[source,json]
+----
+resource.uri
+resource.canonicalUri
+resource.original.url
+resource.original.canonicalUrl
+----
+
+Vimeo / YouTube などの remote video では、`resource.original.url` が空にならないよう、保存・エキスポート時にも正規化する。
+
+== upload Content
+
+upload Content では、URL はサーバー登録結果であり、利用者編集対象ではない。
+`resource.original` は次のように保存する。
+
+[source,json]
+----
+{
+  "url": "",
+  "canonicalUrl": "",
+  "type": "upload",
+  "storageRole": "original"
+}
+----

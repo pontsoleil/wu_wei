@@ -47,6 +47,9 @@ wuwei.edit.uploaded = wuwei.edit.uploaded || {};
   }
 
   function open(param) {
+    if (wuwei.edit && typeof wuwei.edit.closeInfoPaneForEdit === 'function') {
+      wuwei.edit.closeInfoPaneForEdit();
+    }
     if ('undefined' == param.option) {
       param.option = {};
     }

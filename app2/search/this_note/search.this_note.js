@@ -63,10 +63,11 @@ wuwei.search.this_note = (function (ns) {
     var kind = normaliseContentKind(resource.documentKind || resource.kind || '');
 
     /*
-     * resource.kind may be a storage/origin kind such as "upload".
-     * Do not return that value as the content kind.  In that case, inspect
-     * mime type and file names so an uploaded PDF still matches the PDF
-     * condition.
+     * resource.source expresses storage/origin such as "upload".
+     * resource.kind expresses the content kind such as document, video,
+     * audio, or image.  When older notes still contain an origin value in
+     * resource.kind, inspect mime type and file names so they continue to
+     * match the correct condition.
      */
     if (/\.pdf(?:[?#].*)?$/.test(uri) || mime.indexOf('application/pdf') === 0 || kind === 'pdf') { return 'pdf'; }
     if (/\.(docx?|xlsx?|pptx?|odt|ods|odp)(?:[?#].*)?$/.test(uri) || /officedocument|msword|ms-excel|ms-powerpoint|vnd\.ms-/i.test(mime) || kind === 'office') { return 'office'; }
@@ -148,7 +149,7 @@ wuwei.search.this_note = (function (ns) {
     var type;
     if (!target) { return ''; }
     type = String(target.type || '');
-    if (Array.isArray(target.members) || ['Group', 'simple', 'horizontal', 'vertical', 'timeline', 'contents'].indexOf(type) >= 0) {
+    if (Array.isArray(target.members) || ['Group', 'simple', 'horizontal', 'vertical', 'timeline', 'viewpoint'].indexOf(type) >= 0) {
       return findGroupRepresentativeId(target);
     }
     return target.id || '';
@@ -211,10 +212,10 @@ wuwei.search.this_note = (function (ns) {
     if (!obj) { return ''; }
     type = String(obj.type || '');
     if (type === 'Link') { return 'Link'; }
-    if (type === 'contents') { return 'Contents'; }
+    if (type === 'viewpoint') { return 'Viewpoint'; }
     if (type === 'timeline' || obj.groupType === 'timeline' || obj.groupType === 'axis') { return 'Timeline'; }
     if (type === 'Group' || ['simple', 'horizontal', 'vertical'].indexOf(type) >= 0) { return 'Group'; }
-    if (type === 'PageMarker' || obj.topicKind === 'contents-page') { return 'Contents'; }
+    if (type === 'PageMarker' || obj.topicKind === 'viewpoint-page') { return 'Viewpoint'; }
     return type;
   }
 
@@ -222,7 +223,7 @@ wuwei.search.this_note = (function (ns) {
     /*
      * Search / display filtering is a text match over the object data only.
      * The result classification such as Topic, Content/PDF, Memo, Group,
-     * Timeline, Contents or Link is shown in the result list after matching.
+     * Timeline, Viewpoint or Link is shown in the result list after matching.
      * It is not used as a pre-search condition.
      */
     return matchesKeyword(objectSearchText(obj), condition);
@@ -248,7 +249,7 @@ wuwei.search.this_note = (function (ns) {
     if (type === 'Content') { return getContentKind(obj) || ''; }
     if (type === 'Link') { return [obj.role || obj.relation || '', obj.linkType || obj.groupType || '', obj.shape || ''].filter(Boolean).join(' / '); }
     if (type === 'PageMarker') { return obj.pageNumber ? ('p.' + obj.pageNumber) : ''; }
-    if (type === 'contents') { return 'Contents'; }
+    if (type === 'viewpoint') { return 'Viewpoint'; }
     return '';
   }
 
@@ -534,7 +535,7 @@ wuwei.search.this_note = (function (ns) {
   function isContentPageMarker(target) {
     return !!(target && (
       target.type === 'PageMarker' ||
-      target.topicKind === 'contents-page'
+      target.topicKind === 'viewpoint-page'
     ));
   }
 
@@ -549,9 +550,9 @@ wuwei.search.this_note = (function (ns) {
       return;
     }
     if (isContentPageMarker(target) &&
-      wuwei.menu && wuwei.menu.contents &&
-      typeof wuwei.menu.contents.openContentTargetInInfo === 'function') {
-      wuwei.menu.contents.openContentTargetInInfo(target);
+      wuwei.menu && wuwei.menu.viewpoint &&
+      typeof wuwei.menu.viewpoint.openContentTargetInInfo === 'function') {
+      wuwei.menu.viewpoint.openContentTargetInInfo(target);
       scheduleReapplySearchMatch();
       return;
     }

@@ -161,6 +161,7 @@ wuwei.nls.KR = {
   'Total items': '총수',
   'Workbench': '작업 공간',
   'Source': '출처',
+  'Bookmarks': 'Viewpoint',
   'Content': '콘텐츠',
   '_Content': '콘텐츠',
   'Assignment': '과제',
@@ -315,6 +316,7 @@ wuwei.nls.KR = {
   'Edge': '관련선',
   'Edge Shape': '선 종류',
   'Edit': '편집',
+  'Shape Edit': '형상 편집',
   'Edit(s) has been made.': '편집이 완료되었습니다',
   'Do you want to save edit(s)?': '수정 사항을 저장 하시겠습니까?',
   'Edit Flock': '그룹 편집',
@@ -567,4 +569,6 @@ wuwei.nls.KR = {
   'Label offset Y': '라벨 수직 거리',
   'Select label position': '라벨 위치 선택',
 
+  'Viewpoint axis was added.': 'Viewpoint axis was added.',
+  'Failed to add viewpoint axis.': 'Failed to add viewpoint axis.',
 };

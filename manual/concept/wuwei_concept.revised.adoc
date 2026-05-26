@@ -1,0 +1,738 @@
+= WuWei の概念モデル
+:doctype: article
+:author: WuWei project
+:sectnums:
+:toc:
+:toclevels: 3
+:lang: ja
+:revdate: 2026-05-21
+
+== 概要
+
+WuWei（無為）は、読書ノート、調査ノート、映像メモ、Web 参照、アップロード資料を、ネットワーク型の知識モデルとして整理するためのツールである。
+
+対象となるのは、文書、映像、Web ページ、画像、音声、ユーザーがアップロードしたファイル、及びそれらに対する利用者のメモや論点である。
+WuWei は、これらのコンテンツに付箋紙を貼り、ページや時間区間を指定し、キーワードや論点と結び付けることで、読解した内容をグラフとして保存する。
+
+現在の実装では、ノートの利用状態を次の三つに区分する。
+
+[cols="1,3", options="header"]
+|===
+|ノート状態 |意味
+
+|`own`
+|自分で作成した個人ノート。
+
+|`imported`
+|他者から入手した export ノートを、自分の個人領域へ import して利用するノート。
+
+|`team`
+|チーム共同作業領域から読み込む共同編集ノート。
+|===
+
+この状態は、`wuwei.collab` 側では `collabNoteState` として判定する。
+
+== 基本構造
+
+WuWei の Note は、概念的には次の構造を持つ。
+
+[cols="1,3", options="header"]
+|===
+|要素 |意味
+
+|`pages`
+|ノート内のページ。各ページが独立したキャンバスを持つ。
+
+|`nodes`
+|Content、Memo、Topic、Segment、PageMarker などのノード。
+
+|`links`
+|ノード間の関係を表すリンク。
+
+|`groups`
+|ノードのまとまり、Timeline、Contents、通常グループなどの軸又は集合定義。
+
+|`resources`
+|ノートで参照するコンテンツのメタデータ。Content node 内にも compact resource を保持する。
+|===
+
+このうち、ページ内の `nodes`、`links`、`groups` が、WuWei におけるグラフ型ノートの中心である。
+
+[source,text]
+----
+Note
+  └─ Page
+      ├─ nodes
+      ├─ links
+      ├─ groups
+      └─ transform
+----
+
+`transform` は、ページ表示時の移動量及び拡大縮小率を表す。
+
+== 保存モデルと実行時モデル
+
+WuWei では、保存データと実行時描画データを区別する。
+
+[cols="1,3", options="header"]
+|===
+|区分 |説明
+
+|保存モデル
+|`note.json` に保存される正本データ。pages、nodes、links、groups、resources、metadata を保持する。
+
+|実行時グラフ
+|`wuwei.common.graph` に展開され、D3 / SVG 描画、ドラッグ、選択、検索ハイライトなどに使用される一時的な状態。
+|===
+
+保存対象に含めるのは、意味構造と表示再現に必要な属性である。
+D3 simulation の `vx`、`vy`、選択状態、検索強調、DOM 状態などの一時的な情報は保存対象としない。
+
+== ノード
+
+=== type
+
+主な `type` は次のとおりである。
+
+[cols="1,3", options="header"]
+|===
+|type |意味
+
+|`Topic`
+|通常の概念ノード。グループ代表ノードも `type` は `Topic` とし、`topicKind`、`groupRole`、`representativeOf` により代表ノードであることを示す。
+
+|`Content`
+|PDF、Web、画像、動画、Office 文書、音声などのコンテンツを表すノード。
+
+|`Memo`
+|付箋・メモ用ノード。
+
+|`Segment`
+|Timeline group のメンバー。映像又は音声の時間区間を表す。
+
+|`PageMarker`
+|Contents group のメンバー。文書ページ又は HTML anchor を表す。
+|===
+
+代表ノードを `Representative` のような別 `type` にはしない。
+代表ノードは、`Topic` の特殊用途として扱う。
+
+=== 共通属性
+
+ノードは、概念的には次の属性を持つ。
+
+[source,javascript]
+----
+{
+  id: "_node_uuid",
+  type: "Topic",
+  label: "表示ラベル",
+  description: {
+    format: "asciidoc",
+    body: "説明本文"
+  },
+
+  x: 100,
+  y: 200,
+
+  shape: "RECTANGLE",
+  size: {
+    width: 160,
+    height: 60,
+    radius: 30
+  },
+
+  text: {
+    position: "center",
+    width: 160,
+    height: null
+  },
+
+  visible: true,
+  state: "active",
+
+  style: {
+    fill: "#ffffff",
+    font: {
+      family: "sans-serif",
+      size: 14,
+      color: "#303030",
+      align: "center"
+    },
+    line: {
+      kind: "SOLID",
+      color: "#808080",
+      width: 1
+    },
+    label: {
+      lines: 1,
+      offset: { x: 0, y: 0 }
+    }
+  },
+
+  audit: {
+    createdBy: "user_uuid",
+    createdAt: "2026-05-21T12:00:00+09:00",
+    lastModifiedBy: "user_uuid",
+    lastModifiedAt: "2026-05-21T12:00:00+09:00"
+  }
+}
+----
+
+`id` は内部識別子であり、利用者が人間として識別するための名称は `label` である。
+
+== Content
+
+`Content` は、読解対象となる文書、映像、Web ページ、画像、音声、アップロードファイルを表す。
+
+Content node は `resource` を持つ。
+現在の実装では、`mimeType` は参照・表示用の情報であり、種類判定の主軸は `resource.source`、`resource.kind`、`documentKind`、`videoKind`、URI、拡張子である。
+
+[source,javascript]
+----
+{
+  type: "Content",
+  label: "資料名",
+  shape: "THUMBNAIL",
+  resource: {
+    id: "file_uuid",
+    source: "upload",
+    kind: "document",
+    documentKind: "pdf",
+    videoKind: "",
+    canonicalUri: "2026/05/21/file_uuid/document.pdf",
+    uri: "2026/05/21/file_uuid/document.pdf",
+    title: "資料名",
+    mimeType: "application/pdf",
+    storage: {
+      files: [
+        {
+          role: "original",
+          area: "upload",
+          path: "2026/05/21/file_uuid/document.pdf",
+          file_name: "document.pdf",
+          mimeType: "application/pdf"
+        }
+      ]
+    },
+    contents: {
+      type: "pdf",
+      pageCount: 27,
+      pageOffset: 0,
+      firstPageNumber: 1
+    }
+  }
+}
+----
+
+=== resource.source
+
+[cols="1,3", options="header"]
+|===
+|source |意味
+
+|`upload`
+|利用者がアップロードした実体ファイル。
+
+|`remote`
+|外部 URL で参照される Web ページ、PDF、動画など。
+
+|`generated`
+|サムネイル、プレビュー PDF など、プログラムが生成した派生ファイル。
+
+|`embedded`
+|data URI や blob URI など、ノート内又は実行時に埋め込まれる内容。
+|===
+
+=== resource.kind
+
+[cols="1,3", options="header"]
+|===
+|kind |意味
+
+|`document`
+|PDF、Office、HTML、Text などの文書。
+
+|`video`
+|YouTube、Vimeo、MP4 などの映像。
+
+|`image`
+|画像。
+
+|`audio`
+|音声。
+
+|`other`
+|上記以外。
+|===
+
+`kind` はコンテンツの種類であり、upload か remote かという由来とは独立している。
+
+=== documentKind / videoKind
+
+`resource.kind` が `document` の場合、`documentKind` で文書種別を示す。
+
+[source,text]
+----
+pdf
+office
+html
+text
+----
+
+`resource.kind` が `video` の場合、`videoKind` で映像又は音声種別を示す。
+
+[source,text]
+----
+youtube
+vimeo
+mp4
+mp3
+----
+
+== Memo
+
+`Memo` は、付箋紙又はコメントとして利用するノードである。
+
+[source,javascript]
+----
+{
+  type: "Memo",
+  shape: "MEMO",
+  description: {
+    format: "asciidoc",
+    body: "本文"
+  },
+  style: {
+    memo: {
+      corner: "bottom-right",
+      foldSize: 32
+    }
+  }
+}
+----
+
+Memo は `label` を持たない。Memo の表示本文は `description.body` として定義する。
+旧データ又は共通 Node 正規化処理により Memo に `label` が存在する場合でも、読み込み時又は保存時に不要項目として無視する。
+Memo の `style.label` も v2 データモデル及び保存対象には含めない。
+
+共同編集モードでは、他者が作成したノードを直接変更又は削除しない。
+修正提案が必要な場合は、Memo を追加して伝える。
+
+== Topic
+
+`Topic` は、読解対象から抽出した概念、キーワード、論点を表す。
+
+[source,javascript]
+----
+{
+  type: "Topic",
+  label: "JP PINT",
+  description: {
+    format: "asciidoc",
+    body: "説明本文"
+  }
+}
+----
+
+通常の概念ノードのほか、グループ代表ノードも `type: "Topic"` として扱う。
+
+== Timeline
+
+Timeline は、映像又は音声の時間軸を表す axis group である。
+
+映像全体は `Content` ノードとして表す。
+その時間軸上の重要な区間は `Segment` ノードとして表す。
+
+`Segment` ノードは、現在の実装では `time.start`、`time.end` により参照区間を保存する。
+旧式の `mediaStart`、`mediaEnd`、`playDuration` ではなく、`time` オブジェクトへ整理する。
+
+[source,javascript]
+----
+{
+  type: "Segment",
+  topicKind: "timeline-point",
+  groupRef: "_timeline_group_id",
+  mediaRef: "_content_node_id",
+  axisRole: "entry",
+  label: "00:10:15",
+  time: {
+    start: 615,
+    end: 740
+  },
+  axisPos: 120
+}
+----
+
+Timeline group は、概念的には次の構造を持つ。
+
+[source,javascript]
+----
+{
+  id: "_timeline_group_id",
+  type: "timeline",
+  groupType: "axis",
+  name: "Timeline",
+  orientation: "horizontal",
+  mediaRef: "_content_node_id",
+  members: [
+    { nodeId: "_segment_node_id", order: 1, role: "member" }
+  ],
+  axis: {
+    mode: "time",
+    unit: "time",
+    nodeType: "segment"
+  },
+  spine: {
+    kind: "SOLID",
+    color: "#4c6b8a",
+    width: 4
+  }
+}
+----
+
+== Contents
+
+Contents は、文書のページ軸又は HTML anchor 軸を表す axis group である。
+
+文書全体は `Content` ノードとして表す。
+そのページ軸又は anchor 軸上の重要な位置は `PageMarker` ノードとして表す。
+
+[source,javascript]
+----
+{
+  type: "PageMarker",
+  topicKind: "contents-page",
+  groupRef: "_contents_group_id",
+  contentsRef: "_contents_group_id",
+  documentRef: "_content_node_id",
+  mediaRef: "_content_node_id",
+  axisRole: "entry",
+  label: "923",
+  pageNumber: 923,
+  anchorHref: "",
+  htmlAnchorHref: "",
+  axisPos: 120
+}
+----
+
+PDF、Office、Text などの文書では、`pageNumber` を使用する。
+HTML 文書では、`anchorHref` 及び `htmlAnchorHref` を使用する。
+
+Viewer 上のページ番号は、Content 側の `resource.contents.pageOffset` を用いて計算する。
+
+[source,text]
+----
+viewerPage = pageNumber - content.resource.contents.pageOffset
+----
+
+ただし、viewerPage の最小値は `1` とする。
+
+Contents group は、概念的には次の構造を持つ。
+
+[source,javascript]
+----
+{
+  id: "_contents_group_id",
+  type: "contents",
+  groupType: "axis",
+  name: "Contents",
+  orientation: "horizontal",
+  documentRef: "_content_node_id",
+  members: [
+    { nodeId: "_page_marker_node_id", order: 1, role: "member" }
+  ],
+  entries: [
+    {
+      role: "entry",
+      nodeId: "_page_marker_node_id",
+      order: 1,
+      pageNumber: 923,
+      anchorHref: "",
+      htmlAnchorHref: ""
+    }
+  ],
+  axis: {
+    mode: "document",
+    unit: "page",
+    nodeType: "page"
+  },
+  spine: {
+    kind: "SOLID",
+    color: "#4c6b8a",
+    width: 4
+  }
+}
+----
+
+== グループ
+
+グループは、複数のノードを一つのまとまり又は軸として扱うための構造である。
+
+WuWei では、次の種類のグループを扱う。
+
+[cols="1,3", options="header"]
+|===
+|区分 |意味
+
+|通常グループ
+|`s`、`v`、`h`、`v2`、`h2` などの表示スタイルにより、ノードを整理するグループ。
+
+|Timeline group
+|映像又は音声の時間軸を表す group。
+
+|Contents group
+|文書ページ又は HTML anchor の軸を表す group。
+|===
+
+通常グループ、Timeline、Contents は、いずれも代表ノードを持つことができる。
+代表ノードは、グループの表示上の入口、ラベル、スタイル指定、コンテキストメニューの起点として機能する。
+
+== グループ代表ノード
+
+代表ノードは、この文書で列挙した `type` の中では `Topic` である。
+ただし、通常の概念ノードとは異なり、`topicKind`、`groupRole`、`representativeOf` によって代表ノードであることを示す。
+
+[source,javascript]
+----
+{
+  id: "_representative_node_uuid",
+  type: "Topic",
+  topicKind: "group-representative",
+  groupRole: "representative",
+  groupRef: "_group_uuid",
+  representativeOf: {
+    kind: "group",
+    id: "_group_uuid"
+  },
+  label: "代表ノード"
+}
+----
+
+Timeline / Contents の代表ノードでは、`topicKind` を次のようにする。
+
+[source,text]
+----
+timeline-representative
+contents-representative
+group-representative
+----
+
+共同編集及び import ノート編集では、代表ノードの意味属性は保護し、表示 style のみを変更可能とする方針である。
+
+== Link による読解ネットワーク
+
+WuWei の特徴は、Content、Segment、PageMarker、Memo、Topic を Link で結ぶことである。
+
+これにより、単なるファイル管理や単なるメモではなく、読解の結果として形成された理解のネットワークを保存できる。
+
+例えば、次のような関係を記録できる。
+
+* 文書の特定ページと、そのページで扱われる論点
+* 映像の特定区間と、その区間で説明される概念
+* 複数文書に共通するキーワード
+* 付箋紙としてのコメントと、その根拠となる文書ページ
+* 映像セグメントと関連する外部文書
+* 他者が作成したノードと、自分が作成したノードの関係
+
+共同編集では、他者が作成したノードそのものは変更しない。
+ただし、他者が作成したノードと自分が作成したノードを結ぶ Link は作成可能とする。
+この Link の所有者は、Link を作成した利用者である。
+
+[source,javascript]
+----
+{
+  id: "_link_uuid",
+  source: "_other_user_node_id",
+  target: "_my_node_id",
+  state: "active",
+  style: {
+    lineColor: "#333333",
+    lineType: "SOLID",
+    width: 2,
+    preset: "s"
+  },
+  audit: {
+    createdBy: "current_user_uuid"
+  }
+}
+----
+
+source 又は target のどちらかのノードが `state: "deleted"` になった場合、その Link も通常表示できないため、従属的に `state: "deleted"` として履歴管理する。
+
+== state と削除管理
+
+現在の仕様では、ノード、リンク、グループなどの要素を物理削除せず、`state` によって状態を管理する。
+
+[cols="1,3", options="header"]
+|===
+|state |意味
+
+|`active`
+|通常の有効状態。
+
+|`deleted`
+|削除扱い。通常描画からは除外するが、ノートデータには残す。
+|===
+
+削除時には、削除者及び削除日時を記録する。
+
+[source,javascript]
+----
+{
+  state: "deleted",
+  deleted: {
+    deletedBy: "user_uuid",
+    deletedAt: "2026-05-21T12:00:00+09:00",
+    reason: "user operation"
+  }
+}
+----
+
+== audit と所有者
+
+各要素には、作成者及び最終更新者を示す `audit` 情報を持たせる。
+
+[source,javascript]
+----
+audit: {
+  createdBy: "user_uuid",
+  createdAt: "2026-05-21T12:00:00+09:00",
+  lastModifiedBy: "user_uuid",
+  lastModifiedAt: "2026-05-21T12:00:00+09:00"
+}
+----
+
+共同編集モードでは、他者が作成した要素の変更及び削除は不可とする。
+必要な修正提案は、Memo 又はチャットで伝える。
+
+== export / import
+
+WuWei では、ノートを export し、別の利用者が import して利用できる。
+
+export / import では、ノート JSON とアップロード済みリソース、サムネイル、プレビュー PDF などをパッケージとして扱う。
+import 時には、ノート ID、ファイル UUID、resource 論理パスを保ちながら、取り込み先利用者の保存領域へ実体ファイルを配置する。
+
+import されたノートは、`collabNoteState: "imported"` として扱う。
+
+[source,javascript]
+----
+{
+  collabNoteState: "imported",
+  note_scope: "personal",
+  exchange: {
+    imported: true
+  }
+}
+----
+
+import ノートでは、他者が作成した要素を直接破壊しない方針を採る。
+共同編集モードよりは表示調整を許す場合があるが、意味属性の変更は制限する。
+
+== チーム共同作業
+
+チーム共同作業ノートは、個人ノートとは別に、チーム ID 配下へ保存する。
+
+[source,text]
+----
+data/{team_id}/YYYY/MM/DD/{note_uuid}/section/*
+----
+
+`team_id` は、実際には次の形式で生成する。
+
+[source,javascript]
+----
+team_id = "c" + uuid.v4();
+----
+
+チーム共同作業ノートは、`collabNoteState: "team"` として扱う。
+
+[source,javascript]
+----
+{
+  collabNoteState: "team",
+  note_scope: "team",
+  team_id: "c5c1f594a-315b-4bab-9075-62b1bebed7eb",
+  collaboration: {
+    enabled: true,
+    revision: 128,
+    updatedAt: "2026-05-21T12:00:00+09:00"
+  }
+}
+----
+
+共同編集は完全なリアルタイム編集ではなく、主として非同期更新共有を想定する。
+他者更新の確認は、10 秒程度の間隔で latest revision を確認し、変更がある場合のみ operation log を取得する方式を基本とする。
+
+共同作業中の短い連絡には、左下のチャットペインを提供できる。
+ただし、後で残すべき修正提案は Memo としてノート上に記録する。
+
+== 実装モデルとの対応
+
+[cols="1,2,3", options="header"]
+|===
+|概念 |実装上の型又は項目 |説明
+
+|ノート状態
+|`collabNoteState`
+|`own`、`imported`、`team` の三値。
+
+|読解対象
+|`Content`
+|文書、映像、Web ページ、画像、音声など。
+
+|コンテンツ実体
+|`resource`
+|Content node が保持する compact resource。source、kind、storage.files[] を持つ。
+
+|付箋紙
+|`Memo`
+|自由記述の注記。共同編集では他者要素への修正提案にも使う。
+
+|キーワード・論点
+|`Topic`
+|読解内容を整理するトピック。代表ノードも Topic として扱う。
+
+|グループ代表ノード
+|`Topic` + `topicKind`
+|`group-representative`、`timeline-representative`、`contents-representative` など。
+
+|映像セグメント
+|`Segment`
+|Timeline axis 上の時間区間。`time.start` / `time.end` を持つ。
+
+|文書ページマーカー
+|`PageMarker`
+|Contents axis 上のページ又は anchor 参照。`pageNumber`、`anchorHref` を持つ。
+
+|関係
+|`Link`
+|ノード間の関係。style に線種、色、太さ、preset を持つ。
+
+|まとまり・軸
+|`Group`
+|通常グループ、Timeline、Contents など。
+
+|削除状態
+|`state: "deleted"`
+|物理削除せず、通常表示から除外する。
+
+|作成者情報
+|`audit.createdBy`
+|所有者判定、共同編集制御に使用する。
+|===
+
+== まとめ
+
+WuWei の概念モデルは、Content を中心とした読解対象、Memo による注記、Topic による論点整理、Segment / PageMarker による時間・ページ参照、Link による関係付け、Group による構造化から成る。
+
+最新の実装では、これに加えて次の概念が重要である。
+
+* ノート状態 `own` / `imported` / `team`
+* `resource.source` と `resource.kind` によるコンテンツ分類
+* `state: "deleted"` による soft delete
+* `audit.createdBy` による所有者判定
+* 代表ノードを `Topic` の特殊用途として扱う方針
+* チーム共同作業における revision / operation log / chat
+
+これらにより、WuWei は個人ノート、他者から入手したノート、チーム共同作業ノートを同一の基礎モデルの上で扱える。

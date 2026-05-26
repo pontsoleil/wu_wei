@@ -201,8 +201,7 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
     point.style.line.width = Math.max(0, Number(
       pointField('style_line_width') ? pointField('style_line_width').value : point.style.line.width
     ) || 0);
-    point.outline = point.style.line.color;
-    point.outlineWidth = point.style.line.width;
+    expandNodeRuntimeStyle(point);
     point.changed = true;
   }
 
@@ -210,6 +209,17 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
     return value && typeof value === 'object'
       ? JSON.parse(JSON.stringify(value))
       : value;
+  }
+
+  function expandNodeRuntimeStyle(node) {
+    if (wuwei && wuwei.style &&
+        typeof wuwei.style.expandNodeRuntimeStyle === 'function') {
+      wuwei.style.expandNodeRuntimeStyle(node);
+    }
+    else if (wuwei && wuwei.note && wuwei.note.v2 &&
+        typeof wuwei.note.v2.expandNodeRuntimeStyle === 'function') {
+      wuwei.note.v2.expandNodeRuntimeStyle(node);
+    }
   }
 
   function applyPointStyleToGroup(sourcePoint) {
@@ -229,11 +239,16 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
       if (node.id === sourcePoint.id) {
         return;
       }
-      node.color = sourcePoint.color;
-      node.outline = sourcePoint.outline;
-      node.outlineWidth = sourcePoint.outlineWidth;
       node.style = clonePlain(sourcePoint.style || {});
-      node.font = clonePlain(sourcePoint.font || {});
+      if (!node.style.fill && sourcePoint.color) { node.style.fill = sourcePoint.color; }
+      node.style.line = node.style.line || {};
+      node.style.line.color = node.style.line.color ||
+        (sourcePoint.style && sourcePoint.style.line && sourcePoint.style.line.color) ||
+        sourcePoint.outline;
+      node.style.line.width = node.style.line.width ||
+        (sourcePoint.style && sourcePoint.style.line && sourcePoint.style.line.width) ||
+        sourcePoint.outlineWidth || 1;
+      expandNodeRuntimeStyle(node);
       node.changed = true;
     });
     if (wuwei.draw && typeof wuwei.draw.refresh === 'function') {
@@ -272,7 +287,10 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
     var mediaStart = clampSeconds(seconds);
     var mediaEnd = getInputSeconds('editTimelinePointMediaEnd', mediaStart);
 
-    if (mediaEnd < mediaStart) {
+    if (currentTarget && currentTarget.axisRole === 'end') {
+      mediaStart = Math.min(mediaStart, mediaEnd);
+    }
+    else if (mediaEnd < mediaStart) {
       mediaEnd = mediaStart;
     }
 
@@ -370,6 +388,30 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
     };
   }
 
+  function setPointMediaDurationDisplay(group) {
+    var el = $('editTimelinePointMediaDurationText');
+    var mediaNode = getMediaNodeForGroup(group);
+    var duration = mediaNode && wuwei.video && typeof wuwei.video.getDuration === 'function'
+      ? wuwei.video.getDuration(mediaNode)
+      : 0;
+
+    function setValue(value) {
+      if (el) {
+        el.value = formatClockTime(value || 0);
+      }
+    }
+
+    setValue(duration);
+    if ((!duration || duration <= 0) && timeline &&
+        typeof timeline.resolveMediaDuration === 'function' && mediaNode) {
+      timeline.resolveMediaDuration(mediaNode).then(function (resolved) {
+        if (Number.isFinite(Number(resolved)) && Number(resolved) > 0) {
+          setValue(Number(resolved));
+        }
+      }).catch(function () { });
+    }
+  }
+
   function configurePointPanel(point, group, mode) {
     var isEndpoint = point && (point.axisRole === 'start' || point.axisRole === 'end');
     var mediaStart = Number(point.mediaStart != null ? point.mediaStart : 0);
@@ -417,38 +459,31 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
     $('edit-timeline-axis').style.display = 'none';
     $('edit-timeline-point').style.display = '';
 
-    if (isEndpoint) {
-      setFieldVisible('editTimelinePointMediaStartText', false);
-      setFieldVisible('editTimelinePointMediaEndText', false);
-      setFieldVisible('editTimelinePointDurationText', false);
-      setDeleteVisible(false);
-
-      var previewButtons = document.querySelector('.edit-timeline-capture-actions');
-      if (previewButtons) {
-        previewButtons.style.display = 'none';
-      }
-      var previewField = $('editTimelinePreviewHost');
-      if (previewField && previewField.parentElement) {
-        previewField.parentElement.style.display = 'none';
-      }
-      cleanupPreview();
-      return;
-    }
-
     setFieldVisible('editTimelinePointMediaStartText', true);
     setFieldVisible('editTimelinePointMediaEndText', true);
     setFieldVisible('editTimelinePointDurationText', true);
-    setDeleteVisible(mode !== 'axis-add-segment');
+    setDeleteVisible(!isEndpoint && mode !== 'axis-add-segment');
 
-    var previewButtons2 = document.querySelector('.edit-timeline-capture-actions');
-    if (previewButtons2) {
-      previewButtons2.style.display = '';
+    setFieldDisabled('editTimelinePointMediaStartText', point && point.axisRole === 'start');
+    setFieldDisabled('editTimelinePointMediaEndText', point && point.axisRole === 'end');
+    setFieldDisabled('editTimelinePointDurationText', isEndpoint);
+    setButtonDisabled('editTimelineCaptureToStart', point && point.axisRole === 'start');
+    setButtonDisabled('editTimelineCaptureToEnd', point && point.axisRole === 'end');
+
+    var previewButtons = document.querySelector('.edit-timeline-capture-actions');
+    if (previewButtons) {
+      previewButtons.style.display = '';
     }
-    var previewField2 = $('editTimelinePreviewHost');
-    if (previewField2 && previewField2.parentElement) {
-      previewField2.parentElement.style.display = '';
+    var jumpButtons = document.querySelector('.edit-timeline-jump-actions');
+    if (jumpButtons) {
+      jumpButtons.style.display = '';
+    }
+    var previewField = $('editTimelinePreviewHost');
+    if (previewField && previewField.parentElement) {
+      previewField.parentElement.style.display = '';
     }
 
+    setPointMediaDurationDisplay(group);
     refreshPointFields();
 
     renderPreview(group, {
@@ -477,6 +512,54 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
         pointField('description_format') ? pointField('description_format').value || 'plain/text' : 'plain/text'
       )
     };
+  }
+
+  function initTabs(root) {
+    var host = root || document;
+    var buttons = host.querySelectorAll ? host.querySelectorAll('[data-edit-tab]') : [];
+    buttons.forEach(function (button) {
+      button.addEventListener('click', function () {
+        var tabId = button.getAttribute('data-edit-tab');
+        var pane = button.closest('.edit-tabbed-pane');
+        if (!pane || !tabId) {
+          return;
+        }
+        pane.querySelectorAll('[data-edit-tab]').forEach(function (item) {
+          item.classList.toggle('active', item === button);
+          item.classList.toggle('w3-blue', item === button);
+        });
+        pane.querySelectorAll('[data-edit-tab-panel]').forEach(function (panel) {
+          panel.style.display = (panel.getAttribute('data-edit-tab-panel') === tabId) ? 'block' : 'none';
+        });
+      });
+    });
+  }
+
+  function applyTabMode(root, shapeOnly) {
+    var host = root || document;
+    var pane = host.querySelector ? host.querySelector('.edit-tabbed-pane') : null;
+    var shapeButton;
+
+    if (!pane) {
+      return;
+    }
+
+    if (shapeOnly) {
+      pane.querySelectorAll('[data-edit-tab="content"], [data-edit-tab-panel="content"]').forEach(function (el) {
+        el.style.display = 'none';
+      });
+    }
+    else {
+      pane.querySelectorAll('[data-edit-tab="content"]').forEach(function (el) {
+        el.style.display = '';
+      });
+    }
+
+    shapeButton = pane.querySelector('[data-edit-tab="shape"]') ||
+      pane.querySelector('[data-edit-tab="display"]');
+    if (shapeButton) {
+      shapeButton.click();
+    }
   }
 
   function bindTimelineShellEvents(host) {
@@ -519,14 +602,30 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
         return;
       }
 
+      if (target.id === 'editTimelineJumpToStart') {
+        seekPreviewTo(getInputSeconds('editTimelinePointMediaStart', 0));
+        ev.preventDefault();
+        return;
+      }
+
+      if (target.id === 'editTimelineJumpToEnd') {
+        seekPreviewTo(getInputSeconds('editTimelinePointMediaEnd', 0));
+        ev.preventDefault();
+        return;
+      }
+
       if (target.id === 'editTimelineCaptureToStart') {
-        capturePreviewTime('start');
+        if (!target.disabled) {
+          capturePreviewTime('start');
+        }
         ev.preventDefault();
         return;
       }
 
       if (target.id === 'editTimelineCaptureToEnd') {
-        capturePreviewTime('end');
+        if (!target.disabled) {
+          capturePreviewTime('end');
+        }
         ev.preventDefault();
         return;
       }
@@ -617,9 +716,9 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
     }
   }
 
-  function openAxisProperties(group) {
-    if (wuwei.edit && wuwei.edit.contents && typeof wuwei.edit.contents.close === 'function') {
-      wuwei.edit.contents.close();
+  function openAxisProperties(group, option) {
+    if (wuwei.edit && wuwei.edit.viewpoint && typeof wuwei.edit.viewpoint.close === 'function') {
+      wuwei.edit.viewpoint.close();
     }
     if (!group || !isAxisGroup(group)) {
       return false;
@@ -642,12 +741,13 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
     });
 
     configureAxisPanel(group);
+    applyTabMode($('edit-timeline-axis'), option && option.shapeOnly);
     return true;
   }
 
-  function openSegmentProperties(point) {
-    if (wuwei.edit && wuwei.edit.contents && typeof wuwei.edit.contents.close === 'function') {
-      wuwei.edit.contents.close();
+  function openSegmentProperties(point, option) {
+    if (wuwei.edit && wuwei.edit.viewpoint && typeof wuwei.edit.viewpoint.close === 'function') {
+      wuwei.edit.viewpoint.close();
     }
     var record = resolveSegment(point);
     if (!record || !ensureEditShell()) {
@@ -668,6 +768,7 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
     });
 
     configurePointPanel(record.segment, record.group, 'segment-properties');
+    applyTabMode($('edit-timeline-point'), option && option.shapeOnly);
     return true;
   }
 
@@ -725,6 +826,10 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
 
   function ensureEditShell() {
     var editPane = $('edit');
+
+    if (wuwei.edit && typeof wuwei.edit.closeInfoPaneForEdit === 'function') {
+      wuwei.edit.closeInfoPaneForEdit();
+    }
     var host;
 
     if (!editPane) {
@@ -740,12 +845,16 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
 
     editPane.style.display = 'block';
     state.Editing = true;
+    if (wuwei.edit && typeof wuwei.edit.showOnlyEditRoot === 'function') {
+      wuwei.edit.showOnlyEditRoot('edit-timeline');
+    }
 
     host = $('edit-timeline') || editPane;
 
     host.innerHTML = wuwei.edit.timeline.markup.panelsHtml();
 
     bindTimelineShellEvents(host);
+    initTabs(host);
     initColorPalettePicker();
 
     return host;
@@ -756,6 +865,22 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
     var row = el && el.parentElement;
     if (row) {
       row.style.display = visible ? '' : 'none';
+    }
+  }
+
+  function setFieldDisabled(id, disabled) {
+    var el = $(id);
+    if (el) {
+      el.disabled = !!disabled;
+      el.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+    }
+  }
+
+  function setButtonDisabled(id, disabled) {
+    var el = $(id);
+    if (el) {
+      el.disabled = !!disabled;
+      el.setAttribute('aria-disabled', disabled ? 'true' : 'false');
     }
   }
 
@@ -987,8 +1112,8 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
   }
 
   function openAddSegmentFromPlayer(group) {
-    if (wuwei.edit && wuwei.edit.contents && typeof wuwei.edit.contents.close === 'function') {
-      wuwei.edit.contents.close();
+    if (wuwei.edit && wuwei.edit.viewpoint && typeof wuwei.edit.viewpoint.close === 'function') {
+      wuwei.edit.viewpoint.close();
     }
     var now;
     var draft;
@@ -1044,8 +1169,8 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
   }
 
   function openSegmentFromPlayer(point) {
-    if (wuwei.edit && wuwei.edit.contents && typeof wuwei.edit.contents.close === 'function') {
-      wuwei.edit.contents.close();
+    if (wuwei.edit && wuwei.edit.viewpoint && typeof wuwei.edit.viewpoint.close === 'function') {
+      wuwei.edit.viewpoint.close();
     }
     var record = resolveSegment(point);
     var spec;
@@ -1174,13 +1299,14 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
     }
 
     if (record.segment.axisRole === 'start' || record.segment.axisRole === 'end') {
-      menu.timeline.updateTimePoint(currentTarget, {
-        label: $('editTimelinePointName').value || record.segment.label || '',
-        description: buildDescription(
-          pointField('description_body') ? pointField('description_body').value || '' : '',
-          pointField('description_format') ? pointField('description_format').value || 'plain/text' : 'plain/text'
-        )
-      });
+      patch = buildPointPatch(record.group);
+      if (record.segment.axisRole === 'start') {
+        patch.mediaStart = 0;
+      }
+      if (record.segment.axisRole === 'end') {
+        patch.mediaEnd = Number(record.group.timeEnd || (record.group.axis && record.group.axis.end) || record.segment.mediaEnd || record.segment.mediaStart || 0);
+      }
+      menu.timeline.updateTimePoint(currentTarget, patch);
       applyPointStyle(record.segment);
       applyPointStyleToGroup(record.segment);
       return true;
@@ -1273,14 +1399,14 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
       if ('axis-add-segment' === option.timelineMode) {
         return openAddSegmentFromPlayer(target);
       }
-      return openAxisProperties(target);
+      return openAxisProperties(target, option || {});
     }
 
     if (isTimelinePoint(target)) {
       if ('segment-player' === option.timelineMode) {
         return openSegmentFromPlayer(target);
       }
-      return openSegmentProperties(target);
+      return openSegmentProperties(target, option || {});
     }
 
     return false;

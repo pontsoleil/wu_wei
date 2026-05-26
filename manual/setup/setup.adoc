@@ -1,4 +1,4 @@
-﻿= 仕様署名
+= 仕様署名
 三分一信之（三分一技術士事務所）
 :revnumber: ver 2.0
 :revdate: 2026-05-22
@@ -8,6 +8,7 @@
 :toc:
 :toclevels: 3
 :sectnums:
+:encoding: utf-8
 
 == 目的
 
@@ -236,16 +237,24 @@ function buildProtectedFileUrl(file) {
   const params = new URLSearchParams();
   params.set('area', file.area);
   params.set('path', file.path);
-  return `server/load-file.cgi?${params.toString()}`;
+
+  // 実装では環境差を直接書かず、util.getServerUrl('load-file') に委譲する。
+  // local では /wu_wei2/cgi-bin/load-file.py、
+  // 公開環境では /wu_wei2/server/load-file.cgi を返す。
+  return `${wuwei.util.getServerUrl('load-file')}?${params.toString()}`;
 }
 ----
+
+実装コードでは、`server/load-file.cgi` や `cgi-bin/load-file.py` を直接組み立てず、`wuwei.util.getServerUrl('load-file')` 又は `wuwei.util.toPublicResourceUri()` を使用する。
 
 画像、PDF、動画、Office プレビューなども同じ URL を使う。
 
 [source,html]
 ----
-<img src="server/load-file.cgi?area=upload&path=2026/04/29/_uploaded_uuid/thumbnail.jpg">
-<iframe src="server/load-file.cgi?area=upload&path=2026/04/29/_uploaded_uuid/preview.pdf"></iframe>
+<!-- 実際の URL は buildProtectedFileUrl() 又は wuwei.util.toPublicResourceUri() で生成する。 -->
+<!-- 次は公開環境での展開例である。ローカル環境では /wu_wei2/cgi-bin/load-file.py が使用される。 -->
+<img src="/wu_wei2/server/load-file.cgi?area=upload&path=2026/04/29/_uploaded_uuid/thumbnail.jpg">
+<iframe src="/wu_wei2/server/load-file.cgi?area=upload&path=2026/04/29/_uploaded_uuid/preview.pdf"></iframe>
 ----
 
 Office 文書の原本はブラウザ内表示に適さないことがあるため、プレビュー PDF またはサムネイルを優先して表示する。

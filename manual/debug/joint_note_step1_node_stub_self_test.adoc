@@ -1,0 +1,161 @@
+= WuWei Joint Note Step 1 Node Stub Self Test
+三分一信之（三分一技術士事務所）
+:revnumber: ver 1.0
+:revdate: 2026-05-25
+:version-label!:
+:doctype: article
+:toc:
+:toclevels: 3
+:sectnums:
+
+== 目的
+
+この手順は、ブラウザを使わず Node 上で `wuwei.debug.runJointStep1NoServerTest()` を実行し、Joint Note Step 1 の import / team / own 判定がすべて `ok: true` になることを確認するためのものである。
+
+Apache24、CGI、共同編集サーバー API は使用しない。
+
+== 前提
+
+作業ディレクトリは `wu_wei2` ルートとする。
+
+[source,powershell]
+----
+cd C:\Apache24\htdocs\wu_wei2
+node --version
+----
+
+`index.html` の読み込み順に近い形で、次の 2 ファイルを Node 上で評価する。
+
+* `app2/model/wuwei.joint.js`
+* `app2/misc/wuwei.debug.js`
+
+== 実行コマンド
+
+PowerShell で次を実行する。
+
+[source,powershell]
+----
+@'
+const fs = require('fs');
+
+global.window = global;
+global.document = {
+  querySelector() {
+    return null;
+  }
+};
+global.console = console;
+
+global.wuwei = {
+  common: {
+    state: {
+      currentUser: {
+        user_id: 'u-current',
+        role: 'general'
+      }
+    },
+    current: {
+      note_id: 'n-debug',
+      note_name: 'Debug',
+      description: '',
+      page: {
+        nodes: []
+      },
+      pages: [
+        {
+          id: 'p1',
+          nodes: [],
+          links: []
+        }
+      ],
+      resources: [],
+      audit: {
+        createdBy: 'u-current',
+        createdAt: '2026-05-25T00:00:00Z'
+      }
+    },
+    getCurrentOwnerId() {
+      return this.state.currentUser.user_id;
+    },
+    createGuestCurrentUser() {
+      return {
+        user_id: 'guest',
+        role: 'general'
+      };
+    }
+  },
+  auth: {
+    getCurrentUserId() {
+      return wuwei.common.state.currentUser.user_id;
+    },
+    canEditRecord(record) {
+      return !!(record &&
+        record.audit &&
+        record.audit.createdBy === wuwei.common.state.currentUser.user_id);
+    }
+  },
+  note: {
+    exportNoteText() {
+      const current = wuwei.common.current;
+      return JSON.stringify({
+        jointNoteState: current.jointNoteState,
+        note_scope: current.note_scope,
+        origin: current.origin
+      });
+    }
+  }
+};
+
+eval(fs.readFileSync('app2/model/wuwei.joint.js', 'utf8'));
+eval(fs.readFileSync('app2/misc/wuwei.debug.js', 'utf8'));
+
+const result = wuwei.debug.runJointStep1NoServerTest();
+
+if (!result.ok) {
+  console.error(JSON.stringify(result.checks.filter((item) => !item.ok), null, 2));
+  process.exit(1);
+}
+
+console.log('debug self-test ok');
+'@ | node -
+----
+
+== 期待結果
+
+`console.table` に import / team / own のチェック結果が表示される。
+
+すべての行で `ok` が `true` になり、最後に次が表示されれば成功である。
+
+[source,text]
+----
+debug self-test ok
+----
+
+特に確認する項目は次である。
+
+* import state: `jointNoteState == "imported"`
+* import state: `origin.type == "import"`
+* import state: `origin.source == "export-package"`
+* import state: 他者ノードの soft delete が可
+* team state: `jointNoteState == "team"`
+* team state: `origin.type == "team"`
+* team state: `origin.source == "team-note"`
+* team state: 他者ノードの編集及び delete が不可
+* own state: `wuwei.joint.getNoteState()` が `own`
+
+== 失敗時の見方
+
+失敗した場合は、`result.checks.filter((item) => !item.ok)` の JSON が表示される。
+
+`actual` と `expected` を比較し、次の観点で切り分ける。
+
+* `wuwei.joint.isImportedNote()` が `origin.type/source` を見ているか。
+* `wuwei.joint.isTeamNote()` が `jointNoteState`, `note_scope`, `origin.type/source` を見ているか。
+* `wuwei.debug` の `setJointImported()` / `setJointTeam()` が `jointNoteState`, `note_scope`, `origin` を設定しているか。
+* `wuwei.note.exportNoteText()` 相当の経路で `origin` が落ちていないか。
+
+== 注意
+
+このテストは Node 上の最小スタブであり、実ブラウザ上の描画、クリック操作、編集ペイン、Apache24 配信、CGI 保存は確認しない。
+
+実画面での確認は `manual/joint_note/joint_note_step1_no_server_test.adoc` の Chrome Console 手順で行う。

@@ -1,11 +1,24 @@
+/* Note canvas colour settings.
+ * Keep these values very light so the canvas does not look grey.
+ */
+:root {
+  --wuwei-note-canvas-bg: #ffffff;
+  --wuwei-note-grid-line: #f0f2f5;
+  --wuwei-note-grid-text: #eef2f7;
+}
+
+svg#draw {
+  background: var(--wuwei-note-canvas-bg);
+}
+
 g.axis {
-  stroke: #e8e7ea;
+  stroke: var(--wuwei-note-grid-line);
   stroke-width: 1;
   fill: none;
 }
 g.axis text {
   stroke: none;
-  fill: #e8e7ea;
+  fill: var(--wuwei-note-grid-text);
 }
 /*#wuwei {
   display: flex;
@@ -37,7 +50,7 @@ g.axis text {
 }
 #miniature svg {
   position: absolute;
-  background: #f8f9fa;
+  background: var(--wuwei-note-canvas-bg);
   width: 200px;
   height: 200px;
   z-index: 6;

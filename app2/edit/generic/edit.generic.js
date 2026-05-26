@@ -46,6 +46,9 @@ wuwei.edit.generic = wuwei.edit.generic || {};
   }
         
   function open(param) {
+    if (wuwei.edit && typeof wuwei.edit.closeInfoPaneForEdit === 'function') {
+      wuwei.edit.closeInfoPaneForEdit();
+    }
     if (!param) {
       param = {}
     }

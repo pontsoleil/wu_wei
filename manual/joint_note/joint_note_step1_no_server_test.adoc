@@ -1,0 +1,157 @@
+= WuWei Joint Note Step 1 No-Server Test
+三分一信之（三分一技術士事務所）
+:revnumber: ver 1.0
+:revdate: 2026-05-25
+:version-label!:
+:doctype: book
+:toc:
+:toclevels: 3
+:sectnums:
+
+== 目的
+
+この手順は、Joint Note Step 1 のクライアント側状態判定と編集制御を、共同編集サーバー API なしで確認するためのものである。
+
+確認対象は、同期、排他制御、チームノート一覧取得ではなく、次の note-level 状態が画面上の編集制御に反映されることである。
+
+* `jointNoteState`
+* `note_scope`
+* `origin.type`
+* `origin.source`
+
+旧 `collabNoteState` は互換入力として扱うが、Step 1 の正本項目は `jointNoteState` とする。
+
+== 前提
+
+Windows の Apache24 で `wu_wei2` を配信し、Chrome で次のように開く。
+
+[source,text]
+----
+http://localhost/wu_wei2/
+----
+
+任意のノートを一つ開いてから Chrome DevTools の Console を開く。
+
+`index.html` では `app2/misc/wuwei.debug.js` が読み込まれるため、Console から `wuwei.debug.*` を直接呼び出せる。
+
+== 一括確認
+
+Console で次を実行する。
+
+[source,javascript]
+----
+wuwei.debug.runJointStep1NoServerTest();
+----
+
+この関数は現在のノートを一時的に次の状態へ切り替えて、`wuwei.joint` の判定結果を確認する。
+
+* import note
+* team note
+* own note
+
+既定ではテスト後に元の note-level 状態を復元する。
+
+戻り値の `ok` が `true` で、Console の `console.table` に表示される各行の `ok` がすべて `true` なら、Step 1 のクライアント側判定は通っている。
+
+[source,javascript]
+----
+const result = wuwei.debug.runJointStep1NoServerTest();
+result.ok;
+result.checks;
+----
+
+状態を復元せず、画面上で team note 状態のまま確認したい場合は次を使う。
+
+[source,javascript]
+----
+wuwei.debug.runJointStep1NoServerTest({ restore: false });
+----
+
+確認後に通常状態へ戻す。
+
+[source,javascript]
+----
+wuwei.debug.setJointOwn();
+----
+
+== 個別確認
+
+=== import note 状態
+
+[source,javascript]
+----
+wuwei.debug.setJointImported();
+wuwei.debug.jointState();
+----
+
+期待値は次の通りである。
+
+* `jointNoteState == "imported"`
+* `note_scope == "personal"`
+* `origin.type == "import"`
+* `origin.source == "export-package"`
+* 他者ノードの表示・レイアウト編集は可
+* 他者ノードの意味属性編集は不可
+* 他者ノードの soft delete は可
+
+=== team note 状態
+
+[source,javascript]
+----
+wuwei.debug.setJointTeam({ team_id: "t-debug" });
+wuwei.debug.jointState();
+----
+
+期待値は次の通りである。
+
+* `jointNoteState == "team"`
+* `note_scope == "team"`
+* `origin.type == "team"`
+* `origin.source == "team-note"`
+* 他者ノードの意味属性編集は不可
+* 他者ノードの表示・レイアウト編集も不可
+* 他者ノードの delete は不可
+
+=== own note 状態
+
+[source,javascript]
+----
+wuwei.debug.setJointOwn();
+wuwei.debug.jointState();
+----
+
+期待値は次の通りである。
+
+* `jointNoteState == "own"`
+* `note_scope == "personal"`
+* active team note ではない
+* import note ではない
+
+== 保存 JSON の確認
+
+サーバーへ保存せず、クライアントの export 経路で保存 JSON 相当を確認する。
+
+[source,javascript]
+----
+wuwei.debug.setJointImported();
+JSON.parse(wuwei.note.exportNoteText()).origin;
+
+wuwei.debug.setJointTeam({ team_id: "t-debug" });
+JSON.parse(wuwei.note.exportNoteText()).origin;
+----
+
+import note では `origin.type == "import"`、`origin.source == "export-package"` が残る。
+
+team note では `origin.type == "team"`、`origin.source == "team-note"` が残る。
+
+== Step 1 完了判定
+
+Step 1 のサーバーなし確認では、次を完了条件とする。
+
+* `wuwei.debug.runJointStep1NoServerTest().ok` が `true`
+* import note の export JSON に `jointNoteState`, `note_scope`, `origin.type`, `origin.source` が残る
+* team note の export JSON に `jointNoteState`, `note_scope`, `origin.type`, `origin.source` が残る
+* import note では他者ノードの soft delete が可
+* team note では他者ノードの delete が不可
+
+共同編集サーバー API、チームノート一覧、差分同期、競合解決は Step 2 以降の確認対象とする。

@@ -1,0 +1,70 @@
+= WuWei 非チームノートにおける他者作成オブジェクトの編集・レイアウト方針
+三分一信之（三分一技術士事務所）
+:revnumber: ver 2.0
+:revdate: 2026-05-2
+:revremark: draft for review
+:version-label!:
+:doctype: book
+:toc:
+:toclevels: 3
+:sectnums:
+
+== 方針
+
+チームノートでない場合、他者が作成したオブジェクトであっても、現在ユーザの作業用レイアウトとして次を許可する。
+
+* 形状の変更
+* 色の変更
+* 文字フォント・文字サイズの変更
+* node / representative node / Segment / PageMarker の個別移動
+* Timeline / Viewpoint の個別レイアウト調整
+
+一方、active なチームノートでは、他者が作成したオブジェクトを直接編集・移動しない。
+
+== 編集コンテキストメニュー
+
+チームノートでなければ、他者作成対象でも編集コンテキストメニューに `Edit` を表示する。
+
+対象:
+
+* 通常 node
+* Timeline
+* Viewpoint
+* representative node
+* Timeline Segment
+* Viewpoint PageMarker
+
+== 実装
+
+`app2/menu/wuwei.menu.js`:
+
+* `isTeamJointNoteForMenu()` を追加
+* `isNonOwnerAllowedEditOperation()` を修正
+* 非チームノートでは、他者作成対象に対して次の表示・レイアウト系 operation を許可
+
+[source,text]
+----
+edit
+editRepresentativeStyle
+editTimelineAxisProps
+editTimelineSegmentProps
+horizontal
+vertical
+normal
+reverse
+horizontal2
+vertical2
+forward
+backward
+----
+
+`app2/model/wuwei.model.js`:
+
+* `isTeamJointNoteForModel()` を追加
+* `canMoveRecordByCurrentUser()` を追加
+* Node drag の所有者制御を、active team note の場合だけ厳格化
+* `canMoveGroupByCurrentUser()` を修正し、非チームノートでは他者作成 Viewpoint / Timeline も移動可能にした
+
+== 注意
+
+編集ペイン内部では、`wuwei.joint.canEditPath()` により非表示項目又は意味項目の直接編集は引き続き制御される。したがって、非チームノートにおける他者作成オブジェクトの編集許可は、主に表示・レイアウト属性を対象とする。

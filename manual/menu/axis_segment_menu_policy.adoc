@@ -1,0 +1,39 @@
+= WuWei 軸追加及び Segment 追加メニュー整理
+三分一信之（三分一技術士事務所）
+:revnumber: ver 1.0
+:revdate: 2026-05-25
+:revremark:
+:version-label!:
+:doctype: book
+:toc:
+:toclevels: 3
+:sectnums:
+
+== 変更内容
+
+`軸追加` は、Timeline と Viewpoint の両方で同じアイコンを使用する。
+
+* Timeline axis 追加: `fas fa-stream`
+* Viewpoint axis 追加: `fas fa-stream`
+
+これにより、軸追加はどちらも横棒が重なったアイコンで表示される。
+
+== Segment 追加
+
+Timeline では、次の対象で `Segment 追加` を表示する。
+
+* Timeline axis
+* Timeline representative node
+
+`Segment 追加` のアイコンは、Viewpoint の `ページ追加` と同じ丸＋アイコンを使用する。
+
+[source,text]
+----
+fas fa-plus-circle
+----
+
+== 実装
+
+* `isContextTimelineRepresentative(allNodes)` を追加
+* `addTimelineSegmentFromPlayer` の validator を拡張
+* Timeline representative node から Segment を追加する場合は、`groupRef` から Timeline group を解決する

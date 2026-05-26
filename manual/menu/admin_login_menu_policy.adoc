@@ -1,0 +1,37 @@
+= WuWei 管理(Admin)ペイン及びログインユーザメニュー
+三分一信之（三分一技術士事務所）
+:revnumber: ver 1.0
+:revdate: 2026-05-25
+:revremark:
+:version-label!:
+:doctype: book
+:toc:
+:toclevels: 3
+:sectnums:
+
+== 管理(Admin)ペイン
+
+admin ユーザの場合、情報コンテキストメニューに `Admin` を表示する。
+
+`Admin` は次を表示する。
+
+* Summary
+* Validation
+* current.page record
+* graph record
+* group record
+* SVG element
+* input target
+
+== ログインユーザメニュー
+
+ノートキャンパス右上のログインアイコンをクリックすると、ログインユーザメニューを開く。
+
+未ログイン時は `Login` のみ表示する。
+
+ログイン後は次を表示する。
+
+* Login user information
+** login id
+** ユーザ名
+* Logout

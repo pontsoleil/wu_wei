@@ -51,7 +51,7 @@ wuwei.search.this_note.markup = (function () {
     if (type === 'Memo') { return 'far fa-sticky-note'; }
     if (type === 'Group') { return 'far fa-circle'; }
     if (type === 'Timeline') { return 'fas fa-stream'; }
-    if (type === 'Contents') { return 'fas fa-list-ol'; }
+    if (type === 'Viewpoint') { return 'fas fa-list-ol'; }
     if (type === 'Link') { return 'fas fa-link'; }
     return 'fas fa-circle';
   }

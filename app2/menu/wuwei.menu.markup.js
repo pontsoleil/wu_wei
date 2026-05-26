@@ -60,6 +60,33 @@ wuwei.menu.markup = (function () {
     <i class="fas fa-user"></i>
   </a>
 
+  <div id="userMenu" class="pulldown user" style="display: none;">
+    <span class="header">
+      <i class="fas fa-user fa-fw">&nbsp;${translate('User')}</i>
+      <i class="fas fa-times fa-fw">&nbsp;${translate('User')}</i>
+    </span>
+    <hr>
+    <div class="operators">
+      <div class="operator Login notlogin">
+        <i class="fas fa-sign-in-alt fa-fw"></i>
+        <span>${translate('Login')}</span>
+      </div>
+      <div class="operator LoginUserInfo loggedin readonly">
+        <i class="fas fa-id-card fa-fw"></i>
+        <span>${translate('Login user information')}</span>
+        <div class="login-user-info-lines">
+          <div><span class="label">${translate('Login ID')}</span>: <span id="loginUserLogin"></span></div>
+          <div><span class="label">${translate('User name')}</span>: <span id="loginUserName"></span></div>
+          <div><span class="label">${translate('Role')}</span>: <span id="loginUserRole"></span></div>
+        </div>
+      </div>
+      <div class="operator Logout loggedin">
+        <i class="fas fa-sign-out-alt fa-fw"></i>
+        <span>${translate('Logout')}</span>
+      </div>
+    </div>
+  </div>
+
   <div id="note_name">
     <span class="name"></span>
     <span class="description"></span>

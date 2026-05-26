@@ -87,7 +87,7 @@ wuwei.info.video = wuwei.info.video || {};
   };
 
   getResourceUrl = function (resource) {
-    return String(resource && (resource.canonicalUri || resource.uri) || '');
+    return String(resource && ((resource.original && resource.original.url) || (resource.original && resource.original.url) || resource.uri || resource.canonicalUri) || '');
   };
 
   getTimeRange = function (node) {

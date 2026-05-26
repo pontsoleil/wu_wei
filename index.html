@@ -51,15 +51,20 @@
   <link type="text/css" rel="stylesheet" href="app2/edit/generic/edit.generic.css" />
   <link type="text/css" rel="stylesheet" href="app2/edit/uploaded/edit.uploaded.css" />
   <link type="text/css" rel="stylesheet" href="app2/edit/video/edit.video.css" />
+  <link type="text/css" rel="stylesheet" href="app2/edit/audio/edit.audio.css" />
+  <link type="text/css" rel="stylesheet" href="app2/edit/image/edit.image.css" />
   <link type="text/css" rel="stylesheet" href="app2/edit/link/edit.link.css" />
   <link type="text/css" rel="stylesheet" href="app2/edit/timeline/edit.timeline.css" />
   <link type="text/css" rel="stylesheet" href="app2/info/wuwei.info.css" />
+  <link type="text/css" rel="stylesheet" href="app2/info/admin/info.admin.css" />
   <link type="text/css" rel="stylesheet" href="app2/info/generic/info.generic.css" />
   <link type="text/css" rel="stylesheet" href="app2/info/uploaded/info.uploaded.css" />
   <link type="text/css" rel="stylesheet" href="app2/info/video/info.video.css" />
+  <link type="text/css" rel="stylesheet" href="app2/info/audio/info.audio.css" />
+  <link type="text/css" rel="stylesheet" href="app2/info/image/info.image.css" />
   <link type="text/css" rel="stylesheet" href="app2/info/asciidoc/info.asciidoc.css" />
   <link type="text/css" rel="stylesheet" href="app2/info/timeline/info.timeline.css" />
-  <link type="text/css" rel="stylesheet" href="app2/info/contents/info.contents.css" />
+  <link type="text/css" rel="stylesheet" href="app2/info/viewpoint/info.viewpoint.css" />
   <!-- <link type="text/css" rel="stylesheet" href="app2/filter/wuwei.filter.css" /> -->
   <link type="text/css" rel="stylesheet" href="app2/search/wuwei.search.css" />
   <link type="text/css" rel="stylesheet" href="app2/search/this_note/search.this_note.css" />
@@ -124,6 +129,7 @@
   <script type="text/javascript" src="app2/misc/wuwei.common.js"></script>
   <script type="text/javascript" src="app2/misc/wuwei.util.js"></script>
   <script type="text/javascript" src="app2/misc/wuwei.ajax.js"></script>
+  <script type="text/javascript" src="app2/misc/wuwei.debug.js"></script>
   <!-- shell -->
   <script type="text/javascript" src="app2/wuwei.init.registry.js"></script>
   <script type="text/javascript" src="app2/wuwei.shell.js"></script>
@@ -139,7 +145,12 @@
   <script type="text/javascript" src="app2/home/wuwei.home.markup.js"></script>
   <!-- model -->
   <script type="text/javascript" src="app2/model/wuwei.auth.js"></script>
-  <script type="text/javascript" src="app2/model/wuwei.collab.js"></script>
+  <script type="text/javascript" src="app2/model/wuwei.joint.js"></script>
+  <script type="text/javascript" src="app2/model/wuwei.style.js"></script>
+  <script type="text/javascript" src="app2/model/wuwei.resource.js"></script>
+  <script type="text/javascript" src="app2/model/wuwei.document.js"></script>
+  <script type="text/javascript" src="app2/model/wuwei.video.js"></script>
+  <script type="text/javascript" src="app2/model/wuwei.audio.js"></script>
   <script type="text/javascript" src="app2/model/wuwei.model.js"></script>
   <script type="text/javascript" src="app2/model/wuwei.data.js"></script>
   <script type="text/javascript" src="app2/model/wuwei.note.js"></script>
@@ -148,15 +159,11 @@
   <script type="text/javascript" src="app2/model/wuwei.note.v0.js"></script>
   <script type="text/javascript" src="app2/model/wuwei.note.v1.js"></script>
   <script type="text/javascript" src="app2/model/wuwei.log.js"></script>
-  <script type="text/javascript" src="app2/model/wuwei.video.js"></script>
   <script type="text/javascript" src="app2/model/wuwei.timeline.js"></script>
-  <script type="text/javascript" src="app2/model/wuwei.contents.js"></script>
-  <script type="text/javascript" src="app2/model/wuwei.resource.js"></script>
+  <script type="text/javascript" src="app2/model/wuwei.viewpoint.js"></script>
   <!-- draw -->
   <script type="text/javascript" src="app2/draw/wuwei.draw.js"></script>
   <script type="text/javascript" src="app2/draw/wuwei.draw.markup.js"></script>
-  <!-- <script type="text/javascript" src="app2/model/wuwei.file.js"></script>
-  <script type="text/javascript" src="app2/model/wuwei.resource.js"></script> -->
   <!-- menu -->
   <script type="text/javascript" src="app2/menu/wuwei.menu.js"></script>
   <script type="text/javascript" src="app2/menu/wuwei.menu.markup.js"></script>
@@ -180,8 +187,8 @@
   <script type="text/javascript" src="app2/menu/setting/menu.setting.markup.js"></script>
   <script type="text/javascript" src="app2/menu/timeline/menu.timeline.markup.js"></script>
   <script type="text/javascript" src="app2/menu/timeline/menu.timeline.js"></script>
-  <script type="text/javascript" src="app2/menu/contents/menu.contents.markup.js"></script>
-  <script type="text/javascript" src="app2/menu/contents/menu.contents.js"></script>
+  <script type="text/javascript" src="app2/menu/viewpoint/menu.viewpoint.markup.js"></script>
+  <script type="text/javascript" src="app2/menu/viewpoint/menu.viewpoint.js"></script>
   <script type="text/javascript" src="app2/menu/video/menu.video.template.js"></script>
   <script type="text/javascript" src="app2/menu/video/menu.video.js"></script>
   <!-- edit -->
@@ -194,8 +201,8 @@
   <script type="text/javascript" src="app2/edit/group/edit.group.js"></script>
   <script type="text/javascript" src="app2/edit/group/edit.group.markup.js"></script>
   <script type="text/javascript" src="app2/edit/entry/edit.entry.js"></script>
-  <script type="text/javascript" src="app2/edit/contents/edit.contents.js"></script>
-  <script type="text/javascript" src="app2/edit/contents/edit.contents.markup.js"></script>
+  <script type="text/javascript" src="app2/edit/viewpoint/edit.viewpoint.js"></script>
+  <script type="text/javascript" src="app2/edit/viewpoint/edit.viewpoint.markup.js"></script>
   <script type="text/javascript" src="app2/edit/uploaded/edit.uploaded.js"></script>
   <script type="text/javascript" src="app2/edit/uploaded/edit.uploaded.markup.js"></script>
   <script type="text/javascript" src="app2/edit/link/edit.link.js"></script>
@@ -204,9 +211,15 @@
   <script type="text/javascript" src="app2/edit/timeline/edit.timeline.markup.js"></script>
   <script type="text/javascript" src="app2/edit/video/edit.video.js"></script>
   <script type="text/javascript" src="app2/edit/video/edit.video.markup.js"></script>
+  <script type="text/javascript" src="app2/edit/audio/edit.audio.js"></script>
+  <script type="text/javascript" src="app2/edit/audio/edit.audio.markup.js"></script>
+  <script type="text/javascript" src="app2/edit/image/edit.image.js"></script>
+  <script type="text/javascript" src="app2/edit/image/edit.image.markup.js"></script>
   <!-- info -->
   <script type="text/javascript" src="app2/info/wuwei.info.js"></script>
   <script type="text/javascript" src="app2/info/wuwei.info.markup.js"></script>
+  <script type="text/javascript" src="app2/info/admin/info.admin.js"></script>
+  <script type="text/javascript" src="app2/info/admin/info.admin.markup.js"></script>
   <script type="text/javascript" src="app2/info/generic/info.generic.js"></script>
   <script type="text/javascript" src="app2/info/generic/info.generic.markup.js"></script>
   <script type="text/javascript" src="app2/info/group/info.group.js"></script>
@@ -217,10 +230,14 @@
   <script type="text/javascript" src="app2/info/asciidoc/info.asciidoc.markup.js"></script>
   <script type="text/javascript" src="app2/info/timeline/info.timeline.js"></script>
   <script type="text/javascript" src="app2/info/timeline/info.timeline.markup.js"></script>
-  <script type="text/javascript" src="app2/info/contents/info.contents.js"></script>
-  <script type="text/javascript" src="app2/info/contents/info.contents.markup.js"></script>
+  <script type="text/javascript" src="app2/info/viewpoint/info.viewpoint.js"></script>
+  <script type="text/javascript" src="app2/info/viewpoint/info.viewpoint.markup.js"></script>
   <script type="text/javascript" src="app2/info/video/info.video.js"></script>
   <script type="text/javascript" src="app2/info/video/info.video.markup.js"></script>
+  <script type="text/javascript" src="app2/info/audio/info.audio.js"></script>
+  <script type="text/javascript" src="app2/info/audio/info.audio.markup.js"></script>
+  <script type="text/javascript" src="app2/info/image/info.image.js"></script>
+  <script type="text/javascript" src="app2/info/image/info.image.markup.js"></script>
   <!-- search modules -->
   <script type="text/javascript" src="app2/search/wuwei.search.js"></script>
   <script type="text/javascript" src="app2/search/wuwei.search.markup.js"></script>

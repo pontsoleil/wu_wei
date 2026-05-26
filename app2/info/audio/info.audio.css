@@ -1,0 +1,17 @@
+/* info.audio.css */
+.info-audio-player {
+  width: 100%;
+  min-height: 2.5rem;
+}
+.info-audio-metadata {
+  display: grid;
+  grid-template-columns: 9em 1fr;
+  gap: 0.25rem 0.75rem;
+  word-break: break-word;
+}
+.info-audio-metadata dt {
+  font-weight: bold;
+}
+.info-audio-metadata dd {
+  margin: 0;
+}

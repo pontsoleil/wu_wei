@@ -1,0 +1,41 @@
+= WuWei 統一編集メニュー及び編集タブ仕様
+三分一信之（三分一技術士事務所）
+:revnumber: ver 1.0
+:revdate: 2026-05-25
+:revremark:
+:version-label!:
+:doctype: book
+:toc:
+:toclevels: 3
+:sectnums:
+
+== 統一方針
+
+コンテキスト編集メニューリストには、鉛筆アイコンの `編集` を一件だけ表示する。
+
+`形状編集` と `内容編集` はコンテキストメニュー項目として分けず、編集ペイン内のタブとして扱う。
+
+== 編集ペインのタブ
+
+次の対象には、`形状` タブと `内容` タブを提供する。
+
+* Timeline axis
+* Viewpoint axis
+* Timeline representative node
+* Viewpoint representative node
+* Timeline Segment
+* Viewpoint PageMarker
+
+== 権限制御
+
+=== チームノートでない場合
+
+自分のオブジェクトは、`形状` / `内容` タブを編集可能とする。
+
+他人のオブジェクトは、`形状` タブのみ表示する。名称、URL、resource URI などの意味属性は変更不可とする。
+
+=== チームノートの場合
+
+自分のオブジェクトは、`形状` / `内容` タブを編集可能とする。
+
+他人のオブジェクトについては、編集メニューを表示しない。ただし、追加系操作は許可する。

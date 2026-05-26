@@ -1,0 +1,64 @@
+/* WuWei overrides for W3.CSS */
+
+html,
+body {
+  font-family:
+    "Segoe UI",
+    "Meiryo",
+    "Yu Gothic",
+    "Hiragino Kaku Gothic ProN",
+    sans-serif;
+}
+
+/* Avoid unexpected clipping of floating panes and menus */
+html {
+  overflow-x: auto;
+}
+
+/* Restore visible keyboard focus */
+button:focus-visible,
+[role="button"]:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+.w3-button:focus-visible,
+.w3-bar-item:focus-visible {
+  outline: 2px solid #1a73e8;
+  outline-offset: 2px;
+}
+
+/* Ensure WuWei floating UI is above W3 elements */
+.wuwei-context-menu {
+  z-index: 10000;
+}
+
+.wuwei-floating-panel,
+#wuwei-info-pane,
+#wuwei-edit-pane {
+  z-index: 9000;
+}
+
+/* Link visibility in information/edit panes */
+#wuwei-info-pane a,
+#wuwei-edit-pane a,
+.wuwei-document a {
+  color: #0645ad;
+  text-decoration: underline;
+}
+
+/* Reduce motion when requested by OS/user setting */
+@media (prefers-reduced-motion: reduce) {
+  .w3-spin,
+  .w3-animate-fading,
+  .w3-animate-opacity,
+  .w3-animate-top,
+  .w3-animate-left,
+  .w3-animate-right,
+  .w3-animate-bottom,
+  .w3-animate-zoom,
+  .w3-animate-input {
+    animation: none !important;
+    transition: none !important;
+  }
+}

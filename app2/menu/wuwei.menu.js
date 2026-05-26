@@ -242,7 +242,7 @@ wuwei.menu = wuwei.menu || {};
       return false;
     }
     resource = getNodeResource(node);
-    uri = String(resource.canonicalUri || resource.uri || '').toLowerCase();
+    uri = String((resource.original && resource.original.url) || resource.uri || resource.canonicalUri || '').toLowerCase();
     kind = String(resource.kind || '').toLowerCase();
     subtype = String(resource.videoKind || '').toLowerCase();
 
@@ -421,10 +421,10 @@ wuwei.menu = wuwei.menu || {};
     );
   }
 
-  function isContentsInfoTarget(node, link) {
+  function isViewpointInfoTarget(node, link) {
     return !!(
-      (node && wuwei.contents.getContentTargetSpec(node)) ||
-      (link && wuwei.contents.getContentTargetSpec(link))
+      (node && wuwei.viewpoint.getContentTargetSpec(node)) ||
+      (link && wuwei.viewpoint.getContentTargetSpec(link))
     );
   }
 
@@ -432,14 +432,68 @@ wuwei.menu = wuwei.menu || {};
     return !!wuwei.menu.timeline.getTimelineTargetSpec(node);
   }
 
+  function getTimelineResourceUrl(mediaNode, resource) {
+    resource = resource || {};
+    return String(
+      (wuwei.video && typeof wuwei.video.getVideoSource === 'function' ? wuwei.video.getVideoSource(mediaNode) : '') ||
+      (resource.original && (resource.original.url || resource.original.sourceUrl || resource.original.canonicalUrl)) ||
+      (resource.origin && (resource.origin.sourceUrl || resource.origin.canonicalUrl)) ||
+      resource.uri ||
+      resource.canonicalUri ||
+      (mediaNode && (mediaNode.uri || mediaNode.url)) ||
+      ''
+    );
+  }
+
+  function getVimeoEmbedUrlFromSource(rawUrl, startAt) {
+    var h = '';
+    var id = '';
+    var m;
+    var u;
+    rawUrl = String(rawUrl || '');
+    try {
+      u = new URL(rawUrl, location.href);
+      h = u.searchParams.get('h') || '';
+      m = u.pathname.match(/\/(?:video\/)?([0-9]+)(?:\/([A-Za-z0-9_-]+))?/);
+      if (m) {
+        id = m[1];
+        h = h || m[2] || '';
+      }
+    }
+    catch (e) {
+      m = rawUrl.match(/vimeo\.com\/(?:video\/)?([0-9]+)(?:\/([A-Za-z0-9_-]+))?/);
+      if (m) {
+        id = m[1];
+        h = h || m[2] || '';
+      }
+    }
+    if (!id) {
+      return rawUrl;
+    }
+    return 'https://player.vimeo.com/video/' + encodeURIComponent(id) +
+      '?autoplay=1&title=0&byline=0&portrait=0' +
+      (h ? ('&h=' + encodeURIComponent(h)) : '') +
+      (Number(startAt || 0) > 0 ? ('#t=' + Math.floor(Number(startAt || 0)) + 's') : '');
+  }
+
   function buildTimelineMediaNode(spec) {
     var mediaNode;
+    var fullMediaNode;
 
     if (!spec || !spec.mediaNode) {
       return null;
     }
 
-    mediaNode = util.clone ? util.clone(spec.mediaNode) : Object.assign({}, spec.mediaNode);
+    fullMediaNode = spec.mediaNode.id && model && typeof model.findNodeById === 'function'
+      ? model.findNodeById(spec.mediaNode.id)
+      : null;
+    mediaNode = util.clone
+      ? util.clone(fullMediaNode || spec.mediaNode)
+      : Object.assign({}, fullMediaNode || spec.mediaNode);
+
+    if (!mediaNode.resource && spec.mediaNode.resource) {
+      mediaNode.resource = spec.mediaNode.resource;
+    }
     mediaNode.timeRange = Object.assign({}, mediaNode.timeRange || {});
     mediaNode.timeRange.start = Number(spec.startAt || 0);
 
@@ -484,8 +538,7 @@ wuwei.menu = wuwei.menu || {};
     }
     mediaNode = spec.mediaNode;
     resource = (mediaNode.resource && typeof mediaNode.resource === 'object') ? mediaNode.resource : {};
-    rawUrl = wuwei.video.getVideoSource(mediaNode) ||
-      String(resource.canonicalUri || resource.uri || '');
+    rawUrl = getTimelineResourceUrl(mediaNode, resource);
     startAt = Math.max(0, Number(spec.startAt || 0));
     endAt = (spec.endAt != null && isFinite(spec.endAt)) ? Math.max(startAt, Number(spec.endAt)) : null;
     if (!rawUrl) {
@@ -517,8 +570,7 @@ wuwei.menu = wuwei.menu || {};
         }
       }
       if (id) {
-        hash = startAt > 0 ? ('#t=' + Math.floor(startAt) + 's') : '';
-        return 'https://player.vimeo.com/video/' + encodeURIComponent(id) + (h ? ('?h=' + encodeURIComponent(h)) : '') + hash;
+        return getVimeoEmbedUrlFromSource(rawUrl, startAt);
       }
     }
     return rawUrl;
@@ -897,7 +949,7 @@ wuwei.menu = wuwei.menu || {};
           link.groupType === 'horizontal' ||
           link.groupType === 'vertical' ||
           link.groupType === 'timelineAxis' ||
-          link.groupType === 'contentsAxis'
+          link.groupType === 'viewpointAxis'
         )) ? link.groupRef : null;
         const selectableGroupId = groupIdFromRepresentative || groupIdFromNode || groupIdFromLink || null;
         const canShowSelect = graph.mode !== 'view' && (
@@ -1135,7 +1187,7 @@ wuwei.menu = wuwei.menu || {};
   }
 
   ContextMENU = function (MENU, hoveredNode, event) {
-    var operator, iconClass, operation;
+    var operator, iconClass, operation, html;
 
     allNodes = [hoveredNode];
     var supportedOperations = Operations.getSupported(allNodes, MENU);
@@ -1145,7 +1197,21 @@ wuwei.menu = wuwei.menu || {};
     var operators = contextMENU.querySelector('.operators');
     operators.innerHTML = '';
 
+    /*
+     * Do not show an empty context menu icon/list.
+     * Some targets can be recognised as axis/representative/pseudo targets,
+     * but all edit/info operations can be filtered out by ownership or state.
+     * In that case the small context-menu icon itself is misleading, so keep
+     * the menu collapsed and return without positioning it.
+     */
+    if (!supportedOperations || supportedOperations.length === 0) {
+      contextMENU.classList.add('collapsed');
+      state.modal = false;
+      return null;
+    }
+
     supportedOperations.forEach(function (supportedOperation) {
+      operation = supportedOperation[0];
       iconClass = supportedOperation[4];
       if (iconClass) {
         if (iconClass.match(/^xlink:href/)) {
@@ -1165,7 +1231,6 @@ wuwei.menu = wuwei.menu || {};
             html = `<i class="${iconClass}" aria-hidden="true"></i>`;
           }
         }
-        operation = supportedOperation[0];
         html = `<div class="operator ${operation}">${html}${wuwei.nls.translate(supportedOperation[1])}</div>`;
       }
       else {
@@ -1474,7 +1539,7 @@ wuwei.menu = wuwei.menu || {};
   getOpenUrl = function (node) {
     var resource = getNodeResource(node);
     var href = getTextOriginalHref(node, resource) ||
-      (resource && (resource.canonicalUri || resource.uri)) || '';
+      (resource && ((resource.original && resource.original.url) || resource.uri || resource.canonicalUri)) || '';
     var previewUrl = getOfficePreviewOpenUrl(node);
     var officeUrl = getOfficeViewerOpenUrl(node);
     var absoluteUrl;
@@ -1543,7 +1608,7 @@ wuwei.menu = wuwei.menu || {};
     if (previewUri) {
       return appendPdfPageForOpen(previewUri, pageNumber);
     }
-    previewUri = wuwei.contents.getContentTargetViewerUrl(node, pageNumber || 1);
+    previewUri = wuwei.viewpoint.getContentTargetViewerUrl(node, pageNumber || 1);
     if (isPdfLikeOpenUri(previewUri)) {
       return previewUri;
     }
@@ -1587,7 +1652,7 @@ wuwei.menu = wuwei.menu || {};
       return '';
     }
 
-    href = getOfficeOriginalHref(node, resource) || getDownloadUrl(node) || (resource.canonicalUri || resource.uri || '');
+    href = getOfficeOriginalHref(node, resource) || getDownloadUrl(node) || ((resource.original && resource.original.url) || resource.uri || resource.canonicalUri || '');
     if (!isOfficeDocumentReference(resource, href)) {
       return '';
     }
@@ -1619,7 +1684,7 @@ wuwei.menu = wuwei.menu || {};
       return uploadPath;
     }
 
-    return String(resource && (resource.canonicalUri || resource.uri || resource.url) || '').trim();
+    return String(resource && ((resource.original && resource.original.url) || resource.uri || resource.canonicalUri || resource.url) || '').trim();
   }
 
   function isTextDocumentReference(resource, href) {
@@ -1633,11 +1698,16 @@ wuwei.menu = wuwei.menu || {};
   function isHtmlDocumentReference(resource, href) {
     var kind = String(resource && resource.kind || '').toLowerCase();
     var documentKind = String(resource && resource.documentKind || '').toLowerCase();
+    var mimeType = String(resource && (resource.mimeType || resource.type) || '').toLowerCase();
 
     return !!(
       util.isDocumentKindByExtension(null, resource, href, 'html') ||
       documentKind === 'html' ||
-      kind === 'webpage'
+      kind === 'html' ||
+      kind === 'web' ||
+      kind === 'webpage' ||
+      mimeType.indexOf('text/html') === 0 ||
+      mimeType.indexOf('application/xhtml+xml') === 0
     );
   }
 
@@ -1778,7 +1848,7 @@ wuwei.menu = wuwei.menu || {};
     }
     candidates.push(
       href,
-      resource && resource.title,
+      
       identity.title,
       node && node.label
     );
@@ -1793,7 +1863,7 @@ wuwei.menu = wuwei.menu || {};
       }
     }
 
-    fallback = fallback || String((resource && resource.title) || identity.title || (node && node.label) || 'download');
+    fallback = fallback || String( identity.title || (node && node.label) || 'download');
     return fallback;
   }
 
@@ -1806,7 +1876,7 @@ wuwei.menu = wuwei.menu || {};
       href = wuwei.util.getResourceFileUri(resource, 'original', node);
     }
     if (!href) {
-      href = (resource && (resource.canonicalUri || resource.uri)) || '';
+      href = (resource && ((resource.original && resource.original.url) || resource.uri || resource.canonicalUri)) || '';
     }
 
     href = String(href || '').trim();
@@ -1893,7 +1963,7 @@ wuwei.menu = wuwei.menu || {};
     var selectedGroupIds = Array.isArray(state.selectedGroupIds) ? state.selectedGroupIds.slice() : [];
     var allowedTypes = option && Array.isArray(option.types)
       ? option.types
-      : ['simple', 'horizontal', 'vertical', 'timeline', 'contents'];
+      : ['simple', 'horizontal', 'vertical', 'timeline', 'viewpoint'];
 
     return selectedGroupIds.filter(function (gid, index, arr) {
       var group = model.findGroupById(gid);
@@ -2443,49 +2513,83 @@ wuwei.menu = wuwei.menu || {};
       node = resolveContextTargetRecord(state.hoveredNode);
       if (!node || !node.id) { return; }
 
-      var timelineSpecForEdit = wuwei.menu.timeline.getTimelineTargetSpec(node);
-      var timelineEditTarget = timelineSpecForEdit
-        ? (timelineSpecForEdit.point || timelineSpecForEdit.group || node)
-        : null;
+      var editShapeOnly = isShapeOnlyEditForMenu(node);
+      var editOption = {
+        shapeOnly: editShapeOnly,
+        editor: !editShapeOnly,
+        citation: false,
+        cc: false
+      };
 
-      if (timelineEditTarget) {
-        wuwei.edit.open(timelineEditTarget, { editor: false, citation: false, cc: false });
+      var timelineSpecForEdit = wuwei.menu.timeline.getTimelineTargetSpec(node);
+      var viewpointSpecForEdit = (wuwei.viewpoint &&
+        typeof wuwei.viewpoint.getContentTargetSpec === 'function')
+        ? wuwei.viewpoint.getContentTargetSpec(node)
+        : null;
+      var editGroup = null;
+
+      if (timelineSpecForEdit && timelineSpecForEdit.point) {
+        wuwei.edit.timeline.open(timelineSpecForEdit.point, editOption);
         closeContextMenu();
         return;
       }
 
+      if (timelineSpecForEdit && timelineSpecForEdit.group) {
+        wuwei.edit.timeline.open(timelineSpecForEdit.group, editOption);
+        closeContextMenu();
+        return;
+      }
+
+      if (isContextTimelineRepresentative([node])) {
+        editGroup = node.groupRef && model.findGroupById ? model.findGroupById(node.groupRef) : null;
+        if (editGroup && wuwei.edit.timeline && typeof wuwei.edit.timeline.open === 'function') {
+          wuwei.edit.timeline.open(editGroup, editOption);
+          closeContextMenu();
+          return;
+        }
+      }
+
+      if (viewpointSpecForEdit && viewpointSpecForEdit.point) {
+        if (wuwei.edit.viewpoint && typeof wuwei.edit.viewpoint.openContentTarget === 'function') {
+          wuwei.edit.viewpoint.openContentTarget({ node: viewpointSpecForEdit.point, option: editOption });
+        }
+        else {
+          wuwei.edit.open(viewpointSpecForEdit.point, Object.assign({ forceNode: true }, editOption));
+        }
+        closeContextMenu();
+        return;
+      }
+
+      if (viewpointSpecForEdit && viewpointSpecForEdit.group) {
+        wuwei.edit.viewpoint.openAxisProperties(viewpointSpecForEdit.group, editOption);
+        closeContextMenu();
+        return;
+      }
+
+      if (isContextViewpointRepresentative([node])) {
+        editGroup = node.groupRef && model.findGroupById ? model.findGroupById(node.groupRef) : null;
+        if (editGroup && wuwei.edit.viewpoint && typeof wuwei.edit.viewpoint.openAxisProperties === 'function') {
+          wuwei.edit.viewpoint.openAxisProperties(editGroup, editOption);
+          closeContextMenu();
+          return;
+        }
+      }
+
       if (node.groupRef && model.findGroupById(node.groupRef)) {
-        wuwei.edit.open(node, { editor: false, citation: false, cc: false });
+        wuwei.edit.open(node, Object.assign({ forceNode: true }, editOption));
       }
       else if (util.isNode(node)) {
         if ('Topic' === node.type) {
-          wuwei.edit.open(node, { editor: false, citation: false, cc: false });
+          wuwei.edit.open(node, Object.assign({ forceNode: true }, editOption));
         }
         else {
-          wuwei.edit.open(node);
+          wuwei.edit.open(node, editOption);
         }
       }
       else if (util.isLink(node)) {
         link = node;
-        wuwei.edit.open(link, { editor: false, citation: false, cc: false });
+        wuwei.edit.open(link, editOption);
       }
-      closeContextMenu();
-      return;
-    }
-    else if ('editRepresentativeStyle' === method) {
-      node = resolveContextTargetRecord(state.hoveredNode);
-      if (!node || !isRepresentativeTopic(node)) {
-        closeContextMenu();
-        return;
-      }
-
-      wuwei.edit.open(node, {
-        forceNode: true,
-        representativeStyle: true,
-        editor: false,
-        citation: false,
-        cc: false
-      });
       closeContextMenu();
       return;
     }
@@ -2498,11 +2602,11 @@ wuwei.menu = wuwei.menu || {};
       closeContextMenu();
       return;
     }
-    else if ('createContentsAxis' === method) {
+    else if ('createViewpointAxis' === method) {
       node = resolveContextTargetRecord(state.hoveredNode);
-      if (!node || !wuwei.contents || typeof wuwei.contents.createAxisGroup !== 'function') { return; }
+      if (!node || !wuwei.viewpoint || typeof wuwei.viewpoint.createAxisGroup !== 'function') { return; }
 
-      wuwei.contents.createAxisGroup('horizontal', node, { silent: false });
+      wuwei.viewpoint.createAxisGroup('horizontal', node, { silent: false });
 
       closeContextMenu();
       return;
@@ -2513,19 +2617,19 @@ wuwei.menu = wuwei.menu || {};
 
       var axisSpec = wuwei.menu.timeline.getTimelineTargetSpec(node);
       if ((!axisSpec || !axisSpec.group) &&
-        wuwei.contents &&
-        typeof wuwei.contents.getContentTargetSpec === 'function') {
-        axisSpec = wuwei.contents.getContentTargetSpec(node);
+        wuwei.viewpoint &&
+        typeof wuwei.viewpoint.getContentTargetSpec === 'function') {
+        axisSpec = wuwei.viewpoint.getContentTargetSpec(node);
       }
       if (!axisSpec || !axisSpec.group) {
         closeContextMenu();
         return;
       }
 
-      if (axisSpec.group.type === 'contents' &&
-        wuwei.edit.contents &&
-        typeof wuwei.edit.contents.openAxisProperties === 'function') {
-        wuwei.edit.contents.openAxisProperties(axisSpec.group);
+      if (axisSpec.group.type === 'viewpoint' &&
+        wuwei.edit.viewpoint &&
+        typeof wuwei.edit.viewpoint.openAxisProperties === 'function') {
+        wuwei.edit.viewpoint.openAxisProperties(axisSpec.group);
       }
       else {
         wuwei.edit.timeline.openAxisProperties(axisSpec.group);
@@ -2534,43 +2638,43 @@ wuwei.menu = wuwei.menu || {};
       closeContextMenu();
       return;
     }
-    else if ('addContentsEntry' === method) {
+    else if ('addViewpointEntry' === method) {
       var entryDraft;
       node = resolveContextTargetRecord(state.hoveredNode);
-      if (!node || !wuwei.contents || typeof wuwei.contents.createEntryDraft !== 'function') { return; }
-      entryDraft = wuwei.contents.createEntryDraft(node);
+      if (!node || !wuwei.viewpoint || typeof wuwei.viewpoint.createEntryDraft !== 'function') { return; }
+      entryDraft = wuwei.viewpoint.createEntryDraft(node);
       closeContextMenu();
       if (entryDraft && wuwei.edit && typeof wuwei.edit.open === 'function') {
-        wuwei.edit.open(entryDraft, { pendingContentsEntry: true });
+        wuwei.edit.open(entryDraft, { pendingViewpointEntry: true });
       }
       return;
     }
-    else if ('copyContentsTarget' === method) {
+    else if ('copyViewpointTarget' === method) {
       node = resolveContextTargetRecord(state.hoveredNode);
-      if (!node || !wuwei.contents || typeof wuwei.contents.copyTarget !== 'function') { return; }
+      if (!node || !wuwei.viewpoint || typeof wuwei.viewpoint.copyTarget !== 'function') { return; }
       wuwei.log.savePrevious();
-      if (wuwei.contents.copyTarget(node)) {
+      if (wuwei.viewpoint.copyTarget(node)) {
         wuwei.log.storeLog({ operation: 'copy' });
       }
       closeContextMenu();
       return;
     }
 
-    else if ('distributeContentsPageMarkers' === method) {
+    else if ('distributeViewpointPageMarkers' === method) {
       node = resolveContextTargetRecord(state.hoveredNode);
-      if (!node || !wuwei.contents || typeof wuwei.contents.distributePageMarkers !== 'function') { return; }
+      if (!node || !wuwei.viewpoint || typeof wuwei.viewpoint.distributePageMarkers !== 'function') { return; }
       wuwei.log.savePrevious();
-      if (wuwei.contents.distributePageMarkers(node)) {
-        wuwei.log.storeLog({ operation: 'distributeContentsPageMarkers' });
+      if (wuwei.viewpoint.distributePageMarkers(node)) {
+        wuwei.log.storeLog({ operation: 'distributeViewpointPageMarkers' });
       }
       closeContextMenu();
       return;
     }
-    else if ('deleteContentsTarget' === method) {
+    else if ('deleteViewpointTarget' === method) {
       node = resolveContextTargetRecord(state.hoveredNode);
-      if (!node || !wuwei.contents || typeof wuwei.contents.deleteTarget !== 'function') { return; }
+      if (!node || !wuwei.viewpoint || typeof wuwei.viewpoint.deleteTarget !== 'function') { return; }
       wuwei.log.savePrevious();
-      if (wuwei.contents.deleteTarget(node)) {
+      if (wuwei.viewpoint.deleteTarget(node)) {
         wuwei.log.storeLog({ operation: 'delete' });
       }
       closeContextMenu();
@@ -2637,12 +2741,12 @@ wuwei.menu = wuwei.menu || {};
         return;
       }
 
-      if (wuwei.contents && typeof wuwei.contents.getContentTargetSpec === 'function' &&
-        typeof wuwei.contents.deleteTarget === 'function') {
-        var eraseContentsSpec = wuwei.contents.getContentTargetSpec(node);
-        if (eraseContentsSpec && eraseContentsSpec.group) {
+      if (wuwei.viewpoint && typeof wuwei.viewpoint.getContentTargetSpec === 'function' &&
+        typeof wuwei.viewpoint.deleteTarget === 'function') {
+        var eraseViewpointSpec = wuwei.viewpoint.getContentTargetSpec(node);
+        if (eraseViewpointSpec && eraseViewpointSpec.group) {
           wuwei.log.savePrevious();
-          if (wuwei.contents.deleteTarget(node)) {
+          if (wuwei.viewpoint.deleteTarget(node)) {
             wuwei.log.storeLog({ operation: 'erase' });
           }
           closeContextMenu();
@@ -2665,12 +2769,18 @@ wuwei.menu = wuwei.menu || {};
       if (!node) { return; }
 
       var addSpec = wuwei.menu.timeline.getTimelineTargetSpec(node);
-      if (!addSpec || !addSpec.group) {
+      var addGroup = addSpec && addSpec.group;
+
+      if (!addGroup && isContextTimelineRepresentative([node])) {
+        addGroup = node.groupRef && model.findGroupById ? model.findGroupById(node.groupRef) : null;
+      }
+
+      if (!addGroup) {
         closeContextMenu();
         return;
       }
 
-      wuwei.edit.timeline.openAddSegmentFromPlayer(addSpec.group);
+      wuwei.edit.timeline.openAddSegmentFromPlayer(addGroup);
 
       closeContextMenu();
       return;
@@ -2733,13 +2843,34 @@ wuwei.menu = wuwei.menu || {};
       closeContextMenu();
       return;
     }
+    else if ('adminInfo' === method) {
+      node = resolveContextTargetRecord(state.hoveredNode) ||
+        state.hoveredNode ||
+        (common && common.current && common.current.page) ||
+        null;
+      if (wuwei.info && typeof wuwei.info.openAdmin === 'function') {
+        wuwei.info.openAdmin(node, {
+          contextTarget: state.hoveredNode || null
+        });
+      }
+      else if (wuwei.info && wuwei.info.admin && typeof wuwei.info.admin.open === 'function') {
+        wuwei.info.admin.open(node, {
+          contextTarget: state.hoveredNode || null
+        });
+      }
+      else if (window.console && console.warn) {
+        console.warn('Admin info pane is not loaded. Check index.html includes app2/info/admin/info.admin.js and info.admin.markup.js.');
+      }
+      closeContextMenu();
+      return;
+    }
     else if ('info' === method) {
       node = resolveContextTargetRecord(state.hoveredNode);
       if (!node || !node.id) { return; }
-      if (wuwei.contents &&
-        typeof wuwei.contents.isContentsPageNode === 'function' &&
-        wuwei.contents.isContentsPageNode(node)) {
-        wuwei.menu.contents.openContentTargetInInfo(node);
+      if (wuwei.viewpoint &&
+        typeof wuwei.viewpoint.isViewpointPageNode === 'function' &&
+        wuwei.viewpoint.isViewpointPageNode(node)) {
+        wuwei.menu.viewpoint.openContentTargetInInfo(node);
         closeContextMenu();
         return;
       }
@@ -2762,22 +2893,22 @@ wuwei.menu = wuwei.menu || {};
         return;
       }
     }
-    else if ('infoContentsTarget' === method) {
+    else if ('infoViewpointTarget' === method) {
       node = resolveContextTargetRecord(state.hoveredNode);
       if (!node || !node.id) { return; }
 
-      var contentsSpecForInfo = wuwei.contents && typeof wuwei.contents.getContentTargetSpec === 'function'
-        ? wuwei.contents.getContentTargetSpec(node)
+      var viewpointSpecForInfo = wuwei.viewpoint && typeof wuwei.viewpoint.getContentTargetSpec === 'function'
+        ? wuwei.viewpoint.getContentTargetSpec(node)
         : null;
-      if (contentsSpecForInfo) {
-        if (contentsSpecForInfo.point &&
-          wuwei.menu && wuwei.menu.contents &&
-          typeof wuwei.menu.contents.openContentTargetInInfo === 'function') {
-          wuwei.menu.contents.openContentTargetInInfo(contentsSpecForInfo.point);
+      if (viewpointSpecForInfo) {
+        if (viewpointSpecForInfo.point &&
+          wuwei.menu && wuwei.menu.viewpoint &&
+          typeof wuwei.menu.viewpoint.openContentTargetInInfo === 'function') {
+          wuwei.menu.viewpoint.openContentTargetInInfo(viewpointSpecForInfo.point);
         }
-        else if (contentsSpecForInfo.group &&
-          wuwei.info && wuwei.info.contents && typeof wuwei.info.contents.openAxis === 'function') {
-          wuwei.info.contents.openAxis(contentsSpecForInfo.group);
+        else if (viewpointSpecForInfo.group &&
+          wuwei.info && wuwei.info.viewpoint && typeof wuwei.info.viewpoint.openAxis === 'function') {
+          wuwei.info.viewpoint.openAxis(viewpointSpecForInfo.group);
         }
         closeContextMenu();
         return;
@@ -2845,12 +2976,12 @@ wuwei.menu = wuwei.menu || {};
       node = resolveContextTargetRecord(state.hoveredNode);
       if (!node || !node.id) { return; }
 
-      var contentsSpecForWindow = wuwei.contents.getContentTargetSpec(node);
-      if (contentsSpecForWindow && contentsSpecForWindow.group && wuwei.contents) {
-        var contentsWindowTarget = contentsSpecForWindow.point || node;
-        var contentsWindowUrl = wuwei.menu.contents.getContentTargetOpenUrl(contentsWindowTarget);
-        if (contentsWindowUrl) {
-          wuwei.info.openWindow(contentsWindowUrl, null, 'width=900,height=680,noopener,resizable=yes,scrollbars=yes');
+      var viewpointSpecForWindow = wuwei.viewpoint.getContentTargetSpec(node);
+      if (viewpointSpecForWindow && viewpointSpecForWindow.group && wuwei.viewpoint) {
+        var viewpointWindowTarget = viewpointSpecForWindow.point || node;
+        var viewpointWindowUrl = wuwei.menu.viewpoint.getContentTargetOpenUrl(viewpointWindowTarget);
+        if (viewpointWindowUrl) {
+          wuwei.info.openWindow(viewpointWindowUrl, null, 'width=900,height=680,noopener,resizable=yes,scrollbars=yes');
         }
         closeContextMenu();
         return;
@@ -2881,12 +3012,12 @@ wuwei.menu = wuwei.menu || {};
       node = resolveContextTargetRecord(state.hoveredNode);
       if (!node || !node.id) { return; }
 
-      var contentsSpecForTab = wuwei.contents.getContentTargetSpec(node);
-      if (contentsSpecForTab && contentsSpecForTab.group && wuwei.contents) {
-        var contentsTabTarget = contentsSpecForTab.point || node;
-        var contentsTabUrl = wuwei.menu.contents.getContentTargetOpenUrl(contentsTabTarget);
-        if (contentsTabUrl) {
-          wuwei.info.openNewTab(contentsTabUrl);
+      var viewpointSpecForTab = wuwei.viewpoint.getContentTargetSpec(node);
+      if (viewpointSpecForTab && viewpointSpecForTab.group && wuwei.viewpoint) {
+        var viewpointTabTarget = viewpointSpecForTab.point || node;
+        var viewpointTabUrl = wuwei.menu.viewpoint.getContentTargetOpenUrl(viewpointTabTarget);
+        if (viewpointTabUrl) {
+          wuwei.info.openNewTab(viewpointTabUrl);
         }
         closeContextMenu();
         return;
@@ -2934,10 +3065,10 @@ wuwei.menu = wuwei.menu || {};
       node = resolveContextTargetRecord(state.hoveredNode);
       if (!node) { return; }
 
-      var contentsHorizontalSpec = wuwei.contents.getContentTargetSpec(node);
-      if (contentsHorizontalSpec && contentsHorizontalSpec.group && wuwei.contents &&
-        typeof wuwei.contents.updateAxisGroup === 'function') {
-        wuwei.contents.updateAxisGroup(contentsHorizontalSpec.group, {
+      var viewpointHorizontalSpec = wuwei.viewpoint.getContentTargetSpec(node);
+      if (viewpointHorizontalSpec && viewpointHorizontalSpec.group && wuwei.viewpoint &&
+        typeof wuwei.viewpoint.updateAxisGroup === 'function') {
+        wuwei.viewpoint.updateAxisGroup(viewpointHorizontalSpec.group, {
           orientation: 'horizontal'
         });
         closeContextMenu();
@@ -2957,10 +3088,10 @@ wuwei.menu = wuwei.menu || {};
       node = resolveContextTargetRecord(state.hoveredNode);
       if (!node) { return; }
 
-      var contentsVerticalSpec = wuwei.contents.getContentTargetSpec(node);
-      if (contentsVerticalSpec && contentsVerticalSpec.group && wuwei.contents &&
-        typeof wuwei.contents.updateAxisGroup === 'function') {
-        wuwei.contents.updateAxisGroup(contentsVerticalSpec.group, {
+      var viewpointVerticalSpec = wuwei.viewpoint.getContentTargetSpec(node);
+      if (viewpointVerticalSpec && viewpointVerticalSpec.group && wuwei.viewpoint &&
+        typeof wuwei.viewpoint.updateAxisGroup === 'function') {
+        wuwei.viewpoint.updateAxisGroup(viewpointVerticalSpec.group, {
           orientation: 'vertical'
         });
         closeContextMenu();
@@ -3458,6 +3589,17 @@ wuwei.menu = wuwei.menu || {};
     closeNoteMenu();
   };
 
+  function closeUserMenu() {
+    var menu = document.getElementById('userMenu');
+    if (menu) {
+      menu.style.display = 'none';
+    }
+  }
+
+  closeUserClicked = function () {
+    closeUserMenu();
+  };
+
   /** page */
   pageClicked = function () {
     var menu = document.getElementById('pageMenu');
@@ -3729,11 +3871,14 @@ wuwei.menu = wuwei.menu || {};
   /** user status */
   userStatusClicked = function (event) {
     event.stopPropagation();
-    var menu = document.getElementById('menu');
-    if (menu.classList.contains('loggedIn')) {
-      if (window.confirm(wuwei.nls.translate('Do you want to log out?'))) {
-        wuwei.menu.login.logout();
-      }
+    var userMenu = document.getElementById('userMenu');
+
+    if (wuwei.menu.login && typeof wuwei.menu.login.refreshUserStatusMenu === 'function') {
+      wuwei.menu.login.refreshUserStatusMenu();
+    }
+
+    if (userMenu) {
+      menuOpen(userMenu);
     }
     else {
       wuwei.menu.login.open();
@@ -3741,11 +3886,64 @@ wuwei.menu = wuwei.menu || {};
     return false;
   };
 
+  function getCurrentUserRoleForMenu() {
+    var candidates = [
+      wuwei && wuwei.common && wuwei.common.state && wuwei.common.state.currentUser
+    ];
+
+    var user;
+    var i;
+    var role;
+
+    for (i = 0; i < candidates.length; i += 1) {
+      user = candidates[i];
+      if (user && typeof user === 'object') {
+        role = user.role || user.userRole || user.user_role || '';
+        if (role) {
+          return String(role).trim().toLowerCase();
+        }
+      }
+    }
+    return '';
+  }
+
+  function isAdminUserForMenu() {
+    return getCurrentUserRoleForMenu() === 'admin';
+  }
+
+  function safeOperationValidator(validator, allNodes, operation, context, profile) {
+    if (typeof validator !== 'function') {
+      return true;
+    }
+
+    try {
+      /*
+       * Validators should primarily depend on allNodes/context.  The operation
+       * name is passed as an explicit argument only for rare operation-specific
+       * checks.  Validators and context helper functions must never refer to an
+       * undeclared outer variable named `operation`.
+       */
+      return !!validator(allNodes, operation, context, profile);
+    }
+    catch (e) {
+      if (window.console && console.error) {
+        console.error('WuWei menu validator failed:', {
+          operation: operation,
+          context: context || '',
+          message: e && e.message,
+          error: e
+        });
+      }
+      return false;
+    }
+  }
+
+
   Operations = {
     // operations are defined as 'method', 'display name', 'optional rule', 'style', 'icon'
     //
     // Context menus are intentionally grouped by target role.  Generic node/link
-    // menus no longer carry Timeline / Contents / group-specific commands.
+    // menus no longer carry Timeline / Viewpoint / group-specific commands.
     // The actual visibility of each command is still decided by OperationsList
     // validators, but this first-level classification keeps unrelated commands
     // out of the wrong menu bucket.
@@ -3765,8 +3963,8 @@ wuwei.menu = wuwei.menu || {};
 
       'EditNode': [
         'edit',
-        'createTimelineAxis',
-        'createContentsAxis',
+'createTimelineAxis',
+        'createViewpointAxis',
         'addContent',
         'addTopic',
         'addMemo',
@@ -3776,7 +3974,7 @@ wuwei.menu = wuwei.menu || {};
 
       'EditLink': [
         'edit',
-        'reverse',
+'reverse',
         'normal',
         'horizontal',
         'vertical',
@@ -3787,11 +3985,9 @@ wuwei.menu = wuwei.menu || {};
 
       'EditGroup': [
         'edit',
-        'editRepresentativeStyle',
-        'editTimelineAxisProps',
         'addTimelineSegmentFromPlayer',
-        'addContentsEntry',
-        'deleteContentsTarget',
+        'addViewpointEntry',
+        'deleteViewpointTarget',
         'horizontal',
         'vertical',
         'copy',
@@ -3802,12 +3998,10 @@ wuwei.menu = wuwei.menu || {};
       'EditGroupMember': [
         'edit',
         'createTimelineAxis',
-        'createContentsAxis',
-        'editTimelineSegmentProps',
-        'editTimelineSegmentFromPlayer',
+        'createViewpointAxis',
         'deleteTimelineSegment',
-        'copyContentsTarget',
-        'deleteContentsTarget',
+        'copyViewpointTarget',
+        'deleteViewpointTarget',
         'addContent',
         'addTopic',
         'addMemo',
@@ -3817,13 +4011,14 @@ wuwei.menu = wuwei.menu || {};
 
       'EditGroupRepresentative': [
         'edit',
-        'editRepresentativeStyle',
-        'editTimelineAxisProps',
         'addTimelineSegmentFromPlayer',
-        'addContentsEntry',
-        'copyContentsTarget',
-        'distributeContentsPageMarkers',
-        'deleteContentsTarget',
+        'addViewpointEntry',
+        'addContent',
+        'addTopic',
+        'addMemo',
+        'copyViewpointTarget',
+        'distributeViewpointPageMarkers',
+        'deleteViewpointTarget',
         'horizontal',
         'vertical',
         'copy',
@@ -3832,6 +4027,7 @@ wuwei.menu = wuwei.menu || {};
       ],
 
       'InfoNode': [
+        'adminInfo',
         'info',
         'download',
         'openNewTab',
@@ -3840,18 +4036,21 @@ wuwei.menu = wuwei.menu || {};
       ],
 
       'InfoLink': [
+        'adminInfo',
         'info'
       ],
 
       'InfoGroup': [
+        'adminInfo',
         'infoTimelineTarget',
-        'infoContentsTarget',
+        'infoViewpointTarget',
         'info'
       ],
 
       'InfoGroupMember': [
+        'adminInfo',
         'infoTimelineTarget',
-        'infoContentsTarget',
+        'infoViewpointTarget',
         'info',
         'download',
         'openNewTab',
@@ -3860,7 +4059,8 @@ wuwei.menu = wuwei.menu || {};
       ],
 
       'InfoGroupRepresentative': [
-        'infoContentsTarget',
+        'adminInfo',
+        'infoViewpointTarget',
         'infoTimelineTarget',
         'openNewTab',
         'openWindow',
@@ -3877,12 +4077,11 @@ wuwei.menu = wuwei.menu || {};
           continue;
         }
 
-        // INFO operations are read-only; allow them even if not the owner.
-        if ('INFO' !== context && !isOwnedByCurrentUser(nodes[i])) {
+        profile = resolveMenuContext([nodes[i]], context);
+        if (!isOperationAllowedByOwnership(operation, profile, context)) {
           return false;
         }
 
-        profile = resolveMenuContext([nodes[i]], context);
         operations = this.type[profile.menuType];
         if (util.isEmpty(operations) || !util.contains(operations, operation)) {
           return false;
@@ -3916,12 +4115,7 @@ wuwei.menu = wuwei.menu || {};
           operationList[4] = operationDef[3] || null;
           if (self.isSupported(operation, allNodes, context)) {
             validator = operationList[2];
-            if (validator) {
-              if (validator(allNodes)) {
-                supportedOperations.push(operationList);
-              }
-            }
-            else {
+            if (safeOperationValidator(validator, allNodes, operation, context, profile)) {
               supportedOperations.push(operationList);
             }
           }
@@ -3953,6 +4147,14 @@ wuwei.menu = wuwei.menu || {};
   }
 
   function getContextTarget(allNodes) {
+    /*
+     * Some old code accidentally called context helpers as
+     * helper(operation, allNodes).  Context helpers must ignore operation and
+     * use the array argument only.
+     */
+    if (!Array.isArray(allNodes) && Array.isArray(arguments[1])) {
+      allNodes = arguments[1];
+    }
     if (!Array.isArray(allNodes) || allNodes.length === 0) {
       return null;
     }
@@ -3960,24 +4162,44 @@ wuwei.menu = wuwei.menu || {};
   }
 
   function getContextTimelineSpec(allNodes) {
-    var target = getContextTarget(allNodes);
-    if (util.isEmpty(target)) {
+    var target;
+
+    if (!Array.isArray(allNodes) && Array.isArray(arguments[1])) {
+      allNodes = arguments[1];
+    }
+
+    target = getContextTarget(allNodes);
+    if (util.isEmpty(target) ||
+      !wuwei.menu ||
+      !wuwei.menu.timeline ||
+      typeof wuwei.menu.timeline.getTimelineTargetSpec !== 'function') {
       return null;
     }
+
     return wuwei.menu.timeline.getTimelineTargetSpec(target);
   }
 
-  function getContextContentsSpec(allNodes) {
+  function getContextViewpointSpec(allNodes) {
     var target = getContextTarget(allNodes);
     if (util.isEmpty(target)) {
       return null;
     }
 
-    return wuwei.contents.getContentTargetSpec(target);
+    return wuwei.viewpoint.getContentTargetSpec(target);
   }
 
   function isRepresentativeTopic(node) {
-    return !!(node && model.isRepresentativeTopic(node));
+    /*
+     * This classification helper must depend only on the target node.
+     * It is called while menu candidates are being built, before a concrete
+     * operation is selected.  Therefore it must never refer to an outer
+     * variable named `operation`.
+     */
+    return !!(
+      node &&
+      node.groupRole === 'representative' &&
+      node.groupRef
+    );
   }
 
   function isContextGroup(allNodes) {
@@ -4010,11 +4232,11 @@ wuwei.menu = wuwei.menu || {};
       (
         target.pseudo ||
         target.groupType === 'timelineAxis' ||
-        target.groupType === 'contentsAxis' ||
+        target.groupType === 'viewpointAxis' ||
         target.groupType === 'horizontal' ||
         target.groupType === 'vertical' ||
         target.linkType === 'timeline-axis' ||
-        target.linkType === 'contents-axis'
+        target.linkType === 'viewpoint-axis'
       )
     );
   }
@@ -4086,7 +4308,7 @@ wuwei.menu = wuwei.menu || {};
       target &&
       target.type === 'Content' &&
       !getContextTimelineSpec(allNodes) &&
-      !getContextContentsSpec(allNodes)
+      !getContextViewpointSpec(allNodes)
     );
   }
 
@@ -4104,7 +4326,7 @@ wuwei.menu = wuwei.menu || {};
     href = getTextOriginalHref(target, resource) ||
       getOfficeOriginalHref(target, resource) ||
       getDownloadUrl(target) ||
-      (resource && (resource.canonicalUri || resource.uri)) ||
+      (resource && ((resource.original && resource.original.url) || resource.uri || resource.canonicalUri)) ||
       '';
 
     return !!(
@@ -4119,8 +4341,8 @@ wuwei.menu = wuwei.menu || {};
     return (
       isContextDocumentLikeContent(allNodes) ||
       isContextTimelinePlayable(allNodes) ||
-      isContextContentsPage(allNodes) ||
-      isContextContentsRepresentative(allNodes)
+      isContextViewpointPage(allNodes) ||
+      isContextViewpointRepresentative(allNodes)
     );
   }
 
@@ -4146,10 +4368,10 @@ wuwei.menu = wuwei.menu || {};
     );
   }
 
-  function hasAttachedContentsGroup(target) {
+  function hasAttachedViewpointGroup(target) {
     return !!(
       target &&
-      wuwei.contents.hasAttachedContentsGroup(target)
+      wuwei.viewpoint.hasAttachedViewpointGroup(target)
     );
   }
 
@@ -4164,41 +4386,52 @@ wuwei.menu = wuwei.menu || {};
   }
 
   function isContextTimelineCreatableContent(allNodes) {
-    var target = getContextTarget(allNodes);
-    return isContextVideoContent(allNodes) && !hasAttachedTimelineGroup(target);
+    return isContextVideoContent(allNodes);
   }
 
   function isContextTimelinePlayable(allNodes) {
     return !!getContextTimelineSpec(allNodes);
   }
 
-  function isContextContentsPage(allNodes) {
-    var spec = getContextContentsSpec(allNodes);
+  function isContextViewpointPage(allNodes) {
+    var spec = getContextViewpointSpec(allNodes);
     return !!(spec && spec.point);
   }
 
-  function isContextContentsRepresentative(allNodes) {
+  function isContextViewpointRepresentative(allNodes) {
     var target = getContextTarget(allNodes);
     return !!(
       target &&
-      wuwei.contents.isContentsRepresentativeNode(target)
+      wuwei.viewpoint.isViewpointRepresentativeNode(target)
     );
   }
 
-  function isContextContentsAxis(allNodes) {
-    var spec = getContextContentsSpec(allNodes);
+  function isContextTimelineRepresentative(allNodes) {
+    var target = getContextTarget(allNodes);
+    var group = null;
+
+    if (!target || !isRepresentativeTopic(target)) {
+      return false;
+    }
+
+    group = target.groupRef && model.findGroupById ? model.findGroupById(target.groupRef) : null;
+    return !!(group && group.type === 'timeline');
+  }
+
+  function isContextViewpointAxis(allNodes) {
+    var spec = getContextViewpointSpec(allNodes);
     return !!(spec && spec.group && !spec.point);
   }
 
-  function isContextContentsTarget(allNodes) {
-    return !!getContextContentsSpec(allNodes);
+  function isContextViewpointTarget(allNodes) {
+    return !!getContextViewpointSpec(allNodes);
   }
 
-  function getContextGroupFromTarget(target, timelineSpec, contentsSpec) {
+  function getContextGroupFromTarget(target, timelineSpec, viewpointSpec) {
     var group;
 
-    if (contentsSpec && contentsSpec.group) {
-      return contentsSpec.group;
+    if (viewpointSpec && viewpointSpec.group) {
+      return viewpointSpec.group;
     }
     if (timelineSpec && timelineSpec.group) {
       return timelineSpec.group;
@@ -4224,9 +4457,9 @@ wuwei.menu = wuwei.menu || {};
     return null;
   }
 
-  function getContextGroupKind(group, timelineSpec, contentsSpec) {
-    if (contentsSpec || (group && group.type === 'contents')) {
-      return 'contents';
+  function getContextGroupKind(group, timelineSpec, viewpointSpec) {
+    if (viewpointSpec || (group && group.type === 'viewpoint')) {
+      return 'viewpoint';
     }
     if (timelineSpec || (group && group.type === 'timeline')) {
       return 'timeline';
@@ -4253,18 +4486,18 @@ wuwei.menu = wuwei.menu || {};
     return null;
   }
 
-  function isContextGroupAxisTarget(target, timelineSpec, contentsSpec) {
+  function isContextGroupAxisTarget(target, timelineSpec, viewpointSpec) {
     return !!(
       target &&
       util.isLink(target) &&
       target.groupRef &&
       (
         (timelineSpec && timelineSpec.group && !timelineSpec.point) ||
-        (contentsSpec && contentsSpec.group && !contentsSpec.point) ||
+        (viewpointSpec && viewpointSpec.group && !viewpointSpec.point) ||
         target.groupType === 'timelineAxis' ||
-        target.groupType === 'contentsAxis' ||
+        target.groupType === 'viewpointAxis' ||
         target.linkType === 'timeline-axis' ||
-        target.linkType === 'contents-axis' ||
+        target.linkType === 'viewpoint-axis' ||
         target.groupType === 'horizontal' ||
         target.groupType === 'vertical' ||
         target.pseudo
@@ -4275,18 +4508,18 @@ wuwei.menu = wuwei.menu || {};
   function resolveMenuContext(allNodes, context) {
     var target = getContextTarget(allNodes);
     var timelineSpec = target ? getContextTimelineSpec([target]) : null;
-    var contentsSpec = target ? getContextContentsSpec([target]) : null;
-    var group = getContextGroupFromTarget(target, timelineSpec, contentsSpec);
+    var viewpointSpec = target ? getContextViewpointSpec([target]) : null;
+    var group = getContextGroupFromTarget(target, timelineSpec, viewpointSpec);
     var profile = {
       context: context || '',
       target: target || null,
       targetType: 'none',
       role: 'normal',
       group: group || null,
-      groupKind: getContextGroupKind(group, timelineSpec, contentsSpec),
+      groupKind: getContextGroupKind(group, timelineSpec, viewpointSpec),
       groupShape: getContextGroupShape(group),
       timelineSpec: timelineSpec || null,
-      contentsSpec: contentsSpec || null,
+      viewpointSpec: viewpointSpec || null,
       menuType: ''
     };
 
@@ -4302,18 +4535,18 @@ wuwei.menu = wuwei.menu || {};
       }
     }
 
-    if (contentsSpec && contentsSpec.point) {
+    if (viewpointSpec && viewpointSpec.point) {
       profile.role = 'groupMember';
     }
     else if (timelineSpec && timelineSpec.point) {
       profile.role = 'groupMember';
     }
-    else if (isContextContentsRepresentative([target]) || isRepresentativeTopic(target)) {
+    else if (isContextViewpointRepresentative([target]) || isRepresentativeTopic(target)) {
       profile.role = 'groupRepresentative';
     }
-    else if ((contentsSpec && contentsSpec.group && !contentsSpec.point) ||
+    else if ((viewpointSpec && viewpointSpec.group && !viewpointSpec.point) ||
       (timelineSpec && timelineSpec.group && !timelineSpec.point) ||
-      isContextGroupAxisTarget(target, timelineSpec, contentsSpec) ||
+      isContextGroupAxisTarget(target, timelineSpec, viewpointSpec) ||
       isContextGroup([target])) {
       profile.role = 'group';
     }
@@ -4362,12 +4595,179 @@ wuwei.menu = wuwei.menu || {};
     return profile;
   }
 
+  function isTeamJointNoteForMenu() {
+    var current = (common && common.current) || {};
+    var stateValue = String(current.jointNoteState || current.collabNoteState || '').toLowerCase();
+    var scope = String(current.note_scope || '').toLowerCase();
+    var origin = (current.origin && typeof current.origin === 'object') ? current.origin : {};
+    var originType = String(origin.type || '').toLowerCase();
+    var originSource = String(origin.source || '').toLowerCase();
+
+    if (wuwei.joint && typeof wuwei.joint.isTeamNote === 'function') {
+      try {
+        return !!wuwei.joint.isTeamNote(current);
+      }
+      catch (e) {
+        /* fall through to local detection */
+      }
+    }
+
+    if (stateValue === 'team') {
+      return true;
+    }
+    if (stateValue === 'own' || stateValue === 'imported') {
+      return false;
+    }
+    if (originType === 'import' || originSource === 'export-package') {
+      return false;
+    }
+
+    return !!(
+      scope === 'team' ||
+      (current.joint && current.joint.enabled === true) ||
+      (current.collaboration && current.collaboration.enabled === true) ||
+      originType === 'team' ||
+      originSource === 'team-note' ||
+      current.team_id
+    );
+  }
+
+  function isShapeOnlyEditForMenu(record) {
+    return !!(record && !isTeamJointNoteForMenu() && !isOwnedByCurrentUserForMenu(record));
+  }
+
+  function isOwnedByCurrentUserForMenu(record) {
+    if (!record) {
+      return true;
+    }
+    try {
+      return isOwnedByCurrentUser(record);
+    }
+    catch (e) {
+      /*
+       * Legacy records or pseudo SVG targets can be missing audit.createdBy.
+       * Do not break menu rendering for such records; ownership-specific
+       * restrictions are applied when a saved page/group/node record is available.
+       */
+      return true;
+    }
+  }
+
+  function getOwnershipRecordForMenu(profile) {
+    if (!profile) {
+      return null;
+    }
+    /*
+     * For a group axis / outline / Viewpoint axis pseudo link, the saved owner is
+     * the group, not the graph pseudo link. Use the group record when present.
+     */
+    return profile.group || profile.target || null;
+  }
+
+  function isNonOwnerAllowedEditOperation(operation, profile) {
+    var op = String(operation || '');
+    var commonAllowed = [
+      'addContent',
+      'addTopic',
+      'addMemo',
+      'addTimelineSegmentFromPlayer',
+      'addViewpointEntry',
+      'createTimelineAxis',
+      'createViewpointAxis',
+      'copy',
+      'copyViewpointTarget'
+    ];
+    var nonTeamDisplayLayoutAllowed = [
+      'edit',
+      'horizontal',
+      'vertical',
+      'normal',
+      'reverse',
+      'horizontal2',
+      'vertical2',
+      'forward',
+      'backward'
+    ];
+
+    if (commonAllowed.indexOf(op) >= 0) {
+      return true;
+    }
+
+    /*
+     * In ordinary personal/imported notes, another user's objects can be
+     * adjusted for the current user's layout/display needs.  The edit pane
+     * still protects non-display fields through wuwei.joint.canEditPath().
+     *
+     * In active team notes, another user's objects remain directly read-only;
+     * users should add their own node/memo/comment instead of editing or moving
+     * the other user's object.
+     */
+    if (!isTeamJointNoteForMenu() && nonTeamDisplayLayoutAllowed.indexOf(op) >= 0) {
+      return true;
+    }
+
+    /*
+     * Other users' Viewpoint axes / PageMarkers may still be used as an
+     * attachment point for adding a PageMarker, or copied to create a new object
+     * owned by the current user.  Structural deletion / direction / edit is not
+     * allowed for non-owned Viewpoint targets in active team notes.
+     */
+    if (profile && profile.groupKind === 'viewpoint' &&
+      ['addViewpointEntry', 'copyViewpointTarget'].indexOf(op) >= 0) {
+      return true;
+    }
+
+    return false;
+  }
+
+  function isOperationAllowedByOwnership(operation, profile, context) {
+    var ownershipRecord;
+
+    if (context === 'INFO' || operation === 'adminInfo') {
+      return true;
+    }
+
+    ownershipRecord = getOwnershipRecordForMenu(profile);
+    if (isOwnedByCurrentUserForMenu(ownershipRecord)) {
+      return true;
+    }
+
+    if (context === 'EDIT') {
+      return isNonOwnerAllowedEditOperation(operation, profile);
+    }
+
+    return false;
+  }
+
   function hasContextDownloadUrl(allNodes) {
     var node = getContextTarget(allNodes);
     return !!getDownloadUrl(node);
   }
 
   OperationsList = {
+    'adminInfo': ['Admin',
+      function () {
+        /*
+         * Admin pane is an information-menu command for the current internal
+         * state.  It should not depend on whether the clicked target resolves
+         * to a normal node/link record, because Timeline/Viewpoint axes and
+         * pseudo SVG targets can be lightweight context targets.
+         */
+        if (state.Selecting || state.Connecting) {
+          return false;
+        }
+        /*
+         * The menu decision should depend only on the logged-in user's role.
+         * Do not depend on wuwei.info.admin being loaded here; otherwise the
+         * command disappears when the info/admin module is loaded later or when
+         * the menu is evaluated before that namespace is ready.
+         */
+        return isAdminUserForMenu();
+      },
+      null,
+      'fas fa-tools fa-lg fa-fw'
+    ],
+
     'info': ['Info',
       function (allNodes) {
         var node = getContextTarget(allNodes);
@@ -4375,10 +4775,12 @@ wuwei.menu = wuwei.menu || {};
           return false;
         }
 
-        // Timeline Segment and Contents PageMarker have specialised info panes.
-        // A Content node attached to / contained in a group is still a normal
-        // document node, so keep the generic [i] command for PDF/Office/HTML.
-        if (isContextTimelineSegment(allNodes) || isContextContentsPage(allNodes)) {
+        // Timeline / Viewpoint targets have specialised info panes.
+        // Suppress the generic [i] command for axis, representative and member
+        // targets so the information menu does not show duplicate [i] entries.
+        if (isContextTimelineAxis(allNodes) || isContextTimelineSegment(allNodes) ||
+          isContextViewpointAxis(allNodes) || isContextViewpointRepresentative(allNodes) ||
+          isContextViewpointPage(allNodes)) {
           return false;
         }
 
@@ -4469,7 +4871,7 @@ wuwei.menu = wuwei.menu || {};
         }
 
         var resource = getNodeResource(node);
-        ref = String(getDownloadUrl(node) || resource.canonicalUri || resource.uri || '').toLowerCase();
+        ref = String(getDownloadUrl(node) || (resource.original && resource.original.url) || resource.uri || resource.canonicalUri || '').toLowerCase();
 
         isImageOrPdf = !!(
           util.isDocumentKindByExtension(node, resource, ref, 'image') ||
@@ -4484,19 +4886,6 @@ wuwei.menu = wuwei.menu || {};
       'fas fa-download fa-lg fa-fw'
     ],
 
-    'editRepresentativeStyle': ['Edit style',
-      function (allNodes) {
-        var node = getContextTarget(allNodes);
-        return !!(node && isRepresentativeTopic(node) &&
-          graph.mode !== 'view' && !state.viewOnly && !state.published &&
-          !state.Selecting && !state.Connecting &&
-          !isContextTimelineAxis(allNodes) &&
-          !isContextContentsAxis(allNodes));
-      },
-      null,
-      'fas fa-palette fa-lg fa-fw'
-    ],
-
     'edit': ['Edit',
       function (allNodes) {
         var node = getContextTarget(allNodes);
@@ -4505,16 +4894,18 @@ wuwei.menu = wuwei.menu || {};
           return false;
         }
 
-        // timeline / contents axis は個別メニューへ分離
-        if (isContextTimelineAxis(allNodes) || isContextTimelineSegment(allNodes) ||
-          isContextContentsAxis(allNodes)) {
-          return false;
-        }
-
+        /*
+         * Timeline / Viewpoint axis and Timeline Segment have specialised
+         * edit operations with the same "Edit" label.  Suppress the generic
+         * edit item there so the context menu shows only one Edit command.
+         *
+         * Representative nodes and Viewpoint PageMarkers keep the generic edit
+         * command because it opens their display/style edit pane.
+         */
         return true;
       },
       null,
-      'fas fa-edit fa-lg fa-fw'
+      'fas fa-pencil-alt fa-lg fa-fw'
     ],
 
     'connect': ['Connect',
@@ -4536,8 +4927,7 @@ wuwei.menu = wuwei.menu || {};
           !state.Connecting &&
           !util.isEmpty(node) &&
           !isContextTimelineAxis(allNodes) &&
-          !isContextTimelineSegment(allNodes) &&
-          !isContextContentsTarget(allNodes)) {
+          !isContextViewpointAxis(allNodes)) {
           return true;
         }
         return false;
@@ -4553,8 +4943,7 @@ wuwei.menu = wuwei.menu || {};
           !state.Connecting &&
           !util.isEmpty(node) &&
           !isContextTimelineAxis(allNodes) &&
-          !isContextTimelineSegment(allNodes) &&
-          !isContextContentsTarget(allNodes)) {
+          !isContextViewpointAxis(allNodes)) {
           return true;
         }
         return false;
@@ -4570,8 +4959,7 @@ wuwei.menu = wuwei.menu || {};
           !state.Connecting &&
           !util.isEmpty(node) &&
           !isContextTimelineAxis(allNodes) &&
-          !isContextTimelineSegment(allNodes) &&
-          !isContextContentsTarget(allNodes)) {
+          !isContextViewpointAxis(allNodes)) {
           return true;
         }
         return false;
@@ -4707,7 +5095,7 @@ wuwei.menu = wuwei.menu || {};
         if (util.isEmpty(node)) {
           return false;
         }
-        if (isContextContentsTarget(allNodes)) {
+        if (isContextViewpointTarget(allNodes)) {
           return false;
         }
         return true;
@@ -4754,7 +5142,7 @@ wuwei.menu = wuwei.menu || {};
 
     'reverse': ['Reverse',
       function (allNodes) {
-        if (isContextTimelineAxis(allNodes) || isContextContentsTarget(allNodes)) { return false; }
+        if (isContextTimelineAxis(allNodes) || isContextViewpointTarget(allNodes)) { return false; }
         var node = getContextTarget(allNodes);
         if (allNodes.length === 1 &&
           util.notEmpty(node) &&
@@ -4770,7 +5158,7 @@ wuwei.menu = wuwei.menu || {};
 
     'normal': ['NORMAL',
       function (allNodes) {
-        if (isContextTimelineAxis(allNodes) || isContextContentsTarget(allNodes)) { return false; }
+        if (isContextTimelineAxis(allNodes) || isContextViewpointTarget(allNodes)) { return false; }
         var node = getContextTarget(allNodes);
         if (allNodes.length === 1 &&
           util.notEmpty(node) &&
@@ -4791,9 +5179,9 @@ wuwei.menu = wuwei.menu || {};
           var timelineSpec = getContextTimelineSpec(allNodes);
           return !!(timelineSpec && timelineSpec.group && timelineSpec.group.orientation !== 'horizontal');
         }
-        if (isContextContentsAxis(allNodes)) {
-          var contentsSpec = getContextContentsSpec(allNodes);
-          return !!(contentsSpec && contentsSpec.group && contentsSpec.group.orientation !== 'horizontal');
+        if (isContextViewpointAxis(allNodes)) {
+          var viewpointSpec = getContextViewpointSpec(allNodes);
+          return !!(viewpointSpec && viewpointSpec.group && viewpointSpec.group.orientation !== 'horizontal');
         }
         var node = getContextTarget(allNodes);
         if (allNodes.length === 1 &&
@@ -4816,9 +5204,9 @@ wuwei.menu = wuwei.menu || {};
           var timelineSpec = getContextTimelineSpec(allNodes);
           return !!(timelineSpec && timelineSpec.group && timelineSpec.group.orientation !== 'vertical');
         }
-        if (isContextContentsAxis(allNodes)) {
-          var contentsSpec = getContextContentsSpec(allNodes);
-          return !!(contentsSpec && contentsSpec.group && contentsSpec.group.orientation !== 'vertical');
+        if (isContextViewpointAxis(allNodes)) {
+          var viewpointSpec = getContextViewpointSpec(allNodes);
+          return !!(viewpointSpec && viewpointSpec.group && viewpointSpec.group.orientation !== 'vertical');
         }
         var node = getContextTarget(allNodes);
         if (allNodes.length === 1 &&
@@ -4837,7 +5225,7 @@ wuwei.menu = wuwei.menu || {};
 
     'horizontal2': ['HORIZONTAL2',
       function (allNodes) {
-        if (isContextTimelineAxis(allNodes) || isContextContentsTarget(allNodes)) { return false; }
+        if (isContextTimelineAxis(allNodes) || isContextViewpointTarget(allNodes)) { return false; }
         var node = getContextTarget(allNodes);
         if (allNodes.length === 1 &&
           util.notEmpty(node) &&
@@ -4855,7 +5243,7 @@ wuwei.menu = wuwei.menu || {};
 
     'vertical2': ['VERTICAL2',
       function (allNodes) {
-        if (isContextTimelineAxis(allNodes) || isContextContentsTarget(allNodes)) { return false; }
+        if (isContextTimelineAxis(allNodes) || isContextViewpointTarget(allNodes)) { return false; }
         var node = getContextTarget(allNodes);
         if (allNodes.length === 1 &&
           util.notEmpty(node) &&
@@ -4878,11 +5266,11 @@ wuwei.menu = wuwei.menu || {};
           return false;
         }
         /*
-         * Contents representative / axis / PageMarker targets have their own
+         * Viewpoint representative / axis / PageMarker targets have their own
          * managed Delete command.  Suppress the generic group Delete here so
          * the representative context menu does not show two Delete entries.
          */
-        if (isContextContentsTarget(allNodes)) {
+        if (isContextViewpointTarget(allNodes)) {
           return false;
         }
         return isWholeGroupEraseTarget(node);
@@ -4902,7 +5290,7 @@ wuwei.menu = wuwei.menu || {};
         if (isWholeGroupEraseTarget(node)) {
           return false;
         }
-        if (isContextTimelineSegment(allNodes) || isContextContentsTarget(allNodes)) {
+        if (isContextTimelineSegment(allNodes) || isContextViewpointTarget(allNodes)) {
           return false;
         }
         return true;
@@ -5098,92 +5486,73 @@ wuwei.menu = wuwei.menu || {};
       'fas fa-stream fa-lg fa-fw'
     ],
 
-    'createContentsAxis': ['Add Axis',
+    'createViewpointAxis': ['Add Axis',
       function (allNodes) {
         return !state.Selecting &&
           !state.Connecting &&
           isContextDocumentLikeContent(allNodes);
       },
       null,
-      'fa fa-comment fa-lg fa-fw'
+      'fas fa-stream fa-lg fa-fw'
     ],
 
-    'addContentsEntry': ['Add Entry',
+    'addViewpointEntry': ['Add Entry',
       function (allNodes) {
         return !state.Selecting &&
           !state.Connecting &&
-          isContextContentsTarget(allNodes);
+          isContextViewpointTarget(allNodes);
       },
       null,
       'fas fa-plus-circle fa-lg fa-fw'
     ],
 
-    'copyContentsTarget': ['Copy',
+    'copyViewpointTarget': ['Copy',
       function (allNodes) {
         return !state.Selecting &&
           !state.Connecting &&
-          (isContextContentsPage(allNodes) || isContextContentsRepresentative(allNodes));
+          (isContextViewpointAxis(allNodes) ||
+            isContextViewpointPage(allNodes) ||
+            isContextViewpointRepresentative(allNodes));
       },
       null,
       'fa fa-clone fa-lg fa-fw'
     ],
 
 
-    'distributeContentsPageMarkers': ['Distribute PageMarkers',
+    'distributeViewpointPageMarkers': ['Distribute PageMarkers',
       function (allNodes) {
         return !state.Selecting &&
           !state.Connecting &&
-          isContextContentsRepresentative(allNodes);
+          isContextViewpointRepresentative(allNodes);
       },
       null,
       'fas fa-arrows-alt-h fa-lg fa-fw'
     ],
 
-    'deleteContentsTarget': ['Delete',
+    'deleteViewpointTarget': ['Delete',
       function (allNodes) {
         return !state.Selecting &&
           !state.Connecting &&
-          isContextContentsTarget(allNodes);
+          isContextViewpointTarget(allNodes);
       },
       'danger',
       'far fa-trash-alt fa-lg fa-fw'
-    ],
-
-    'editTimelineAxisProps': ['Edit perspective',
-      function (allNodes) {
-        return !state.Selecting &&
-          !state.Connecting &&
-          (isContextTimelineAxis(allNodes) || isContextContentsAxis(allNodes));
-      },
-      null,
-      'fas fa-ruler-horizontal fa-lg fa-fw'
     ],
 
     'addTimelineSegmentFromPlayer': ['Add Segment',
       function (allNodes) {
         return !state.Selecting &&
           !state.Connecting &&
-          isContextTimelineAxis(allNodes);
+          (isContextTimelineAxis(allNodes) ||
+            isContextTimelineRepresentative(allNodes));
       },
       null,
       'fas fa-plus-circle fa-lg fa-fw'
     ],
 
-    'editTimelineSegmentProps': ['Edit properties',
-      function (allNodes) {
-        return !state.Selecting &&
-          !state.Connecting &&
-          isContextTimelineSegment(allNodes);
-      },
-      null,
-      'fas fa-map-marker-alt fa-lg fa-fw'
-    ],
-
-    'editTimelineSegmentFromPlayer': ['Edit',
-      function (allNodes) {
-        return !state.Selecting &&
-          !state.Connecting &&
-          isContextTimelineMidSegment(allNodes);
+    'editTimelineSegmentFromPlayer': ['Edit from player',
+      function () {
+        return false;
       },
       null,
       'fas fa-play-circle fa-lg fa-fw'
@@ -5210,11 +5579,11 @@ wuwei.menu = wuwei.menu || {};
       'fas fa-info fa-lg fa-fw'
     ],
 
-    'infoContentsTarget': ['Info',
+    'infoViewpointTarget': ['Info',
       function (allNodes) {
         return !state.Selecting &&
           !state.Connecting &&
-          isContextContentsTarget(allNodes);
+          isContextViewpointTarget(allNodes);
       },
       null,
       'fas fa-info fa-lg fa-fw'
@@ -5341,6 +5710,15 @@ wuwei.menu = wuwei.menu || {};
     registerClick('#zoomout', zoomOutClicked);
     registerClick('#open_miniature', openMiniatureClicked);
     registerClick('#user_status', userStatusClicked);
+    registerClick('.pulldown.user .header i.fa-times', closeUserClicked);
+    registerClick('.pulldown.user .operators .operator.Login', () => {
+      wuwei.menu.login.open();
+      closeUserMenu();
+    });
+    registerClick('.pulldown.user .operators .operator.Logout', () => {
+      wuwei.menu.login.logout();
+      closeUserMenu();
+    });
     registerClick('#mainIcon', mainClicked);
     // noteIcon
     registerClick('#noteIcon', noteClicked);
@@ -5531,8 +5909,8 @@ wuwei.menu = wuwei.menu || {};
     if (wuwei.menu.timeline && typeof wuwei.menu.timeline.initModule === 'function') {
       wuwei.menu.timeline.initModule();
     }
-    if (wuwei.menu.contents && typeof wuwei.menu.contents.initModule === 'function') {
-      wuwei.menu.contents.initModule();
+    if (wuwei.menu.viewpoint && typeof wuwei.menu.viewpoint.initModule === 'function') {
+      wuwei.menu.viewpoint.initModule();
     }
     if (wuwei.menu.upload && typeof wuwei.menu.upload.initModule === 'function') {
       wuwei.menu.upload.initModule();

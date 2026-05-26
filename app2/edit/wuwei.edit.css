@@ -89,7 +89,7 @@
 #edit-link,
 #edit-uploaded,
 #edit-video,
-#edit-contents,
+#edit-viewpoint,
 #edit-timeline {
   max-height: calc(100vh - 80px);
   overflow-y: auto;
@@ -253,4 +253,88 @@
 #edit .svg-inline--fa.font_text-anchor:not(.checked):hover {
   color: #fcfdfe;
   background: #808080;
+}
+
+/* Header action icons: right-aligned on one row: info, widen, close. */
+#edit > header {
+  min-height: 56px;
+}
+
+#edit > header h2 {
+  margin: 0;
+  padding: 12px 96px 8px 0;
+  line-height: 1;
+}
+
+#edit .pane-header-actions {
+  position: absolute;
+  top: 16px;
+  right: 12px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+#infoOpen,
+#editWiden,
+#editDismiss {
+  position: static;
+  top: auto;
+  right: auto;
+  bottom: auto;
+  left: auto;
+  width: 22px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+
+/* Final edit pane header action alignment override.
+   Keep action icons at the right edge in one row. */
+#edit > header {
+  position: sticky;
+  min-height: 56px;
+}
+
+#edit .pane-header-actions {
+  position: absolute !important;
+  top: 16px !important;
+  right: 12px !important;
+  left: auto !important;
+  bottom: auto !important;
+  height: 24px;
+  display: flex !important;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  z-index: 3;
+}
+
+#edit .pane-header-actions > a {
+  position: static !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+}
+
+#infoOpen,
+#editWiden,
+#editDismiss {
+  position: static !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
 }

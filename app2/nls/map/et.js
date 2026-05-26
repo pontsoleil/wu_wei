@@ -161,6 +161,7 @@ wuwei.nls.ET = {
   'Total items': 'Elemente kokku',
   'Workbench': 'Töölaud',
   'Source': 'Allikas',
+  'Bookmarks': 'Viewpoint',
   'Content': 'Sisu',
   '_Content': 'Sisu',
   'Assignment': 'Ülesanne',
@@ -315,6 +316,7 @@ wuwei.nls.ET = {
   'Edge': 'Edge',
   'Edge Shape': 'Edge Shape',
   'Edit': 'Muuda',
+  'Shape Edit': 'Kuju muutmine',
   'Edit(s) has been made.': 'Edit(s) has been made.',
   'Do you want to save edit(s)?': 'Do you want to save edit(s)?',
   'Edit Flock': 'Edit Flock',
@@ -567,4 +569,6 @@ wuwei.nls.ET = {
   'Label offset Y': 'Sildi vertikaalne kaugus',
   'Select label position': 'Vali sildi asukoht',
 
+  'Viewpoint axis was added.': 'Viewpoint axis was added.',
+  'Failed to add viewpoint axis.': 'Failed to add viewpoint axis.',
 };

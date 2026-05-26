@@ -1,0 +1,149 @@
+= WuWei メニュー判定ロジック整理
+三分一信之（三分一技術士事務所）
+:revnumber: ver 2.0
+:revdate: 2026-05-25
+:revremark: draft for review
+:version-label!:
+:doctype: book
+:toc:
+:toclevels: 3
+:sectnums:
+
+== 目的
+
+`ReferenceError: operation is not defined` が複数箇所で発生しているため、コンテキストメニューの判定処理を次の原則で整理する。
+
+* context 判定は、対象 `target` / `allNodes` だけに依存する。
+* operation 判定は、候補 operation が確定した後に行う。
+* context helper は、外側の未定義変数 `operation` を参照しない。
+* validator は、必要な場合だけ明示引数 `operation` を受け取る。
+* validator で例外が発生しても、メニュー全体を落とさず、その operation を非表示にする。
+
+== 現在発生しているエラー
+
+代表例:
+
+[source,text]
+----
+ReferenceError: operation is not defined
+at getContextTimelineSpec
+at isContextTimelineSegment
+at OperationsList.info
+----
+
+原因は、`OperationsList.info` などの validator が呼ばれる時点では、候補 operation は `getSupported()` 内のローカル変数として存在するだけであり、`getContextTimelineSpec()` などの context helper からは参照できないことである。
+
+== 判定フロー
+
+[source,text]
+----
+ContextMENU(MENU, hoveredNode, event)
+  |
+  |-- Operations.getSupported(allNodes, context)
+        |
+        |-- resolveMenuContext(allNodes, context)
+        |     |
+        |     |-- getContextTarget(allNodes)
+        |     |-- getContextTimelineSpec(allNodes)
+        |     |-- getContextViewpointSpec(allNodes)
+        |     |-- menuType / role / groupKind を決定
+        |
+        |-- profile.menuType に対応する operation 候補を取得
+        |
+        |-- operation 候補ごとに判定
+              |
+              |-- Operations.isSupported(operation, allNodes, context)
+              |     |
+              |     |-- ownership 判定
+              |     |-- menuType に operation が含まれるか判定
+              |
+              |-- safeOperationValidator(validator, allNodes, operation, context, profile)
+                    |
+                    |-- validator(allNodes, operation, context, profile)
+                    |-- 例外時は console.error して false
+----
+
+== 役割分担
+
+[cols="25%,75%",options="header"]
+|===
+|処理 |責務
+
+|`getContextTarget(allNodes)`
+|対象 node / link / pseudo target を正本 record に解決する。operation は見ない。
+
+|`getContextTimelineSpec(allNodes)`
+|対象が Timeline axis / Segment / representative かを判定するための spec を取得する。operation は見ない。
+
+|`getContextViewpointSpec(allNodes)`
+|対象が Viewpoint axis / PageMarker / representative かを判定するための spec を取得する。operation は見ない。
+
+|`resolveMenuContext(allNodes, context)`
+|targetType、role、groupKind、menuType を決定する。operation は見ない。
+
+|`Operations.isSupported(operation, allNodes, context)`
+|operation がその menuType で許可されているか、所有者制御上許可されるかを判定する。
+
+|`OperationsList[operation][1]`
+|各 operation の詳細 validator。operation 固有条件はここで見る。
+|===
+
+== 禁止事項
+
+context helper では次のような記述をしない。
+
+[source,javascript]
+----
+function getContextTimelineSpec(allNodes) {
+  if (operation === 'info') { ... } // 禁止
+}
+----
+
+== 許可される書き方
+
+operation 固有条件が必要な場合は、validator の明示引数として受け取る。
+
+[source,javascript]
+----
+'info': ['Info',
+  function (allNodes, operation, context, profile) {
+    return !isContextTimelineSegment(allNodes);
+  },
+  null,
+  'fas fa-info fa-lg fa-fw'
+]
+----
+
+ただし、多くの validator は従来どおり `function (allNodes) { ... }` のままでよい。
+
+== 後方互換対策
+
+過去の修正過程で `getContextTimelineSpec(operation, allNodes)` のような呼び出しが残っている可能性があるため、防御的に次の形を受け付ける。
+
+[source,javascript]
+----
+if (!Array.isArray(allNodes) && Array.isArray(arguments[1])) {
+  allNodes = arguments[1];
+}
+----
+
+ただし、`operation` の内容は使用しない。
+
+== 今回の修正
+
+* `getContextTarget()` を operation 非依存に整理
+* `getContextTimelineSpec()` を operation 非依存に整理
+* `isContextTimelinePlayable()` を `getContextTimelineSpec(allNodes)` のみに整理
+* `safeOperationValidator()` を追加
+* validator 呼び出しを `validator(allNodes, operation, context, profile)` に変更
+* validator 例外時にメニュー全体を停止せず、該当 operation を非表示にする
+* context helper の実行本体に `operation` 参照が残っていないことを確認
+
+== 運用上の注意
+
+この修正後も同種のエラーが出る場合は、ブラウザが古い `wuwei.menu.js` をキャッシュしている可能性が高い。
+
+[source,text]
+----
+Ctrl + F5
+----

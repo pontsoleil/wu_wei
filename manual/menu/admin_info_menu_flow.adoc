@@ -1,0 +1,96 @@
+= WuWei Admin 情報ペイン表示制御フロー
+三分一信之（三分一技術士事務所）
+:revnumber: ver 1.0
+:revdate: 2026-05-25
+:revremark:
+:version-label!:
+:doctype: book
+:toc:
+:toclevels: 3
+:sectnums:
+
+== 目的
+
+情報コンテキストメニューリストに `管理(Admin)` ペイン表示コマンドを表示する制御の流れを整理する。
+
+== 表示判定の流れ
+
+[source,text]
+----
+ContextMENU('INFO', hoveredNode, event)
+  |
+  |-- Operations.getSupported(allNodes, 'INFO')
+        |
+        |-- resolveMenuContext(allNodes, 'INFO')
+        |     |
+        |     |-- target / role / groupKind / menuType を決定
+        |     |-- InfoNode / InfoLink / InfoGroup / InfoGroupMember / InfoGroupRepresentative
+        |
+        |-- menuType の operation 候補を取得
+        |     |
+        |     |-- adminInfo
+        |     |-- info / infoTimelineTarget / infoViewpointTarget
+        |     |-- download / openNewTab / openWindow / openPlayer
+        |
+        |-- adminInfo validator
+              |
+              |-- Selecting / Connecting 中でないこと
+              |-- currentUser.role === 'admin'
+----
+
+== 重要な設計
+
+`adminInfo` の表示可否は、ログインユーザの `role` だけで判定する。
+
+[source,javascript]
+----
+isAdminUserForMenu()
+----
+
+`wuwei.info.admin` が読み込まれているかどうかは、メニュー表示可否の判定には使わない。
+
+理由は、メニュー表示判定の時点で `info.admin.js` の namespace が未生成の場合に、admin ユーザであってもメニュー項目が消えるためである。
+
+== 実行時の流れ
+
+[source,text]
+----
+adminInfo click
+  |
+  |-- wuwei.info.openAdmin(target, option)
+        |
+        |-- wuwei.info.admin.open(target, option)
+              |
+              |-- 管理(Admin)ペインを表示
+----
+
+== 必要な読込
+
+`index.html` には次が必要である。
+
+[source,html]
+----
+<link type="text/css" rel="stylesheet" href="app2/info/admin/info.admin.css" />
+<script type="text/javascript" src="app2/info/admin/info.admin.js"></script>
+<script type="text/javascript" src="app2/info/admin/info.admin.markup.js"></script>
+----
+
+== デバッグ確認
+
+ブラウザコンソールで次を確認する。
+
+[source,javascript]
+----
+wuwei.common.state.currentUser.role
+typeof wuwei.info.openAdmin
+typeof wuwei.info.admin.open
+----
+
+期待値は次である。
+
+[source,text]
+----
+"admin"
+"function"
+"function"
+----

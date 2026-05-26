@@ -48,11 +48,7 @@
 #info-video,
 #info-asciidoc,
 #info-timeline,
-#info-contents {
-  max-height: calc(100vh - 80px);
-  overflow-y: auto;
-}
-
+#info-viewpoint,
 #info .info {
   margin-top: 8px;
 }
@@ -77,12 +73,6 @@
   position: absolute;
   top: 16px;
   right: 12px;
-}
-
-#editOpen {
-  position: absolute;
-  top: 16px;
-  right: 32px;
 }
 
 #info .fa,
@@ -119,4 +109,145 @@
   border-left: none;
   margin-top: 4px;
   padding: 4px;
+}
+/* Header action icons: right-aligned on one row: edit/info action, widen, close. */
+#info > header {
+  min-height: 56px;
+}
+
+#info > header h2 {
+  margin: 0;
+  padding: 12px 96px 8px 0;
+  line-height: 1;
+}
+
+#info .pane-header-actions {
+  position: absolute;
+  top: 16px;
+  right: 12px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+#editOpen,
+#infoWiden,
+#infoDismiss {
+  position: static;
+  top: auto;
+  right: auto;
+  bottom: auto;
+  left: auto;
+  width: 22px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Administrator diagnostic pane */
+#info-admin .admin-diagnostic-pane {
+  font-size: 12px;
+  color: #333;
+}
+
+#info-admin .admin-warning {
+  margin: 4px 0 8px 0;
+  padding: 6px;
+  border-left: 3px solid #b36b00;
+  background: #fff7e6;
+  white-space: pre-wrap;
+}
+
+#info-admin summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #555;
+}
+
+#info-admin th,
+#info-admin th {
+  width: 38%;
+  text-align: left;
+  color: #666;
+  font-weight: 600;
+}
+
+#info-admin .admin-validation-ok {
+  color: #27632a;
+}
+
+/* Final info pane header action alignment override.
+   Keep action icons at the right edge in one row. */
+#info > header {
+  position: sticky;
+  min-height: 56px;
+}
+
+#info .pane-header-actions {
+  position: absolute !important;
+  top: 16px !important;
+  right: 12px !important;
+  left: auto !important;
+  bottom: auto !important;
+  height: 24px;
+  display: flex !important;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  z-index: 3;
+}
+
+#info .pane-header-actions > a {
+  position: static !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+}
+
+#editOpen,
+#infoWiden,
+#infoDismiss {
+  position: static !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+}
+
+/* Pane title text for info/admin panes. */
+#info .pane-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+#info .pane-title-text {
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+
+
+/* Conditional edit action in the information pane header.
+   Own/editable records show: [edit] <-> X.
+   Non-owned/read-only records show: <-> X. */
+#info .pane-header-actions #editOpen {
+  display: none;
+}
+
+#info .pane-header-actions #editOpen.is-visible {
+  display: inline-flex !important;
 }

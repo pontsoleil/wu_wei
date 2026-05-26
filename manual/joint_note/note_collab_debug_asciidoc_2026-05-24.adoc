@@ -1,0 +1,96 @@
+= WuWei Joint Note Step 1 Console Test Notes
+三分一信之（三分一技術士事務所）
+:revnumber: ver 3.0
+:revdate: 2026-05-25
+:revremark: renamed from collab note to joint note
+:version-label!:
+:doctype: book
+:toc:
+:toclevels: 3
+:sectnums:
+
+== 位置づけ
+
+この資料は、旧 Collab Note 名称で作成した Step 1A デバッグ資料を、Joint Note 名称へ更新したものである。
+
+詳細なサーバーなし確認手順は、次を正本とする。
+
+* `manual/joint_note/joint_note_step1_no_server_test.adoc`
+
+== 正本状態
+
+Step 1 の note-level 状態は次を正本とする。
+
+[source,json]
+----
+{
+  "jointNoteState": "imported",
+  "note_scope": "personal",
+  "origin": {
+    "type": "import",
+    "source": "export-package"
+  }
+}
+----
+
+[source,json]
+----
+{
+  "jointNoteState": "team",
+  "note_scope": "team",
+  "team_id": "t-test",
+  "origin": {
+    "type": "team",
+    "source": "team-note"
+  }
+}
+----
+
+旧 `collabNoteState` は互換入力としてのみ扱う。
+
+== Chrome Console 確認
+
+Apache24 localhost で WuWei を開き、ノートを一つ読み込んだ後、Chrome DevTools Console で次を実行する。
+
+[source,javascript]
+----
+wuwei.debug.runJointStep1NoServerTest();
+----
+
+個別に状態を切り替える場合は次を使用する。
+
+[source,javascript]
+----
+wuwei.debug.setJointImported();
+wuwei.debug.setJointTeam({ team_id: "t-test" });
+wuwei.debug.setJointOwn();
+wuwei.debug.jointState();
+----
+
+判定 API は `wuwei.joint` を使用する。
+
+[source,javascript]
+----
+const node = wuwei.common.current.page.nodes[0];
+
+wuwei.joint.getNoteState();
+wuwei.joint.canEditPath(node, "description.body", "node");
+wuwei.joint.canEditPath(node, "x", "node");
+wuwei.joint.canDeleteObject(node);
+----
+
+== 期待される差
+
+[cols="35%,65%",options="header"]
+|===
+|状態 |期待値
+
+|import note
+|他者ノードの表示・レイアウト編集及び soft delete は可。意味属性の直接編集は不可。
+
+|team note
+|他者ノードの表示・レイアウト編集、意味属性編集、delete は不可。
+
+|own note
+|通常の個人ノートとして扱う。
+|===

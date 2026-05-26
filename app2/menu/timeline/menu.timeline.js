@@ -113,6 +113,19 @@ wuwei.menu.timeline = wuwei.menu.timeline || {};
     });
   }
 
+  function getVimeoPlayerUrl(source) {
+    var url = source && (source.url || source.src || source.embedUrl);
+    var id = source && source.id;
+
+    if (url) {
+      return url;
+    }
+    if (id) {
+      return 'https://vimeo.com/' + id;
+    }
+    return '';
+  }
+
   function cleanupEmbeddedPreview(previewState, host) {
     var timer = previewState && (previewState.timer || previewState.timeWatchTimer);
     var kind = previewState && (previewState.kind || previewState.provider || '');
@@ -257,7 +270,7 @@ wuwei.menu.timeline = wuwei.menu.timeline || {};
       var player;
       host.innerHTML = '';
       player = new window.Vimeo.Player(host, {
-        url: source.url,
+        url: getVimeoPlayerUrl(source),
         autoplay: true,
         controls: true,
         responsive: true,

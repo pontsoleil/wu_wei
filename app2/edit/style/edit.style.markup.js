@@ -193,9 +193,9 @@ wuwei.edit.style.markup = (function () {
     var supplementFormat;
     param = param || {};
     importedSupplement = !!(param.node &&
-      wuwei.collab &&
-      typeof wuwei.collab.canAppendImportedDescription === 'function' &&
-      wuwei.collab.canAppendImportedDescription(param.node, 'description.body', 'node'));
+      wuwei.joint &&
+      typeof wuwei.joint.canAppendImportedDescription === 'function' &&
+      wuwei.joint.canAppendImportedDescription(param.node, 'description.body', 'node'));
     if (importedSupplement) {
       originalBody = descriptionOriginalBody(param.node.description);
       originalFormat = descriptionOriginalFormat(param.node.description);

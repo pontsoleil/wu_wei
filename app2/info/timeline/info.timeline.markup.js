@@ -30,8 +30,49 @@ wuwei.info.timeline.markup = (function () {
   function block(label, value, klass) {
     return '' +
       '<div class="timeline-field ' + (klass || '') + '">' +
-        '<div class="timeline-label">' + esc(label) + '</div>' +
-        '<div class="timeline-value">' + esc(value) + '</div>' +
+        '<span class="timeline-label">' + esc(label) + '</span>' +
+        '<span class="timeline-value">' + esc(value) + '</span>' +
+      '</div>';
+  }
+
+  function mediaBasicInfoHtml(info) {
+    info = info || {};
+    return '' +
+      '<div class="timeline-media-info">' +
+        '<h4 class="timeline-subheading">' + esc(t('Media information')) + '</h4>' +
+        '<div class="timeline-grid">' +
+          block(t('Title'), info.title || '', 'title') +
+          block(t('Kind'), info.kind || '', 'kind') +
+          block(t('Provider'), info.provider || info.videoKind || '', 'provider') +
+          block(t('Duration'), info.durationText || '', 'duration') +
+        '</div>' +
+      '</div>';
+  }
+
+  function segmentListHtml(segments) {
+    segments = Array.isArray(segments) ? segments : [];
+    if (!segments.length) {
+      return '' +
+        '<div class="timeline-segment-list">' +
+          '<h4 class="timeline-subheading">' + esc(t('Segment list')) + '</h4>' +
+          '<div class="timeline-empty">' + esc(t('No segments')) + '</div>' +
+        '</div>';
+    }
+    return '' +
+      '<div class="timeline-segment-list">' +
+        '<h4 class="timeline-subheading">' + esc(t('Segment list')) + '</h4>' +
+        '<table class="timeline-segment-table timeline-label-start-table">' +
+          '<thead><tr>' +
+            '<th>' + esc(t('Label')) + '</th>' +
+            '<th>' + esc(t('Start time')) + '</th>' +
+          '</tr></thead>' +
+          '<tbody>' + segments.map(function (seg) {
+            return '<tr>' +
+              '<td>' + esc(seg.label || '') + '</td>' +
+              '<td>' + esc(seg.startText || '') + '</td>' +
+            '</tr>';
+          }).join('') + '</tbody>' +
+        '</table>' +
       '</div>';
   }
 
@@ -53,6 +94,8 @@ wuwei.info.timeline.markup = (function () {
             block(t('Segments'), (param && param.segmentCount) || 0, 'segments') +
             block(t('Default'), (param && param.defaultPlayDuration) || 0, 'default') +
         '</div>' +
+        mediaBasicInfoHtml(param && param.mediaInfo) +
+        segmentListHtml(param && param.segments) +
       '</section>';
   }
 

@@ -93,6 +93,10 @@ wuwei.edit.contents = wuwei.edit.contents || {};
 
   function ensureShell() {
     var editPane = $('edit');
+
+    if (wuwei.edit && typeof wuwei.edit.closeInfoPaneForEdit === 'function') {
+      wuwei.edit.closeInfoPaneForEdit();
+    }
     var host;
 
     if (!editPane) {
@@ -109,6 +113,9 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     editPane.style.display = 'block';
     if (common && common.state) {
       common.state.Editing = true;
+    }
+    if (wuwei.edit && typeof wuwei.edit.showOnlyEditRoot === 'function') {
+      wuwei.edit.showOnlyEditRoot('edit-contents');
     }
 
     host = $('edit-contents');
@@ -343,6 +350,11 @@ wuwei.edit.contents = wuwei.edit.contents || {};
 
   function isHtmlContentTarget(point) {
     var documentNode;
+    var documentResource;
+    var documentHref;
+    var documentKind;
+    var documentKindValue;
+    var documentMimeType;
     var hrefText;
     var hashIndex;
     var hashText;
@@ -357,7 +369,27 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     documentNode = getPageMarkerDocumentNode(point);
     if (documentNode && wuwei.contents &&
       typeof wuwei.contents.isHtmlResourceNode === 'function') {
-      return !!wuwei.contents.isHtmlResourceNode(documentNode);
+      if (wuwei.contents.isHtmlResourceNode(documentNode)) {
+        return true;
+      }
+    }
+
+    documentResource = documentNode && documentNode.resource && typeof documentNode.resource === 'object'
+      ? documentNode.resource
+      : {};
+    documentKind = String(documentResource.kind || '').toLowerCase();
+    documentKindValue = String(documentResource.documentKind || '').toLowerCase();
+    documentMimeType = String(documentResource.mimeType || documentResource.type || '').toLowerCase();
+    documentHref = getPageMarkerDocumentHref(point);
+
+    if (documentKindValue === 'html' ||
+      documentKind === 'html' ||
+      documentKind === 'web' ||
+      documentKind === 'webpage' ||
+      documentMimeType.indexOf('text/html') === 0 ||
+      documentMimeType.indexOf('application/xhtml+xml') === 0 ||
+      /\.(?:html?|xhtml)(?:[?#].*)?$/i.test(documentHref)) {
+      return true;
     }
 
     return !!(point.anchorHref || point.htmlAnchorHref);
@@ -940,15 +972,8 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     currentPoint.style.line.kind = currentPoint.style.line.kind || 'SOLID';
     currentPoint.style.line.color = $('style_line_color').value || '#4c6b8a';
     currentPoint.style.line.width = Math.max(0, Number($('style_line_width').value || 0));
-    currentPoint.color = currentPoint.style.fill;
-    currentPoint.outline = currentPoint.style.line.color;
-    currentPoint.outlineWidth = currentPoint.style.line.width;
-    currentPoint.font = currentPoint.font || {};
-    currentPoint.font.color = currentPoint.style.font.color;
-    currentPoint.font.size = currentPoint.style.font.size;
-    currentPoint.font.align = align;
-    currentPoint.font['text-anchor'] = textAnchorForAlign(align);
     currentPoint.labelAlign = align;
+    expandNodeRuntimeStyle(currentPoint);
     currentPoint.changed = true;
     applyContentTargetStyleToGroup(currentPoint);
     if (wuwei.contents && typeof wuwei.contents.updateEntryFromNode === 'function') {
@@ -958,6 +983,17 @@ wuwei.edit.contents = wuwei.edit.contents || {};
       wuwei.draw.refresh();
     }
     return true;
+  }
+
+  function expandNodeRuntimeStyle(node) {
+    if (wuwei && wuwei.style &&
+        typeof wuwei.style.expandNodeRuntimeStyle === 'function') {
+      wuwei.style.expandNodeRuntimeStyle(node);
+    }
+    else if (wuwei && wuwei.note && wuwei.note.v2 &&
+        typeof wuwei.note.v2.expandNodeRuntimeStyle === 'function') {
+      wuwei.note.v2.expandNodeRuntimeStyle(node);
+    }
   }
 
   function applyContentTargetStyleToGroup(sourcePoint) {
@@ -982,12 +1018,7 @@ wuwei.edit.contents = wuwei.edit.contents || {};
       node.shape = sourcePoint.shape;
       node.size = clonePlain(sourcePoint.size || {});
       node.style = clonePlain(sourcePoint.style || {});
-      if (node.style && node.style.fill) { node.color = node.style.fill; }
-      if (node.style && node.style.line) {
-        node.outline = node.style.line.color;
-        node.outlineWidth = node.style.line.width;
-      }
-      if (node.style && node.style.font) { node.font = clonePlain(node.style.font); }
+      expandNodeRuntimeStyle(node);
       node.changed = true;
     });
     if (wuwei.draw && typeof wuwei.draw.refresh === 'function') {

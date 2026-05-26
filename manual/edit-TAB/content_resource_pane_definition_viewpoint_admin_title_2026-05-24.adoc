@@ -1,0 +1,408 @@
+= WuWei Content resource.kind 別ペイン項目対応表（編集ペイン・表示ペイン・管理(Admin)ペイン）
+三分一信之（三分一技術士事務所）
+:revnumber: ver 2.0
+:revdate: 2026-05-24
+:revremark:
+:version-label!:
+:doctype: book
+:toc:
+:toclevels: 3
+:sectnums:
+
+== 目的
+
+本資料は、WuWei の Content node について、`resource.kind` 別に、編集ペイン、表示ペイン、管理(Admin)ペインで扱う項目を整理する。管理(Admin)ペインは、通常の情報ペインとは区別される管理者用の read only 診断ペインである。
+
+本版では、次の設計方針を反映する。
+
+* `resource.contents` は新規データでは使用せず、`resource.viewpoint` を使用する。
+* 旧 Contents group は廃止し、Viewpoint group として扱う。
+* `resource.title`、`resource.uri`、`resource.canonicalUri` は新規データでは使用しない。
+* Content の表示名は `node.label` に一本化する。
+* remote Content の参照元は `resource.original.url`、正規 URL は `resource.original.canonicalUrl` に保存する。
+* upload Content の原本は `resource.original.storageRole` と `resource.storage.files[]` により管理する。
+* `graph` 欄とは別に `svg` 欄を設け、`graph.node` / `graph.link` と、`g.node` / `g.link` / SVG DOM の対応を区別する。
+* 管理(Admin)ペインは read only の診断ペインとし、管理者ロールの場合だけ表示する。
+
+各表では、次の列を用いる。
+
+[cols="2,1,2,2,4",options="header"]
+|===
+|項目名 |更新可 / 参照 |graph |svg |内容
+
+|項目名
+|更新可又は参照
+|`graph.node` 又は `graph.link` の対応属性
+|`g.node`、`g.link`、`text.node-label`、`foreignObject` などの SVG DOM 対応
+|項目の意味
+|===
+
+== ペイン構成の概要
+
+WuWei の Content node に関するペインは、編集、表示、診断の三つの目的に分ける。
+
+[cols="20%,25%,20%,35%",options="header"]
+|===
+|ペイン |役割 |更新可否 |主な対象
+
+|編集ペイン
+|利用者が変更してよい項目を編集する。
+|更新可項目を含む。
+|`label`、`description.body`、`description.format`、`shape`、`size`、`style.*`、remote Content の `resource.original.url`、`resource.original.canonicalUrl`、`resource.rights.*` など。
+
+|表示ペイン
+|選択対象の内容、参照先、再生・表示操作、権利情報を確認する。
+|原則として参照のみ。
+|Content の説明、viewer URL、サムネイル、Segment 一覧、PageMarker 一覧、Viewpoint 関連情報、権利情報など。
+
+|管理(Admin)ペイン
+|管理者が内部データ、runtime model、SVG DOM、legacy 項目、pseudo link / pseudo node 混入、viewer 解決結果を診断する。
+|参照のみ。
+|`current.page` record、`graph` record、SVG element、input target、validation、legacy warning、pseudo warning など。
+|===
+
+=== 編集ペイン
+
+編集ペインは、利用者が保存正本データのうち、通常操作として変更してよい項目を編集するためのペインである。
+
+Content node では、表示属性と resource 関連属性を分けて扱う。`label`、`description.body`、`description.format`、`shape`、`size`、`style.*` は通常の編集対象である。
+
+remote Content では、`resource.original.url` 及び `resource.original.canonicalUrl` は Content 定義時の入力項目であるため、更新可とする。ただし、URL 変更により viewer 解決、thumbnail、PageMarker anchor、Segment 等に影響する場合があるため、保存時又は更新時に再検査を行う。
+
+upload Content では、原本ファイルの論理パス及び storage 情報を編集ペインで直接変更しない。原本を変更する必要がある場合は、Content の再登録又は置換操作として扱う。
+
+=== 表示ペイン
+
+表示ペインは、利用者が選択対象の内容を確認し、必要に応じて original、preview、viewer、player、外部 URL などを開くためのペインである。
+
+表示ペインは通常の情報表示用であり、内部診断用 JSON や runtime model の詳細表示は扱わない。管理者が内部状態を確認する場合は、管理(Admin)ペインを使用する。
+
+=== 管理(Admin)ペイン
+
+=== 位置付け
+
+管理(Admin)ペインは、管理者が WuWei の内部状態を確認するための read only 診断ペインである。
+
+通常の表示ペインは、利用者向けの情報表示を目的とする。一方、管理(Admin)ペインは、保存正本、runtime model、SVG DOM、入力 target、legacy 項目、pseudo link / pseudo node の混入状態などを確認するために用いる。
+
+管理(Admin)ペインは、編集ペインではない。したがって、表示された JSON 又は内部情報を直接編集して保存する機能は持たせない。
+
+=== 表示条件
+
+管理(Admin)ペインは、現在の利用者の role が `admin` の場合だけ表示する。
+
+[source,javascript]
+----
+wuwei.common.state.currentUser &&
+wuwei.common.state.currentUser.role === "admin"
+----
+
+`login.cgi` 又は `login.py` の成功時 JSON において `role` が `admin` として返され、クライアント側の `wuwei.common.state.currentUser.role` に設定されている場合に、管理(Admin)ペインを表示できる。
+
+=== メニュー上の扱い
+
+管理(Admin)ペインは、コンテキスト情報メニューリストの `Admin` から開く。
+
+コンテキスト編集メニューリストには `Admin` を表示しない。これは、管理(Admin)ペインが編集機能ではなく、診断用の参照ペインであるためである。
+
+[cols="25%,25%,50%",options="header"]
+|===
+|メニュー |Admin 表示 |理由
+
+|コンテキスト編集メニューリスト
+|表示しない
+|編集操作と管理診断を混在させないため。
+
+|コンテキスト情報メニューリスト
+|表示する
+|通常の情報確認から、管理者用の詳細診断へ進めるようにするため。
+|===
+
+=== ヘッダ表示
+
+管理(Admin)ペインの上部ヘッダには、コンテキストメニューリストの `Admin` と同じ tools icon を使用する。
+
+[source,text]
+----
+tools icon + 管理(Admin)ペイン
+----
+
+通常の情報ペインとは異なる診断用ペインであることを明確にするため、タイトルにも `管理(Admin)ペイン` と表示する。
+
+=== 管理(Admin)ペインの共通表示項目
+
+[cols="2,1,2,2,4",options="header"]
+|===
+|項目名 |更新可 / 参照 |graph |svg |内容
+
+|current.page record
+|参照
+|`graph.node.id` 又は `graph.link.id`
+|対応 SVG 要素の `id`
+|選択対象に対応する保存正本 record を表示する。
+
+|graph record
+|参照
+|`graph.node` 又は `graph.link`
+|対応 SVG 要素の `id`
+|SVG 描画用 runtime record を表示する。
+
+|SVG element
+|参照
+|`graph.node.id` 又は `graph.link.id`
+|`g.node` / `g.link`
+|実際の SVG DOM 要素を表示する。
+
+|input target
+|参照
+|context menu target
+|event target
+|メニュー又はペインを開く契機となった入力 target を表示する。
+
+|legacy warning
+|参照
+|page node 又は graph node
+|なし
+|`resource.contents`、`resource.uri`、`resource.canonicalUri`、`resource.title` などの旧項目残存を表示する。
+
+|pseudo warning
+|参照
+|`graph.node`, `graph.link`
+|`g.node`, `g.link`
+|pseudo node / pseudo link が保存対象へ混入していないか表示する。
+
+|validation
+|参照
+|page node 又は graph node
+|なし
+|欠落ファイル、参照切れ、viewer 解決失敗、PageMarker 不整合などを表示する。
+|===
+
+=== 診断対象
+
+管理(Admin)ペインでは、次の内容を確認する。
+
+[cols="30%,70%",options="header"]
+|===
+|診断対象 |内容
+
+|保存正本
+|`current.page.nodes[]`、`current.page.links[]`、`current.page.groups[]` の対応 record を確認する。
+
+|graph runtime
+|`graph.node`、`graph.link` など、SVG 描画及び操作用 runtime model を確認する。
+
+|SVG DOM
+|`g.node`、`g.link`、`text.node-label`、`foreignObject`、`path`、`image` など、実際に描画されている SVG 要素を確認する。
+
+|legacy 項目
+|新規データでは使用しない `resource.contents`、`resource.uri`、`resource.canonicalUri`、`resource.title` などの残存を確認する。
+
+|pseudo record
+|group axis、group outline、timeline axis、Viewpoint axis / boundary などの pseudo link / pseudo node が、保存対象に混入していないか確認する。
+
+|viewer / resource
+|original、thumbnail、preview、pdf-preview、viewer URL、media metadata、Viewpoint metadata の解決状態を確認する。
+|===
+
+=== 禁止事項
+
+管理(Admin)ペインでは、次の操作を行わない。
+
+[cols="30%,70%",options="header"]
+|===
+|禁止事項 |理由
+
+|保存正本 JSON の直接編集
+|不整合な node、link、group、resource を作る危険があるため。
+
+|`resource.storage.files[]` の直接変更
+|upload 原本、thumbnail、preview、pdf-preview の整合性を壊す危険があるため。
+
+|pseudo link / pseudo node の保存
+|pseudo record は graph / SVG 用 runtime record であり、保存対象ではないため。
+
+|legacy 項目の新規作成
+|`resource.contents`、`resource.uri`、`resource.canonicalUri`、`resource.title` は新規データでは使用しないため。
+|===
+
+
+== graph 反映規則
+
+[cols="2,2,2,2,3",options="header"]
+|===
+|current.page 側 |graph 側 |svg |反映タイミング |備考
+
+|`node.id`
+|`graph.node.id`
+|`g.node` の `id`
+|graph 生成時
+|同一 ID とする。
+
+|`node.type`
+|`graph.node.type`
+|`g.node` の class
+|graph 生成時
+|Content, Memo, Topic 等である。
+
+|`node.label`
+|`graph.node.label`
+|`g.node text.node-label`
+|編集保存時又は graph 再生成時
+|Content, Topic, Segment, PageMarker では主表示文字列として使う。
+
+|`node.description.body`
+|`graph.node.description.body`
+|`g.node foreignObject`
+|graph 生成時又は編集保存時
+|Memo 及び Content では HTML 化して図形内に表示する。
+
+|`node.description.format`
+|`graph.node.description.format`
+|`g.node foreignObject`
+|graph 生成時又は編集保存時
+|`description.body` の HTML 化方法を指定する。
+
+|`node.x`, `node.y`
+|`graph.node.x`, `graph.node.y`
+|`g.node` の `transform`
+|読込時。ドラッグ中は graph 先行
+|ノートキャンバス上のドラッグ操作で変更する。
+
+|`node.shape`
+|`graph.node.shape`
+|`g.node rect.shape-node` 等の shape 要素
+|編集保存時
+|SVG 形状である。
+
+|`node.size`
+|`graph.node.size`
+|`g.node rect.shape-node` 等の shape 要素
+|編集保存時
+|SVG サイズである。
+
+|`node.style.*`
+|`graph.node.style.*`, runtime mirror fields
+|`g.node`
+|編集保存時
+|runtime mirror を再展開する。
+
+|`resource.kind`
+|`graph.node.iconKind` 又は `graph.node.resource.kind`
+|`g.node` の class / icon / thumbnail 表示
+|graph 生成時
+|document, video, image, audio, html を反映する。
+
+|`resource.documentKind`
+|`graph.node.documentKind` 又は `graph.node.resource.documentKind`
+|`g.node` の class / icon / thumbnail 表示
+|graph 生成時
+|pdf, office, text 等を反映する。
+
+|`resource.videoKind`
+|`graph.node.videoKind` 又は `graph.node.resource.videoKind`
+|`g.node` の class / icon / thumbnail 表示
+|graph 生成時
+|youtube, vimeo, mp4 等を反映する。
+
+|`resource.audioKind`
+|`graph.node.audioKind` 又は `graph.node.resource.audioKind`
+|`g.node` の class / icon / thumbnail 表示
+|graph 生成時
+|mp3, wav 等を反映する。
+
+|`resource.storage.files[]`
+|`graph.node.resource.storage.files[]` 又はなし
+|なし
+|graph 生成時
+|現行実装では含まれる場合がある。ただし SVG 描画では直接使用せず、thumbnail URL 等の解決に使用する。
+
+|resolved thumbnail URL
+|`graph.node.thumbnailUrl`
+|`g.node image` 又は `g.node foreignObject` 内 thumbnail
+|graph 生成時又は thumbnail 更新時
+|SVG 表示に必要な URL のみを保持する。
+
+|`resource.viewer`
+|`graph.node.resource.viewer` 又はなし
+|なし
+|graph 生成時
+|表示ペイン又は操作時に解決する。
+
+|`resource.media`
+|`graph.node.resource.media` 又はなし
+|なし
+|graph 生成時
+|表示ペイン又は管理(Admin)ペインで参照する。
+
+|`resource.rights.*`
+|`graph.node.resource.rights.*` 又はなし
+|なし
+|graph 生成時
+|編集ペイン及び表示ペインで扱う。SVG 描画では使用しない。
+
+|`resource.original.*`
+|`graph.node.resource.original.*` 又はなし
+|なし
+|graph 生成時
+|編集ペイン、表示ペイン、管理(Admin)ペインで扱う。SVG 描画では使用しない。
+
+|`resource.viewpoint.*`
+|`graph.node.resource.viewpoint.*` 又はなし
+|なし
+|graph 生成時
+|document / html のページ、anchor、viewer page 変換情報である。
+
+|`audit`
+|`graph.node.audit` 又はなし
+|なし
+|graph 生成時
+|管理(Admin)ペインで参照する。SVG 描画では使用しない。
+|===
+
+== 保存時の検査
+
+remote Content の `resource.original.url` 及び `resource.original.canonicalUrl` は、定義時入力項目であるため更新可とする。
+
+ただし、URL 変更により viewer 解決、thumbnail 取得、PageMarker anchor、Segment、外部埋め込み可否が変わる場合がある。
+
+保存時には次の再検査を行う。
+
+[cols="1,3",options="header"]
+|===
+|検査項目 |内容
+
+|viewer 再解決
+|iframe、external、PDF.js、Office Viewer、video player 等の表示方法を再判定する。
+
+|thumbnail 再取得
+|必要に応じて remote thumbnail を再取得又は再生成する。
+
+|anchor 再検査
+|HTML の場合、Viewpoint group の PageMarker の `anchorHref` と新しい URL の対応を確認する。
+
+|Segment 再検査
+|video / audio の場合、duration が変化したときに Segment の範囲を確認する。
+
+|legacy 項目削除
+|保存時には `resource.contents`、`resource.uri`、`resource.canonicalUri`、`resource.title` を出力しない。
+
+|警告表示
+|URL 変更により既存 PageMarker、Segment、thumbnail が不整合になる可能性を表示する。
+|===
+
+upload Content の原本ファイルは、`resource.storage.files[role="original"]` により管理する。
+
+upload Content では、原本ファイルの論理パスを編集ペインで変更しない。
+
+原本を変更する必要がある場合は、URL や path の直接編集ではなく、Content の再登録又は置換操作として扱う。
+
+== まとめ
+
+本仕様では、Content の表示名を `node.label` に一本化し、`resource.title` は定義しない。
+
+Content の参照元は、upload では `resource.original.storageRole` と `resource.storage.files[]`、remote では `resource.original.url` と `resource.original.canonicalUrl` により管理する。
+
+Document / HTML のページ、anchor、viewer page 変換、PageMarker / Viewpoint 関連 metadata は `resource.viewpoint` に保存する。`resource.contents` は旧 v2 互換の legacy 入力としてのみ扱い、新規保存データには出力しない。
+
+`graph` は画面操作用 runtime model であり、`svg` は実際の SVG DOM である。現行実装では `graph.node` に詳細属性が含まれる場合があるが、SVG 描画で直接使用する属性と、編集ペイン・表示ペイン・管理(Admin)ペインで参照する詳細属性を区別して扱う。

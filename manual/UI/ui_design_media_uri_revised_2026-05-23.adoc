@@ -1,0 +1,906 @@
+= WuWei app2 モジュール構成と画面設計方針
+三分一信之（三分一技術士事務所）
+:revnumber: 2026-05-23
+:revdate:
+:revremark:
+:version-label!:
+:doctype: book
+:toc:
+:toclevels: 3
+:sectnums:
+
+NOTE: Viewpoint は、従来 Contents / Bookmarks と呼んでいた「Content node に対してページ番号又は HTML anchor の視点を定義する軸」の新しい利用者向け名称および実装名である。内部モジュール名は `wuwei.viewpoint`、新規 group type は `viewpoint` とする。旧データの `contents` / `contentsAxis` 系識別子は `wuwei.note.v2` の読み込み時正規化でのみ受け入れ、ノートキャンバス描画時には fallback として扱わない。
+
+本書は、WuWei app2 の最新スクリプトに合わせて、モジュール構成と画面設計方針を整理したものです。最終段階の整理として、Document Content の編集・情報表示を `edit.document` / `info.document` として独立させ、Audio Content は `edit.audio` / `info.audio`、Image Content は `edit.image` / `info.image` に分離します。また、PageMarker の編集入口を `edit.pageMarker` として分離します。Resource 種別判定、Document のページ処理、Video / Audio の再生時間・source 解決、Image の preview / thumbnail 解決、保存 URI から実行時アクセス URL への解決は、`wuwei.resource.js`、`wuwei.document.js`、`wuwei.video.js`、`wuwei.audio.js` の helper 呼び出しへ寄せます。保存データの `resource.uri`、`canonicalUri`、`thumbnailUri`、`viewer.*Uri` には、内部ファイルに対する `load-file.cgi` / `load-file.py` URL、ホスト名、利用者 UUID、`user_id` を含めません。
+
+NOTE: `wuwei.note.v2` は構造識別子を正規化するため、旧 `contents` group type、`contentsAxis` link type、`contents-representative` topic kind 等は `viewpoint` 系へ変換する。一方、`label` はユーザ定義の表示情報であるため、`group.label`、代表ノードの `node.label`、PageMarker の `node.label`、及び link の `link.label` は正規化処理で書き換えない。旧ノートの表示ラベルが `Contents` であっても、それは利用者が定義したラベルとして保存・表示する。
+
+== 1. 基本方針
+
+=== 1.1 `common.current` を正本とする
+
+WuWei app2 では、ノートデータの正本は常に `wuwei.common.current` です。現在ページは `common.current.page` に設定され、これは `common.current.pages[]` 内の Page オブジェクトそのものへの参照です。
+
+[source,text]
+----
+common.current
+  currentPage: page.id
+  page: common.current.pages[] の該当 Page オブジェクトへの参照
+  pages[]
+    nodes[]
+    links[]
+    groups[]
+    transform
+    thumbnail
+----
+
+`common.graph` は描画用の展開結果です。`current.page` から `common.graph.nodes` / `common.graph.links` へ展開し、この過程で group axis、Timeline axis、Viewpoint axis などの pseudo link / pseudo overlay を生成します。
+
+[source,text]
+----
+common.current.page  ->  common.graph
+正本                    描画用 runtime 展開
+----
+
+NOTE: `common.graph.nodes` / `common.graph.links` から `common.current.page.nodes` / `common.current.page.links` へ戻す逆方向変換は行いません。`syncPageFromGraph()` のような専用同期関数は定義しません。ノートキャンバス上で編集される real node / real link は、`current.page` 内の同一オブジェクトを `graph` 側でも参照します。
+
+=== 1.2 ノートキャンバス状態と編集ペインの責務
+
+NOTE: 右側ペインでは、編集ペインと情報ペインを同時に表示しない。編集ペインを開くときは、表示中の情報ペインを閉じる。情報ペインを開くときは、表示中の編集ペインを閉じる。この規則は Generic / Group / Link / Content / Document / Video / Audio / Image / Timeline / Viewpoint / Segment / PageMarker の全対象に共通する。
+
+`x`、`y`、`visible` は保存対象ですが、編集ペインでは変更しません。
+
+[cols="25%,75%",options="header"]
+|===
+|項目 |変更手段
+|`x`, `y` |ノートキャンバス上のドラッグ移動
+|`visible` |コンテキストメニュー右上の `wilt` / `bloom` / `root` / `hide`
+|`transform` |ノートキャンバス全体の pan / zoom 操作
+|===
+
+編集ペインは、対象の意味情報、表示スタイル、resource metadata、Timeline / Viewpoint の軸属性などを編集します。
+
+=== 1.3 style 正本と runtime mirror
+
+保存データでは、色、線、フォントなどの表示スタイルは `node.style` を正本にします。
+
+[source,javascript]
+----
+style: {
+  fill: '#ffffff',
+  line: {
+    kind: 'SOLID',
+    color: '#4c6b8a',
+    width: 1
+  },
+  font: {
+    family: 'sans-serif',
+    size: 14,
+    color: '#303030',
+    align: 'center'
+  },
+  label: {
+    lines: 1,
+    offset: { x: 0, y: 0 }
+  }
+}
+----
+
+`node.color`、`node.outline`、`node.outlineWidth`、`node.font` は、描画コードの可読性と simulation 時の応答性を保つため、load / normalize / graph 展開時に `style` から生成される runtime mirror field です。`Object.defineProperty(..., enumerable: false)` により定義し、JSON 保存対象にはしません。
+
+[cols="30%,35%,35%",options="header"]
+|===
+|runtime mirror |正本 |保存対象
+|`node.color` |`node.style.fill` |しない
+|`node.outline` |`node.style.line.color` |しない
+|`node.outlineWidth` |`node.style.line.width` |しない
+|`node.font` |`node.style.font` |しない
+|===
+
+NOTE: `wuwei.draw` は従来どおり `d.color`、`d.outline`、`d.outlineWidth`、`d.font` を参照してよいです。ただし、それらは保存項目ではありません。編集ペインで変更する対象は `style.*` です。編集後は runtime mirror を再展開します。
+
+`shape`、`size`、`x`、`y`、`state`、`visible`、`linkCount` は、当面 Node 直下の保存項目として扱います。
+
+=== 1.4 Resource の基本分類
+
+`resource.source` は取得元又は保管方式を表します。`resource.kind` は Content 種別を表します。両者は混同しません。
+
+[cols="25%,75%",options="header"]
+|===
+|分類 |意味
+|`source` |`upload`、`remote`、`generated`、`embedded` などの取得元・保管方式
+|`kind` |`document`、`video`、`image`、`audio`、`other` などの Content 種別
+|`documentKind` |`pdf`、`office`、`html`、`text`
+|`videoKind` |`youtube`、`vimeo`、`mp4`
+|`audioKind` |`mp3` など
+|`imageKind` |`png`、`jpeg`、`gif`、`webp`、`svg` など
+|===
+
+`resource.source` は、取得元又は保管方式を示す分類であり、`upload` はここに設定します。`resource.kind` は、Content のメディア種別であり、アップロードされた音声でも `audio`、アップロードされた画像でも `image` を設定します。`resource.kind = 'upload'` とはしません。
+
+`resource.uri`、`resource.canonicalUri`、`resource.thumbnailUri`、`resource.viewer.*Uri` 及び同等の `...Uri` 保存項目には、`/wu_wei2/server/load-file.cgi`、`/wu_wei2/cgi-bin/load-file.py`、`user_id`、利用者 UUID、ホスト名を含む実行時アクセス URL を保存しません。保存値は、外部 URL 又は `YYYY/MM/DD/file_uuid/filename` 形式の論理パスとします。
+
+Audio / Image についても同じ規則を適用します。アップロードされた mp3、png、jpeg 等を表示するときは、保存済み logical path から `wuwei.resource.getRuntimeUrl()` 等により `load-file.cgi` 又は `load-file.py` 経由の実行時アクセス URL を生成します。ただし、生成した実行時 URL を `uri`、`canonicalUri`、`thumbnailUri`、`viewer.*Uri` へ書き戻してはいけません。
+
+[cols="30%,70%",options="header"]
+|===
+|項目 |保存値の例
+|外部 URL |`https://example.org/image/sample.png`
+|内部 logical path |`2026/05/23/file_uuid/sample.png`
+|保存してはいけない値 |`http://localhost/wu_wei2/server/load-file.cgi?...`、`/wu_wei2/cgi-bin/load-file.py?...`、`data/{user_uuid}/upload/...`
+|===
+
+NOTE: `storage.files[].dir_name` は、サーバー内部の物理保存場所を参照する補助情報として扱います。利用者向けの `uri` / `...Uri` 保存値とは区別します。
+
+== 2. 現行モジュール構成
+
+現行スクリプトは、次のディレクトリ構成で実装されています。
+
+[source,text]
+----
+app2/
+  wuwei.js
+  wuwei.init.registry.js
+  wuwei.shell.js
+
+  misc/
+    wuwei.common.js
+    wuwei.util.js
+    wuwei.ajax.js
+    wuwei.sse.js
+
+  model/
+    wuwei.model.js
+    wuwei.note.js
+    wuwei.note.v0.js
+    wuwei.note.v1.js
+    wuwei.note.v2.js
+    wuwei.resource.js
+    wuwei.document.js
+    wuwei.video.js
+    wuwei.audio.js
+    wuwei.timeline.js
+    wuwei.viewpoint.js
+    wuwei.auth.js
+    wuwei.collab.js
+    wuwei.data.js
+    wuwei.log.js
+    wuwei.file.js
+    wuwei.csv.js
+
+  draw/
+    wuwei.draw.js
+    wuwei.draw.markup.js
+
+  menu/
+    wuwei.menu.js
+    wuwei.menu.markup.js
+    login/ upload/ note/ page/ modal/ publish/ snackbar/
+    pagination/ progressbar/ setting/ timeline/ viewpoint/ video/
+
+  edit/
+    wuwei.edit.js
+    wuwei.edit.markup.js
+    style/
+    generic/
+    group/
+    link/
+    uploaded/
+    document/
+    video/
+    audio/
+    image/
+    timeline/
+    viewpoint/
+    pageMarker/
+    entry/
+
+  info/
+    wuwei.info.js
+    wuwei.info.markup.js
+    generic/
+    group/
+    uploaded/
+    document/
+    video/
+    audio/
+    image/
+    timeline/
+    viewpoint/
+    asciidoc/
+
+  home/
+  search/
+  filter/
+  nls/
+  viewer/
+----
+
+=== 2.1 初期化対象モジュール
+
+`wuwei.init.registry.js` は、次の主要モジュールを初期化対象とします。
+
+[source,text]
+----
+wuwei.util
+wuwei.style
+wuwei.resource
+wuwei.document
+wuwei.video
+wuwei.audio
+wuwei.timeline
+wuwei.viewpoint
+wuwei.model
+wuwei.data
+wuwei.log
+wuwei.menu
+wuwei.draw
+wuwei.note
+wuwei.edit
+wuwei.info
+wuwei.filter
+wuwei.search
+wuwei.home
+----
+
+必須 API として、少なくとも次が確認されます。
+
+[source,text]
+----
+wuwei.model.getCurrentPage
+wuwei.model.setGraphFromCurrentPage
+wuwei.log.savePrevious
+wuwei.log.resumePrevious
+wuwei.log.recordCurrent
+wuwei.log.storeLog
+----
+
+== 3. model 層
+
+=== 3.1 `wuwei.model.js`
+
+`wuwei.model.js` は、ノートキャンバス上の graph 展開、Node / Link / Group の作成・検索・描画補助、group representative、pseudo group / pseudo link の生成を担当します。
+
+主な責務は次です。
+
+[source,text]
+----
+current.page の取得
+current.page から graph への展開
+Group representative node の生成・補完
+simple / horizontal / vertical / timeline / viewpoint group の pseudo 表示生成
+Timeline / Viewpoint の axis link 生成
+Node / Link / Group の検索・追加・削除補助
+wilt / bloom / root / hide に関する表示状態操作
+描画用 runtime style mirror の展開
+----
+
+`setGraphFromCurrentPage()` は、`current.page` を graph に展開します。この際に、`wuwei.note.v2` で正規化済みのデータを前提とし、generic group representative の確保、pseudo node / pseudo link の生成、runtime style mirror の展開を行います。旧 `contents` group type や `contentsAxis` link type を描画時 fallback として受け入れてはいけません。これらが実行時に残っている場合は、読み込み時正規化漏れとしてエラーにします。
+
+[source,text]
+----
+current.page.nodes[]  -> graph.nodes[]
+current.page.links[]  -> graph.links[]
+current.page.groups[] -> graph.groups[]
+                  + pseudo nodes / pseudo links
+----
+
+=== 3.2 `wuwei.note.js`
+
+`wuwei.note.js` は、ノート全体の保存、読込、インポート、エクスポート、ページ操作を担当します。
+
+主な責務は次です。
+
+[source,text]
+----
+newNote / loadNote / saveNote / removeNote
+importNote / exportNoteText / exportPortableNoteText
+Page 作成・複写・削除・切替
+current.page と current.pages[] の関係維持
+保存前の runtime field 除去
+Resource の compact / runtime 補完
+thumbnail 更新
+----
+
+保存時には `current.page` を正本とし、runtime mirror field や pseudo 要素を保存しません。`node.color`、`node.outline`、`node.outlineWidth`、`node.font` が enumerable property として残っている場合でも、保存前に `style.*` へ補完したうえで削除します。
+
+=== 3.3 `wuwei.note.v2.js`
+
+`wuwei.note.v2.js` は、v2 データ形式の正規化を担当します。
+
+主な責務は次です。
+
+[source,text]
+----
+旧データの v2 形式への補完
+Node / Link / Group / Resource の正規化
+Content resource の source / kind / documentKind / videoKind / audioKind / imageKind 推定
+logical path への URI 正規化
+PageMarker / Viewpoint group / Timeline group の正規化
+style 正本から runtime mirror field を non-enumerable に展開
+保存対象外 runtime field の除去
+----
+
+旧 Contents 系の互換処理は `wuwei.note.v2` に集約します。`wuwei.model`、`wuwei.draw`、`wuwei.edit`、`wuwei.info`、`wuwei.menu` では、正規化済みの `viewpoint` 系データのみを前提とします。
+
+[cols="35%,35%,30%",options="header"]
+|===
+|旧識別子 |正規識別子 |扱い
+|`group.type = 'contents'` |`group.type = 'viewpoint'` |構造識別子として変換する。
+|`group.type = 'contentsGroup'` |`group.type = 'viewpoint'` |構造識別子として変換する。
+|`group.name = 'Contents'` |`group.name = 'Viewpoint'` |内部名として変換する。
+|`group.label = 'Contents'` |変更しない |ユーザ定義ラベルとして保持する。
+|`topicKind = 'contents-representative'` |`topicKind = 'viewpoint-representative'` |構造識別子として変換する。
+|`topicKind = 'contents-page'` |`topicKind = 'viewpoint-page'` |構造識別子として変換する。
+|`type = 'contentsAxis'` |`type = 'viewpointAxis'` |axis pseudo / link 識別子として変換する。
+|`type = 'contents-axis'` |`type = 'viewpoint-axis'` |axis pseudo / link 識別子として変換する。
+|`contents-entry` |`viewpoint-entry` |構造識別子として変換する。
+|`contents-first-entry` |`viewpoint-first-entry` |構造識別子として変換する。
+|`node.label` / `link.label` |変更しない |ユーザ定義ラベルとして保持する。
+|===
+
+NOTE: 実行時検査では、`group.type`、`group.name`、`topicKind`、`link.type`、`link.role` などの構造識別子に旧 Contents 系が残っていないことを確認する。ただし、`label === 'Contents'` はエラーとしない。`label` は利用者が明示的に定義した表示文字列である。
+
+=== 3.4 `wuwei.resource.js`
+
+`app2/model/wuwei.resource.js` は Resource の検索・更新・削除と、保存済み logical path から実行時 URL を解決する共通補助を担当します。
+
+`wuwei.resource` は、Resource の保管・取得元・storage role・logical path の解決を中心に扱います。PDF / Office / HTML のページ処理、YouTube / Vimeo の ID 抽出、mp3 の再生情報などの種別固有処理は、`wuwei.document`、`wuwei.video`、`wuwei.audio` 側に分離します。
+
+[source,text]
+----
+list / search / update / remove
+getResource / getKind / getDocumentKind / getVideoKind / getAudioKind / getImageKind
+isDocument / isVideo / isAudio / isImage
+getStorageFiles / findFileByRole
+getLogicalUri / getRolePath / getRoleUrl / getRuntimeUrl
+toLogicalResourcePath / toStorageRelativePath
+getOpenUrl / getOriginalUrl / getPreviewUrl / getPdfPreviewUrl
+getPrimaryPreviewUrl / getThumbnailUrl
+----
+
+NOTE: `resource.uri` / `resource.canonicalUri` / `resource.thumbnailUri` / `resource.viewer.*Uri` / `storage.files[].path` は保存上の logical path 又は外部 URL です。`load-file.cgi` / `load-file.py` / `user_id` / user UUID / host 名を含む実行時アクセス URL は保存せず、`wuwei.resource.getRuntimeUrl()` 等で必要時に生成します。Audio / Image の preview / player でも同じく、実行時 URL は HTML の `src` 等に一時的に渡すだけで、保存データへ書き戻しません。
+
+=== 3.5 `wuwei.document.js`
+
+`app2/model/wuwei.document.js` は、PDF、Office、HTML、text などの Document Content 固有 helper を担当します。
+
+[source,text]
+----
+getDocumentKind
+isDocumentNode / isHtmlDocumentNode / isContentTargetNode
+getDocumentPageMeta
+getPageCount / hasKnownPages
+getFirstPageNumber / getPageOffset
+setFirstPageNumber / setPageOffset
+toViewerPageNumber / toDocumentPageNumber
+getPageNumberRange / clampPageNumber
+getViewerUrl / getOpenUrl
+----
+
+Document のページ関連では、`resource.contents.firstPageNumber` を編集可能な正本とし、`resource.contents.pageOffset` は `firstPageNumber - 1` として扱います。`resource.contents.pageCount` は `resource.media.pageCount` と同じ物理ページ数であり、原則 read only です。
+
+`edit.document` は Document Content 本体の編集を担当し、`edit.viewpoint` は Viewpoint group / axis、`edit.pageMarker` は PageMarker node の編集を担当します。文書ページ数、先頭ページ番号、page offset、viewer page 変換は `wuwei.document` を呼び出して処理します。これにより、Document Content 固有のページ計算と、Viewpoint / PageMarker の編集ロジックを分離します。
+
+NOTE: `pageMin` / `pageMax` フィールドは定義しません。PageMarker の入力範囲は、必要に応じて `wuwei.document.getPageNumberRange()` により一時的に算出します。
+
+=== 3.6 `wuwei.video.js`
+
+`wuwei.video.js` は、YouTube、Vimeo、mp4 などの Video Content 固有 helper を担当します。
+
+[source,text]
+----
+isHostedYouTube / isHostedVimeo
+extractYouTubeId / extractVimeoInfo / extractVimeoId
+getVideoSource / setVideoSource
+detectSource / getEmbedUrl
+isVideoNode
+open / close
+----
+
+Timeline / Segment の group 管理は `wuwei.timeline.js` の責務です。`wuwei.video.js` は、映像 URL、provider 判定、embed URL、HTML5 video source など、Video Content 固有の解決処理に集中します。
+
+=== 3.7 `wuwei.audio.js`
+
+`wuwei.audio.js` は、mp3 等の Audio Content 固有 helper を担当します。
+
+[source,text]
+----
+getAudioKind
+getAudioSource
+getDuration
+setAudioSource
+isAudioNode
+----
+
+Audio は Video と同様に media resource ですが、表示 UI は `<audio>` player であり、Timeline / Segment の扱いを拡張する場合にも Video と混同しないように独立 helper として定義します。
+
+`edit.audio` / `info.audio` は、Audio Content の source 解決、duration 取得、HTML5 audio player 表示などを `wuwei.audio.js` と `wuwei.resource.js` に委譲します。player の `src` は logical path から実行時に解決し、解決後の URL は保存しません。
+
+=== 3.8 `wuwei.timeline.js`
+
+`wuwei.timeline.js` は、Video Content に対する Timeline group と Segment node を管理します。
+
+[source,text]
+----
+Timeline group の作成・正規化
+Timeline representative node の管理
+Timeline axis pseudo link の生成補助
+Segment node の作成・補完
+mediaStart / mediaEnd / playDuration の管理
+axisPos と x/y の対応
+動画 duration の取得・反映
+----
+
+=== 3.9 `wuwei.viewpoint.js`
+
+`wuwei.viewpoint.js` は、Document Content に対する Viewpoint group と PageMarker node を管理します。
+
+[source,text]
+----
+Viewpoint group の作成
+Viewpoint representative node の管理
+Viewpoint axis pseudo link の生成補助
+PageMarker node の作成・補完
+pageNumber / anchorHref / htmlAnchorHref の管理
+PageMarker の配置、移動、axisPos と x/y の対応
+----
+
+文書固有の次の処理は `wuwei.document.js` の helper を使用します。
+
+[source,text]
+----
+pageCount
+firstPageNumber
+pageOffset
+Document page number <-> viewer page number の変換
+PageMarker の入力可能範囲の算出
+PDF / Office / HTML の viewer URL 解決
+----
+
+`pageMin` / `pageMax` フィールドは定義しません。PageMarker の入力範囲は、必要に応じて `wuwei.document.getPageNumberRange()` から算出します。
+
+NOTE: `wuwei.viewpoint.js` は旧 `contents` 系識別子を描画時 fallback として受け入れない。旧 Contents から Viewpoint への変換は、`wuwei.note.v2` の読み込み時正規化で完了していることを前提とする。
+
+== 4. draw 層
+
+`wuwei.draw.js` は SVG 上の描画と simulation を担当します。
+
+[source,text]
+----
+Node / Link / Group overlay の描画
+simulation / drag / selection の処理
+runtime mirror field を用いた高速な表示属性参照
+canvas transform の適用
+----
+
+`wuwei.draw` では、描画コードの可読性と応答性を重視し、`d.color`、`d.outline`、`d.outlineWidth`、`d.font` を参照してよいです。ただし、これらは `style.*` から展開された non-enumerable runtime mirror であり、保存対象ではありません。
+
+simulation の tick 処理では、`x` / `y` などの直下項目を直接参照します。`x` / `y` は D3 force simulation と相性がよいため、当面 Node 直下の保存項目として残します。
+
+== 5. edit 層
+
+=== 5.1 全体構成
+
+`wuwei.edit.js` は編集ペイン全体の制御を担当します。個別の編集画面は、`edit/generic`、`edit/group`、`edit/link`、`edit/uploaded`、`edit/document`、`edit/video`、`edit/audio`、`edit/image`、`edit/timeline`、`edit/viewpoint`、`edit/pageMarker` が担当します。
+
+[source,text]
+----
+edit/wuwei.edit.js          編集ペイン制御、対象振分、commit
+edit/style/                 style 用共通 markup helper
+edit/generic/               Topic / Memo / generic Content fallback
+edit/group/                 generic group
+edit/link/                  Link
+edit/uploaded/              upload-backed Content fallback / resource metadata fallback
+edit/document/              PDF / Office / HTML / text などの Document Content
+edit/video/                 Video Content
+edit/audio/                 Audio Content
+edit/image/                 Image Content
+edit/timeline/              Timeline axis / Segment
+edit/viewpoint/              Viewpoint group / Viewpoint axis
+edit/pageMarker/             PageMarker node
+----
+
+`edit.document` は Document Content 本体の表示属性、文書種別、viewer / preview 情報、及び権利情報を扱います。`edit.audio` は Audio Content 本体の表示属性、audio player、duration、source 情報、及び権利情報を扱います。`edit.image` は Image Content 本体の表示属性、image preview、thumbnail、image metadata、及び権利情報を扱います。`edit.pageMarker` は PageMarker node の表示属性、ページ番号、HTML anchor などを扱います。`edit.uploaded` は、明確な content kind に振り分けられない upload-backed Content の fallback として残します。
+
+=== 5.2 編集対象の振分順序
+
+編集対象の振分は、おおむね次の順序です。
+
+[source,text]
+----
+1. Viewpoint representative / Viewpoint axis
+   -> edit.viewpoint
+
+2. PageMarker
+   -> edit.pageMarker
+
+3. Timeline axis / Segment / Timeline group
+   -> edit.timeline
+
+4. Link
+   -> edit.link
+
+5. Topic / Memo
+   -> edit.generic
+
+6. Document Content
+   -> edit.document
+
+7. Video Content
+   -> edit.video
+
+8. Audio Content
+   -> edit.audio
+
+9. Image Content
+   -> edit.image
+
+10. upload-backed Content fallback
+   -> edit.uploaded
+
+11. その他
+   -> edit.generic
+----
+
+この順序により、Viewpoint representative、PageMarker、Segment、Document / Video / Audio / Image Content が upload / generic の編集画面に落ちることを避けます。
+
+=== 5.3 編集ペインで編集する項目
+
+編集ペインは保存正本を編集します。
+
+[cols="30%,70%",options="header"]
+|===
+|対象 |編集先
+|色・線・フォント |`node.style.*`
+|描画用 `node.color` 等 |直接編集しない。`style.*` から再展開する。
+|`label`, `description` |Node / Link / Group の保存項目
+|`shape`, `size` |当面 Node 直下の保存項目
+|`x`, `y` |編集ペインでは変更しない。キャンバス上のドラッグで変更する。
+|`visible` |編集ペインでは変更しない。`wilt` / `bloom` / `root` / `hide` で変更する。
+|===
+
+=== 5.4 Document Content 編集
+
+`edit.document` は、PDF、Office、HTML、text などの Document Content を扱います。Document Content の編集ペインでは、文書 preview / viewer 情報、resource metadata、権利情報を表示します。PageMarker 個別のページ番号や HTML anchor は `edit.pageMarker` で扱います。
+
+[cols="30%,70%",options="header"]
+|===
+|対象 |主な編集項目
+|表示 |label、description、shape / size、style.fill、style.line、style.font、label layout
+|Document metadata |source、kind、documentKind、MIME、URI、canonicalUri、pageCount、firstPageNumber、pageOffset の readonly / 派生表示
+|Viewer / preview |original、preview、thumbnail、pdf-preview などの storage role と logical path の表示。表示用 URL は実行時に解決するが、保存値として扱わない
+|Rights |resource.rights.*
+|===
+
+NOTE: `resource.title`、`resource.uri`、`resource.canonicalUri`、storage path、MIME、size、SHA/checksum、preview / thumbnail path など、サーバーが登録した resource metadata は編集不可とする。これらは Content の情報として保存し、情報ペイン又は編集ペインの readonly 表示で確認できるようにする。
+
+=== 5.5 Video Content 編集
+
+`edit.video` は、YouTube、Vimeo、mp4 などの Video Content を扱います。Video Content の編集ペインでは、文書ページ関連項目は表示しません。したがって、`resource.contents.firstPageNumber`、`resource.contents.pageOffset`、`resource.contents.pageCount` は `edit.video` の編集対象ではありません。
+
+[cols="30%,70%",options="header"]
+|===
+|対象 |主な編集項目
+|表示 |label、description、shape / size、style.fill、style.line、style.font、label layout
+|Video media |内容タブで映像 preview と再生時間を表示する。開始時間、終了時間、clip range 操作、Open Media Player は Video Content 編集ペインでは表示しない
+|Resource |source、kind、videoKind、provider、videoId、MIME、URI、thumbnailUri、media.durationSeconds の readonly 表示
+|Rights |resource.rights.*
+|===
+
+NOTE: Video Content の編集ペインでは、表示タブは label、description、shape、size、style などの表示属性のみを扱い、映像 preview と再生時間は内容タブで表示する。再生時間は `resource.media.durationSeconds` を基本とする read only 項目とし、開始時間、終了時間、clip range 操作、Open Media Player は Video Content 編集ペインでは扱わない。必要な区間指定は Timeline / Segment 側で扱う。既存データ互換のため `resource.media.duration` 又は `resource.duration` も読み取る。
+
+NOTE: Video Segment の編集ペインは、開始セグメント及び終了セグメントも含めて、表示タブと内容タブで構成する。コンテキストメニューでは「属性編集」と「編集」を分けず、鉛筆アイコンの「編集」に統一する。典拠・権利タブは Video Segment には表示しない。内容タブでは、映像 preview、再生時間、開始時間、終了時間、及び現在位置を開始・終了へ設定するボタンを表示する。開始セグメントでは開始時間を固定し、終了時間は変更可能とする。終了セグメントでは終了時間を固定し、開始時間は変更可能とする。
+
+=== 5.6 Audio Content 編集
+
+`edit.audio` は、mp3 等の Audio Content を扱います。Audio Content の編集ペインでは、文書ページ関連項目や Video 固有の provider 情報は表示しません。
+
+[cols="30%,70%",options="header"]
+|===
+|対象 |主な編集項目
+|表示 |label、description、shape / size、style.fill、style.line、style.font、label layout
+|Audio media |内容タブで audio preview / player と再生時間を表示する。開始時間、終了時間、clip range 操作は Audio Content 本体では扱わない
+|Resource |source、kind、audioKind、MIME、URI、canonicalUri、thumbnailUri、media.durationSeconds の readonly 表示。URI 系は logical path 又は外部 URL を表示し、実行時 URL は保存値として表示しない
+|Rights |resource.rights.*
+|===
+
+NOTE: Audio Content の再生時間は `resource.media.durationSeconds` を基本とする read only 項目とし、既存データ互換のため `resource.media.duration` 又は `resource.duration` も読み取る。Audio Content に区間指定や注釈軸を導入する場合は、Content 本体ではなく、別の perspective axis 又は member node 側で扱う。アップロード音声では `resource.source = 'upload'`、`resource.kind = 'audio'`、`resource.audioKind = 'mp3'` 等とし、`resource.kind = 'upload'` とはしない。
+
+=== 5.7 Image Content 編集
+
+`edit.image` は、png、jpeg、gif、webp、svg 等の Image Content を扱います。Image Content の編集ペインでは、文書ページ関連項目、Video / Audio の再生時間、Timeline / Segment 関連項目は表示しません。
+
+[cols="30%,70%",options="header"]
+|===
+|対象 |主な編集項目
+|表示 |label、description、shape / size、style.fill、style.line、style.font、label layout
+|Image preview |内容タブで image preview、thumbnail を表示する。画像表示用 `src` は logical path から実行時に解決するが、解決後 URL は保存値として表示・保存しない
+|Resource |source、kind、imageKind、MIME、URI、canonicalUri、thumbnailUri、media.width、media.height の readonly 表示。URI 系は logical path 又は外部 URL を表示し、実行時 URL は保存値として表示しない
+|Rights |resource.rights.*
+|===
+
+NOTE: Image Content の `resource.uri`、`resource.canonicalUri`、`resource.thumbnailUri`、storage path、MIME、size、SHA/checksum、thumbnail path はサーバー登録又は取得元識別情報であり、編集不可とする。内部ファイルの場合、URI 系保存値は `YYYY/MM/DD/file_uuid/filename` 形式の logical path とし、`http://...`、`load-file.cgi?...`、`load-file.py?...`、`data/{user_uuid}/upload/...` は保存しない。画像の表示サイズ、shape、style は Node の表示属性として編集する。アップロード画像では `resource.source = 'upload'`、`resource.kind = 'image'`、`resource.imageKind = 'png'` / `jpeg` 等とし、`resource.kind = 'upload'` とはしない。
+
+=== 5.8 Viewpoint 編集
+
+`edit.viewpoint` は、Viewpoint axis と PageMarker を扱います。
+
+[cols="30%,70%",options="header"]
+|===
+|対象 |主な編集項目
+|Viewpoint representative / axis |代表ノード label、description、shape / size、direction、axis length、firstPageNumber、axis width、axis color
+|PageMarker |`edit.pageMarker` で扱う。label、description、pageNumber 又は htmlAnchorHref、shape / size、style.fill、style.line、style.font、label layout
+|===
+
+`firstPageNumber` のみユーザが編集します。`pageOffset` は `firstPageNumber - 1` により算出される派生値です。`pageCount` は resource / media 由来の readonly 値です。
+
+NOTE: Viewpoint 代表ノードの `label` はユーザ定義情報である。旧 Contents から読み込まれた代表ノードのラベルが `Contents` であっても、`wuwei.note.v2`、`edit.viewpoint`、保存処理のいずれも自動で `Viewpoint` へ書き換えてはいけない。
+
+NOTE: PageMarker 及び Viewpoint 代表ノードの編集コンテキストメニューでは、`Edit properties` 等の別名称は使わず、標準の「編集」と鉛筆アイコンを使用する。
+
+=== 5.9 Timeline 編集
+
+`edit.timeline` は、Timeline axis と Segment を扱います。
+
+[cols="30%,70%",options="header"]
+|===
+|対象 |主な編集項目
+|Timeline axis |media、direction、media length、default play duration、axis length、axis width、axis color
+|Segment |Video preview、start time、end time、play duration、label、description、style.fill、style.line
+|===
+
+NOTE: Timeline representative node 及び Timeline axis の情報コンテキストメニューには `[i]` を表示する。情報ペインでは、映像の基本情報と Segment 一覧を表示する。基本情報は、見出しラベル行と値行を分けず、同じ行にラベルと値を並べ、可能な範囲で2項目ずつ横並びにする。Segment 一覧は簡潔にし、各 Segment のラベル及び開始時刻を表示する。
+
+=== 5.10 Style 共通 markup
+
+`app2/model/wuwei.style.js` は style 正本の正規化と runtime mirror 展開を担当します。一方、`edit/style/edit.style.markup.js` は、編集ペイン内の style 入力欄を生成する markup helper です。
+
+[source,text]
+----
+wuwei.style.js
+  normalizeNodeStyle
+  expandNodeRuntimeStyle
+  stripNodeRuntimeStyleFields
+  align / text-anchor 変換
+
+edit/style/edit.style.markup.js
+  labelRows
+  labelLayoutRows
+  descriptionRows
+  shapeSizeRows
+  paintRows
+  initPalette
+----
+
+== 6. info 層
+
+=== 6.1 全体構成
+
+`wuwei.info.js` は情報ペイン全体の制御を担当します。個別の情報表示は、`info/generic`、`info/group`、`info/uploaded`、`info/document`、`info/video`、`info/audio`、`info/image`、`info/timeline`、`info/viewpoint`、`info/asciidoc` が担当します。
+
+[source,text]
+----
+info/wuwei.info.js          情報ペイン制御、対象振分、open new tab/window
+info/generic/               Topic / Memo / generic Content
+info/group/                 group 情報
+info/uploaded/              upload-backed Content fallback / resource metadata fallback
+info/document/              PDF / Office / HTML / text などの Document Content
+info/video/                 Video Content
+info/audio/                 Audio Content
+info/image/                 Image Content
+info/timeline/              Timeline axis / Segment
+info/viewpoint/              Viewpoint axis / PageMarker
+info/asciidoc/              AsciiDoc 表示補助
+----
+
+`info.document` は、PDF / Office / HTML / text などの Document Content の表示対象 URL、preview URL、pageCount、firstPageNumber、pageOffset、storage role、resource metadata、rights 情報を表示します。URL 解決は `wuwei.resource` / `wuwei.document` に委譲します。`info.audio` は audio player、再生時間、source / storage 情報、rights 情報を表示します。`info.image` は image preview、thumbnail、画像寸法、source / storage 情報、rights 情報を表示します。
+
+=== 6.2 情報表示の振分順序
+
+情報表示の振分は、おおむね次の順序です。
+
+[source,text]
+----
+1. Timeline point / Timeline axis
+   -> info.timeline
+
+2. PageMarker / Viewpoint representative / Viewpoint axis
+   -> info.viewpoint
+
+3. Group target
+   -> info.group
+
+4. Document Content
+   -> info.document
+
+5. Hosted video / video Content
+   -> info.video
+
+6. Audio Content
+   -> info.audio
+
+7. Image Content
+   -> info.image
+
+8. Uploaded Content fallback
+   -> info.uploaded
+
+9. Generic / AsciiDoc content
+   -> info.generic / info.asciidoc
+----
+
+PageMarker は、文書 Content の単なる upload 情報としてではなく、Viewpoint の一部として表示します。
+
+== 7. menu 層
+
+`wuwei.menu.js` は、コンテキストメニュー、ノートキャンバス右上の操作、表示制御、open / download / group 操作を担当します。
+
+主な責務は次です。
+
+[source,text]
+----
+右クリック対象の判定
+Timeline / Viewpoint / group / Content / Link の操作振分
+wilt / bloom / root / hide
+open new tab / open new window
+PDF / Office / HTML / text / video / audio / image の open URL 解決補助
+download filename の生成
+Group 操作、代表ノード操作、clipboard 操作
+----
+
+NOTE: `wilt`、`bloom`、`root`、`hide` は表示状態を変更する操作です。編集ペインの `visible` 入力ではなく、コンテキストメニュー右上の表示制御として扱います。
+
+== 8. Resource の保存 URI と実行時アクセス URL
+
+Resource の保存値と実行時アクセス URL は明確に区別します。
+
+[cols="30%,70%",options="header"]
+|===
+|項目 |扱い
+|`resource.uri` |外部 URL 又は logical path。内部ファイルについて `load-file` URL、host 名、利用者 UUID、`user_id` は保存しない。
+|`resource.canonicalUri` |正準的な外部 URL 又は logical path。内部ファイルでは logical path とする。
+|`resource.thumbnailUri` |保存する場合は logical path。実行時 URL は保存しない。
+|`resource.viewer.*Uri` |保存する場合は logical path 又は外部 URL。内部ファイルに対する実行時アクセス URL は保存しない。
+|`storage.files[].path` |logical path。
+|`storage.files[].dir_name` |サーバー内の物理ディレクトリ参照。必要に応じて保存するが、利用者向け URI とは区別する。
+|実行時アクセス URL |`wuwei.resource.getRuntimeUrl()`、`getRoleUrl()`、`wuwei.info`、`wuwei.menu` 等で生成する。一時的な表示・再生・preview 用であり、保存データへ書き戻さない。
+|===
+
+内部ファイルの保存 URI は、次の形式を基本とします。
+
+[source,text]
+----
+YYYY/MM/DD/file_uuid/filename
+----
+
+次のような値は、`uri`、`canonicalUri`、`thumbnailUri`、`viewer.*Uri` に保存しません。
+
+[source,text]
+----
+http://localhost/wu_wei2/server/load-file.cgi?path=...
+https://example.com/wu_wei2/cgi-bin/load-file.py?path=...
+/wu_wei2/server/load-file.cgi?path=...
+/wu_wei2/cgi-bin/load-file.py?path=...
+data/{user_uuid}/upload/YYYY/MM/DD/file_uuid/filename
+----
+
+Audio / Image についても同じ規則を適用します。`edit.audio` / `info.audio` の audio player、及び `edit.image` / `info.image` の image preview では、保存済み logical path から実行時アクセス URL を生成して `<audio src>` 又は `<img src>` に使います。ただし、その URL は保存 URI ではありません。
+
+EC2 サーバー上の Office 文書表示では Office Viewer を利用できます。ただし、PageMarker のページ指定では PDF preview を使います。Office Viewer 用 URL も実行時表示 URL であり、内部ファイルの保存 URI へ書き戻しません。
+
+== 9. Content 種別別の現行扱い
+
+[cols="20%,25%,20%,35%",options="header"]
+|===
+|Content |resource.kind / 補助種別 |現行 edit/info |備考
+|Document PDF |`kind=document`, `documentKind=pdf` |`edit.document` / `info.document` |PageMarker は `edit.pageMarker` / `info.viewpoint`。
+|Document Office |`kind=document`, `documentKind=office` |`edit.document` / `info.document` |通常表示は Office Viewer 又は preview。PageMarker は PDF preview。
+|Document HTML |`kind=document`, `documentKind=html` |`edit.document` / `info.document` |PageMarker は `anchorHref` / `htmlAnchorHref`。
+|Video YouTube/Vimeo |`kind=video`, `videoKind=youtube/vimeo` |`edit.video` / `info.video` |hosted video として処理。
+|Video mp4 |`kind=video`, `videoKind=mp4` |`edit.video` / `info.video` |`source=upload` でも video 判定を優先。
+|Audio mp3 |`kind=audio`, `audioKind=mp3` |`edit.audio` / `info.audio` |`source=upload` でも audio 判定を優先。HTML5 audio player と duration を表示。
+|Image |`kind=image`, `imageKind=png/jpeg/gif/webp/svg` |`edit.image` / `info.image` |`source=upload` でも image 判定を優先。preview / thumbnail と画像 metadata を表示。
+|===
+
+== 10. Perspective axis
+
+Timeline / Viewpoint は、Content に付属する視点軸です。Content 本体とは別に、group と member node により表現します。
+
+[source,text]
+----
+Video Content
+  └─ Timeline group
+       ├─ representative Topic node
+       └─ Segment nodes
+
+Document Content
+  └─ Viewpoint group
+       ├─ representative Topic node
+       └─ PageMarker nodes
+----
+
+Representative node は real Topic node として `current.page.nodes` に保存します。ただし、group の member には含めません。Group とは `groupRef`、`groupRole`、`representativeOf`、`representativeNodeId` により関連付けます。Representative node の `label` はユーザ定義情報であり、group type や topic kind の正規化とは独立して保持します。
+
+Timeline / Viewpoint axis の線は、graph 上の pseudo link として生成されます。保存対象は group 定義と member node であり、pseudo link ではありません。
+
+== 11. Group と代表ノード
+
+Group は `current.page.groups` に保存します。`simple`、`horizontal`、`vertical`、`timeline`、`viewpoint` を扱います。
+
+[cols="20%,80%",options="header"]
+|===
+|Group |扱い
+|`simple` |member node の外周 overlay を graph で生成する。
+|`horizontal` |member node を横方向の spine に沿って扱う。
+|`vertical` |member node を縦方向の spine に沿って扱う。
+|`timeline` |Video Content の時間軸。Segment node を member とする。
+|`viewpoint` |Document Content のページ・アンカー軸。PageMarker node を member とする。
+|===
+
+代表ノードは、Group 又は Perspective axis の操作入口です。代表ノード自身の外観は Node style として編集し、代表している group / axis の属性は group 側に保存します。
+
+[source,text]
+----
+代表ノード自身の属性
+  label / description / shape / size / style.* / x / y / visible
+
+代表している group / axis の属性
+  orientation / length / spine / firstPageNumber / timeline range 等
+----
+
+== 12. Link と pseudo link
+
+`current.page.links` には、ユーザーが定義した real Link を保存します。group spine、Timeline axis、Viewpoint axis などの描画補助線は、graph 上に pseudo link として生成し、保存しません。
+
+[cols="25%,75%",options="header"]
+|===
+|Link 種別 |保存
+|real Link |`current.page.links` に保存する。
+|pseudo group spine |保存しない。
+|pseudo timeline axis |保存しない。
+|pseudo viewpoint axis |保存しない。
+|===
+
+== 13. 旧版記述からの変更点
+
+旧版の記述から、現行スクリプトに合わせて次を改めます。
+
+[cols="35%,65%",options="header"]
+|===
+|旧版記述 |改訂後
+|Document helper の利用範囲 |`wuwei.document.js` に PDF / Office / HTML / text のページ関連処理を集約し、`edit.document` / `info.document` / `edit.pageMarker` / `info.viewpoint` から呼び出す。
+|Video / Audio helper の利用範囲 |Video 固有処理は `wuwei.video.js`、Audio 固有処理は `wuwei.audio.js` に分離する。Image の preview / thumbnail / storage role 解決は `wuwei.resource.js` を中心に扱う。`wuwei.resource.js` は logical path / storage role / runtime URL 生成など共通処理に寄せる。生成した runtime URL は保存 URI へ書き戻さない。
+|`edit.document` / `info.document` |Document Content の現行画面として導入する。文書 Content を `edit.uploaded` / `info.uploaded` の fallback に落とさない。
+|`edit.audio` / `info.audio` |Audio Content の現行画面として導入する。音声 Content を `edit.uploaded` / `info.uploaded` の fallback に落とさない。
+|`edit.image` / `info.image` |Image Content の現行画面として導入する。画像 Content を `edit.uploaded` / `info.uploaded` の fallback に落とさない。
+|`resource.kind = upload` |使用しない。`upload` は `resource.source` の値であり、メディア種別は `resource.kind = audio` / `image` / `document` / `video` 等で表す。
+|Image / Audio の保存 URI |`uri`、`canonicalUri`、`thumbnailUri`、`viewer.*Uri` には `http...`、`load-file.cgi?...`、`load-file.py?...`、利用者 UUID、`user_id` を含めず、外部 URL 又は logical path のみを保存する。
+|`edit.pageMarker` |PageMarker node の編集入口として導入する。Viewpoint group / axis とは分離する。
+|旧 `Contents` / `contentsAxis` fallback |`wuwei.note.v2` の読み込み時正規化に集約する。描画・編集・情報・メニュー側では fallback しない。
+|旧 `Contents` ラベル |`label` はユーザ定義情報であるため変更しない。`group.name` 等の内部名だけを正規化する。
+|style 処理の分散 |`wuwei.style.js` を現行モジュールとして使用し、style 正本の正規化と runtime mirror 展開を共通化する。`edit/style/edit.style.markup.js` は markup helper として残す。
+|`page offset` を Viewpoint axis のユーザ入力項目として記載 |`firstPageNumber` のみユーザ入力。`pageOffset` は readonly 派生値。
+|`pageMin` / `pageMax` |フィールドとして定義しない。
+|graph から current.page への同期 |行わない。`current.page` が正本で、graph は runtime 展開。
+|`node.color` 等を保存項目として扱う |保存しない。`style.*` から生成する non-enumerable runtime mirror とする。
+|===
+
+== 14. 今後拡張する場合の注意
+
+将来、collaborative editing 用の追加画面、又は新しい Content kind 専用の edit / info 画面を導入する場合でも、次の原則は維持します。
+
+[source,text]
+----
+common.current が正本
+style.* が保存正本
+runtime mirror は保存しない
+x / y / visible は編集ペインで変更しない
+Timeline / Viewpoint は Content に付属する perspective axis
+upload は UI 主分類ではなく resource.source
+Audio / Image のメディア種別は resource.kind = audio / image で表し、resource.kind = upload とはしない
+保存 URI には実行時アクセス URL、host 名、load-file URL、user_id、利用者 UUID を含めない
+旧データ互換は wuwei.note.v2 の読み込み時正規化に集約する
+label はユーザ定義表示情報として正規化で書き換えない
+----
+

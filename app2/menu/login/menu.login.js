@@ -19,6 +19,8 @@ wuwei.menu.login = wuwei.menu.login || {};
     state = common.state;
 
   function open(cb) {
+    refreshUserStatusMenu();
+
     const loginEl = document.getElementById('login');
     const tpl = menu?.login?.markup?.template; // guard
     if (!tpl) {
@@ -222,6 +224,32 @@ wuwei.menu.login = wuwei.menu.login || {};
     };
   }
 
+  function getCurrentUser() {
+    return (common && common.state && common.state.currentUser) || {};
+  }
+
+  function refreshUserStatusMenu() {
+    var user = getCurrentUser();
+    var loginEl = document.getElementById('loginUserLogin');
+    var nameEl = document.getElementById('loginUserName');
+    var roleEl = document.getElementById('loginUserRole');
+    var loginText = user.login || user.login_id || user.user || user.user_id || '';
+    var nameText = user.name || user.userName || user.displayName || '';
+    var roleText = user.role || '';
+
+    if (loginEl) {
+      loginEl.textContent = loginText;
+    }
+    if (nameEl) {
+      nameEl.textContent = nameText;
+    }
+    if (roleEl) {
+      roleEl.textContent = roleText;
+    }
+
+    return user;
+  }
+
   function update(currentUser) {
     var oldOwnerId = common.state.currentUser && common.state.currentUser.user_id;
     var previousUser = common.state.currentUser || {};
@@ -270,6 +298,7 @@ wuwei.menu.login = wuwei.menu.login || {};
   ns.login = login;
   ns.check = check;
   ns.update = update;
+  ns.refreshUserStatusMenu = refreshUserStatusMenu;
   ns.logout = logout;
   ns.close = close;
   ns.initModule = initModule;

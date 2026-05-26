@@ -9,11 +9,25 @@ wuwei.edit.timeline.markup = (function () {
   'use strict';
 
   function axisPanelHtml() {
-    return [
-      '<section id="edit-timeline-axis" class="edit-panel edit-timeline-panel" style="display:none;">',
-        '<input type="hidden" id="editTimelineAxisId">',
-        '<input type="hidden" id="editTimelineAxisStart" value="0">',
-        '<input type="hidden" id="editTimelineAxisEnd" value="0">',
+    var shapeHtml = [
+        '<div id="editTimelineAxisLengthRow" class="edit-field">',
+          '<label for="editTimelineAxisLength" class="w3-col s3">' + t('Axis length') + ' (px)</label>',
+          '<input id="editTimelineAxisLength" class="w3-col s3" type="number" step="1" min="60">',
+        '</div>',
+        '<div id="editTimelineAxisStrokeWidthRow" class="edit-field">',
+          '<label for="editTimelineAxisStrokeWidth" class="w3-col s3">' + t('Axis width') + ' (px)</label>',
+          '<input id="editTimelineAxisStrokeWidth" class="w3-col s3" type="number" step="1" min="1">',
+        '</div>',
+        '<div id="editTimelineAxisStrokeColorRow" class="edit-field">',
+          '<label for="editTimelineAxisStrokeColor" class="w3-col s4">' + t('Axis color') + '</label>',
+          '<div class="edit-color-inline w3-col s8">',
+            '<input id="editTimelineAxisStrokeColor" class="w3-col s4" type="color">',
+            '<div id="editTimelineAxisStrokeColorPalette" class="edit-color-palette w3-col s4"></div>',
+          '</div>',
+        '</div>'
+    ].join('\n');
+
+    var contentHtml = [
         '<div id="editTimelineAxisMediaRow" class="edit-field">',
           '<label for="editTimelineAxisMedia" class="w3-col s4">' + t('Media') + '</label>',
           '<input id="editTimelineAxisMedia" class="w3-col s8" type="text" readonly>',
@@ -32,23 +46,34 @@ wuwei.edit.timeline.markup = (function () {
         '<div id="editTimelineAxisDefaultDurationRow" class="edit-field">',
           '<label for="editTimelineAxisDefaultDuration" class="w3-col s6">' + t('Default play duration') + '</label>',
           '<input id="editTimelineAxisDefaultDuration" class="w3-col s6" type="number" step="1" min="1">',
-        '</div>',
-        '<div id="editTimelineAxisLengthRow" class="edit-field">',
-          '<label for="editTimelineAxisLength" class="w3-col s3">' + t('Axis length') + ' (px)</label>',
-          '<input id="editTimelineAxisLength" class="w3-col s3" type="number" step="1" min="60">',
-        '</div>',
-        '<div id="editTimelineAxisStrokeWidthRow" class="edit-field">',
-          '<label for="editTimelineAxisStrokeWidth" class="w3-col s3">' + t('Axis width') + ' (px)</label>',
-          '<input id="editTimelineAxisStrokeWidth" class="w3-col s3" type="number" step="1" min="1">',
-        '</div>',
-        '<div id="editTimelineAxisStrokeColorRow" class="edit-field">',
-          '<label for="editTimelineAxisStrokeColor" class="w3-col s4">' + t('Axis color') + '</label>',
-          '<div class="edit-color-inline w3-col s8">',
-            '<input id="editTimelineAxisStrokeColor" class="w3-col s4" type="color">',
-            '<div id="editTimelineAxisStrokeColorPalette" class="edit-color-palette w3-col s4"></div>',
-          '</div>',
-        '</div>',
+        '</div>'
+    ].join('\n');
+
+    return [
+      '<section id="edit-timeline-axis" class="edit-panel edit-timeline-panel" style="display:none;">',
+        '<input type="hidden" id="editTimelineAxisId">',
+        '<input type="hidden" id="editTimelineAxisStart" value="0">',
+        '<input type="hidden" id="editTimelineAxisEnd" value="0">',
+        tabbedPaneHtml([
+          { id: 'shape', label: 'Shape', html: shapeHtml },
+          { id: 'content', label: '_Content', html: contentHtml }
+        ]),
       '</section>'
+    ].join('\n');
+  }
+
+  function tabbedPaneHtml(tabs) {
+    return [
+      '<div class="edit-tabbed-pane edit-timeline-tabbed-pane">',
+      '<div class="w3-bar w3-light-grey edit-tab-buttons">',
+      tabs.map(function (tab, index) {
+        return '<button type="button" class="w3-button w3-small edit-tab-button' + (index ? '' : ' active w3-blue') + '" data-edit-tab="' + tab.id + '">' + t(tab.label) + '</button>';
+      }).join('\n'),
+      '</div>',
+      tabs.map(function (tab, index) {
+        return '<div class="edit-tab-panel" data-edit-tab-panel="' + tab.id + '" style="display:' + (index ? 'none' : 'block') + ';">' + tab.html + '</div>';
+      }).join('\n'),
+      '</div>'
     ].join('\n');
   }
 
@@ -57,21 +82,46 @@ wuwei.edit.timeline.markup = (function () {
       return wuwei.nls.translate(str);
     }
 
-    return [
-      '<section id="edit-timeline-point" class="edit-panel edit-timeline-panel" style="display:none;">',
-        '<input type="hidden" id="editTimelinePointId">',
-        '<input type="hidden" id="editTimelinePointMediaStart" value="0">',
-        '<input type="hidden" id="editTimelinePointMediaEnd" value="0">',
-        '<input type="hidden" id="editTimelinePointDuration" value="0">',
+    var displayHtml = [
+        wuwei.edit.style.markup.paintRows({
+          includeLine: true,
+          includeFontSize: false,
+          fillPaletteId: 'editTimelinePointColorPalette',
+          linePaletteId: 'editTimelinePointOutlineColorPalette',
+          fontPaletteId: 'editTimelinePointFontColorPalette'
+        }),
+        '<div class="edit-field">',
+          '<label for="applyToTimelineGroup" class="w3-col s10">' + t('Apply to group members') + '</label>',
+          '<input type="checkbox" id="applyToTimelineGroup" class="w3-col s2">',
+        '</div>'
+    ].join('\n');
 
+    var contentHtml = [
+        '<div class="edit-field">',
+          '<label for="editTimelinePointName" class="w3-col s4">' + t('Label') + '</label>',
+          '<input id="editTimelinePointName" class="w3-col s8" type="text">',
+        '</div>',
+        wuwei.edit.style.markup.descriptionRows({
+          format: 'plain/text',
+          body: ''
+        }),
         '<div class="edit-field edit-timeline-preview-field">',
           '<label>' + t('Video preview') + '</label>',
           '<div id="editTimelinePreviewHost" class="edit-timeline-preview-host"></div>',
+          '<div class="edit-actions edit-timeline-jump-actions">',
+            '<button id="editTimelineJumpToStart" type="button">' + t('jump start') + '</button>',
+            '<button id="editTimelineJumpToEnd" type="button">' + t('jump end') + '</button>',
+          '</div>',
           '<div class="edit-actions edit-timeline-capture-actions">',
             '<button id="editTimelineCaptureToStart" type="button">' + t('Set current time to start') + '</button>',
             '<button id="editTimelineCaptureToEnd" type="button">' + t('Set current time to end') + '</button>',
             '<button id="editTimelineCaptureThumbnail" type="button">' + t('Create thumbnail') + '</button>',
           '</div>',
+        '</div>',
+
+        '<div id="editTimelinePointMediaDurationRow" class="edit-field">',
+          '<label for="editTimelinePointMediaDurationText" class="w3-col s6">' + t('Duration') + '</label>',
+          '<input id="editTimelinePointMediaDurationText" class="w3-col s6" type="text" readonly value="00:00">',
         '</div>',
 
         '<div id="editTimelinePointStartRow" class="edit-field">',
@@ -90,33 +140,19 @@ wuwei.edit.timeline.markup = (function () {
           '<label for="editTimelinePointDurationText" class="w3-col s6">' + t('Play duration') + '</label>',
           '<input id="editTimelinePointDurationText" class="w3-col s6" type="text" value="00:00" inputmode="numeric" placeholder="mm:ss ' + t('or') + ' hh:mm:ss">',
           '<input id="editTimelinePointDuration" type="hidden" value="0">',
-        '</div>',
+        '</div>'
+    ].join('\n');
 
-        '<div class="edit-field">',
-          '<label for="editTimelinePointName" class="w3-col s4">' + t('Label') + '</label>',
-          '<input id="editTimelinePointName" class="w3-col s8" type="text">',
-        '</div>',
-        wuwei.edit.style.markup.descriptionRows({
-          format: 'plain/text',
-          body: ''
-        }),
-
-        wuwei.edit.style.markup.paintRows({
-          includeLine: true,
-          includeFontSize: false,
-          fillPaletteId: 'editTimelinePointColorPalette',
-          linePaletteId: 'editTimelinePointOutlineColorPalette',
-          fontPaletteId: 'editTimelinePointFontColorPalette'
-        }),
-
-        '<div class="edit-field">',
-          '<label for="applyToTimelineGroup" class="w3-col s10">' + t('Apply to group members') + '</label>',
-          '<input type="checkbox" id="applyToTimelineGroup" class="w3-col s2">',
-        '</div>',
-        
-        // '<div class="edit-actions">',
-        //   '<button id="editTimelinePointDelete" type="button">' + t('Delete') + '</button>',
-        // '</div>',
+    return [
+      '<section id="edit-timeline-point" class="edit-panel edit-timeline-panel" style="display:none;">',
+        '<input type="hidden" id="editTimelinePointId">',
+        '<input type="hidden" id="editTimelinePointMediaStart" value="0">',
+        '<input type="hidden" id="editTimelinePointMediaEnd" value="0">',
+        '<input type="hidden" id="editTimelinePointDuration" value="0">',
+        tabbedPaneHtml([
+          { id: 'shape', label: 'Shape', html: displayHtml },
+          { id: 'content', label: '_Content', html: contentHtml }
+        ]),
       '</section>'
     ].join('\n');
   }

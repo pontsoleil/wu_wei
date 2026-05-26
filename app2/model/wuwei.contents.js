@@ -41,6 +41,18 @@ wuwei.contents = wuwei.contents || {};
     };
   }
 
+  function expandNodeRuntimeStyle(node) {
+    if (wuwei && wuwei.style &&
+        typeof wuwei.style.expandNodeRuntimeStyle === 'function') {
+      wuwei.style.expandNodeRuntimeStyle(node);
+    }
+    else if (wuwei && wuwei.note && wuwei.note.v2 &&
+        typeof wuwei.note.v2.expandNodeRuntimeStyle === 'function') {
+      wuwei.note.v2.expandNodeRuntimeStyle(node);
+    }
+    return node;
+  }
+
   function getCurrentPage() {
     return common && common.current ? common.current.page || null : null;
   }
@@ -130,16 +142,9 @@ wuwei.contents = wuwei.contents || {};
   }
 
   function isHtmlResourceNode(node) {
-    var resource = (node && node.resource && typeof node.resource === 'object') ? node.resource : {};
-    var kind = String(resource.kind || '').toLowerCase();
-    var documentKind = String(resource.documentKind || '').toLowerCase();
-
-    return !!(node && node.type === 'Content' && (
-      (util && typeof util.isDocumentKindByExtension === 'function' &&
-        util.isDocumentKindByExtension(node, resource, '', 'html')) ||
-      documentKind === 'html' ||
-      kind === 'webpage'
-    ));
+    return !!(wuwei.document &&
+      typeof wuwei.document.isHtmlDocumentNode === 'function' &&
+      wuwei.document.isHtmlDocumentNode(node));
   }
 
   function isHtmlContentsGroup(group) {
@@ -150,35 +155,15 @@ wuwei.contents = wuwei.contents || {};
   }
 
   function isContentTargetResourceNode(node) {
-    var resource = (node && node.resource && typeof node.resource === 'object') ? node.resource : {};
-    var contents = (resource.contents && typeof resource.contents === 'object') ? resource.contents : {};
-    var pageCount = Number(contents.pageCount || 0);
-    var kind = util && typeof util.getDocumentKindByExtension === 'function'
-      ? util.getDocumentKindByExtension(node, resource, '')
-      : '';
-    var hasContentTargets = Number.isFinite(pageCount) && pageCount > 0;
-
-    /*
-     * Contents target detection is based on file extension.  mimeType is
-     * retained only as reference information and is not used to decide whether
-     * a Content can have PageMarkers.  Extensionless web-page resources are
-     * allowed when their resource kind explicitly identifies them as HTML/web.
-     */
-    return !!(node && node.type === 'Content' && (
-      kind === 'pdf' ||
-      kind === 'office' ||
-      kind === 'html' ||
-      kind === 'text' ||
-      isHtmlResourceNode(node) ||
-      hasContentTargets
-    ));
+    return !!(wuwei.document &&
+      typeof wuwei.document.isContentTargetNode === 'function' &&
+      wuwei.document.isContentTargetNode(node));
   }
 
   function getDocumentPageCount(node) {
-    var resource = (node && node.resource && typeof node.resource === 'object') ? node.resource : {};
-    var contents = (resource.contents && typeof resource.contents === 'object') ? resource.contents : {};
-    var n = Number(contents.pageCount || 0);
-    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+    return (wuwei.document && typeof wuwei.document.getPageCount === 'function')
+      ? wuwei.document.getPageCount(node)
+      : 0;
   }
 
   function hasKnownDocumentPages(node) {
@@ -186,16 +171,9 @@ wuwei.contents = wuwei.contents || {};
   }
 
   function getResourceContentsMeta(node, create) {
-    if (!node || node.type !== 'Content') { return null; }
-    if (!node.resource || typeof node.resource !== 'object') {
-      if (!create) { return null; }
-      node.resource = {};
-    }
-    if (!node.resource.contents || typeof node.resource.contents !== 'object') {
-      if (!create) { return null; }
-      node.resource.contents = {};
-    }
-    return node.resource.contents;
+    return (wuwei.document && typeof wuwei.document.getContentsMeta === 'function')
+      ? wuwei.document.getContentsMeta(node, create)
+      : null;
   }
 
   function getDocumentNode(group) {
@@ -203,45 +181,27 @@ wuwei.contents = wuwei.contents || {};
   }
 
   function getDocumentFirstPageNumber(documentNode) {
-    var meta = getResourceContentsMeta(documentNode, false);
-    var value = Number(meta && meta.firstPageNumber);
-
-    if (Number.isFinite(value) && value >= 1) {
-      return Math.floor(value);
-    }
-
-    // Legacy compatibility: older notes may only have pageOffset.
-    value = Number(meta && meta.pageOffset);
-    if (Number.isFinite(value) && value >= 0) {
-      return Math.floor(value) + 1;
-    }
-
-    return 1;
+    return (wuwei.document && typeof wuwei.document.getFirstPageNumber === 'function')
+      ? wuwei.document.getFirstPageNumber(documentNode)
+      : 1;
   }
 
   function getDocumentPageNumberOffset(documentNode) {
-    return Math.max(0, getDocumentFirstPageNumber(documentNode) - 1);
+    return (wuwei.document && typeof wuwei.document.getPageOffset === 'function')
+      ? wuwei.document.getPageOffset(documentNode)
+      : Math.max(0, getDocumentFirstPageNumber(documentNode) - 1);
   }
 
   function setDocumentFirstPageNumber(documentNode, firstPageNumber) {
-    var meta;
-
-    if (!documentNode || documentNode.type !== 'Content' || !Number.isFinite(Number(firstPageNumber))) {
-      return false;
-    }
-    firstPageNumber = Math.max(1, Math.floor(Number(firstPageNumber)));
-    meta = getResourceContentsMeta(documentNode, true);
-    meta.firstPageNumber = firstPageNumber;
-    meta.pageOffset = firstPageNumber - 1;
-    documentNode.changed = true;
-    return true;
+    return !!(wuwei.document &&
+      typeof wuwei.document.setFirstPageNumber === 'function' &&
+      wuwei.document.setFirstPageNumber(documentNode, firstPageNumber));
   }
 
   function setDocumentPageNumberOffset(documentNode, pageOffset) {
-    if (!Number.isFinite(Number(pageOffset))) {
-      return false;
-    }
-    return setDocumentFirstPageNumber(documentNode, Math.max(0, Math.floor(Number(pageOffset))) + 1);
+    return !!(wuwei.document &&
+      typeof wuwei.document.setPageOffset === 'function' &&
+      wuwei.document.setPageOffset(documentNode, pageOffset));
   }
 
   function getPageNumberOffset(group) {
@@ -253,18 +213,17 @@ wuwei.contents = wuwei.contents || {};
   }
 
   function toViewerPageNumber(group, pageNumber) {
-    var value = Number(pageNumber);
-    if (!Number.isFinite(value)) {
-      value = getFirstPageNumber(group);
-    }
-    value = Math.floor(value);
-    return Math.max(1, value - getPageNumberOffset(group));
+    var documentNode = getDocumentNode(group);
+    return (wuwei.document && typeof wuwei.document.toViewerPageNumber === 'function')
+      ? wuwei.document.toViewerPageNumber(documentNode, pageNumber)
+      : Math.max(1, Math.floor(Number(pageNumber || getFirstPageNumber(group))) - getPageNumberOffset(group));
   }
 
   function toDisplayedPageNumber(group, viewerPageNumber) {
-    var value = Math.floor(Number(viewerPageNumber || 1));
-    if (!Number.isFinite(value)) { value = 1; }
-    return Math.max(1, value + getPageNumberOffset(group));
+    var documentNode = getDocumentNode(group);
+    return (wuwei.document && typeof wuwei.document.toDocumentPageNumber === 'function')
+      ? wuwei.document.toDocumentPageNumber(documentNode, viewerPageNumber)
+      : Math.max(1, Math.floor(Number(viewerPageNumber || 1)) + getPageNumberOffset(group));
   }
 
   function isAutomaticPageMarkerLabel(label, oldPageNumber) {
@@ -366,13 +325,12 @@ wuwei.contents = wuwei.contents || {};
   }
 
   function getDocumentPageNumberRange(documentNode) {
-    var first = getDocumentFirstPageNumber(documentNode);
-    var count = getDocumentPageCount(documentNode);
-
-    return {
-      min: first,
-      max: count > 0 ? first + count - 1 : null
-    };
+    return (wuwei.document && typeof wuwei.document.getPageNumberRange === 'function')
+      ? wuwei.document.getPageNumberRange(documentNode)
+      : {
+        min: getDocumentFirstPageNumber(documentNode),
+        max: null
+      };
   }
 
   function getPageMarkerPageNumberRange(group) {
@@ -794,17 +752,14 @@ wuwei.contents = wuwei.contents || {};
     node.label = node.label || makeContentTargetLabel(group, node.pageNumber, null);
     node.shape = normalizeNodeShapeForContents(node.shape, 'CIRCLE');
     node.size = normalizeNodeSizeForContents(node.shape, node.size, defaultContentsPageMarkerSize());
-    node.color = node.color || '#ffffff';
-    node.outline = node.outline || '#4c6b8a';
     node.style = (node.style && 'object' === typeof node.style) ? node.style : {};
+    node.style.fill = node.style.fill || node.color || '#ffffff';
     node.style.font = node.style.font || common.defaultFont;
     node.style.line = (node.style.line && 'object' === typeof node.style.line) ? node.style.line : {};
     node.style.line.kind = node.style.line.kind || 'SOLID';
-    node.style.line.color = node.style.line.color || node.outline;
+    node.style.line.color = node.style.line.color || node.outline || '#4c6b8a';
     node.style.line.width = Math.max(0, Number(node.style.line.width || node.outlineWidth || 1));
-    node.outline = node.style.line.color;
-    node.outlineWidth = node.style.line.width;
-    node.font = node.font || common.defaultFont;
+    expandNodeRuntimeStyle(node);
     node.visible = (false !== node.visible);
     node.changed = true;
     if (!Number.isFinite(Number(node.x))) { node.x = 0; }
@@ -2205,33 +2160,16 @@ wuwei.contents = wuwei.contents || {};
   }
 
   function isHtmlDocumentNode(documentNode) {
-    var resource = (documentNode && documentNode.resource && 'object' === typeof documentNode.resource) ? documentNode.resource : {};
-    var documentKind = String(resource.documentKind || '').toLowerCase();
-    var contentsType = String(resource.contents && resource.contents.type || '').toLowerCase();
-    return !!(documentNode && documentNode.type === 'Content' && (
-      documentKind === 'html' ||
-      contentsType === 'html' ||
-      (util && typeof util.isDocumentKindByExtension === 'function' &&
-        util.isDocumentKindByExtension(documentNode, resource, '', 'html'))
-    ));
+    return !!(wuwei.document &&
+      typeof wuwei.document.isHtmlDocumentNode === 'function' &&
+      wuwei.document.isHtmlDocumentNode(documentNode));
   }
 
   function getHtmlDocumentViewerUrl(documentNode) {
-    var resource = (documentNode && documentNode.resource && 'object' === typeof documentNode.resource) ? documentNode.resource : {};
-    var originalUri = util && typeof util.getResourceOriginalUri === 'function'
-      ? util.getResourceOriginalUri(documentNode)
-      : '';
-    var fileOriginal = util && typeof util.getResourceFileUri === 'function'
-      ? util.getResourceFileUri(resource, 'original', documentNode)
-      : '';
-
-    return String(
-      fileOriginal ||
-      originalUri ||
-      resource.canonicalUri ||
-      resource.uri ||
-      ''
-    ).trim();
+    if (wuwei.document && typeof wuwei.document.getViewerUrl === 'function') {
+      return wuwei.document.getViewerUrl(documentNode);
+    }
+    return '';
   }
 
   function isOfficeDocumentNode(documentNode) {

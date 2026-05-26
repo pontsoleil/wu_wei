@@ -173,22 +173,22 @@ wuwei.draw.markup = ( function () {
         <path d="M300,-480 L300,480"></path><path d="M400,-480 L400,480"></path>
         <circle cx="0" cy="0" r="100"></circle>
         <circle cx="0" cy="0" r="200"></circle>
-        <text stroke="none" fill="#EFF8FB" x="6" y="-400">-400</text>
-        <text stroke="none" fill="#EFF8FB" x="6" y="-300">-300</text>
-        <text stroke="none" fill="#EFF8FB" x="6" y="-200">-200</text>
-        <text stroke="none" fill="#EFF8FB" x="6" y="-100">-100</text>
-        <text stroke="none" fill="#EFF8FB" x="6" y="100">100</text>
-        <text stroke="none" fill="#EFF8FB" x="6" y="200">200</text>
-        <text stroke="none" fill="#EFF8FB" x="6" y="300">300</text>
-        <text stroke="none" fill="#EFF8FB" x="6" y="400">400</text>
-        <text stroke="none" fill="#EFF8FB" x="-400" y="16">-400</text>
-        <text stroke="none" fill="#EFF8FB" x="-300" y="16">-300</text>
-        <text stroke="none" fill="#EFF8FB" x="-200" y="16">-200</text>
-        <text stroke="none" fill="#EFF8FB" x="-100" y="16">-100</text>
-        <text stroke="none" fill="#EFF8FB" x="100" y="16">100</text>
-        <text stroke="none" fill="#EFF8FB" x="200" y="16">200</text>
-        <text stroke="none" fill="#EFF8FB" x="300" y="16">300</text>
-        <text stroke="none" fill="#EFF8FB" x="400" y="16">400</text>
+        <text stroke="none" fill="#eef2f7" x="6" y="-400">-400</text>
+        <text stroke="none" fill="#eef2f7" x="6" y="-300">-300</text>
+        <text stroke="none" fill="#eef2f7" x="6" y="-200">-200</text>
+        <text stroke="none" fill="#eef2f7" x="6" y="-100">-100</text>
+        <text stroke="none" fill="#eef2f7" x="6" y="100">100</text>
+        <text stroke="none" fill="#eef2f7" x="6" y="200">200</text>
+        <text stroke="none" fill="#eef2f7" x="6" y="300">300</text>
+        <text stroke="none" fill="#eef2f7" x="6" y="400">400</text>
+        <text stroke="none" fill="#eef2f7" x="-400" y="16">-400</text>
+        <text stroke="none" fill="#eef2f7" x="-300" y="16">-300</text>
+        <text stroke="none" fill="#eef2f7" x="-200" y="16">-200</text>
+        <text stroke="none" fill="#eef2f7" x="-100" y="16">-100</text>
+        <text stroke="none" fill="#eef2f7" x="100" y="16">100</text>
+        <text stroke="none" fill="#eef2f7" x="200" y="16">200</text>
+        <text stroke="none" fill="#eef2f7" x="300" y="16">300</text>
+        <text stroke="none" fill="#eef2f7" x="400" y="16">400</text>
       </g>
 
       <circle id="Editing" style="opacity:0" r="32" fill="none" stroke="${wuwei.common.Color.outerEditing}" stroke-width="4">

@@ -46,6 +46,31 @@ wuwei.info.timeline = wuwei.info.timeline || {};
     return h < 1 ? (pad2(m) + ':' + pad2(s)) : (pad2(h) + ':' + pad2(m) + ':' + pad2(s));
   }
 
+  function getResourceUrl(node) {
+    var resource = node && node.resource ? node.resource : {};
+    if (resource.uri) { return resource.uri; }
+    if (resource.original && resource.original.url) { return resource.original.url; }
+    if (resource.original && resource.original.sourceUrl) { return resource.original.sourceUrl; }
+    if (resource.original && resource.original.canonicalUrl) { return resource.original.canonicalUrl; }
+    if (resource.origin && resource.origin.sourceUrl) { return resource.origin.sourceUrl; }
+    if (resource.origin && resource.origin.canonicalUrl) { return resource.origin.canonicalUrl; }
+    if (node && node.uri) { return node.uri; }
+    if (node && node.url) { return node.url; }
+    return '';
+  }
+
+  function getVimeoUrl(mediaNode, source) {
+    var url = source && (source.url || source.src || source.embedUrl);
+    var id = source && source.id;
+    if (!url) {
+      url = getResourceUrl(mediaNode);
+    }
+    if (!url && id) {
+      url = 'https://vimeo.com/' + id;
+    }
+    return url || '';
+  }
+
 
 
   function ensureInfoRoot() {
@@ -53,7 +78,11 @@ wuwei.info.timeline = wuwei.info.timeline || {};
     var editPane = document.getElementById('edit');
     var hasHeader;
 
-    if (editPane) {
+    if (wuwei.info && typeof wuwei.info.closeEditPaneForInfo === 'function') {
+      wuwei.info.closeEditPaneForInfo();
+    }
+    else if (editPane) {
+      editPane.innerHTML = '';
       editPane.style.display = 'none';
     }
     if (!infoPane) {
@@ -87,8 +116,10 @@ wuwei.info.timeline = wuwei.info.timeline || {};
       'info-group',
       'info-uploaded',
       'info-video',
+      'info-audio',
+      'info-image',
       'info-asciidoc',
-      'info-contents'
+      'info-viewpoint'
     ].forEach(function (id) {
       var el = document.getElementById(id);
       if (el) { el.style.display = 'none'; }
@@ -105,11 +136,18 @@ wuwei.info.timeline = wuwei.info.timeline || {};
     if (target && target.type === 'Segment' && target.id) {
       infoPane.dataset.node_id = target.id;
       infoPane.dataset.edit_node_id = target.id;
+      if (wuwei.info && typeof wuwei.info.setInfoEditTarget === 'function') {
+        wuwei.info.setInfoEditTarget(target);
+      }
       return;
     }
     if (target && target.id) {
       infoPane.dataset.node_id = target.id;
+      infoPane.dataset.edit_node_id = target.id;
       infoPane.dataset.group_id = target.id;
+      if (wuwei.info && typeof wuwei.info.setInfoEditTarget === 'function') {
+        wuwei.info.setInfoEditTarget(target);
+      }
     }
   }
 
@@ -145,6 +183,41 @@ wuwei.info.timeline = wuwei.info.timeline || {};
     var mediaNode = getMediaNodeForGroup(group);
     return mediaNode ? (mediaNode.label || mediaNode.uri || mediaNode.id) : '';
   }
+
+  function getMediaBasicInfo(mediaNode) {
+    var resource = mediaNode && mediaNode.resource ? mediaNode.resource : {};
+    var source = mediaNode && timeline && typeof timeline.detectMediaSource === 'function'
+      ? timeline.detectMediaSource(mediaNode)
+      : {};
+    var duration = mediaNode && wuwei.video && typeof wuwei.video.getDuration === 'function'
+      ? wuwei.video.getDuration(mediaNode)
+      : (timeline && typeof timeline.getMediaDuration === 'function' ? timeline.getMediaDuration(mediaNode) : 0);
+
+    return {
+      title: mediaNode ? (mediaNode.label ||  mediaNode.name || mediaNode.id || '') : '',
+      kind: resource.kind || (mediaNode && mediaNode.kind) || 'video',
+      videoKind: resource.videoKind || (mediaNode && mediaNode.videoKind) || '',
+      provider: (source && source.provider) || resource.provider || resource.videoKind || '',
+      durationText: formatClockTime(duration || 0)
+    };
+  }
+
+  function buildSegmentList(group) {
+    var members = timeline && typeof timeline.sortTimelineMembers === 'function'
+      ? timeline.sortTimelineMembers(group)
+      : [];
+
+    return members.filter(function (node) {
+      return node && node.type === 'Segment';
+    }).map(function (node) {
+      var timing = getSegmentTiming(node, group);
+      return {
+        label: node.label || '',
+        startText: formatClockTime(timing.startAt)
+      };
+    });
+  }
+
   function resolveSegment(point) { return timeline.resolveSegmentRecord(point); }
 
   function getSegmentTiming(segment, group) {
@@ -183,6 +256,8 @@ wuwei.info.timeline = wuwei.info.timeline || {};
     pane.innerHTML = wuwei.info.timeline.markup.axisTemplate({
       group: group,
       mediaName: getMediaName(group),
+      mediaInfo: getMediaBasicInfo(mediaNode),
+      segments: buildSegmentList(group),
       segmentCount: Array.isArray(group.members) ? group.members.length : 0,
       defaultPlayDuration: group.defaultPlayDuration || 0,
       endText: formatClockTime(group.timeEnd || 0)
@@ -218,11 +293,15 @@ wuwei.info.timeline = wuwei.info.timeline || {};
       });
       return;
     }
-    if (source.provider === 'vimeo' && source.url) {
-      menu.timeline.renderVimeoEmbeddedPreview(host, source, startAt, endAt, pointPreviewState).catch(function () {
-        host.innerHTML = '<div class="timeline-preview-note">Vimeo preview could not be loaded.</div>';
-      });
-      return;
+    if (source.provider === 'vimeo') {
+      var vimeoUrl = getVimeoUrl(mediaNode, source);
+      if (vimeoUrl) {
+        source = Object.assign({}, source, { url: vimeoUrl });
+        menu.timeline.renderVimeoEmbeddedPreview(host, source, startAt, endAt, pointPreviewState).catch(function () {
+          host.innerHTML = '<div class="timeline-preview-note">Vimeo preview could not be loaded.</div>';
+        });
+        return;
+      }
     }
     host.innerHTML = '<div class="timeline-preview-note">' + t('Please use Open player / Open in new tab.') + '</div>';
   }

@@ -1,0 +1,40 @@
+= WuWei Timeline / Viewpoint 編集コマンド整理
+三分一信之（三分一技術士事務所）
+:revnumber: ver 1.0
+:revdate: 2026-05-25
+:revremark:
+:version-label!:
+:doctype: book
+:toc:
+:toclevels: 3
+:sectnums:
+
+== 整理方針
+
+Timeline axis、Viewpoint axis、Timeline Segment では、従来の `edit` と専用編集コマンドが同じ `Edit` 表示になり、区別しにくかった。
+
+両者の対象は異なる。
+
+[cols="30%,70%",options="header"]
+|===
+|コマンド |対象
+
+|`Edit`
+|Timeline / Viewpoint の軸属性、Timeline Segment の時間範囲など、意味的又は管理的な属性を編集する。
+
+|`Shape Edit`
+|軸、代表ノード、Segment、PageMarker の表示形状、色、線、文字など、表示・レイアウト属性を編集する。
+|===
+
+== UI 表示
+
+`Shape Edit` は、鉛筆アイコンではなくパレットアイコンで表示する。
+
+日本語表示は `形状編集` とする。
+
+== 実装
+
+* `editShape` operation を追加
+* `editShape` は `wuwei.edit.open()` を呼び、表示・形状編集用の edit pane を開く
+* `editTimelineAxisProps` と `editTimelineSegmentProps` は従来どおり専用属性編集として維持
+* `Shape Edit` の NLS 翻訳を追加

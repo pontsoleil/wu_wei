@@ -161,6 +161,7 @@ wuwei.nls.FI = {
   'Total items': 'Kohteita yhteensä',
   'Workbench': 'Työtila',
   'Source': 'Lähde',
+  'Bookmarks': 'Viewpoint',
   'Content': 'Sisältö',
   '_Content': 'Sisältö',
   'Assignment': 'Tehtävä',
@@ -315,6 +316,7 @@ wuwei.nls.FI = {
   'Edge': 'Edge',
   'Edge Shape': 'Edge Shape',
   'Edit': 'Muokkaa',
+  'Shape Edit': 'Muodon muokkaus',
   'Edit(s) has been made.': 'Edit(s) has been made.',
   'Do you want to save edit(s)?': 'Do you want to save edit(s)?',
   'Edit Flock': 'Edit Flock',
@@ -567,4 +569,6 @@ wuwei.nls.FI = {
   'Label offset Y': 'Otsikon pystysuuntainen etäisyys',
   'Select label position': 'Valitse otsikon sijainti',
 
+  'Viewpoint axis was added.': 'Viewpoint axis was added.',
+  'Failed to add viewpoint axis.': 'Failed to add viewpoint axis.',
 };

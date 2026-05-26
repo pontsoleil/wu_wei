@@ -17,7 +17,7 @@
       ? wuwei.video.detectSource(node)
       : { provider: 'unknown' };
     var resource = (node && node.resource && typeof node.resource === 'object') ? node.resource : {};
-    var title = node && (node.label || resource.title || resource.uri || 'video');
+    var title = node && (node.label ||  resource.uri || 'video');
     var className = mode === 'modal' ? 'modal-video-frame' : 'info-video-frame';
     var nativeClass = mode === 'modal' ? 'modal-video-native' : 'info-video-native';
     if (!template) {

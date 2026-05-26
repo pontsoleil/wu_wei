@@ -161,6 +161,7 @@ wuwei.nls.TW = {
   'Total items': '總數',
   'Workbench': '工作區',
   'Source': '来源',
+  'Bookmarks': 'Viewpoint',
   'Content': '內容',
   '_Content': '內容',
   'Assignment': '任務',
@@ -315,6 +316,7 @@ wuwei.nls.TW = {
   'Edge': '關聯線',
   'Edge Shape': '線型',
   'Edit': '編輯',
+  'Shape Edit': '形狀編輯',
   'Edit(s) has been made.': '已完成編輯。',
   'Do you want to save edit(s)?': '你想保存编辑吗？',
   'Edit Flock': '編輯群組',
@@ -567,4 +569,6 @@ wuwei.nls.TW = {
   'Label offset Y': '標籤垂直距離',
   'Select label position': '選擇標籤位置',
 
+  'Viewpoint axis was added.': 'Viewpoint axis was added.',
+  'Failed to add viewpoint axis.': 'Failed to add viewpoint axis.',
 };

@@ -1,0 +1,37 @@
+= WuWei admin information command and login user role
+三分一信之（三分一技術士事務所）
+:revnumber: ver 1.0
+:revdate: 2026-05-25
+:revremark:
+:version-label!:
+:doctype: book
+:toc:
+:toclevels: 3
+:sectnums:
+
+== 管理(Admin)ペイン
+
+管理(Admin)ペインは、admin ユーザ用の情報メニューコマンドとして表示する。
+
+従来、`adminInfo` validator が通常 node/link record への解決を必須としていたため、Timeline / Viewpoint axis などの pseudo SVG target ではメニューに表示されない場合があった。
+
+今回の修正では、`adminInfo` は対象 record の有無ではなく、次だけで判定する。
+
+* selecting / connecting 中ではないこと
+* `wuwei.info.canOpenAdminPane()` が true であること
+
+== ユーザメニュー
+
+ノートキャンパス右上のログインアイコンから表示するユーザメニューに、ログインユーザの `role` を追加する。
+
+未ログイン時:
+
+* Login
+
+ログイン後:
+
+* Login user information
+** Login ID
+** User name
+** Role
+* Logout

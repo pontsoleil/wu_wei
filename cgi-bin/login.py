@@ -15,6 +15,9 @@ LOG_DIR = SCRIPT_DIR / "log"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 ERR_LOG = LOG_DIR / "cgi.err"
 
+AUTHENTICATED_DEFAULT_ROLE = ""
+FAILED_LOGIN_ROLE = "guest"
+
 
 def log_err(msg: str) -> None:
     with ERR_LOG.open("a", encoding="utf-8", newline="\n") as f:
@@ -68,7 +71,16 @@ def fail_json(msg: str):
         status="401 Unauthorized",
         extra_headers=emit_cookie_delete_headers(),
     )
-    print(json.dumps({"error": msg}, ensure_ascii=False))
+    print(json.dumps(
+        {
+            "error": msg,
+            "login": "",
+            "user_id": "",
+            "name": "",
+            "role": FAILED_LOGIN_ROLE,
+        },
+        ensure_ascii=False
+    ))
     raise SystemExit(0)
 
 
@@ -250,10 +262,10 @@ def main():
 
     for line in member_name.read_text(encoding="utf-8", errors="ignore").splitlines():
         cols = line.strip().split()
-        if len(cols) >= 4 and cols[1] == user:
+        if len(cols) >= 3 and cols[1] == user:
             user_id = cols[0]
             user_name = cols[2]
-            user_role = cols[3]
+            user_role = cols[3] if len(cols) >= 4 and cols[3] else AUTHENTICATED_DEFAULT_ROLE
             break
 
     if not user_id:
@@ -298,4 +310,10 @@ if __name__ == "__main__":
     except Exception as e:
         log_err(f"Unhandled exception: {e!r}")
         emit_headers(status="500 Internal Server Error", extra_headers=emit_cookie_delete_headers())
-        print(json.dumps({"error": "LOGIN FAILED (internal error)"}, ensure_ascii=False))
+        print(json.dumps({
+            "error": "LOGIN FAILED (internal error)",
+            "login": "",
+            "user_id": "",
+            "name": "",
+            "role": FAILED_LOGIN_ROLE,
+        }, ensure_ascii=False))

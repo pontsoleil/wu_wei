@@ -7,7 +7,7 @@
 }
 
 #edit-video .edit {
-  margin-top: 50px;
+  margin-top: 8px;
 }
 
 #edit-video .edit .frame {
@@ -72,4 +72,36 @@
 
 .list-inline {
   width: 168px;
+}
+#edit-video .edit-tab-panel > .edit {
+  margin-top: 8px;
+}
+
+#edit-video .edit-video-content-preview {
+  margin-top: 8px;
+}
+
+#edit-video .edit-video-content-preview > label {
+  display: block;
+  margin-bottom: 4px;
+}
+
+#edit-video .edit-video-content-preview-host {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 0;
+  background: #000;
+  overflow: hidden;
+}
+
+#edit-video .edit-video-content-frame,
+#edit-video .edit-video-content-native {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #000;
 }

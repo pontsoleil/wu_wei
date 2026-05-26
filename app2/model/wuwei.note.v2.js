@@ -33,6 +33,7 @@
 
   var VALID_KINDS = {
     document: true,
+    html: true,
     video: true,
     image: true,
     audio: true,
@@ -44,6 +45,35 @@
     office: true,
     html: true,
     text: true
+  };
+
+  var VALID_VIDEO_KINDS = {
+    youtube: true,
+    vimeo: true,
+    mp4: true,
+    webm: true,
+    mov: true
+  };
+
+  var VALID_AUDIO_KINDS = {
+    mp3: true,
+    wav: true,
+    m4a: true,
+    aac: true,
+    flac: true,
+    oga: true,
+    ogg: true
+  };
+
+  var VALID_IMAGE_KINDS = {
+    png: true,
+    jpeg: true,
+    jpg: true,
+    gif: true,
+    webp: true,
+    svg: true,
+    tif: true,
+    tiff: true
   };
 
   function isObject(value) {
@@ -188,6 +218,78 @@
     return font;
   }
 
+  function textAnchorFromAlign(align) {
+    if (align === 'left') {
+      return 'start';
+    }
+    if (align === 'right') {
+      return 'end';
+    }
+    return 'middle';
+  }
+
+  function defineRuntimeField(record, name, value) {
+    if (!record || typeof record !== 'object') {
+      return;
+    }
+    try {
+      Object.defineProperty(record, name, {
+        value: value,
+        writable: true,
+        configurable: true,
+        enumerable: false
+      });
+    } catch (e) {
+      record[name] = value;
+    }
+  }
+
+  function expandNodeRuntimeStyle(node) {
+    if (wuwei && wuwei.style &&
+        typeof wuwei.style.expandNodeRuntimeStyle === 'function') {
+      return wuwei.style.expandNodeRuntimeStyle(node);
+    }
+
+    var style, line, font, runtimeFont;
+
+    if (!node || typeof node !== 'object') {
+      return node;
+    }
+
+    style = isObject(node.style) ? node.style : {};
+    line = isObject(style.line) ? style.line : {};
+    font = isObject(style.font) ? style.font : {};
+
+    runtimeFont = {
+      family: font.family || 'sans-serif',
+      size: finiteOr(font.size, 14),
+      color: font.color || '#303030',
+      'text-anchor': textAnchorFromAlign(font.align || 'center')
+    };
+
+    defineRuntimeField(node, 'color', style.fill || '#FFFFF0');
+    defineRuntimeField(node, 'outline', line.color || '#d7d8d9');
+    defineRuntimeField(node, 'outlineWidth', finiteOr(line.width, 1));
+    defineRuntimeField(node, 'font', runtimeFont);
+
+    return node;
+  }
+
+  function stripNodeRuntimeStyleFields(node) {
+    if (wuwei && wuwei.style &&
+        typeof wuwei.style.stripNodeRuntimeStyleFields === 'function') {
+      return wuwei.style.stripNodeRuntimeStyleFields(node);
+    }
+    if (!node || typeof node !== 'object') {
+      return node;
+    }
+    delete node.color;
+    delete node.outline;
+    delete node.outlineWidth;
+    delete node.font;
+    return node;
+  }
+
   function normalizeLabelStyle(label) {
     label = isObject(label) ? label : {};
     label.lines = finiteOr(label.lines, 1);
@@ -204,6 +306,11 @@
   }
 
   function normalizeStyle(node) {
+    if (wuwei && wuwei.style &&
+        typeof wuwei.style.normalizeNodeStyle === 'function') {
+      return wuwei.style.normalizeNodeStyle(node);
+    }
+
     node.style = isObject(node.style) ? node.style : {};
     node.style.fill = node.style.fill || node.color || '#FFFFF0';
     node.style.line = normalizeLineStyle(node.style.line, node);
@@ -214,18 +321,12 @@
       node.style.label = normalizeLabelStyle(node.style.label);
     }
 
-    /* Keep legacy convenience fields for modules not yet fully v2-clean. */
-    node.color = node.color || node.style.fill;
-    node.outline = node.outline || node.style.line.color;
-    node.outlineWidth = node.outlineWidth || node.style.line.width;
-    node.font = isObject(node.font) ? node.font : {};
-    node.font.size = node.font.size || node.style.font.size;
-    node.font.color = node.font.color || node.style.font.color;
-    node.font.family = node.font.family || node.style.font.family;
-    if (!node.font['text-anchor']) {
-      node.font['text-anchor'] = node.style.font.align === 'left' ? 'start' :
-        node.style.font.align === 'right' ? 'end' : 'middle';
-    }
+    /*
+     * Runtime drawing fields are expanded from style for wuwei.draw
+     * readability/performance.  They are intentionally non-enumerable so
+     * JSON serialization and util.clone() do not persist duplicate style data.
+     */
+    expandNodeRuntimeStyle(node);
 
     return node.style;
   }
@@ -259,9 +360,28 @@
     return null;
   }
 
+  function legacyUploadPath(resource) {
+    var date = trim(resource && resource.date);
+    var id = trim(resource && resource.id);
+    var file = trim(resource && resource.file);
+    if (date && id && file) {
+      return date.replace(/\\/g, '/') + '/' + id + '/' + file;
+    }
+    return '';
+  }
+
+  function getOriginal(resource) {
+    return resource && resource.original && typeof resource.original === 'object' ? resource.original : {};
+  }
+
+  function getOriginalUrl(resource) {
+    var original = getOriginal(resource);
+    return trim(original.url || original.canonicalUrl || resource && (resource.uri || resource.canonicalUri) || '');
+  }
+
   function getBestPath(resource) {
     var file = findFirstFile(resource, ['original', 'preview', 'pdf-preview', 'body', 'thumbnail']);
-    return file && file.path || resource.canonicalUri || resource.uri || '';
+    return file && file.path || getOriginalUrl(resource) || legacyUploadPath(resource) || resource.file || '';
   }
 
   function getOriginalPath(resource) {
@@ -289,7 +409,7 @@
       return 'upload';
     }
 
-    uri = resource.canonicalUri || resource.uri || '';
+    uri = getOriginalUrl(resource);
     if (isHttpUri(uri)) {
       return 'remote';
     }
@@ -328,7 +448,7 @@
     path = getBestPath(resource);
     ext = getExtension(path);
     mime = getBestMime(resource);
-    uri = resource.canonicalUri || resource.uri || '';
+    uri = getOriginalUrl(resource);
 
     if (mime.indexOf('image/') === 0 || isImageExt(ext)) {
       return 'image';
@@ -383,7 +503,7 @@
       return 'html';
     }
 
-    uri = resource.canonicalUri || resource.uri || '';
+    uri = getOriginalUrl(resource);
     if (source === 'remote' && isHttpUri(uri)) {
       return 'html';
     }
@@ -405,22 +525,64 @@
   }
 
   function inferVideoKind(resource) {
-    var uri = resource.canonicalUri || resource.uri || '';
+    var uri = getOriginalUrl(resource);
     var ext = getExtension(uri || getBestPath(resource));
 
+    if (VALID_VIDEO_KINDS[toLower(resource.videoKind)]) {
+      return toLower(resource.videoKind);
+    }
     if (/youtube\.com|youtu\.be/i.test(uri)) {
       return 'youtube';
     }
     if (/vimeo\.com/i.test(uri)) {
       return 'vimeo';
     }
-    if (ext === 'mp3') {
+    if (isVideoExt(ext)) {
+      return ext === 'mov' ? 'mov' : (ext === 'webm' ? 'webm' : 'mp4');
+    }
+    return '';
+  }
+
+  function inferAudioKind(resource) {
+    var ext = getExtension(getOriginalUrl(resource) || getBestPath(resource));
+    var mime = getBestMime(resource);
+
+    if (VALID_AUDIO_KINDS[toLower(resource.audioKind)]) {
+      return toLower(resource.audioKind);
+    }
+    if (VALID_AUDIO_KINDS[ext]) {
+      return ext;
+    }
+    if (mime.indexOf('audio/') === 0) {
+      if (mime.indexOf('wav') >= 0) { return 'wav'; }
+      if (mime.indexOf('mp4') >= 0 || mime.indexOf('m4a') >= 0) { return 'm4a'; }
+      if (mime.indexOf('aac') >= 0) { return 'aac'; }
+      if (mime.indexOf('flac') >= 0) { return 'flac'; }
+      if (mime.indexOf('ogg') >= 0) { return 'ogg'; }
       return 'mp3';
     }
-    if (isVideoExt(ext)) {
-      return 'mp4';
+    return '';
+  }
+
+  function inferImageKind(resource) {
+    var ext = getExtension(getOriginalUrl(resource) || getBestPath(resource));
+    var mime = getBestMime(resource);
+
+    if (VALID_IMAGE_KINDS[toLower(resource.imageKind)]) {
+      return toLower(resource.imageKind) === 'jpg' ? 'jpeg' : toLower(resource.imageKind);
     }
-    return resource.videoKind || '';
+    if (VALID_IMAGE_KINDS[ext]) {
+      return ext === 'jpg' ? 'jpeg' : ext;
+    }
+    if (mime.indexOf('image/') === 0) {
+      if (mime.indexOf('jpeg') >= 0 || mime.indexOf('jpg') >= 0) { return 'jpeg'; }
+      if (mime.indexOf('png') >= 0) { return 'png'; }
+      if (mime.indexOf('gif') >= 0) { return 'gif'; }
+      if (mime.indexOf('webp') >= 0) { return 'webp'; }
+      if (mime.indexOf('svg') >= 0) { return 'svg'; }
+      if (mime.indexOf('tiff') >= 0) { return 'tiff'; }
+    }
+    return '';
   }
 
   function noteCurrentUserId() {
@@ -550,11 +712,20 @@
 
     storage = isObject(storage) ? storage : {};
     files = ensureArray(storage.files);
+    if (source === 'upload' && !files.length && legacyUploadPath(resource)) {
+      files = [{
+        role: 'original',
+        area: 'upload',
+        path: legacyUploadPath(resource),
+        file_name: trim(resource.file),
+        mimeType: resource.mimeType || ''
+      }];
+    }
     storage.files = files.map(function (item) {
       var out = isObject(item) ? cloneObject(item) : {};
       var role = toLower(out.role || 'original');
       var area = toLower(out.area || storage.area || (source === 'upload' ? 'upload' : 'resource'));
-      var rawPath = out.path || out.sourcePath || out.uri || out.url || resource.uri || resource.canonicalUri || '';
+      var rawPath = out.path || out.sourcePath || out.uri || out.url || getOriginalUrl(resource) || ''; 
       if (role === 'pdf-preview' || role === 'pdf') {
         role = 'preview';
       }
@@ -582,8 +753,9 @@
     });
 
     if (source === 'upload') {
-      resource.uri = normalizeLogicalPath(resource.uri || resource.canonicalUri || (files[0] && files[0].path) || '', 'upload', resource);
-      resource.canonicalUri = normalizeLogicalPath(resource.canonicalUri || resource.uri || '', 'upload', resource);
+      resource.original = isObject(resource.original) ? resource.original : {};
+      resource.original.type = resource.original.type || 'upload';
+      resource.original.storageRole = resource.original.storageRole || 'original';
     }
 
     storage.managed = storage.managed === undefined ? source === 'upload' || source === 'generated' : !!storage.managed;
@@ -621,74 +793,75 @@
     return viewer;
   }
 
-  function normalizeContents(resource) {
-    var contents = isObject(resource.contents) ? resource.contents : {};
+  function normalizeViewpoint(resource) {
+    var viewpoint = isObject(resource.viewpoint) ? resource.viewpoint : (isObject(resource.contents) ? resource.contents : {});
+    delete resource.contents;
     var preview;
     var pageCount;
     var firstPageNumber;
     var media;
 
     if (resource.kind !== 'document') {
-      if (Object.keys(contents).length > 0) {
-        resource.contents = contents;
+      if (Object.keys(viewpoint).length > 0) {
+        resource.viewpoint = viewpoint;
       }
-      return contents;
+      return viewpoint;
     }
 
-    contents.axis = isObject(contents.axis) ? contents.axis : {};
+    viewpoint.axis = isObject(viewpoint.axis) ? viewpoint.axis : {};
     media = isObject(resource.media) ? resource.media : {};
 
     if (resource.documentKind === 'html') {
-      contents.type = 'html';
-      contents.axis.unit = 'anchor';
-      contents.axis.nodeType = 'pageMarker';
-      contents.pageCount = finiteOr(contents.pageCount, 0);
-      contents.hasPageCount = false;
-      contents.sourceRole = contents.sourceRole || 'original';
+      viewpoint.type = 'html';
+      viewpoint.axis.unit = 'anchor';
+      viewpoint.axis.nodeType = 'pageMarker';
+      viewpoint.pageCount = finiteOr(viewpoint.pageCount, 0);
+      viewpoint.hasPageCount = false;
+      viewpoint.sourceRole = viewpoint.sourceRole || 'original';
     } else if (resource.documentKind === 'office') {
       preview = findFirstFile(resource, ['preview', 'pdf-preview']);
-      contents.type = 'pdf';
-      contents.axis.unit = 'page';
-      contents.axis.nodeType = 'page';
-      if (contents.sourceRole === 'pdf-preview' || contents.sourceRole === 'pdf') {
-        contents.sourceRole = 'preview';
+      viewpoint.type = 'pdf';
+      viewpoint.axis.unit = 'page';
+      viewpoint.axis.nodeType = 'page';
+      if (viewpoint.sourceRole === 'pdf-preview' || viewpoint.sourceRole === 'pdf') {
+        viewpoint.sourceRole = 'preview';
       }
-      contents.sourceRole = contents.sourceRole || (preview ? 'preview' : 'original');
-      pageCount = finiteOr(media.pageCount, finiteOr(contents.pageCount, 0));
-      contents.pageCount = pageCount;
-      contents.hasPageCount = pageCount > 0;
-      firstPageNumber = finiteOr(contents.firstPageNumber, 0);
+      viewpoint.sourceRole = viewpoint.sourceRole || (preview ? 'preview' : 'original');
+      pageCount = finiteOr(media.pageCount, finiteOr(viewpoint.pageCount, 0));
+      viewpoint.pageCount = pageCount;
+      viewpoint.hasPageCount = pageCount > 0;
+      firstPageNumber = finiteOr(viewpoint.firstPageNumber, 0);
       if (!(firstPageNumber >= 1)) {
-        firstPageNumber = finiteOr(contents.pageOffset, 0) + 1;
+        firstPageNumber = finiteOr(viewpoint.pageOffset, 0) + 1;
       }
       firstPageNumber = Math.max(1, Math.floor(firstPageNumber));
-      contents.firstPageNumber = firstPageNumber;
-      contents.pageOffset = firstPageNumber - 1;
+      viewpoint.firstPageNumber = firstPageNumber;
+      viewpoint.pageOffset = firstPageNumber - 1;
     } else if (resource.documentKind === 'pdf') {
-      contents.type = 'pdf';
-      contents.axis.unit = 'page';
-      contents.axis.nodeType = 'page';
-      contents.sourceRole = contents.sourceRole || 'original';
-      pageCount = finiteOr(media.pageCount, finiteOr(contents.pageCount, 0));
-      contents.pageCount = pageCount;
-      contents.hasPageCount = pageCount > 0;
-      firstPageNumber = finiteOr(contents.firstPageNumber, 0);
+      viewpoint.type = 'pdf';
+      viewpoint.axis.unit = 'page';
+      viewpoint.axis.nodeType = 'page';
+      viewpoint.sourceRole = viewpoint.sourceRole || 'original';
+      pageCount = finiteOr(media.pageCount, finiteOr(viewpoint.pageCount, 0));
+      viewpoint.pageCount = pageCount;
+      viewpoint.hasPageCount = pageCount > 0;
+      firstPageNumber = finiteOr(viewpoint.firstPageNumber, 0);
       if (!(firstPageNumber >= 1)) {
-        firstPageNumber = finiteOr(contents.pageOffset, 0) + 1;
+        firstPageNumber = finiteOr(viewpoint.pageOffset, 0) + 1;
       }
       firstPageNumber = Math.max(1, Math.floor(firstPageNumber));
-      contents.firstPageNumber = firstPageNumber;
-      contents.pageOffset = firstPageNumber - 1;
+      viewpoint.firstPageNumber = firstPageNumber;
+      viewpoint.pageOffset = firstPageNumber - 1;
     } else {
-      contents.type = 'text';
-      contents.axis.unit = contents.axis.unit || 'anchor';
-      contents.axis.nodeType = contents.axis.nodeType || 'pageMarker';
-      contents.pageCount = finiteOr(contents.pageCount, 0);
-      contents.hasPageCount = false;
-      contents.sourceRole = contents.sourceRole || 'original';
+      viewpoint.type = 'text';
+      viewpoint.axis.unit = viewpoint.axis.unit || 'anchor';
+      viewpoint.axis.nodeType = viewpoint.axis.nodeType || 'pageMarker';
+      viewpoint.pageCount = finiteOr(viewpoint.pageCount, 0);
+      viewpoint.hasPageCount = false;
+      viewpoint.sourceRole = viewpoint.sourceRole || 'original';
     }
 
-    Object.keys(contents).forEach(function (key) {
+    Object.keys(viewpoint).forEach(function (key) {
       if (!{
         type: true,
         axis: true,
@@ -698,12 +871,12 @@
         firstPageNumber: true,
         pageOffset: true
       }[key]) {
-        delete contents[key];
+        delete viewpoint[key];
       }
     });
 
-    resource.contents = contents;
-    return contents;
+    resource.viewpoint = viewpoint;
+    return viewpoint;
   }
 
   function normalizeResource(resource, node) {
@@ -716,14 +889,23 @@
     oldKind = toLower(resource.kind);
 
     resource.id = resource.id || node.resourceId || node.id;
-    resource.title = resource.title || node.label || node.name || '';
-    resource.canonicalUri = resource.canonicalUri || resource.url || node.url || '';
-    resource.uri = resource.uri || resource.canonicalUri || node.uri || node.url || node.download_url || '';
+    if (!isObject(resource.original)) {
+      resource.original = {};
+    }
+    if (!resource.original.url && !resource.original.canonicalUrl) {
+      resource.original.url = resource.uri || resource.url || node.uri || node.url || node.download_url || resource.canonicalUri || '';
+      resource.original.canonicalUrl = resource.canonicalUri || resource.original.url || '';
+    }
     resource.mimeType = resource.mimeType || '';
     resource.thumbnailUri = normalizeLogicalPath(resource.thumbnailUri || '', 'thumbnail', resource);
 
     source = inferSource(resource, oldKind);
     resource.source = source;
+    resource.original.type = resource.original.type || (source === 'upload' ? 'upload' : (source === 'remote' ? 'remote' : source));
+    if (source === 'remote') {
+      resource.original.accessedAt = resource.original.accessedAt || '';
+      resource.original.identifiers = Array.isArray(resource.original.identifiers) ? resource.original.identifiers : [];
+    }
 
     kind = inferKind(resource, oldKind, source);
     resource.kind = kind;
@@ -731,19 +913,39 @@
     if (kind === 'document') {
       documentKind = inferDocumentKind(resource, oldKind, source);
       resource.documentKind = documentKind;
-      resource.videoKind = resource.videoKind || '';
+      resource.videoKind = '';
+      resource.audioKind = '';
+      resource.imageKind = '';
+    } else if (kind === 'video') {
+      resource.documentKind = '';
+      resource.videoKind = inferVideoKind(resource);
+      resource.audioKind = '';
+      resource.imageKind = '';
+    } else if (kind === 'audio') {
+      resource.documentKind = '';
+      resource.videoKind = '';
+      resource.audioKind = inferAudioKind(resource);
+      resource.imageKind = '';
+    } else if (kind === 'image') {
+      resource.documentKind = '';
+      resource.videoKind = '';
+      resource.audioKind = '';
+      resource.imageKind = inferImageKind(resource);
     } else {
-      resource.documentKind = resource.documentKind || '';
-      if (kind === 'video' || kind === 'audio') {
-        resource.videoKind = inferVideoKind(resource);
-      } else {
-        resource.videoKind = resource.videoKind || '';
-      }
+      resource.documentKind = '';
+      resource.videoKind = '';
+      resource.audioKind = '';
+      resource.imageKind = '';
+    }
+
+    if (resource.media && typeof resource.media === 'object') {
+      resource.media.kind = kind;
+      resource.media.mimeType = resource.media.mimeType || resource.mimeType || '';
     }
 
     normalizeStorage(resource, source);
     normalizeViewer(resource);
-    normalizeContents(resource);
+    normalizeViewpoint(resource);
 
     resource.rights = isObject(resource.rights) ? resource.rights : {
       owner: '',
@@ -752,6 +954,9 @@
       attribution: ''
     };
     resource.audit = isObject(resource.audit) ? resource.audit : {};
+    delete resource.title;
+    delete resource.uri;
+    delete resource.canonicalUri;
 
     return resource;
   }
@@ -764,14 +969,98 @@
     return value.charAt(0) === '#' ? value : '#' + value;
   }
 
+  function isLegacyContentsName(value) {
+    return trim(value).toLowerCase() === 'contents';
+  }
+
+  function normalizeLegacyContentsName(value, fallback) {
+    if (value === undefined || value === null || trim(value) === '') {
+      return fallback || '';
+    }
+    return isLegacyContentsName(value) ? 'Viewpoint' : String(value);
+  }
+
+  function isLegacyContentsGroupType(value) {
+    value = trim(value);
+    return value === 'contents' || value === 'contentsGroup';
+  }
+
+  function normalizeLegacyContentsToken(value) {
+    switch (value) {
+    case 'contents':
+      return 'viewpoint';
+    case 'contentsGroup':
+      return 'viewpointGroup';
+    case 'contentsAxis':
+      return 'viewpointAxis';
+    case 'contents-axis':
+      return 'viewpoint-axis';
+    case 'contents-entry':
+      return 'viewpoint-entry';
+    case 'contents-first-entry':
+      return 'viewpoint-first-entry';
+    case 'contents-representative':
+      return 'viewpoint-representative';
+    case 'contents-page':
+      return 'viewpoint-page';
+    default:
+      return value;
+    }
+  }
+
+  function normalizeLegacyContentsNode(node) {
+    if (!isObject(node)) {
+      return node;
+    }
+    if (typeof node.topicKind === 'string') {
+      node.topicKind = normalizeLegacyContentsToken(node.topicKind);
+    }
+    if (typeof node.representativeType === 'string') {
+      node.representativeType = normalizeLegacyContentsToken(node.representativeType);
+      if (node.representativeType === 'viewpointGroup') {
+        node.representativeType = 'viewpoint';
+      }
+    }
+    if (typeof node.axisRole === 'string') {
+      node.axisRole = normalizeLegacyContentsToken(node.axisRole);
+      if (node.axisRole === 'viewpoint-entry') {
+        node.axisRole = 'entry';
+      }
+    }
+    // Preserve node.label. Labels are user-defined display information and must not be
+    // rewritten by v2 normalization, even when the old label text is "Contents".
+    return node;
+  }
+
+  function normalizeLegacyContentsLink(link) {
+    if (!isObject(link)) {
+      return link;
+    }
+    ['relation', 'role', 'linkType', 'groupType', 'topicKind', 'representativeType'].forEach(function (key) {
+      if (typeof link[key] === 'string') {
+        link[key] = normalizeLegacyContentsToken(link[key]);
+        if (key === 'representativeType' && link[key] === 'viewpointGroup') {
+          link[key] = 'viewpoint';
+        }
+      }
+    });
+    // Preserve link.label. Labels are user-defined display information.
+    return link;
+  }
+
   function normalizePageMarker(node) {
+    normalizeLegacyContentsNode(node);
     node.type = 'PageMarker';
-    node.topicKind = node.topicKind || 'contents-page';
-    node.groupRef = node.groupRef || node.contentsRef || '';
-    node.contentsRef = node.contentsRef || node.groupRef || '';
+    node.topicKind = node.topicKind || 'viewpoint-page';
+    node.groupRef = node.groupRef || node.viewpointRef || '';
+    node.viewpointRef = node.viewpointRef || node.groupRef || '';
     node.documentRef = node.documentRef || node.mediaRef || '';
     node.mediaRef = node.mediaRef || node.documentRef || '';
     node.axisRole = node.axisRole || 'entry';
+    node.axisRole = normalizeLegacyContentsToken(node.axisRole);
+    if (node.axisRole === 'viewpoint-entry') {
+      node.axisRole = 'entry';
+    }
     node.pageNumber = finiteOr(node.pageNumber, 0);
 
     node.anchorHref = normalizeAnchor(node.anchorHref || node.htmlAnchorHref || '');
@@ -802,6 +1091,7 @@
     }
     node.description = normalizeDescription(node.description);
     node.audit = isObject(node.audit) ? node.audit : {};
+    normalizeLegacyContentsNode(node);
 
     normalizeStyle(node);
 
@@ -809,7 +1099,7 @@
       node.resource = normalizeResource(node.resource, node);
       node.resourceView = isObject(node.resourceView) ? node.resourceView : { mode: 'default' };
       node.resourceView.mode = node.resourceView.mode || 'default';
-    } else if (node.type === 'PageMarker' || node.topicKind === 'contents-page') {
+    } else if (node.type === 'PageMarker' || node.topicKind === 'viewpoint-page') {
       normalizePageMarker(node);
     }
 
@@ -890,10 +1180,11 @@
     var resource = contentNode && contentNode.resource || {};
     var kind = toLower(resource.kind);
     var documentKind = toLower(resource.documentKind);
-    var contentsType = toLower(resource.contents && resource.contents.type);
+    var viewpointData = resource.viewpoint || resource.contents || {};
+    var viewpointType = toLower(viewpointData.type);
 
     if (documentKind) { return documentKind; }
-    if (contentsType === 'html' || /^(web|webpage|html)$/.test(kind)) {
+    if (viewpointType === 'html' || /^(web|webpage|html)$/.test(kind)) {
       return 'html';
     }
     return '';
@@ -901,34 +1192,47 @@
 
   function getContentPageCount(contentNode) {
     var resource = contentNode && contentNode.resource || {};
-    var contents = resource.contents || {};
-    return finiteOr(contents.pageCount, 0);
+    var viewpoint = resource.viewpoint || resource.contents || {};
+    return finiteOr(viewpoint.pageCount, 0);
   }
 
-  function normalizeContentsEntry(entry, group, nodeMap, order, documentKind) {
+  function normalizeViewpointEntry(entry, group, nodeMap, order, documentKind) {
     var marker;
 
     entry = isObject(entry) ? entry : {};
-    entry.role = entry.role || 'entry';
+    entry.role = normalizeLegacyContentsToken(entry.role || 'entry');
+    if (entry.role === 'viewpoint-entry') {
+      entry.role = 'entry';
+    }
     entry.nodeId = entry.nodeId || entry.id || '';
     entry.order = finiteOr(entry.order, order);
     entry.comment = entry.comment || '';
 
     marker = nodeMap[entry.nodeId];
     if (marker) {
+      normalizeLegacyContentsNode(marker);
       marker.type = 'PageMarker';
-      marker.topicKind = marker.topicKind || 'contents-page';
+      marker.topicKind = marker.topicKind || 'viewpoint-page';
       marker.groupRef = marker.groupRef || group.id;
-      marker.contentsRef = marker.contentsRef || marker.groupRef || group.id;
+      marker.viewpointRef = marker.viewpointRef || marker.groupRef || group.id;
       marker.documentRef = marker.documentRef || group.documentRef || group.mediaRef || '';
       marker.mediaRef = marker.mediaRef || marker.documentRef || '';
-      marker.axisRole = marker.axisRole || 'entry';
+      marker.axisRole = normalizeLegacyContentsToken(marker.axisRole || 'entry');
+      if (marker.axisRole === 'viewpoint-entry') {
+        marker.axisRole = 'entry';
+      }
 
       if (entry.pageNumber === undefined && marker.pageNumber !== undefined) {
         entry.pageNumber = marker.pageNumber;
       }
       if (marker.pageNumber === undefined && entry.pageNumber !== undefined) {
         marker.pageNumber = entry.pageNumber;
+      }
+      if (!isFinite(Number(marker.pageNumber)) || Number(marker.pageNumber) <= 0) {
+        marker.pageNumber = finiteOr(entry.pageNumber, order);
+      }
+      if (!isFinite(Number(entry.pageNumber)) || Number(entry.pageNumber) <= 0) {
+        entry.pageNumber = finiteOr(marker.pageNumber, order);
       }
       marker.pageNumber = finiteOr(marker.pageNumber, finiteOr(entry.pageNumber, order));
       entry.pageNumber = finiteOr(entry.pageNumber, marker.pageNumber);
@@ -965,7 +1269,7 @@
       member = normalizeMember(members[i], i + 1);
       members[i] = member;
       node = nodeMap[member.nodeId];
-      if (node && (node.type === 'PageMarker' || node.topicKind === 'contents-page')) {
+      if (node && (node.type === 'PageMarker' || node.topicKind === 'viewpoint-page')) {
         entries.push({
           role: 'entry',
           nodeId: member.nodeId,
@@ -980,7 +1284,7 @@
     return entries;
   }
 
-  function normalizeContentsGroup(group, page, nodeMap) {
+  function normalizeViewpointGroup(group, page, nodeMap) {
     var contentNode;
     var documentKind;
     var entries;
@@ -991,9 +1295,17 @@
     var minPage;
     var marker;
 
-    group.type = 'contents';
-    group.groupType = group.groupType || 'axis';
-    group.name = group.name || 'Contents';
+    group.type = 'viewpoint';
+    if (group.kind === 'contents' || group.kind === 'contentsGroup') {
+      group.kind = 'viewpoint';
+    }
+    group.groupType = normalizeLegacyContentsToken(group.groupType || 'axis');
+    if (group.groupType === 'viewpointAxis') {
+      group.groupType = 'axis';
+    }
+    // group.name is treated as a system/internal group name and is normalised.
+    // group.label is user-defined display information and is intentionally preserved.
+    group.name = normalizeLegacyContentsName(group.name, 'Viewpoint') || 'Viewpoint';
     group.description = normalizeDescription(group.description);
     group.visible = group.visible === undefined ? true : !!group.visible;
     group.moveTogether = group.moveTogether === undefined ? true : !!group.moveTogether;
@@ -1004,6 +1316,10 @@
 
     group.documentRef = group.documentRef || group.mediaRef || group.contentRef || '';
     group.mediaRef = group.mediaRef || group.documentRef || '';
+
+    if (group.representativeNodeId && nodeMap[group.representativeNodeId]) {
+      normalizeLegacyContentsNode(nodeMap[group.representativeNodeId]);
+    }
 
     contentNode = nodeMap[group.documentRef] || nodeMap[group.mediaRef] || null;
     documentKind = getContentDocumentKind(contentNode);
@@ -1017,7 +1333,7 @@
     entries = group.entries.length > 0 ? group.entries : buildEntriesFromMembers(group, nodeMap);
 
     for (i = 0; i < entries.length; i += 1) {
-      entries[i] = normalizeContentsEntry(entries[i], group, nodeMap, i + 1, documentKind);
+      entries[i] = normalizeViewpointEntry(entries[i], group, nodeMap, i + 1, documentKind);
       addMemberIfMissing(group.members, entries[i].nodeId);
     }
 
@@ -1111,9 +1427,15 @@
     group = isObject(group) ? group : {};
     group.id = group.id || ('_' + Math.random().toString(36).slice(2));
     group.type = group.type || group.kind || 'simple';
+    if (isLegacyContentsGroupType(group.type)) {
+      group.type = 'viewpoint';
+    }
+    if (isLegacyContentsGroupType(group.kind)) {
+      group.kind = 'viewpoint';
+    }
 
-    if (group.type === 'contents') {
-      return normalizeContentsGroup(group, page, nodeMap);
+    if (group.type === 'viewpoint' || group.type === 'viewpointGroup') {
+      return normalizeViewpointGroup(group, page, nodeMap);
     }
     if (group.type === 'timeline') {
       return normalizeTimelineGroup(group, page, nodeMap);
@@ -1145,6 +1467,10 @@
 
     for (i = 0; i < page.nodes.length; i += 1) {
       page.nodes[i] = normalizeNode(page.nodes[i]);
+    }
+
+    for (i = 0; i < page.links.length; i += 1) {
+      page.links[i] = normalizeLegacyContentsLink(page.links[i]);
     }
 
     nodeMap = makeNodeMap(page);
@@ -1217,6 +1543,8 @@
     var node;
     var resource;
     var group;
+    var links;
+    var link;
 
     if (!isObject(note)) {
       return true;
@@ -1229,6 +1557,13 @@
         if (!node) {
           return true;
         }
+        if (node.topicKind === 'contents-representative' ||
+            node.topicKind === 'contents-page' ||
+            node.representativeType === 'contents' ||
+            node.representativeType === 'contentsGroup' ||
+            node.axisRole === 'contents-entry') {
+          return true;
+        }
         if (node.type === 'Content') {
           resource = node.resource || {};
           if (!VALID_SOURCES[resource.source] || !VALID_KINDS[resource.kind]) {
@@ -1238,8 +1573,8 @@
             return true;
           }
         }
-        if (node.type === 'PageMarker' || node.topicKind === 'contents-page') {
-          if (!node.contentsRef || !node.groupRef) {
+        if (node.type === 'PageMarker' || node.topicKind === 'viewpoint-page') {
+          if (!node.viewpointRef || !node.groupRef) {
             return true;
           }
           if (node.htmlAnchorHref && !node.anchorHref) {
@@ -1250,10 +1585,29 @@
           }
         }
       }
+      links = ensureArray(pages[i].links);
+      for (j = 0; j < links.length; j += 1) {
+        link = links[j];
+        if (link && (
+          link.groupType === 'contentsAxis' ||
+          link.linkType === 'contents-axis' ||
+          link.relation === 'contents' ||
+          link.role === 'contents-entry' ||
+          link.role === 'contents-first-entry'
+        )) {
+          return true;
+        }
+      }
       groups = ensureArray(pages[i].groups);
       for (j = 0; j < groups.length; j += 1) {
         group = groups[j];
-        if (group && group.type === 'contents') {
+        if (group && isLegacyContentsGroupType(group.type || group.kind)) {
+          return true;
+        }
+        if (group && (group.type === 'viewpoint' || group.type === 'viewpointGroup')) {
+          if (isLegacyContentsName(group.name)) {
+            return true;
+          }
           if (!group.axis || !group.axis.unit || group.documentRef && !group.mediaRef) {
             return true;
           }
@@ -1268,5 +1622,7 @@
   api.normalizeResource = normalizeResource;
   api.normalizePageMarker = normalizePageMarker;
   api.normalizeAnchor = normalizeAnchor;
+  api.expandNodeRuntimeStyle = expandNodeRuntimeStyle;
+  api.stripNodeRuntimeStyleFields = stripNodeRuntimeStyleFields;
 
 }(window));

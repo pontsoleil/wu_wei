@@ -165,7 +165,7 @@ wuwei.menu.upload = wuwei.menu.upload || {};
           response.label = requestedLabel;
           response.name = requestedLabel;
           if (response.resource) {
-            response.resource.title = requestedLabel;
+            delete response.resource.title;
           }
         }
 

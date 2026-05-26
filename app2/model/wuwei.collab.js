@@ -205,8 +205,7 @@ wuwei.collab = wuwei.collab || {};
     return !!(
       record &&
       kind === 'node' &&
-      (p === 'description.body' || p === 'description.supplementFormat') &&
-      isImportedNote() &&
+      (p === 'description.body' || p === 'description.format' || p === 'description.supplementFormat') &&
       !isTeamNote() &&
       !isOwnObject(record)
     );
@@ -222,12 +221,15 @@ wuwei.collab = wuwei.collab || {};
     if (isTeamNote()) {
       return false;
     }
-    if (!isImportedNote()) {
-      return true;
-    }
     if (canAppendImportedDescription(record, path, kind)) {
       return true;
     }
+
+    /*
+     * Non-team notes allow other users' objects to be adjusted locally for
+     * display/layout purposes only.  Name/label, URL, resource identity and
+     * other semantic fields remain protected.
+     */
     return isDisplayPath(kind, path);
   }
 

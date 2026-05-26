@@ -29,30 +29,33 @@ wuwei.edit.uploaded.markup = ( function () {
 
   function getMediaKindValue(node) {
     var resource = (node && node.resource) || {};
-    var kind = String(resource.kind || '').toLowerCase();
+    var kind = wuwei.resource && typeof wuwei.resource.getKind === 'function'
+      ? wuwei.resource.getKind(node)
+      : String(resource.kind || '').toLowerCase();
     var mimeType = String(resource.mimeType || '').toLowerCase();
-    var uri = String(resource.uri || '').toLowerCase();
+    var uri = String(resource.uri || editableResourceUrl(resource.canonicalUri || '')).toLowerCase();
 
-    if (kind === 'web') { return 'webpage'; }
-    if (kind === 'pdf' || kind === 'office' || kind === 'document') { return 'document'; }
-    if (kind === 'image' || kind === 'video' || kind === 'audio') { return kind; }
-    if (mimeType.indexOf('video/') === 0) { return 'video'; }
-    if (mimeType.indexOf('image/') === 0) { return 'image'; }
-    if (mimeType.indexOf('audio/') === 0) { return 'audio'; }
-    if (mimeType.indexOf('application/pdf') === 0 ||
-      mimeType.indexOf('application/msword') === 0 ||
-      mimeType.indexOf('application/vnd.ms-excel') === 0 ||
-      mimeType.indexOf('application/vnd.ms-powerpoint') === 0 ||
-      mimeType.indexOf('application/vnd.openxmlformats-officedocument') === 0 ||
-      /\.(pdf|doc|docx|xls|xlsx|ppt|pptx)(\?|#|$)/.test(uri)) {
+    if (kind) { return kind === 'web' ? 'webpage' : kind; }
+    if (wuwei.document && typeof wuwei.document.isDocumentNode === 'function' && wuwei.document.isDocumentNode(node)) {
       return 'document';
     }
-    return kind || '';
+    if (wuwei.video && typeof wuwei.video.isVideoNode === 'function' && wuwei.video.isVideoNode(node)) {
+      return 'video';
+    }
+    if (wuwei.audio && typeof wuwei.audio.isAudioNode === 'function' && wuwei.audio.isAudioNode(node)) {
+      return 'audio';
+    }
+    if (mimeType.indexOf('image/') === 0) { return 'image'; }
+    if (/\.(png|jpe?g|gif|webp|svg)(\?|#|$)/.test(uri)) { return 'image'; }
+    return '';
   }
 
   function getEditableThumbnailUri(node) {
     var uri = '';
-    if (wuwei.util && typeof wuwei.util.getResourceFilePath === 'function' &&
+    if (wuwei.resource && typeof wuwei.resource.getRolePath === 'function') {
+      uri = wuwei.resource.getRolePath(node, 'thumbnail') || '';
+    }
+    if (!uri && wuwei.util && typeof wuwei.util.getResourceFilePath === 'function' &&
       node && node.resource) {
       uri = wuwei.util.getResourceFilePath(node.resource, 'thumbnail', node) || '';
     }
@@ -70,9 +73,18 @@ wuwei.edit.uploaded.markup = ( function () {
   }
 
   function getEditableResourceUri(node) {
-    var uri = (wuwei.util && wuwei.util.getResourceOriginalPath)
-      ? wuwei.util.getResourceOriginalPath(node)
-      : ((node && node.resource && node.resource.uri) || '');
+    var uri = '';
+    if (wuwei.resource && typeof wuwei.resource.getRolePath === 'function') {
+      uri = wuwei.resource.getRolePath(node, 'original') || '';
+    }
+    if (!uri && wuwei.resource && typeof wuwei.resource.getLogicalUri === 'function') {
+      uri = wuwei.resource.getLogicalUri(node) || '';
+    }
+    if (!uri) {
+      uri = (wuwei.util && wuwei.util.getResourceOriginalPath)
+        ? wuwei.util.getResourceOriginalPath(node)
+        : ((node && node.resource && node.resource.uri) || '');
+    }
     if (wuwei.util && wuwei.util.toStorageRelativePath &&
       (/^(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i.test(String(uri || '')) ||
         /^\/?upload\//.test(String(uri).replace(/^.*\/wu_wei2\//, '')) ||
@@ -82,7 +94,7 @@ wuwei.edit.uploaded.markup = ( function () {
     return getSnapshotDisplayPath(node, 'original', uri);
   }
 
-  function getResourceContentsValue(node, key) {
+  function getResourceViewpointValue(node, key) {
     var contents = node && node.resource && node.resource.contents;
     var value = contents && contents[key];
     return Number.isFinite(Number(value)) ? String(Math.floor(Number(value))) : '';
@@ -110,27 +122,133 @@ wuwei.edit.uploaded.markup = ( function () {
     ].join('\n');
   }
 
+  function isRemoteResource(resource) {
+    resource = resource && typeof resource === 'object' ? resource : {};
+    return String(resource.source || '').toLowerCase() === 'remote' ||
+      !!(resource.original && String(resource.original.type || '').toLowerCase() === 'remote') ||
+      (!!resource.uri && /^https?:\/\//i.test(String(resource.uri || '')));
+  }
+
+  function editableTextRow(id, label, value, labelSize, valueSize, placeholder) {
+    return [
+      '<div class="w3-row">',
+      '  <label for="' + id + '" class="w3-col ' + (labelSize || 's5') + '">' + t(label) + '</label>',
+      '  <input type="text" id="' + id + '" name="' + String(id || '').replace(/_/g, '.') + '" class="w3-col ' + (valueSize || 's7') + ' edit-value" value="' + esc(value || '') + '"' + (placeholder ? (' placeholder="' + esc(placeholder) + '"') : '') + '>',
+      '</div>'
+    ].join('\n');
+  }
+
+  function resourceTextRow(resource, id, label, value, labelSize, valueSize, placeholder) {
+    return isRemoteResource(resource)
+      ? editableTextRow(id, label, value, labelSize, valueSize, placeholder)
+      : readonlyRow(id, label, value, labelSize, valueSize);
+  }
+
+  function thumbnailUriInputRow(node, value) {
+    var visible = String(node && node.shape || '').toUpperCase() === 'THUMBNAIL';
+    value = editableResourceUrl(value);
+    return [
+      '<div class="w3-row thumbnail-uri-row" style="display:' + (visible ? 'block' : 'none') + ';">',
+      '  <label for="resource_thumbnailUri" class="w3-col s5">' + t('URL:') + '</label>',
+      '  <input type="text" id="resource_thumbnailUri" name="resource.thumbnailUri" class="w3-col s7 edit-value" value="' + esc(value || '') + '" placeholder="' + esc('https://... or upload path') + '">',
+      '</div>'
+    ].join('\n');
+  }
+
   function contentRows(node, page, thumbnailUri) {
     var resource = (node && node.resource && typeof node.resource === 'object') ? node.resource : {};
-    var contents = (resource.contents && typeof resource.contents === 'object') ? resource.contents : {};
-    return [
+    var kind = wuwei.resource && typeof wuwei.resource.getKind === 'function'
+      ? wuwei.resource.getKind(node)
+      : getMediaKindValue(node);
+    var documentKind = wuwei.resource && typeof wuwei.resource.getDocumentKind === 'function'
+      ? wuwei.resource.getDocumentKind(node)
+      : String(resource.documentKind || '');
+    var videoKind = wuwei.resource && typeof wuwei.resource.getVideoKind === 'function'
+      ? wuwei.resource.getVideoKind(node)
+      : String(resource.videoKind || '');
+    var audioKind = wuwei.resource && typeof wuwei.resource.getAudioKind === 'function'
+      ? wuwei.resource.getAudioKind(node)
+      : String(resource.audioKind || '');
+    var rows = [
       readonlyRow('resource_source', 'Source', resource.source || ''),
-      readonlyRow('resource_kind', 'Media type', resource.kind || getMediaKindValue(node) || ''),
-      readonlyRow('resource_documentKind', 'Document kind', resource.documentKind || ''),
-      readonlyRow('resource_videoKind', 'Video kind', resource.videoKind || ''),
-      readonlyRow('resource_title', 'Title', resource.title || ''),
+      readonlyRow('resource_kind', 'Media type', kind || ''),
+      resourceTextRow(resource, 'resource_documentKind', 'Document kind', documentKind || '', 's5', 's7', 'pdf / html / office / text'),
+      resourceTextRow(resource, 'resource_videoKind', 'Video kind', videoKind || '', 's5', 's7', 'youtube / vimeo / mp4'),
+      resourceTextRow(resource, 'resource_audioKind', 'Audio kind', audioKind || '', 's5', 's7', 'mp3 / wav / remote'),
+      resourceTextRow(resource, 'resource_title', 'Title', resource.title || ''),
       readonlyRow('resource_mimeType', 'MIME', resource.mimeType || ''),
-      readonlyRow('resource_uri', 'URL:', resource.uri || ''),
-      readonlyRow('resource_canonicalUri', 'Canonical URI', resource.canonicalUri || ''),
-      readonlyRow('thumbnailUri', 'THUMBNAIL', thumbnailUri || ''),
+      resourceTextRow(resource, 'resource_uri', 'URL:', editableResourceUrl(resource.uri || (resource.original && resource.original.url) || ''), 's5', 's7', 'https://...'),
+      resourceTextRow(resource, 'resource_canonicalUri', 'Canonical URI', editableResourceUrl(resource.canonicalUri || (resource.original && resource.original.canonicalUrl) || '')),
+      resourceTextRow(resource, 'resource_original_url', 'Original URL', editableResourceUrl(resource.original && resource.original.url || resource.uri || ''), 's5', 's7', 'https://...'),
+      readonlyRow('thumbnailUri', 'THUMBNAIL', thumbnailUri || '')
+    ];
+
+    if (wuwei.document && typeof wuwei.document.isDocumentNode === 'function' && wuwei.document.isDocumentNode(node)) {
+      rows = rows.concat(documentRows(node, page));
+    }
+    else if (wuwei.video && typeof wuwei.video.isVideoNode === 'function' && wuwei.video.isVideoNode(node)) {
+      rows = rows.concat(videoRows(node));
+    }
+    else if (wuwei.audio && typeof wuwei.audio.isAudioNode === 'function' && wuwei.audio.isAudioNode(node)) {
+      rows = rows.concat(audioRows(node));
+    }
+    return rows.join('\n');
+  }
+
+  function documentRows(node, page) {
+    var first = wuwei.document && typeof wuwei.document.getFirstPageNumber === 'function'
+      ? wuwei.document.getFirstPageNumber(node)
+      : 1;
+    var offset = wuwei.document && typeof wuwei.document.getPageOffset === 'function'
+      ? wuwei.document.getPageOffset(node)
+      : Math.max(0, first - 1);
+    var count = wuwei.document && typeof wuwei.document.getPageCount === 'function'
+      ? wuwei.document.getPageCount(node)
+      : '';
+    return [
       page ? readonlyRow('pdfPage', 'Page:', page) : '',
       '<div class="w3-row">',
       '  <label for="resource_contents_firstPageNumber" class="w3-col s5">' + t('First page number') + '</label>',
-      '  <input type="number" id="resource_contents_firstPageNumber" name="resource.contents.firstPageNumber" class="w3-col s7 edit-value" min="1" step="1" value="' + esc(contents.firstPageNumber == null ? '1' : contents.firstPageNumber) + '">',
+      '  <input type="number" id="resource_contents_firstPageNumber" name="resource.contents.firstPageNumber" class="w3-col s7 edit-value" min="1" step="1" value="' + esc(first || 1) + '">',
       '</div>',
-      readonlyRow('resource_contents_pageOffset', 'Page offset', contents.pageOffset == null ? '' : contents.pageOffset),
-      readonlyRow('resource_contents_pageCount', 'Page count', contents.pageCount == null ? '' : contents.pageCount)
-    ].join('\n');
+      readonlyRow('resource_contents_pageOffset', 'Page offset', offset == null ? '' : offset),
+      readonlyRow('resource_contents_pageCount', 'Page count', count || '')
+    ];
+  }
+
+  function videoRows(node) {
+    var source = wuwei.video && typeof wuwei.video.detectSource === 'function'
+      ? wuwei.video.detectSource(node)
+      : {};
+    var duration = wuwei.video && typeof wuwei.video.getDuration === 'function'
+      ? wuwei.video.getDuration(node)
+      : 0;
+    return [
+      readonlyRow('resource_video_provider', 'Provider', source.provider || ''),
+      readonlyRow('resource_video_id', 'Video ID', source.id || ''),
+      readonlyRow('resource_video_duration', 'Duration', formatSeconds(duration))
+    ];
+  }
+
+  function audioRows(node) {
+    var duration = wuwei.audio && typeof wuwei.audio.getDuration === 'function'
+      ? wuwei.audio.getDuration(node)
+      : 0;
+    return [
+      readonlyRow('resource_audio_duration', 'Duration', formatSeconds(duration))
+    ];
+  }
+
+  function formatSeconds(value) {
+    var total = Math.max(0, Math.floor(Number(value || 0)));
+    var hh = Math.floor(total / 3600);
+    var mm = Math.floor((total % 3600) / 60);
+    var ss = total % 60;
+    if (!total) { return ''; }
+    if (hh > 0) {
+      return String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0') + ':' + String(ss).padStart(2, '0');
+    }
+    return String(mm).padStart(2, '0') + ':' + String(ss).padStart(2, '0');
   }
 
   function rightsRows(node) {
@@ -138,8 +256,8 @@ wuwei.edit.uploaded.markup = ( function () {
     var rights = (resource.rights && typeof resource.rights === 'object') ? resource.rights : {};
     return [
       readonlyRow('resource_rights_source_title', 'Title', resource.title || ''),
-      readonlyRow('resource_rights_source_uri', 'URL:', resource.uri || ''),
-      readonlyRow('resource_rights_source_canonicalUri', 'Canonical URI', resource.canonicalUri || ''),
+      readonlyRow('resource_rights_source_uri', 'URL:', editableResourceUrl(resource.uri || '')),
+      readonlyRow('resource_rights_source_canonicalUri', 'Canonical URI', editableResourceUrl(resource.canonicalUri || '')),
       '<div class="w3-row">',
       '  <label for="resource_rights_owner" class="w3-col s5">' + t('Owner') + '</label>',
       '  <input type="text" id="resource_rights_owner" name="resource.rights.owner" class="w3-col s7 edit-value" value="' + esc(rights.owner || '') + '">',
@@ -270,15 +388,6 @@ wuwei.edit.uploaded.markup = ( function () {
       resourceUri = matchP[1];
       page = +matchP[2];
     }
-    
-    // video?
-    const resourceMimeType = (node && node.resource && node.resource.mimeType ? String(node.resource.mimeType) : '').toLowerCase();
-    const resourceUriLc = (resourceUri ? String(resourceUri) : '').toLowerCase();
-    const labelLc = (node && node.label ? String(node.label) : '').toLowerCase();
-    const isVideo = resourceMimeType.startsWith('video/') || /\.(mp4|webm|ogg|mov|m4v)$/.test(resourceUriLc) || /\.(mp4|webm|ogg|mov|m4v)$/.test(labelLc);
-    const timeRange = (node && node.timeRange && typeof node.timeRange === 'object') ? node.timeRange : {};
-    const mediaStart = timeRange.start != null ? timeRange.start : '';
-    const mediaEnd = timeRange.end != null ? timeRange.end : '';
 
     const
       common = wuwei.common,
@@ -313,42 +422,14 @@ wuwei.edit.uploaded.markup = ( function () {
     format: (node.description && node.description.format) || 'plain/text',
     body: value || ''
   })}
-  ${isVideo
-    ? `<div class="w3-row">
-        <div class="frame video w3-col s12">
-          <video id="editVideoPlayer" controls playsinline preload="metadata"></video>
-        </div>
-      </div>
-
-      <div class="w3-row video-controls">
-        <label class="w3-col s12">${t('clip range')}</label>
-        <div class="w3-col s12 time-inputs">
-          <input id="vMediaStart" type="text" placeholder="start 00:01:23.5">
-          <input id="vMediaEnd" type="text" placeholder="end (optional) 00:02:10">
-          <input type="hidden" id="timeRange_start" name="timeRange.start" value="${mediaStart}">
-          <input type="hidden" id="timeRange_end" name="timeRange.end" value="${mediaEnd}">
-        </div>
-        <div class="w3-col s12 buttons">
-          <button type="button" id="editVideoJumpStart">jump start</button>
-          <button type="button" id="editVideoJumpEnd">jump end</button>
-          <button type="button" id="editVideoSetStartHere">set start here</button>
-          <button type="button" id="editVideoSetEndHere">set end here</button>
-          <button type="button" id="editVideoClearEnd">clear end</button>
-        </div>
-        <div class="w3-col s12">
-          <span class="player" id="editVideoOpenPlayer">
-            Open player <i class="fas fa-external-link-alt"></i>
-          </span>
-        </div>
-      </div>`
-    : ''
-  }
+  
   ${node ?
   `${wuwei.edit.style.markup.shapeSizeRows({
     shape: shape,
     size: node.size,
     options: shapes
   })}
+  ${thumbnailUriInputRow(node, thumbnailUri)}
   ${wuwei.edit.style.markup.paintRows({
     style: style,
     fontSize: fontSizeValue,
@@ -366,7 +447,7 @@ wuwei.edit.uploaded.markup = ( function () {
       '<form id="editform" class="uploaded form-group content" onsubmit="return false;">',
       tabbedPaneHtml([
         { id: 'display', label: 'Display', html: displayHtml },
-        { id: 'content', label: 'Content', html: contentRows(node, page, thumbnailUri) },
+        { id: 'content', label: '_Content', html: contentRows(node, page, thumbnailUri) },
         { id: 'rights', label: 'Source / Rights', html: rightsRows(node) }
       ]),
       '</form>'
@@ -376,6 +457,30 @@ wuwei.edit.uploaded.markup = ( function () {
 
   function t(str) {
     return wuwei.nls.translate(str);
+  }
+
+  function isLoadFileRuntimeUrl(value) {
+    return /(?:^|\/)(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i.test(String(value || ''));
+  }
+
+  function getUrlHash(value) {
+    var s = String(value || '');
+    var index = s.indexOf('#');
+    return index >= 0 ? s.slice(index) : '';
+  }
+
+  function editableResourceUrl(value) {
+    var s = String(value || '').trim();
+    var match;
+
+    if (!s || !isLoadFileRuntimeUrl(s)) {
+      return s;
+    }
+
+    match = s.match(/[?&]path=([^&#]*)/);
+    if (!match) { return s; }
+    try { return decodeURIComponent(match[1]) + getUrlHash(s); }
+    catch (e) { return match[1].replace(/%2F/ig, '/') + getUrlHash(s); }
   }
 
   return {

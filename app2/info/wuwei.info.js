@@ -63,25 +63,25 @@ wuwei.info = wuwei.info || {};
     return false;
   }
 
-  function isContentsTarget(target) {
+  function isViewpointTarget(target) {
     return !!(
       target &&
-      wuwei.info.contents &&
-      typeof wuwei.info.contents.canOpen === 'function' &&
-      wuwei.info.contents.canOpen(target)
+      wuwei.info.viewpoint &&
+      typeof wuwei.info.viewpoint.canOpen === 'function' &&
+      wuwei.info.viewpoint.canOpen(target)
     );
   }
 
-  function openContentsInfo(target, option, replace) {
+  function openViewpointInfo(target, option, replace) {
     if (!target ||
-      !wuwei.info.contents ||
-      typeof wuwei.info.contents.open !== 'function') {
+      !wuwei.info.viewpoint ||
+      typeof wuwei.info.viewpoint.open !== 'function') {
       return false;
     }
     if (replace) {
-      showInfoPane('info-contents');
+      showInfoPane('info-viewpoint');
     }
-    return !!wuwei.info.contents.open(target, option || {});
+    return !!wuwei.info.viewpoint.open(target, option || {});
   }
 
   function isHostedYouTubeUrl(url) {
@@ -113,15 +113,31 @@ wuwei.info = wuwei.info || {};
     );
   }
 
+  function closeEditPaneForInfo() {
+    var editPane = document.getElementById('edit');
+    if (!editPane || editPane.style.display === 'none') {
+      return;
+    }
+    if (wuwei.edit && typeof wuwei.edit.close === 'function') {
+      wuwei.edit.close();
+      return;
+    }
+    editPane.innerHTML = '';
+    editPane.style.display = 'none';
+  }
+
   function hideAllInfoPanes() {
     var ids = [
       'info-generic',
       'info-group',
       'info-uploaded',
       'info-video',
+      'info-audio',
+      'info-image',
       'info-asciidoc',
       'info-timeline',
-      'info-contents'
+      'info-viewpoint',
+      'info-admin'
     ];
     ids.forEach(function (id) {
       var el = document.getElementById(id);
@@ -133,6 +149,7 @@ wuwei.info = wuwei.info || {};
 
   function showInfoPane(id) {
     var el;
+    closeEditPaneForInfo();
     hideAllInfoPanes();
     el = document.getElementById(id);
     if (el) {
@@ -157,6 +174,154 @@ wuwei.info = wuwei.info || {};
     return resolveTarget(node);
   }
 
+  function getCurrentOwnerId() {
+    return (common && typeof common.getCurrentOwnerId === 'function'
+      ? common.getCurrentOwnerId()
+      : '') ||
+      (state && state.currentUser && state.currentUser.user_id) ||
+      '';
+  }
+
+  function getRecordOwnerId(record) {
+    if (!record || typeof record !== 'object') {
+      return '';
+    }
+    if (record.audit && typeof record.audit === 'object' && record.audit.createdBy) {
+      return String(record.audit.createdBy);
+    }
+    return '';
+  }
+
+  function isRecordOwnedByCurrentUser(record) {
+    var ownerId = getRecordOwnerId(record);
+    var currentOwnerId = getCurrentOwnerId();
+
+    if (!ownerId || !currentOwnerId) {
+      return false;
+    }
+    if (ownerId === currentOwnerId) {
+      return true;
+    }
+    if (common &&
+      typeof common.isTemporaryOwnerId === 'function' &&
+      common.isTemporaryOwnerId(ownerId) &&
+      common.isTemporaryOwnerId(currentOwnerId)) {
+      return true;
+    }
+    return false;
+  }
+
+  function isTeamJointNote() {
+    var current = (common && common.current) || {};
+    var noteState = String(current.jointNoteState || current.collabNoteState || '').toLowerCase();
+    var noteScope = String(current.note_scope || '').toLowerCase();
+    var origin = (current.origin && typeof current.origin === 'object') ? current.origin : {};
+    var originType = String(origin.type || '').toLowerCase();
+    var originSource = String(origin.source || '').toLowerCase();
+
+    if (noteState === 'team') {
+      return true;
+    }
+    if (noteState === 'imported' || noteState === 'own') {
+      return false;
+    }
+    if (originType === 'import' || originSource === 'export-package') {
+      return false;
+    }
+    if (noteScope === 'team') {
+      return true;
+    }
+    if (originType === 'team' || originSource === 'team-note') {
+      return true;
+    }
+    if (current.team_id) {
+      return true;
+    }
+
+    return false;
+  }
+
+  function canOpenEditFromInfo(record) {
+    if (!record ||
+      !common.graph ||
+      common.graph.mode === 'view' ||
+      state.viewOnly ||
+      state.published) {
+      return false;
+    }
+
+    /*
+     * Team Joint Note:
+     *   another user's node is read-only, so hide the edit action.
+     *
+     * Imported / personal / ordinary note:
+     *   another user's node may still allow display-style editing
+     *   such as size, colour and font.  Therefore show the edit action.
+     */
+    if (isTeamJointNote() && !isRecordOwnedByCurrentUser(record)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  function updateHeaderEditAction(record) {
+    var editBtn = document.getElementById('editOpen');
+    var canEdit = canOpenEditFromInfo(record);
+
+    if (!editBtn) {
+      return;
+    }
+
+    editBtn.style.display = canEdit ? '' : 'none';
+    editBtn.classList.toggle('is-visible', canEdit);
+    editBtn.setAttribute('aria-hidden', canEdit ? 'false' : 'true');
+    editBtn.setAttribute('tabindex', canEdit ? '0' : '-1');
+  }
+
+  function setInfoEditTarget(record, option) {
+    var infoPane = document.getElementById('info');
+    var target = resolveTarget(record) || record || null;
+
+    stateMap.node = target;
+    stateMap.editTarget = target;
+    stateMap.option = option || stateMap.option || null;
+    stateMap.displayedContentTarget = isContentTargetMarker(target) ? target : null;
+
+    if (infoPane) {
+      if (target && target.id) {
+        infoPane.dataset.node_id = target.id;
+        infoPane.dataset.edit_node_id = target.id;
+
+        if (isContentTargetMarker(target)) {
+          infoPane.dataset.content_target_id = target.id;
+          infoPane.dataset.page_marker_id = target.id;
+        }
+        else {
+          delete infoPane.dataset.content_target_id;
+          delete infoPane.dataset.page_marker_id;
+        }
+
+        if (target.members || target.type === 'timeline' || target.type === 'viewpoint') {
+          infoPane.dataset.group_id = target.id;
+        }
+        else {
+          delete infoPane.dataset.group_id;
+        }
+      }
+      else {
+        delete infoPane.dataset.node_id;
+        delete infoPane.dataset.edit_node_id;
+        delete infoPane.dataset.content_target_id;
+        delete infoPane.dataset.page_marker_id;
+        delete infoPane.dataset.group_id;
+      }
+    }
+
+    updateHeaderEditAction(target);
+    return target;
+  }
+
   function isContentTargetMarker(target) {
     return !!(
       target &&
@@ -164,7 +329,7 @@ wuwei.info = wuwei.info || {};
         target.type === 'PageMarker' ||
         target.nodeKind === 'PageMarker' ||
         target.kind === 'PageMarker' ||
-        target.topicKind === 'contents-page'
+        target.topicKind === 'viewpoint-page'
       )
     );
   }
@@ -176,7 +341,7 @@ wuwei.info = wuwei.info || {};
       return null;
     }
 
-    point = option.displayedContentTarget || option.contentTarget || option.contentTargetPoint || option.displayedPageMarker || option.contentsPoint || null;
+    point = option.displayedContentTarget || option.contentTarget || option.contentTargetPoint || option.displayedPageMarker || option.viewpointPoint || null;
     point = resolveTarget(point) || point;
 
     if (!point || !isContentTargetMarker(point)) {
@@ -300,7 +465,7 @@ wuwei.info = wuwei.info || {};
     type = String(target.type || '');
     return !!(
       Array.isArray(target.members) ||
-      ['Group', 'simple', 'horizontal', 'vertical', 'timeline', 'contents'].indexOf(type) >= 0
+      ['Group', 'simple', 'horizontal', 'vertical', 'timeline', 'viewpoint'].indexOf(type) >= 0
     );
   }
 
@@ -371,9 +536,12 @@ wuwei.info = wuwei.info || {};
     hidePane('info-group');
     hidePane('info-uploaded');
     hidePane('info-video');
+    hidePane('info-audio');
+    hidePane('info-image');
     hidePane('info-asciidoc');
     hidePane('info-timeline');
-    hidePane('info-contents');
+    hidePane('info-viewpoint');
+    hidePane('info-admin');
   }
 
   function hasAsciiDocValue(node) {
@@ -390,6 +558,25 @@ wuwei.info = wuwei.info || {};
 
     return !!(util.isDocumentKindByExtension &&
       util.isDocumentKindByExtension(node, resource, uri, 'video'));
+  }
+
+
+  function isAudioNode(node) {
+    return !!(
+      node &&
+      wuwei.audio &&
+      typeof wuwei.audio.isAudioNode === 'function' &&
+      wuwei.audio.isAudioNode(node)
+    );
+  }
+
+  function isImageNode(node) {
+    return !!(
+      node &&
+      wuwei.resource &&
+      typeof wuwei.resource.isImage === 'function' &&
+      wuwei.resource.isImage(node)
+    );
   }
 
   function isUploadedNode(node) {
@@ -417,7 +604,7 @@ wuwei.info = wuwei.info || {};
     if (!node) {
       return false;
     }
-    if (isVideoNode(node) || isUploadedNode(node)) {
+    if (isVideoNode(node) || isAudioNode(node) || isImageNode(node) || isUploadedNode(node)) {
       return false;
     }
     return !!(
@@ -455,27 +642,52 @@ wuwei.info = wuwei.info || {};
     return !!String(pane.textContent || '').replace(/\s+/g, '');
   }
 
+
+
+  function setPaneTitle(iconClass, titleText) {
+    var icon = document.getElementById('infoPaneTitleIcon');
+    var text = document.getElementById('infoPaneTitleText');
+
+    if (icon) {
+      icon.className = iconClass || 'fas fa-info fa-lg fa-fw';
+    }
+    if (text) {
+      text.textContent = titleText || '';
+    }
+  }
+
+  function setInfoPaneTitle() {
+    setPaneTitle('fas fa-info fa-lg fa-fw', '');
+  }
+
+  function openAdmin(target, option) {
+    if (ns.admin && typeof ns.admin.open === 'function') {
+      return ns.admin.open(target, option);
+    }
+    if (window.console && console.warn) {
+      console.warn('info.admin.js is not loaded.');
+    }
+    return false;
+  }
+
+  function canOpenAdminPane() {
+    return !!(ns.admin && typeof ns.admin.canOpen === 'function' && ns.admin.canOpen());
+  }
+
   function open(node, option) {
     var infoPane = document.getElementById('info');
     var resolvedNode;
     var hasAdoc;
 
-    if (wuwei.edit && typeof wuwei.edit.close === 'function') {
-      var editPane = document.getElementById('edit');
-      if (editPane && editPane.style.display !== 'none') {
-        wuwei.edit.close();
-      }
-    }
-    else {
-      var fallbackEditPane = document.getElementById('edit');
-      if (fallbackEditPane) { fallbackEditPane.style.display = 'none'; }
-    }
+    closeEditPaneForInfo();
 
     if (!infoPane) {
       return;
     }
 
     infoPane.innerHTML = wuwei.info.markup.template();
+    setInfoPaneTitle();
+    updateHeaderEditAction(null);
     infoPane.style.display = 'block';
     hideInfoPanes();
     stateMap._window.clear();
@@ -486,6 +698,7 @@ wuwei.info = wuwei.info || {};
       stateMap.editTarget = null;
       stateMap.displayedContentTarget = null;
       stateMap.option = null;
+      updateHeaderEditAction(null);
       hideInformationMark();
       return;
     }
@@ -513,6 +726,8 @@ wuwei.info = wuwei.info || {};
       delete infoPane.dataset.edit_node_id;
     }
 
+    updateHeaderEditAction(stateMap.editTarget || resolvedNode);
+
     showInformationMark(stateMap.displayedContentTarget || resolvedNode);
 
     if (isTimelinePointNode(resolvedNode) || isTimelineAxisLink(resolvedNode)) {
@@ -522,20 +737,20 @@ wuwei.info = wuwei.info || {};
 
     /*
      * A PageMarker represents a page/anchor inside its source Content.
-     * Open it through the Contents info pane, not through the generic/uploaded
+     * Open it through the Viewpoint info pane, not through the generic/uploaded
      * resource pane, so the marker label, source document label and preview
      * are presented as one PageMarker view.
      */
     if (isContentTargetMarker(resolvedNode) &&
       !(stateMap.option && stateMap.option.contentTargetView) &&
-      wuwei.menu && wuwei.menu.contents &&
-      typeof wuwei.menu.contents.openContentTargetInInfo === 'function') {
-      wuwei.menu.contents.openContentTargetInInfo(resolvedNode);
+      wuwei.menu && wuwei.menu.viewpoint &&
+      typeof wuwei.menu.viewpoint.openContentTargetInInfo === 'function') {
+      wuwei.menu.viewpoint.openContentTargetInInfo(resolvedNode);
       return;
     }
 
-    if (isContentsTarget(resolvedNode)) {
-      openContentsInfo(resolvedNode, stateMap.option, true);
+    if (isViewpointTarget(resolvedNode)) {
+      openViewpointInfo(resolvedNode, stateMap.option, true);
       return;
     }
 
@@ -571,9 +786,28 @@ wuwei.info = wuwei.info || {};
         option: stateMap.option
       });
     }
+    else if (isAudioNode(resolvedNode) &&
+      wuwei.info.audio &&
+      'function' === typeof wuwei.info.audio.open) {
+      showInfoPane('info-audio');
+      wuwei.info.audio.open({
+        node: resolvedNode,
+        option: stateMap.option
+      });
+    }
+    else if (isImageNode(resolvedNode) &&
+      wuwei.info.image &&
+      'function' === typeof wuwei.info.image.open) {
+      showInfoPane('info-image');
+      wuwei.info.image.open({
+        node: resolvedNode,
+        option: stateMap.option
+      });
+    }
     else if (isUploadedNode(resolvedNode) &&
       wuwei.info.uploaded &&
       'function' === typeof wuwei.info.uploaded.open) {
+      showInfoPane('info-uploaded');
       wuwei.info.uploaded.open({
         node: resolvedNode,
         option: stateMap.option
@@ -604,13 +838,13 @@ wuwei.info = wuwei.info || {};
     }
 
     /*
-     * PageMarker information is handled by info.contents.  For other cases
+     * PageMarker information is handled by info.viewpoint.  For other cases
      * where a displayedContentTarget is attached to a normal content preview,
-     * optionally open the related Contents details.
+     * optionally open the related Viewpoint details.
      */
     if (stateMap.displayedContentTarget &&
-      !(stateMap.option && (stateMap.option.contentTargetView || stateMap.option.contentsPage))) {
-      openContentsInfo(stateMap.displayedContentTarget, stateMap.option, false);
+      !(stateMap.option && (stateMap.option.contentTargetView || stateMap.option.viewpointPage))) {
+      openViewpointInfo(stateMap.displayedContentTarget, stateMap.option, false);
     }
   }
 
@@ -624,11 +858,17 @@ wuwei.info = wuwei.info || {};
     if (wuwei.info.timeline && 'function' === typeof wuwei.info.timeline.close) {
       wuwei.info.timeline.close();
     }
-    if (wuwei.info.contents && 'function' === typeof wuwei.info.contents.close) {
-      wuwei.info.contents.close();
+    if (wuwei.info.viewpoint && 'function' === typeof wuwei.info.viewpoint.close) {
+      wuwei.info.viewpoint.close();
     }
     if (wuwei.info.video && 'function' === typeof wuwei.info.video.close) {
       wuwei.info.video.close();
+    }
+    if (wuwei.info.audio && 'function' === typeof wuwei.info.audio.close) {
+      wuwei.info.audio.close();
+    }
+    if (wuwei.info.image && 'function' === typeof wuwei.info.image.close) {
+      wuwei.info.image.close();
     }
     if (wuwei.info.uploaded && 'function' === typeof wuwei.info.uploaded.close) {
       wuwei.info.uploaded.close();
@@ -652,6 +892,8 @@ wuwei.info = wuwei.info || {};
       delete infoPane.dataset.node_id;
       delete infoPane.dataset.edit_node_id;
       delete infoPane.dataset.content_target_id;
+      delete infoPane.dataset.page_marker_id;
+      delete infoPane.dataset.group_id;
     }
 
     stateMap.node = null;
@@ -691,11 +933,18 @@ wuwei.info = wuwei.info || {};
       editingNode = findEditableTargetById(editingNodeId);
     }
 
+    if (!canOpenEditFromInfo(editingNode)) {
+      updateHeaderEditAction(editingNode);
+      return false;
+    }
+
     close();
 
     if (editingNode) {
       wuwei.edit.open(editingNode);
+      return true;
     }
+    return false;
   }
 
   function widen() {
@@ -1052,6 +1301,14 @@ wuwei.info = wuwei.info || {};
       wuwei.info.video.initModule();
     }
 
+    if (wuwei.info.audio && typeof wuwei.info.audio.initModule === 'function') {
+      wuwei.info.audio.initModule();
+    }
+
+    if (wuwei.info.image && typeof wuwei.info.image.initModule === 'function') {
+      wuwei.info.image.initModule();
+    }
+
     if (wuwei.info.uploaded && typeof wuwei.info.uploaded.initModule === 'function') {
       wuwei.info.uploaded.initModule();
     }
@@ -1060,8 +1317,8 @@ wuwei.info = wuwei.info || {};
       wuwei.info.timeline.initModule();
     }
 
-    if (wuwei.info.contents && typeof wuwei.info.contents.initModule === 'function') {
-      wuwei.info.contents.initModule();
+    if (wuwei.info.viewpoint && typeof wuwei.info.viewpoint.initModule === 'function') {
+      wuwei.info.viewpoint.initModule();
     }
 
     document.addEventListener('click', function (ev) {
@@ -1085,16 +1342,24 @@ wuwei.info = wuwei.info || {};
       if (editBtn) {
         ev.preventDefault();
         ev.stopPropagation();
-        editOpen();
+        if (editBtn.classList.contains('is-visible') && editBtn.style.display !== 'none') {
+          editOpen();
+        }
         return;
       }
     }, true);
   }
 
   ns.open = open;
+  ns.closeEditPaneForInfo = closeEditPaneForInfo;
+  ns.showInfoPane = showInfoPane;
   ns.close = close;
   ns.hideInformationMark = hideInformationMark;
   ns.editOpen = editOpen;
+  ns.setInfoEditTarget = setInfoEditTarget;
+  ns.updateHeaderEditAction = updateHeaderEditAction;
+  ns.openAdmin = openAdmin;
+  ns.canOpenAdminPane = canOpenAdminPane;
   ns.getDisplayedContentTarget = function () {
     return stateMap.displayedContentTarget;
   };

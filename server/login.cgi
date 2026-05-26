@@ -50,6 +50,8 @@ export PATH=".:./bin:$(command -p getconf PATH)${PATH+:}${PATH-}"
 export UNIX_STD=2003
 
 Tmp="/tmp/${0##*/}.$$"
+AUTHENTICATED_DEFAULT_ROLE=""
+FAILED_LOGIN_ROLE="guest"
 
 trim(){ printf '%s' "$1" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'; }
 
@@ -102,7 +104,9 @@ fail_json() {
   printf "Content-Type: application/json\r\n"
   emit_cookie_delete
   printf "\r\n"
-  printf '{ "error": "%s" }\n' "$(json_escape "$msg")"
+  printf '{"error":"%s","login":"","user_id":"","name":"","role":"%s"}\n' \
+    "$(json_escape "$msg")" \
+    "$(json_escape "$FAILED_LOGIN_ROLE")"
   rm -f "$Tmp"-*
   exit 0
 }
@@ -161,7 +165,10 @@ strd_pw="$(trim "$strd_pw")"
 [ -z "$strd_pw" ] && fail_json "LOGIN FAILED (no stored password)"
 
 user_name=$(awk -v id="$id" '$1 == id {print $3; exit}' "$user_dir/member.name")
+user_name="$(trim "$user_name")"
 user_role=$(awk -v id="$id" '$1 == id {print $4; exit}' "$user_dir/member.name")
+user_role="$(trim "$user_role")"
+[ -z "$user_role" ] && user_role="$AUTHENTICATED_DEFAULT_ROLE"
 
 if [ "_${ntrd_pw}_" != "_${strd_pw}_" ]; then
   fail_json "LOGIN FAILED"

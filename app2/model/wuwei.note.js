@@ -97,11 +97,11 @@ wuwei.note = (function () {
     return out;
   }
 
-  function normalizeCollaboration(collaboration) {
-    if (wuwei.collab && typeof wuwei.collab.normalizeMetadata === 'function') {
-      return wuwei.collab.normalizeMetadata(collaboration);
+  function normalizeJoint(joint) {
+    if (wuwei.joint && typeof wuwei.joint.normalizeMetadata === 'function') {
+      return wuwei.joint.normalizeMetadata(joint);
     }
-    var src = (collaboration && typeof collaboration === 'object') ? collaboration : {};
+    var src = (joint && typeof joint === 'object') ? joint : {};
     var revision = Number(src.revision);
     return {
       enabled: !!src.enabled,
@@ -121,17 +121,79 @@ wuwei.note = (function () {
     };
   }
 
-  function normalizeCollabNoteState(param) {
-    var src = (param && typeof param === 'object') ? param : {};
-    var raw = String(src.collabNoteState || '').toLowerCase();
+  function normalizeOrigin(origin, noteState) {
+    var src = (origin && typeof origin === 'object') ? origin : {};
+    var out = {};
+    var stateValue = String(noteState || '').toLowerCase();
+    var keys = [
+      'type',
+      'source',
+      'sourceNoteId',
+      'sourceTeamId',
+      'sourcePackageId',
+      'importedBy',
+      'importedAt',
+      'createdBy',
+      'createdAt',
+      'savedAs',
+      'savedAt'
+    ];
+
+    keys.forEach(function (key) {
+      if (typeof src[key] !== 'undefined' && src[key] !== null && String(src[key]) !== '') {
+        out[key] = String(src[key]);
+      }
+    });
+
+    if (src.originalOrigin && typeof src.originalOrigin === 'object') {
+      out.originalOrigin = util.clone(src.originalOrigin);
+    }
+
+    if (!out.type && stateValue === 'imported') {
+      out.type = 'import';
+    }
+    if (!out.source && stateValue === 'imported') {
+      out.source = 'export-package';
+    }
+    if (!out.type && stateValue === 'team') {
+      out.type = 'team';
+    }
+    if (!out.source && stateValue === 'team') {
+      out.source = 'team-note';
+    }
+
+    return Object.keys(out).length ? out : undefined;
+  }
+
+  function originIndicatesImport(src) {
+    var origin = (src && src.origin && typeof src.origin === 'object') ? src.origin : {};
+    var type = String(origin.type || '').toLowerCase();
+    var source = String(origin.source || '').toLowerCase();
+    return type === 'import' || source === 'export-package';
+  }
+
+  function originIndicatesTeam(src) {
+    var origin = (src && src.origin && typeof src.origin === 'object') ? src.origin : {};
+    var type = String(origin.type || '').toLowerCase();
+    var source = String(origin.source || '').toLowerCase();
+    return type === 'team' || source === 'team-note';
+  }
+
+  function normalizeJointNoteState(param) {
+    var src = param || {};
+    var raw = String(src.jointNoteState || src.collabNoteState || '').toLowerCase();
     var exchange = normalizeExchange(src.exchange);
-    var collaboration = normalizeCollaboration(src.collaboration);
+    var joint = normalizeJoint(src.joint || src.collaboration);
     var createdBy = String(src.audit && src.audit.createdBy || '');
     var uid = String(state.currentUser && state.currentUser.user_id || '');
+
     if (/^(own|imported|team)$/.test(raw)) {
       return raw;
     }
-    if (String(src.note_scope || '').toLowerCase() === 'team' || collaboration.enabled) {
+    if (originIndicatesImport(src)) {
+      return 'imported';
+    }
+    if (String(src.note_scope || '').toLowerCase() === 'team' || joint.enabled || originIndicatesTeam(src)) {
       return 'team';
     }
     if (exchange.imported || exchange.mode === 'imported' || exchange.source === 'import') {
@@ -149,6 +211,158 @@ wuwei.note = (function () {
       return 'team';
     }
     return 'personal';
+  }
+
+  function isTeamJointNoteForSave(note) {
+    var src = note || {};
+    var noteState = String(src.jointNoteState || src.collabNoteState || '').toLowerCase();
+    var noteScope = String(src.note_scope || '').toLowerCase();
+    var origin = (src.origin && typeof src.origin === 'object') ? src.origin : {};
+    var originType = String(origin.type || '').toLowerCase();
+    var originSource = String(origin.source || '').toLowerCase();
+    var joint = normalizeJoint(src.joint || src.collaboration);
+
+    if (noteState === 'team') {
+      return true;
+    }
+    if (noteState === 'own' || noteState === 'imported') {
+      return false;
+    }
+    if (originType === 'import' || originSource === 'export-package') {
+      return false;
+    }
+    return !!(
+      noteScope === 'team' ||
+      joint.enabled ||
+      originType === 'team' ||
+      originSource === 'team-note' ||
+      src.team_id
+    );
+  }
+
+  function makePersonalCopyAuditFromTeamNote(note) {
+    var currentUser = state.currentUser || {};
+    var sourceAudit = normalizeAudit(note && note.audit, currentUser);
+    var updated = util.clone(sourceAudit) || {};
+
+    /*
+     * A personal save of a team note is a derived personal copy.
+     * Keep the original team note creation history, but record this save as the
+     * latest modification by the current user.
+     */
+    updated.createdBy = sourceAudit.createdBy || currentUser.user_id || common.TEMP_OWNER_ID;
+    updated.createdAt = sourceAudit.createdAt || nowIsoString();
+    updated.lastModifiedBy = currentUser.user_id || common.TEMP_OWNER_ID;
+    updated.lastModifiedAt = nowIsoString();
+
+    return updated;
+  }
+
+  function resetNoteIdentityForPersonalSave(note) {
+    var previousNoteId = String(note && note.note_id || '');
+    var previousTeamId = String(note && note.team_id || '');
+    var previousOrigin = (note && note.origin && typeof note.origin === 'object') ? util.clone(note.origin) : null;
+    var newId = util.createUuid();
+
+    note.note_id = newId;
+    note.note_uuid = newId;
+
+    /*
+     * note_key is a storage location, not the logical identity of this new
+     * personal copy.  Delete any loaded/list-note key aliases so save-note stores
+     * this as a different note under the current user's note area.
+     */
+    delete note.note_key;
+    delete note.key;
+    delete note.dir;
+    delete note.path;
+    delete note.notePath;
+
+    note.joint = normalizeJoint(null);
+    note.jointNoteState = 'own';
+    note.note_scope = 'personal';
+    note.team_id = '';
+
+    delete note.collaboration;
+    delete note.collabNoteState;
+
+    note.origin = normalizeOrigin({
+      type: 'personal-copy',
+      source: 'team-note',
+      sourceNoteId: previousNoteId,
+      sourceTeamId: previousTeamId,
+      originalOrigin: previousOrigin || undefined,
+      savedAs: newId,
+      savedAt: nowIsoString()
+    }, 'own');
+
+    note.exchange = normalizeExchange({
+      imported: false,
+      mode: 'personal-copy',
+      source: 'team-note'
+    });
+    note.exchange.sourceNoteId = previousNoteId;
+    if (previousTeamId) {
+      note.exchange.sourceTeamId = previousTeamId;
+    }
+    if (previousOrigin) {
+      note.exchange.sourceOrigin = previousOrigin;
+    }
+
+    /*
+     * The saved note is a personal copy derived from the team note.
+     * Preserve the note-level original createdBy / createdAt, and record this
+     * save operation as lastModifiedBy / lastModifiedAt of the current user.
+     * Node/link/group audit.createdBy values are not rewritten; they continue
+     * to show the original creators inside the note.
+     */
+    note.audit = makePersonalCopyAuditFromTeamNote(note);
+    note._convertedFromTeamNote = {
+      sourceNoteId: previousNoteId,
+      sourceTeamId: previousTeamId,
+      savedAs: newId,
+      savedAt: nowIsoString()
+    };
+
+    return note._convertedFromTeamNote;
+  }
+
+  function ensurePersonalCopyBeforeSave(actionName) {
+    var action = actionName || 'save-note';
+
+    if (action !== 'save-note') {
+      return null;
+    }
+    if (!current || !isTeamJointNoteForSave(current)) {
+      return null;
+    }
+
+    return resetNoteIdentityForPersonalSave(current);
+  }
+
+  function applyPersonalNoteSavePolicy(note) {
+    var noteState = normalizeJointNoteState(note);
+
+    if (noteState === 'team') {
+      return note;
+    }
+
+    note.note_scope = 'personal';
+    note.jointNoteState = noteState === 'imported' ? 'imported' : 'own';
+
+    delete note.team_id;
+    note.origin = normalizeOrigin(note.origin, note.jointNoteState);
+    if (!note.origin) {
+      delete note.origin;
+    }
+    delete note.collaboration;
+    delete note.collabNoteState;
+
+    if (note.joint && note.joint.enabled !== true) {
+      delete note.joint;
+    }
+
+    return note;
   }
 
   function normalizeRecordState(src) {
@@ -401,17 +615,247 @@ wuwei.note = (function () {
     return resource;
   }
 
+  function normalizedResourceKindForSave(src) {
+    var kind = String(src && src.kind || '').toLowerCase();
+    var mediaKind = String(src && src.media && src.media.kind || '').toLowerCase();
+    var extKind = util.getDocumentKindByExtension
+      ? util.getDocumentKindByExtension(null, src || {}, (src && (src.uri || src.canonicalUri)) || '')
+      : '';
+
+    if (/^(document|video|audio|image|other)$/.test(kind)) {
+      return kind;
+    }
+    if (/^(document|video|audio|image|other)$/.test(mediaKind)) {
+      return mediaKind;
+    }
+    if (extKind === 'image' || extKind === 'video' || extKind === 'audio') {
+      return extKind;
+    }
+    if (/^(pdf|office|html|text)$/.test(extKind)) {
+      return 'document';
+    }
+    return 'other';
+  }
+
+  function normalizedResourceSourceForSave(src) {
+    var source = String(src && src.source || '').toLowerCase();
+    var kind = String(src && src.kind || '').toLowerCase();
+    var storage = src && src.storage && typeof src.storage === 'object' ? src.storage : {};
+    var files = Array.isArray(storage.files) ? storage.files : [];
+    var uri = String(src && (src.uri || src.canonicalUri) || '');
+
+    if (/^(upload|remote|generated|embedded)$/.test(source)) {
+      return source;
+    }
+    if (kind === 'upload' || files.some(function (file) { return String(file && file.area || '').toLowerCase() === 'upload'; })) {
+      return 'upload';
+    }
+    if (/^https?:\/\//i.test(uri)) {
+      return 'remote';
+    }
+    return 'embedded';
+  }
+
+  function isRemoteResourceForSave(src, savedSource) {
+    var original = src && src.original && typeof src.original === 'object' ? src.original : {};
+    var text = String(
+      (original && (original.url || original.canonicalUrl)) ||
+      (src && (src.uri || src.canonicalUri || src.url || src.sourceUrl)) ||
+      ''
+    );
+    return String(savedSource || '').toLowerCase() === 'remote' ||
+      String(original.type || '').toLowerCase() === 'remote' ||
+      /^https?:\/\//i.test(text);
+  }
+
+  function firstRemoteUrlForSave(src) {
+    return remoteUrlCandidateForSave(src);
+  }
+
+  function normalizeOriginalForSave(src, savedSource, uri, canonicalUri) {
+    var original = src && src.original && typeof src.original === 'object' ? src.original : {};
+    var identifiers = Array.isArray(original.identifiers) ? util.clone(original.identifiers) : [];
+    var remote = isRemoteResourceForSave(src, savedSource);
+    var url = String(firstRemoteUrlForSave(src) || uri || canonicalUri || '').trim();
+    var canonical = String(original.canonicalUrl || canonicalUri || url || '').trim();
+
+    if (remote) {
+      return {
+        url: url,
+        canonicalUrl: canonical || url,
+        type: 'remote',
+        accessedAt: String(original.accessedAt || ''),
+        identifiers: identifiers
+      };
+    }
+
+    if (String(savedSource || '').toLowerCase() === 'upload') {
+      return {
+        url: '',
+        canonicalUrl: '',
+        type: 'upload',
+        storageRole: String(original.storageRole || 'original')
+      };
+    }
+
+    if (original && Object.keys(original).length) {
+      return util.clone(original);
+    }
+    return undefined;
+  }
+
+  function remoteUrlCandidateForSave(src) {
+    var original = src && src.original && typeof src.original === 'object' ? src.original : {};
+    var origin = src && src.origin && typeof src.origin === 'object' ? src.origin : {};
+    var media = src && src.media && typeof src.media === 'object' ? src.media : {};
+    var candidates = [
+      original.url,
+      original.sourceUrl,
+      src && src.uri,
+      src && src.canonicalUri,
+      original.canonicalUrl,
+      origin.sourceUrl,
+      origin.canonicalUrl,
+      media.url,
+      media.src,
+      media.embedUrl,
+      media.sourceUrl,
+      src && src.url,
+      src && src.sourceUrl,
+      src && src.snapshotSources && src.snapshotSources.originalUri,
+      src && src.snapshotSources && src.snapshotSources.previewUri
+    ];
+    var provider = String(media.provider || src && src.videoKind || '').toLowerCase();
+    var videoId = String(media.videoId || media.id || src && src.videoId || '').trim();
+    var i, value;
+
+    for (i = 0; i < candidates.length; i += 1) {
+      value = String(candidates[i] || '').trim();
+      if (/^https?:\/\//i.test(value)) {
+        return value;
+      }
+    }
+    if (provider === 'vimeo' && videoId) {
+      return 'https://vimeo.com/' + videoId;
+    }
+    if (provider === 'youtube' && videoId) {
+      return 'https://www.youtube.com/watch?v=' + videoId;
+    }
+    for (i = 0; i < candidates.length; i += 1) {
+      value = String(candidates[i] || '').trim();
+      if (value) {
+        return value;
+      }
+    }
+    return '';
+  }
+
+  function synchronizeRemoteResourceForSave(resource) {
+    var url;
+    var original;
+    var source;
+    if (!resource || typeof resource !== 'object') {
+      return resource;
+    }
+    source = String(resource.source || '').toLowerCase();
+    url = remoteUrlCandidateForSave(resource);
+    if (source !== 'remote' && !(resource.original && String(resource.original.type || '').toLowerCase() === 'remote') && !/^https?:\/\//i.test(url)) {
+      return resource;
+    }
+    resource.source = 'remote';
+    original = (resource.original && typeof resource.original === 'object') ? resource.original : {};
+    original.type = 'remote';
+    original.url = String(original.url || url || resource.uri || resource.canonicalUri || '');
+    original.canonicalUrl = String(original.canonicalUrl || resource.canonicalUri || original.url || url || '');
+    if (!Array.isArray(original.identifiers)) {
+      original.identifiers = [];
+    }
+    resource.original = original;
+    if (!resource.uri && original.url) {
+      resource.uri = original.url;
+    }
+    if (!resource.canonicalUri && (original.canonicalUrl || original.url)) {
+      resource.canonicalUri = original.canonicalUrl || original.url;
+    }
+    if (resource.kind === 'video' && !resource.videoKind) {
+      if (/vimeo\.com|player\.vimeo\.com/i.test(original.url || resource.uri || '')) {
+        resource.videoKind = 'vimeo';
+      }
+      else if (/youtube\.com|youtu\.be/i.test(original.url || resource.uri || '')) {
+        resource.videoKind = 'youtube';
+      }
+    }
+    return resource;
+  }
+
+  function synchronizeRemoteContentUrlsForSave(note) {
+    var resources = Array.isArray(note && note.resources) ? note.resources : [];
+    var byId = {};
+    var pages = pagesAsArray(note || {});
+
+    resources.forEach(function (resource) {
+      if (resource && resource.id) {
+        synchronizeRemoteResourceForSave(resource);
+        byId[resource.id] = resource;
+      }
+    });
+
+    pages.forEach(function (page) {
+      (Array.isArray(page && page.nodes) ? page.nodes : []).forEach(function (node) {
+        var resource;
+        var found;
+        if (!node || node.type !== 'Content') {
+          return;
+        }
+        resource = (node.resource && typeof node.resource === 'object') ? node.resource : null;
+        if (!resource && node.resourceRef && byId[node.resourceRef]) {
+          resource = util.clone(byId[node.resourceRef]);
+          node.resource = resource;
+        }
+        if (!resource) {
+          return;
+        }
+        if (node.resourceRef && byId[node.resourceRef]) {
+          found = byId[node.resourceRef];
+          if (!remoteUrlCandidateForSave(resource) && remoteUrlCandidateForSave(found)) {
+            Object.assign(resource, util.clone(found));
+          }
+        }
+        synchronizeRemoteResourceForSave(resource);
+        if (resource.id) {
+          found = byId[resource.id];
+          if (found) {
+            Object.assign(found, normalizeResourceDefinition(resource));
+          }
+          else {
+            resources.push(normalizeResourceDefinition(resource));
+            byId[resource.id] = resources[resources.length - 1];
+          }
+        }
+      });
+    });
+    note.resources = resources;
+  }
+
   function normalizeResourceDefinition(resource) {
     var src = (resource && typeof resource === 'object') ? resource : {};
+    synchronizeRemoteResourceForSave(src);
     var rights = (src.rights && typeof src.rights === 'object') ? src.rights : {};
+    var savedKind = normalizedResourceKindForSave(src);
+    var savedSource = normalizedResourceSourceForSave(src);
+    var remoteUrl = firstRemoteUrlForSave(src);
+    var savedUri = normalizeStoredResourceUri(src.uri || src.canonicalUri || remoteUrl || '', 'upload');
+    var savedCanonicalUri = normalizeStoredResourceUri(src.canonicalUri || src.uri || remoteUrl || '', 'upload');
     var out = {
       id: src.id || util.createUuid(),
-      source: String(src.source || ''),
-      kind: String(src.kind || 'other'),
-      documentKind: String(src.documentKind || ''),
-      videoKind: String(src.videoKind || ''),
-      canonicalUri: normalizeStoredResourceUri(src.canonicalUri || src.uri || '', 'upload'),
-      uri: normalizeStoredResourceUri(src.uri || src.canonicalUri || '', 'upload'),
+      source: savedSource,
+      kind: savedKind,
+      documentKind: savedKind === 'document' ? String(src.documentKind || '') : '',
+      videoKind: savedKind === 'video' ? String(src.videoKind || '') : '',
+      audioKind: savedKind === 'audio' ? String(src.audioKind || '') : '',
+      imageKind: savedKind === 'image' ? String(src.imageKind || '') : '',
+      canonicalUri: savedCanonicalUri,
+      uri: savedUri,
       title: String(src.title || ''),
       mimeType: String(src.mimeType || 'text/plain'),
       thumbnailUri: normalizeStoredResourceUri(src.thumbnailUri || '', 'thumbnail'),
@@ -430,6 +874,16 @@ wuwei.note = (function () {
       audit: normalizeAudit(src.audit, state.currentUser)
     };
 
+    out.original = normalizeOriginalForSave(src, savedSource, out.uri, out.canonicalUri);
+    if (out.original && out.original.type === 'remote') {
+      if (!out.uri && out.original.url) {
+        out.uri = out.original.url;
+      }
+      if (!out.canonicalUri && (out.original.canonicalUrl || out.original.url)) {
+        out.canonicalUri = out.original.canonicalUrl || out.original.url;
+      }
+    }
+
     if (!out.thumbnailUri) {
       out.thumbnailUri = storedThumbnailFromStorage(out.storage);
     }
@@ -441,6 +895,10 @@ wuwei.note = (function () {
       if (!out.viewer.embed.thumbnailUri) {
         out.viewer.embed.thumbnailUri = out.thumbnailUri || '';
       }
+    }
+    if (out.media && typeof out.media === 'object') {
+      out.media.kind = savedKind;
+      out.media.mimeType = out.media.mimeType || out.mimeType || '';
     }
     if (src.export && typeof src.export === 'object') {
       out.export = util.clone(src.export);
@@ -471,7 +929,11 @@ wuwei.note = (function () {
       resource: clone
     };
     if (wuwei.video && typeof wuwei.video.setVideoSource === 'function') {
-      return wuwei.video.setVideoSource(tempNode, sourceUri);
+      clone = wuwei.video.setVideoSource(tempNode, sourceUri);
+      if (clone) {
+        clone.original = normalizeOriginalForSave(clone, 'remote', clone.uri, clone.canonicalUri);
+      }
+      return clone;
     }
     clone.kind = 'video';
     clone.uri = sourceUri;
@@ -479,6 +941,8 @@ wuwei.note = (function () {
     clone.mimeType = clone.mimeType || 'text/html';
     clone.title = String(clone.title || (node && node.label) || sourceUri || 'Video');
     clone.videoKind = clone.videoKind || '';
+    clone.source = 'remote';
+    clone.original = normalizeOriginalForSave(clone, 'remote', clone.uri, clone.canonicalUri);
     delete clone.storage;
     return clone;
   }
@@ -511,8 +975,74 @@ wuwei.note = (function () {
     return true;
   }
 
+  function textAnchorToAlign(anchor) {
+    if (anchor === 'start') {
+      return 'left';
+    }
+    if (anchor === 'end') {
+      return 'right';
+    }
+    return 'center';
+  }
+
+  function runtimeStyleFallbackForSave(node) {
+    var style, line, font;
+
+    if (!node || typeof node !== 'object') {
+      return node;
+    }
+
+    style = (node.style && typeof node.style === 'object') ? node.style : {};
+    line = (style.line && typeof style.line === 'object') ? style.line : {};
+    font = (style.font && typeof style.font === 'object') ? style.font : {};
+
+    if (!style.fill && node.color) {
+      style.fill = node.color;
+    }
+    if (node.outline || node.outlineWidth) {
+      style.line = line;
+      line.kind = line.kind || 'SOLID';
+      line.color = line.color || node.outline || '#d7d8d9';
+      line.width = Number.isFinite(Number(line.width)) ? Number(line.width) :
+        (Number.isFinite(Number(node.outlineWidth)) ? Number(node.outlineWidth) : 1);
+    }
+    if (node.font && typeof node.font === 'object') {
+      style.font = font;
+      font.family = font.family || node.font.family || 'sans-serif';
+      font.size = font.size || node.font.size || 14;
+      font.color = font.color || node.font.color || '#303030';
+      font.align = font.align || textAnchorToAlign(node.font['text-anchor']);
+    }
+    node.style = style;
+    return node;
+  }
+
+  function stripNodeRuntimeStyleFields(node) {
+    if (!node || typeof node !== 'object') {
+      return node;
+    }
+    delete node.color;
+    delete node.outline;
+    delete node.outlineWidth;
+    delete node.font;
+    return node;
+  }
+
+  function expandNodeRuntimeStyle(node) {
+    if (wuwei && wuwei.style &&
+        typeof wuwei.style.expandNodeRuntimeStyle === 'function') {
+      return wuwei.style.expandNodeRuntimeStyle(node);
+    }
+    if (wuwei && wuwei.note && wuwei.note.v2 &&
+        typeof wuwei.note.v2.expandNodeRuntimeStyle === 'function') {
+      return wuwei.note.v2.expandNodeRuntimeStyle(node);
+    }
+    return node;
+  }
+
   function normalizeNode(node, resourceById) {
     var src = node || {};
+    assertNoLegacyContentsRuntime(src, 'wuwei.note.normalizeNode');
     var shape = src.shape || (src.type === 'Memo' ? 'MEMO' : 'RECTANGLE');
     var size = src.size || {};
     var out = {
@@ -604,12 +1134,12 @@ wuwei.note = (function () {
       out.groupRef = src.groupRef;
     }
 
-    if (src.type === 'PageMarker' || src.topicKind === 'contents-page') {
+    if (src.type === 'PageMarker' || src.topicKind === 'viewpoint-page') {
       out.type = 'PageMarker';
-      out.topicKind = 'contents-page';
+      out.topicKind = 'viewpoint-page';
       out.groupRef = out.groupRef || '';
-      if (typeof src.contentsRef === 'string' && src.contentsRef) {
-        out.contentsRef = src.contentsRef;
+      if (typeof src.viewpointRef === 'string' && src.viewpointRef) {
+        out.viewpointRef = src.viewpointRef;
       }
       if (typeof src.documentRef === 'string' && src.documentRef) {
         out.documentRef = src.documentRef;
@@ -659,11 +1189,14 @@ wuwei.note = (function () {
       out.topicKind = src.topicKind;
     }
 
+    expandNodeRuntimeStyle(out);
+
     return model.NodeFactory(out);
   }
 
   function normalizeLink(link) {
     var src = link || {};
+    assertNoLegacyContentsRuntime(src, 'wuwei.note.normalizeLink');
     var out = {
       id: src.id || util.createUuid(),
       type: 'Link',
@@ -703,6 +1236,47 @@ wuwei.note = (function () {
     return Number.isFinite(n) ? n : fallback;
   }
 
+  function isLegacyContentsName(value) {
+    return String(value || '').trim().toLowerCase() === 'contents';
+  }
+
+  function isLegacyContentsGroupType(value) {
+    value = String(value || '').trim();
+    return value === 'contents' || value === 'contentsGroup';
+  }
+
+  function hasLegacyContentsLinkToken(src) {
+    return !!(src && (
+      src.groupType === 'contentsAxis' ||
+      src.linkType === 'contents-axis' ||
+      src.relation === 'contents' ||
+      src.role === 'contents-entry' ||
+      src.role === 'contents-first-entry'
+    ));
+  }
+
+  function assertNoLegacyContentsRuntime(value, context) {
+    if (!value) {
+      return;
+    }
+    if (isLegacyContentsGroupType(value.type) || isLegacyContentsGroupType(value.kind)) {
+      throw new Error((context || 'WuWei runtime') + ': legacy Contents group remained after wuwei.note.v2 normalization.');
+    }
+    if (value.topicKind === 'contents-representative' ||
+        value.topicKind === 'contents-page' ||
+        value.representativeType === 'contents' ||
+        value.representativeType === 'contentsGroup' ||
+        value.axisRole === 'contents-entry') {
+      throw new Error((context || 'WuWei runtime') + ': legacy Contents node remained after wuwei.note.v2 normalization.');
+    }
+    if (hasLegacyContentsLinkToken(value)) {
+      throw new Error((context || 'WuWei runtime') + ': legacy Contents link remained after wuwei.note.v2 normalization.');
+    }
+    if (isLegacyContentsName(value.name) && (value.type === 'viewpoint' || value.type === 'viewpointGroup')) {
+      throw new Error((context || 'WuWei runtime') + ': legacy Contents group name remained after wuwei.note.v2 normalization.');
+    }
+  }
+
   function noteGroupStyleDefaults(type) {
     var style = (common && common.defaultStyle && common.defaultStyle.group) || {};
     var typed = style[type] || {};
@@ -734,6 +1308,10 @@ wuwei.note = (function () {
     var rawType = src.type || 'simple';
     var type = rawType;
 
+    if (isLegacyContentsGroupType(rawType) || isLegacyContentsGroupType(src.kind) || isLegacyContentsName(src.name) && rawType === 'viewpoint') {
+      assertNoLegacyContentsRuntime(src, 'wuwei.note.normalizeGroup');
+    }
+
     if (rawType === 'simpleGroup') {
       type = 'simple';
     }
@@ -752,8 +1330,11 @@ wuwei.note = (function () {
     else if (rawType === 'timelineGroup') {
       type = 'timeline';
     }
-    else if (rawType === 'contentsGroup') {
-      type = 'contents';
+    else if (rawType === 'viewpointGroup') {
+      type = 'viewpoint';
+    }
+    else if (isLegacyContentsGroupType(rawType)) {
+      assertNoLegacyContentsRuntime(src, 'wuwei.note.normalizeGroup');
     }
 
     var defaultSpine = noteGroupStyleDefaults(type);
@@ -763,7 +1344,7 @@ wuwei.note = (function () {
       return Number.isFinite(Number(spine[key])) ? Number(spine[key]) : Number(defaultSpine[key] || baseSpinePadding);
     }
 
-    if (type === 'contents' && !members.length && entries.length) {
+    if (type === 'viewpoint' && !members.length && entries.length) {
       members = entries.map(function (entry, index) {
         return {
           nodeId: entry && (entry.nodeId || entry.id) || '',
@@ -779,6 +1360,7 @@ wuwei.note = (function () {
       id: src.id || util.createUuid(),
       type: type,
       name: src.name || '',
+      label: src.label || undefined,
       description: src.description && typeof src.description === 'object'
         ? util.clone(src.description)
         : { format: 'plain', body: String(src.description || '') },
@@ -817,7 +1399,7 @@ wuwei.note = (function () {
       }).filter(function (m) {
         return !!m.nodeId;
       }),
-      entries: (type === 'contents') ? entries.map(function (entry) {
+      entries: (type === 'viewpoint') ? entries.map(function (entry) {
         var outEntry = {
           role: entry && entry.role || 'entry',
           nodeId: entry && (entry.nodeId || entry.id) || '',
@@ -978,7 +1560,11 @@ wuwei.note = (function () {
      */
     if (wuwei && wuwei.note && wuwei.note.v2 &&
         typeof wuwei.note.v2.normalize === 'function') {
-      return wuwei.note.v2.normalize(note, { inPlace: false });
+      var runtimeNote = wuwei.note.v2.normalize(note, { inPlace: false });
+      if (note && note.origin && !runtimeNote.origin) {
+        runtimeNote.origin = util.clone(note.origin);
+      }
+      return runtimeNote;
     }
     return note;
   }
@@ -986,7 +1572,11 @@ wuwei.note = (function () {
   function materializeNoteForV2Storage(note) {
     if (wuwei && wuwei.note && wuwei.note.v2 &&
         typeof wuwei.note.v2.normalize === 'function') {
-      return wuwei.note.v2.normalize(note, { inPlace: false });
+      var storageNote = wuwei.note.v2.normalize(note, { inPlace: false });
+      if (note && note.origin && !storageNote.origin) {
+        storageNote.origin = util.clone(note.origin);
+      }
+      return storageNote;
     }
     return note;
   }
@@ -1016,11 +1606,12 @@ wuwei.note = (function () {
       pages: pages,
       resources: resources,
       thumbnail: (typeof src.thumbnail === 'undefined') ? '' : src.thumbnail,
-      collaboration: normalizeCollaboration(src.collaboration),
+      joint: normalizeJoint(src.joint || src.collaboration),
       exchange: normalizeExchange(src.exchange),
-      collabNoteState: normalizeCollabNoteState(src),
-      note_scope: normalizeNoteScope(src.note_scope, normalizeCollabNoteState(src)),
+      jointNoteState: normalizeJointNoteState(src),
+      note_scope: normalizeNoteScope(src.note_scope, normalizeJointNoteState(src)),
       team_id: String(src.team_id || ''),
+      origin: normalizeOrigin(src.origin, normalizeJointNoteState(src)),
       audit: normalizeAudit(src.audit, state.currentUser)
     });
   }
@@ -1092,7 +1683,7 @@ wuwei.note = (function () {
       return null;
     }
     return {
-      kind: 'upload',
+      source: 'upload',
       id: id,
       date: date,
       file: originalFile || ''
@@ -1120,6 +1711,8 @@ wuwei.note = (function () {
     delete out.checked;
     delete out.transparency;
     delete out.filterout;
+    runtimeStyleFallbackForSave(out);
+    stripNodeRuntimeStyleFields(out);
     return out;
   }
 
@@ -1132,13 +1725,13 @@ wuwei.note = (function () {
         delete out.style.label;
       }
     }
-    if (out.topicKind === 'contents-page' || out.type === 'PageMarker') {
+    if (out.topicKind === 'viewpoint-page' || out.type === 'PageMarker') {
       out = {
         id: out.id,
         type: 'PageMarker',
-        topicKind: 'contents-page',
+        topicKind: 'viewpoint-page',
         groupRef: out.groupRef || '',
-        contentsRef: out.contentsRef || out.groupRef || '',
+        viewpointRef: out.viewpointRef || out.groupRef || '',
         documentRef: out.documentRef || '',
         mediaRef: out.mediaRef || out.documentRef || '',
         axisRole: out.axisRole || 'entry',
@@ -1151,10 +1744,6 @@ wuwei.note = (function () {
         y: Number.isFinite(Number(out.y)) ? Number(out.y) : 0,
         shape: out.shape || 'CIRCLE',
         size: out.size,
-        color: out.color,
-        outline: out.outline,
-        outlineWidth: out.outlineWidth,
-        font: out.font,
         linkCount: Number.isFinite(Number(out.linkCount)) ? Number(out.linkCount) : 0,
         style: out.style,
         state: out.state || 'active',
@@ -1195,7 +1784,7 @@ wuwei.note = (function () {
     return (typeof member === 'string') ? member : (member && (member.nodeId || member.id)) || '';
   }
 
-  function buildContentsEntriesForSave(group, page) {
+  function buildViewpointEntriesForSave(group, page) {
     var nodes = (page && Array.isArray(page.nodes)) ? page.nodes : [];
     var byId = {};
     nodes.forEach(function (node) {
@@ -1206,7 +1795,7 @@ wuwei.note = (function () {
     return (Array.isArray(group.members) ? group.members : []).map(function (member) {
       var id = memberNodeId(member);
       var node = id ? byId[id] : null;
-      if (!node || node.topicKind !== 'contents-page') {
+      if (!node || node.topicKind !== 'viewpoint-page') {
         return null;
       }
       var entry = {
@@ -1254,9 +1843,9 @@ wuwei.note = (function () {
     delete out.pseudoLinkId;
     delete out.strokeColor;
     delete out.strokeWidth;
-    if (out.type === 'contents') {
+    if (out.type === 'viewpoint') {
       delete out.contents;
-      out.entries = buildContentsEntriesForSave(out, page);
+      out.entries = buildViewpointEntriesForSave(out, page);
     }
     if (Array.isArray(out.members)) {
       out.members = out.members.map(function (member) {
@@ -1295,11 +1884,12 @@ wuwei.note = (function () {
       this.currentPage = this.page.id;
       this.resources = cloneArray(param.resources).map(normalizeResourceDefinition);
       this.thumbnail = (typeof param.thumbnail === 'undefined') ? '' : param.thumbnail;
-      this.collaboration = normalizeCollaboration(param.collaboration);
+      this.joint = normalizeJoint(param.joint || param.collaboration);
       this.exchange = normalizeExchange(param.exchange);
-      this.collabNoteState = normalizeCollabNoteState(param);
-      this.note_scope = normalizeNoteScope(param.note_scope, this.collabNoteState);
+      this.jointNoteState = normalizeJointNoteState(param);
+      this.note_scope = normalizeNoteScope(param.note_scope, this.jointNoteState);
       this.team_id = String(param.team_id || '');
+      this.origin = normalizeOrigin(param.origin, this.jointNoteState);
       const portable = (param.bundle && typeof param.bundle === 'object')
         ? param.bundle
         : ((param.portable && typeof param.portable === 'object')
@@ -1325,6 +1915,70 @@ wuwei.note = (function () {
     param.pages = pages;
     param.currentPage = (resolveCurrentPage(pages, param.currentPage) || pages[0]).id;
     return new Note(param);
+  }
+
+  function translateLabel(key) {
+    return (wuwei && wuwei.nls && typeof wuwei.nls.translate === 'function')
+      ? wuwei.nls.translate(key)
+      : key;
+  }
+
+  function isJointNoteForDisplay(note) {
+    var src = note || common.current || {};
+    var noteState = String(src.jointNoteState || src.collabNoteState || '').toLowerCase();
+    var noteScope = String(src.note_scope || '').toLowerCase();
+    var origin = (src.origin && typeof src.origin === 'object') ? src.origin : {};
+    var originType = String(origin.type || '').toLowerCase();
+    var originSource = String(origin.source || '').toLowerCase();
+    var joint = (src.joint && typeof src.joint === 'object') ? src.joint :
+      ((src.collaboration && typeof src.collaboration === 'object') ? src.collaboration : {});
+
+    if (noteState === 'team') {
+      return true;
+    }
+    if (noteState === 'own' || noteState === 'imported') {
+      return false;
+    }
+    if (originType === 'import' || originSource === 'export-package') {
+      return false;
+    }
+
+    return !!(
+      noteScope === 'team' ||
+      joint.enabled === true ||
+      originType === 'team' ||
+      originSource === 'team-note' ||
+      src.team_id
+    );
+  }
+
+  function getNoteDisplayName(note) {
+    var src = note || common.current || {};
+    var base = String(src.note_name || '');
+    var suffix;
+
+    if (!isJointNoteForDisplay(src)) {
+      return base;
+    }
+
+    suffix = '(' + translateLabel('Joint Note') + ')';
+    if (base.slice(-suffix.length) === suffix) {
+      return base;
+    }
+    return base + suffix;
+  }
+
+  function updateNoteNameDisplay(note) {
+    var src = note || common.current || {};
+    var noteName = document.querySelector('#note_name .name');
+    var noteDesc = document.querySelector('#note_name .description');
+
+    if (noteName) {
+      noteName.textContent = getNoteDisplayName(src);
+    }
+    if (noteDesc) {
+      noteDesc.textContent = src.description || '';
+    }
   }
 
   function newNote() {
@@ -1354,10 +2008,7 @@ wuwei.note = (function () {
     setGraphFromCurrentPage(firstPage.id);
     updateCanvasTransform(util.getPageTransform(current.page));
 
-    const noteName = document.querySelector('#note_name .name');
-    const noteDesc = document.querySelector('#note_name .description');
-    if (noteName) { noteName.textContent = ''; }
-    if (noteDesc) { noteDesc.textContent = ''; }
+    updateNoteNameDisplay(current);
     updatePageName(current.page);
 
     return current;
@@ -1377,11 +2028,14 @@ wuwei.note = (function () {
     common.current = current;
     const page = setGraphFromCurrentPage(current.currentPage);
     updateCanvasTransform(util.getPageTransform(page));
+    updateNoteNameDisplay(current);
     return current;
   }
 
   function persistNote(form, actionName) {
     ensureEditableNoteId();
+    ensurePersonalCopyBeforeSave(actionName || 'save-note');
+    synchronizeRemoteContentUrlsForSave(current);
 
     const nameEl = form && form.elements ? form.elements['name'] : null;
     const descEl = form && form.elements ? form.elements['description'] : null;
@@ -1408,13 +2062,16 @@ wuwei.note = (function () {
       currentPage: (current.page && current.page.id) || current.currentPage,
       resources: [],
       pages: [],
-      collaboration: normalizeCollaboration(current.collaboration),
+      joint: normalizeJoint(current.joint || current.collaboration),
       exchange: normalizeExchange(current.exchange),
-      collabNoteState: normalizeCollabNoteState(current),
-      note_scope: normalizeNoteScope(current.note_scope, normalizeCollabNoteState(current)),
+      jointNoteState: normalizeJointNoteState(current),
+      note_scope: normalizeNoteScope(current.note_scope, normalizeJointNoteState(current)),
       team_id: String(current.team_id || ''),
+      origin: normalizeOrigin(current.origin, normalizeJointNoteState(current)),
       audit: normalizeAudit(current.audit, state.currentUser)
     };
+
+    applyPersonalNoteSavePolicy(noteToSave);
 
     pagesAsArray(current).forEach(function (page, index) {
       if (!page) { return; }
@@ -1455,6 +2112,7 @@ wuwei.note = (function () {
 
   function exportNoteText() {
     ensureEditableNoteId();
+    synchronizeRemoteContentUrlsForSave(current);
 
     const currentPageThumbnail = snapshotCurrentPageThumbnail();
     const noteToExport = {
@@ -1466,11 +2124,12 @@ wuwei.note = (function () {
       currentPage: (current.page && current.page.id) || current.currentPage,
       resources: cloneArray(current.resources).map(normalizeResourceDefinition),
       pages: [],
-      collaboration: normalizeCollaboration(current.collaboration),
+      joint: normalizeJoint(current.joint || current.collaboration),
       exchange: normalizeExchange(current.exchange),
-      collabNoteState: normalizeCollabNoteState(current),
-      note_scope: normalizeNoteScope(current.note_scope, normalizeCollabNoteState(current)),
+      jointNoteState: normalizeJointNoteState(current),
+      note_scope: normalizeNoteScope(current.note_scope, normalizeJointNoteState(current)),
       team_id: String(current.team_id || ''),
+      origin: normalizeOrigin(current.origin, normalizeJointNoteState(current)),
       audit: normalizeAudit(current.audit, state.currentUser)
     };
 
@@ -1723,6 +2382,17 @@ wuwei.note = (function () {
     return PageFactory(base);
   }
 
+  function setGraphFromPage(page) {
+    if (!page) {
+      return null;
+    }
+    current = common.current;
+    current.page = page;
+
+    current.currentPage = page.id || current.currentPage;
+    return setGraphFromCurrentPage(current.currentPage);
+  }
+
   function setGraphFromCurrentPage(pageRef) {
     var pp = pageRef;
     // graph 構成は model 側が pseudo group / timeline を含めて管理する。
@@ -1897,6 +2567,12 @@ wuwei.note = (function () {
     return pagesAsArray(current).length + 1;
   }
 
+  /*  function applyPageState(page) {
+      const activePage = setGraphFromPage(page || wuwei.model.getCurrentPage());
+      updateCanvasTransform(util.getPageTransform(activePage));
+      redrawCurrentPage();
+      return activePage;
+    }*/
   function applyPageState(page) {
     const targetPage = page || wuwei.model.getCurrentPage();
     let activePage;
@@ -2187,6 +2863,7 @@ wuwei.note = (function () {
     const span_pp = document.querySelector('#page_name .pp');
     const span_name = document.querySelector('#page_name .name');
     const span_description = document.querySelector('#page_name .description');
+    updateNoteNameDisplay(current);
     if (span_pp) {
       span_pp.textContent = (pagesAsArray(current).length > 1) ? `P.${page.pp}` : '';
     }
@@ -2234,6 +2911,9 @@ wuwei.note = (function () {
     listNote: listNote,
     loadNote: loadNote,
     removeNote: removeNote,
+    isJointNoteForDisplay: isJointNoteForDisplay,
+    getNoteDisplayName: getNoteDisplayName,
+    updateNoteNameDisplay: updateNoteNameDisplay,
     /** Page */
     Page: Page,
     PageFactory: PageFactory,

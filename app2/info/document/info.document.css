@@ -1,0 +1,13 @@
+/**
+ * info.document.css
+ * Document info pane styles.
+ */
+.info-document-actions {
+  margin: 0.5em 0;
+}
+.info-document-frame {
+  width: 100%;
+  min-height: 480px;
+  border: none;
+  overflow: auto;
+}

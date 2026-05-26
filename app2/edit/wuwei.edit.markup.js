@@ -19,18 +19,20 @@ wuwei.edit.markup = (function () {
       <i id="editIcon" class="fas fa-edit fa-lg fa-fw"></i>
       <i id="editSave" class="fas fa-save fa-lg fa-fw"></i>
     </h2>
-    <!-- DISMISS BUTTON -->
-    <a id="editDismiss">
-      <i class="fa fa-times fa-lg fa-fw"></i>
-    </a>
-    <!-- WIDEN BUTTON -->
-    <a id="editWiden">
-      <i class="fas fa-arrows-alt-h fa-lg fa-fw"></i>
-    </a>
-    <!-- INFO BUTTON -->
-    <a id="infoOpen">
-      <i class="fas fa-info fa-lg fa-fw"></i>
-    </a>
+    <div class="pane-header-actions" aria-label="Edit pane actions">
+      <!-- INFO BUTTON -->
+      <a id="infoOpen">
+        <i class="fas fa-info fa-lg fa-fw"></i>
+      </a>
+      <!-- WIDEN BUTTON -->
+      <a id="editWiden">
+        <i class="fas fa-arrows-alt-h fa-lg fa-fw"></i>
+      </a>
+      <!-- DISMISS BUTTON -->
+      <a id="editDismiss">
+        <i class="fa fa-times fa-lg fa-fw"></i>
+      </a>
+    </div>
   </header>`);
 
     html.push(`
@@ -39,12 +41,14 @@ wuwei.edit.markup = (function () {
   <div id="edit-link"></div>
   <div id="edit-uploaded"></div>
   <div id="edit-video"></div>
-  <div id="edit-contents">`);
+  <div id="edit-audio"></div>
+  <div id="edit-image"></div>
+  <div id="edit-viewpoint">`);
     if (wuwei.edit &&
-      wuwei.edit.contents &&
-      wuwei.edit.contents.markup &&
-      typeof wuwei.edit.contents.markup.panelsHtml === 'function') {
-      html.push(wuwei.edit.contents.markup.panelsHtml());
+      wuwei.edit.viewpoint &&
+      wuwei.edit.viewpoint.markup &&
+      typeof wuwei.edit.viewpoint.markup.panelsHtml === 'function') {
+      html.push(wuwei.edit.viewpoint.markup.panelsHtml());
     }
     html.push(`</div>
   <div id="edit-timeline">`);
@@ -131,6 +135,69 @@ wuwei.edit.markup = (function () {
     return html.join('');
   }
 
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function readonlyTextRow(id, label, value, labelSize, valueSize) {
+    return [
+      '<div class="w3-row">',
+      '  <label for="' + escapeHtml(id) + '" class="w3-col ' + (labelSize || 's5') + '">' + translate(label) + '</label>',
+      '  <input type="text" id="' + escapeHtml(id) + '" class="w3-col ' + (valueSize || 's7') + '" readonly aria-readonly="true" value="' + escapeHtml(value || '') + '">',
+      '</div>'
+    ].join('\n');
+  }
+
+  function editableTextRow(path, label, value, labelSize, valueSize) {
+    var id = pathToFieldId(path);
+    return [
+      '<div class="w3-row">',
+      '  <label for="' + escapeHtml(id) + '" class="w3-col ' + (labelSize || 's5') + '">' + translate(label) + '</label>',
+      '  <input type="text" id="' + escapeHtml(id) + '" name="' + escapeHtml(path) + '" class="w3-col ' + (valueSize || 's7') + ' edit-value" value="' + escapeHtml(value || '') + '">',
+      '</div>'
+    ].join('\n');
+  }
+
+  function resourceOriginalRows(resource, options) {
+    var html = [];
+    var original;
+    var source;
+    var storage;
+    var files;
+    var file;
+    var i;
+    options = options || {};
+    resource = resource && typeof resource === 'object' ? resource : {};
+    original = resource.original && typeof resource.original === 'object' ? resource.original : {};
+    source = String(resource.source || original.type || '').toLowerCase();
+    storage = resource.storage && typeof resource.storage === 'object' ? resource.storage : {};
+    files = Array.isArray(storage.files) ? storage.files : [];
+    if (source === 'remote' || original.type === 'remote' || original.url || original.canonicalUrl) {
+      html.push(editableTextRow('resource.original.url', 'Reference URL', original.url || resource.uri || resource.canonicalUri || ''));
+      html.push(editableTextRow('resource.original.canonicalUrl', 'Canonical URL', original.canonicalUrl || resource.canonicalUri || ''));
+      html.push(readonlyTextRow('resource_original_accessedAt', 'Accessed at', original.accessedAt || ''));
+      html.push(editableTextRow('resource.original.identifiers', 'Identifiers', Array.isArray(original.identifiers) ? JSON.stringify(original.identifiers) : ''));
+      return html.join('\n');
+    }
+    html.push(readonlyTextRow('resource_original_type', 'Original type', original.type || source || 'upload'));
+    html.push(readonlyTextRow('resource_original_storageRole', 'Original storage role', original.storageRole || 'original'));
+    for (i = 0; i < files.length; i += 1) {
+      file = files[i] || {};
+      if (String(file.role || '').toLowerCase() === String(original.storageRole || 'original').toLowerCase()) {
+        html.push(readonlyTextRow('resource_original_path', 'Original path', file.path || ''));
+        html.push(readonlyTextRow('resource_original_fileName', 'Original file', file.file_name || file.name || ''));
+        break;
+      }
+    }
+    return html.join('\n');
+  }
+
   function rowcount(text, minRows, maxRows) {
     text = String(text || '');
     minRows = Number(minRows || 1);
@@ -152,6 +219,10 @@ wuwei.edit.markup = (function () {
   }
 
   return {
+    escapeHtml: escapeHtml,
+    readonlyTextRow: readonlyTextRow,
+    editableTextRow: editableTextRow,
+    resourceOriginalRows: resourceOriginalRows,
     selectOptions: selectOptions,
     rowcount: rowcount,
     translate: translate,

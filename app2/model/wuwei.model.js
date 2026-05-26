@@ -211,6 +211,56 @@ wuwei.model = (function () {
     }
   }
 
+  function isLegacyContentsName(value) {
+    return String(value || '').trim().toLowerCase() === 'contents';
+  }
+
+  function hasLegacyContentsRuntimeToken(record) {
+    return !!(record && (
+      record.type === 'contents' ||
+      record.type === 'contentsGroup' ||
+      record.kind === 'contents' ||
+      record.kind === 'contentsGroup' ||
+      record.topicKind === 'contents-representative' ||
+      record.topicKind === 'contents-page' ||
+      record.representativeType === 'contents' ||
+      record.representativeType === 'contentsGroup' ||
+      record.axisRole === 'contents-entry' ||
+      record.groupType === 'contentsAxis' ||
+      record.linkType === 'contents-axis' ||
+      record.relation === 'contents' ||
+      record.role === 'contents-entry' ||
+      record.role === 'contents-first-entry' ||
+      (record.type === 'viewpoint' && isLegacyContentsName(record.name))
+    ));
+  }
+
+  function assertNoLegacyContentsRuntime(record, context) {
+    if (hasLegacyContentsRuntimeToken(record)) {
+      throw new Error((context || 'WuWei runtime') + ': legacy Contents data remained after wuwei.note.v2 normalization.');
+    }
+  }
+
+  function assertNoLegacyContentsInPage(page, context) {
+    var i;
+    var list;
+    if (!page) {
+      return;
+    }
+    list = Array.isArray(page.nodes) ? page.nodes : [];
+    for (i = 0; i < list.length; i += 1) {
+      assertNoLegacyContentsRuntime(list[i], context || 'wuwei.model.page.nodes');
+    }
+    list = Array.isArray(page.links) ? page.links : [];
+    for (i = 0; i < list.length; i += 1) {
+      assertNoLegacyContentsRuntime(list[i], context || 'wuwei.model.page.links');
+    }
+    list = Array.isArray(page.groups) ? page.groups : [];
+    for (i = 0; i < list.length; i += 1) {
+      assertNoLegacyContentsRuntime(list[i], context || 'wuwei.model.page.groups');
+    }
+  }
+
   function getRecordOwnerId(record) {
     assertNoLegacyRuntimeFields(record, 'Runtime record');
     if (!record || 'object' !== typeof record) {
@@ -409,7 +459,7 @@ wuwei.model = (function () {
     });
   }
 
-  function getContentsVisibilityMembers(group) {
+  function getViewpointVisibilityMembers(group) {
     var page = common.current && common.current.page;
     var sourceNodes = (page && page.nodes) ? page.nodes : graph.nodes;
     var byId = {};
@@ -439,9 +489,9 @@ wuwei.model = (function () {
     return out;
   }
 
-  function getContentsVisibilityAxisLinks(group) {
+  function getViewpointVisibilityAxisLinks(group) {
     return (graph.links || []).filter(function (link) {
-      return isContentsVisibilityAxisLink(link) && link.groupRef === group.id;
+      return isViewpointVisibilityAxisLink(link) && link.groupRef === group.id;
     });
   }
 
@@ -937,8 +987,8 @@ wuwei.model = (function () {
         return;
       }
 
-      if ('contents' === group.type) {
-        link = wuwei.contents.buildContentsAxisPseudoLink(group);
+      if (wuwei.viewpoint && typeof wuwei.viewpoint.isViewpointGroup === 'function' && wuwei.viewpoint.isViewpointGroup(group)) {
+        link = wuwei.viewpoint.buildViewpointAxisPseudoLink(group);
         if (link) {
           result.links.push(link);
         }
@@ -958,6 +1008,7 @@ wuwei.model = (function () {
 
   createGroup = function (param) {
     param = param || {};
+    assertNoLegacyContentsRuntime(param, 'wuwei.model.createGroup');
     var spine = param.spine || {};
     var timeline = (param.timeline && 'object' === typeof param.timeline) ? param.timeline : {};
     var members = Array.isArray(param.members)
@@ -1028,12 +1079,77 @@ wuwei.model = (function () {
     };
   };
 
+  function defineRuntimeField(record, name, value) {
+    if (!record || typeof record !== 'object') {
+      return;
+    }
+    try {
+      Object.defineProperty(record, name, {
+        value: value,
+        writable: true,
+        configurable: true,
+        enumerable: false
+      });
+    } catch (e) {
+      record[name] = value;
+    }
+  }
+
+  function textAnchorToAlign(anchor) {
+    if (anchor === 'start') {
+      return 'left';
+    }
+    if (anchor === 'end') {
+      return 'right';
+    }
+    return 'center';
+  }
+
+  function textAnchorFromAlign(align) {
+    if (align === 'left') {
+      return 'start';
+    }
+    if (align === 'right') {
+      return 'end';
+    }
+    return 'middle';
+  }
+
+  function expandNodeRuntimeStyle(node) {
+    var style, line, font;
+    if (wuwei && wuwei.style &&
+        typeof wuwei.style.expandNodeRuntimeStyle === 'function') {
+      return wuwei.style.expandNodeRuntimeStyle(node);
+    }
+    if (!node || typeof node !== 'object') {
+      return node;
+    }
+    style = (node.style && typeof node.style === 'object') ? node.style : {};
+    line = (style.line && typeof style.line === 'object') ? style.line : {};
+    font = (style.font && typeof style.font === 'object') ? style.font : {};
+    defineRuntimeField(node, 'color', style.fill || Color.nodeFill || '#FFFFF0');
+    defineRuntimeField(node, 'outline', line.color || Color.nodeOutline || '#d7d8d9');
+    defineRuntimeField(node, 'outlineWidth', finiteOr(line.width, 1));
+    defineRuntimeField(node, 'font', {
+      size: finiteOr(font.size, 14),
+      color: font.color || common.defaultFont.color,
+      family: font.family || common.defaultFont.family,
+      'text-anchor': textAnchorFromAlign(font.align || 'center')
+    });
+    return node;
+  }
+
   // Node
   Node = function (param) {
     param = param || {};
     assertNoLegacyRuntimeFields(param, 'Node');
+    assertNoLegacyContentsRuntime(param, 'wuwei.model.Node');
     var self = {};
     var pos;
+    var legacyColor = param.color;
+    var legacyOutline = param.outline;
+    var legacyOutlineWidth = param.outlineWidth;
+    var legacyFont = (param.font && 'object' === typeof param.font) ? param.font : {};
 
     Object.keys(param).forEach(function (key) {
       self[key] = param[key];
@@ -1097,7 +1213,10 @@ wuwei.model = (function () {
     self.style = (self.style && 'object' === typeof self.style) ? self.style : {};
 
     if (!self.style.fill) {
-      if ('Memo' === self.type) {
+      if (legacyColor) {
+        self.style.fill = legacyColor;
+      }
+      else if ('Memo' === self.type) {
         self.style.fill = '#FFF7B0';
       }
       else if ('Content' === self.type) {
@@ -1108,13 +1227,16 @@ wuwei.model = (function () {
       }
     }
 
-    self.style.font = self.style.font || common.defaultFont;
+    self.style.font = self.style.font || {};
+    self.style.font.family = self.style.font.family || legacyFont.family || common.defaultFont.family;
+    self.style.font.size = self.style.font.size || legacyFont.size || common.defaultFont.size;
+    self.style.font.color = self.style.font.color || legacyFont.color || common.defaultFont.color;
+    self.style.font.align = self.style.font.align || textAnchorToAlign(legacyFont['text-anchor']);
 
-    self.style.line = self.style.line || {
-      kind: 'SOLID',
-      color: Color.nodeOutline,
-      width: 1
-    };
+    self.style.line = self.style.line || {};
+    self.style.line.kind = self.style.line.kind || 'SOLID';
+    self.style.line.color = self.style.line.color || legacyOutline || Color.nodeOutline;
+    self.style.line.width = finiteOr(self.style.line.width, finiteOr(legacyOutlineWidth, 1));
 
     if ('Memo' === self.type) {
       delete self.style.label;
@@ -1133,17 +1255,8 @@ wuwei.model = (function () {
       }
     }
 
-    // runtime mirror for draw/text rendering
-    self.color = self.style.fill;
-    self.outline = self.style.line.color;
-    self.font = {
-      size: finiteOr(self.style.font.size, 14),
-      color: self.style.font.color || common.defaultFont.color,
-      family: self.style.font.family || common.defaultFont.family,
-      'text-anchor':
-        (self.style.font.align === 'left') ? 'start' :
-          ((self.style.font.align === 'right') ? 'end' : 'middle')
-    };
+    // Non-enumerable runtime mirror for draw/text rendering.
+    expandNodeRuntimeStyle(self);
 
     pos = newPosition(param.x, param.y);
     self.x = finiteOr(param.x, finiteOr(self.x, finiteOr(pos.x, 0)));
@@ -1432,8 +1545,7 @@ wuwei.model = (function () {
     var page, ownerId;
 
     if ('view' === graph.mode) { return; }
-    ownerId = getRecordOwnerId(d);
-    if (ownerId && ownerId !== common.getCurrentOwnerId()) { return; }
+    if (!canMoveRecordByCurrentUser(d)) { return; }
 
     ensureFiniteNodePosition(d);
 
@@ -1515,9 +1627,9 @@ wuwei.model = (function () {
     return false;
   }
 
-  function handleContentsPageMarkerDrag(d, eventX, eventY) {
-    if (wuwei.contents && typeof wuwei.contents.handlePageMarkerDrag === 'function') {
-      return wuwei.contents.handlePageMarkerDrag(d, eventX, eventY);
+  function handleViewpointPageMarkerDrag(d, eventX, eventY) {
+    if (wuwei.viewpoint && typeof wuwei.viewpoint.handlePageMarkerDrag === 'function') {
+      return wuwei.viewpoint.handlePageMarkerDrag(d, eventX, eventY);
     }
     return false;
   }
@@ -1537,8 +1649,8 @@ wuwei.model = (function () {
     if ('timeline' === group.type && wuwei.timeline && typeof wuwei.timeline.updateAxisBoundsFromPositions === 'function') {
       return wuwei.timeline.updateAxisBoundsFromPositions(group);
     }
-    if ('contents' === group.type && wuwei.contents && typeof wuwei.contents.updateAxisBoundsFromPositions === 'function') {
-      return wuwei.contents.updateAxisBoundsFromPositions(group);
+    if (wuwei.viewpoint && typeof wuwei.viewpoint.isViewpointGroup === 'function' && wuwei.viewpoint.isViewpointGroup(group) && typeof wuwei.viewpoint.updateAxisBoundsFromPositions === 'function') {
+      return wuwei.viewpoint.updateAxisBoundsFromPositions(group);
     }
     return false;
   }
@@ -1603,8 +1715,7 @@ wuwei.model = (function () {
     var eventX, eventY, deltaX, deltaY, page, moved, ownerId;
 
     if ('view' === graph.mode) { return; }
-    ownerId = getRecordOwnerId(d);
-    if (ownerId && ownerId !== common.getCurrentOwnerId()) { return; }
+    if (!canMoveRecordByCurrentUser(d)) { return; }
 
     ensureFiniteNodePosition(d);
 
@@ -1615,7 +1726,7 @@ wuwei.model = (function () {
     eventX = safeEventCoord(d3.event && d3.event.x, d.x);
     eventY = safeEventCoord(d3.event && d3.event.y, d.y);
 
-    if (page && (handleTimelineSegmentDrag(d, eventX, eventY) || handleContentsPageMarkerDrag(d, eventX, eventY) || handleRepresentativeTopicDrag(d, eventX, eventY))) {
+    if (page && (handleTimelineSegmentDrag(d, eventX, eventY) || handleViewpointPageMarkerDrag(d, eventX, eventY) || handleRepresentativeTopicDrag(d, eventX, eventY))) {
       moved = findNodeById(d.id);
       if (moved) {
         d.x = moved.x;
@@ -1711,7 +1822,7 @@ wuwei.model = (function () {
     eventX = safeEventCoord(d3.event && d3.event.x, d.x);
     eventY = safeEventCoord(d3.event && d3.event.y, d.y);
 
-    if (page && (handleTimelineSegmentDrag(d, eventX, eventY) || handleContentsPageMarkerDrag(d, eventX, eventY) || handleRepresentativeTopicDrag(d, eventX, eventY))) {
+    if (page && (handleTimelineSegmentDrag(d, eventX, eventY) || handleViewpointPageMarkerDrag(d, eventX, eventY) || handleRepresentativeTopicDrag(d, eventX, eventY))) {
       pageNode = findNodeById(d.id);
       if (pageNode) {
         d.x = pageNode.x;
@@ -2036,8 +2147,8 @@ wuwei.model = (function () {
     node.topicKind = node.topicKind ||
       (group.type === 'timeline'
         ? 'timeline-representative'
-        : (group.type === 'contents'
-          ? 'contents-representative'
+        : (group.type === 'viewpoint'
+          ? 'viewpoint-representative'
           : 'group-representative'));
     node.representativeType = node.representativeType ||
       group.type ||
@@ -2085,8 +2196,8 @@ wuwei.model = (function () {
     node.topicKind = option.topicKind || node.topicKind ||
       (group.type === 'timeline'
         ? 'timeline-representative'
-        : (group.type === 'contents'
-          ? 'contents-representative'
+        : (group.type === 'viewpoint'
+          ? 'viewpoint-representative'
           : 'group-representative'));
     node.representativeType = option.representativeType ||
       node.representativeType ||
@@ -2179,7 +2290,7 @@ wuwei.model = (function () {
       representative.axisPos = Number(representative.y);
     }
     else if ('horizontal' === type || 'horizontal' === group.orientation ||
-      'timeline' === type || 'contents' === type) {
+      'timeline' === type || 'viewpoint' === type) {
       representative.axisPos = Number(representative.x);
     }
 
@@ -2249,10 +2360,10 @@ wuwei.model = (function () {
     if (!id) {
       return linkids;
     }
-    if (node && wuwei.collab && typeof wuwei.collab.canDeleteObject === 'function' &&
-      !wuwei.collab.canDeleteObject(node)) {
-      if (typeof wuwei.collab.notifyReadOnly === 'function') {
-        wuwei.collab.notifyReadOnly();
+    if (node && wuwei.joint && typeof wuwei.joint.canDeleteObject === 'function' &&
+      !wuwei.joint.canDeleteObject(node)) {
+      if (typeof wuwei.joint.notifyReadOnly === 'function') {
+        wuwei.joint.notifyReadOnly();
       }
       return linkids;
     }
@@ -2393,6 +2504,7 @@ wuwei.model = (function () {
   Link = function (param) {
     param = param || {};
     assertNoLegacyRuntimeFields(param, 'Link');
+    assertNoLegacyContentsRuntime(param, 'wuwei.model.Link');
 
     var self = {};
     var currentUser = (state && state.currentUser) ? state.currentUser : {};
@@ -3137,32 +3249,32 @@ wuwei.model = (function () {
     return !!(node && node.type === 'Content');
   }
 
-  function isTimelineOrContentsGroup(group) {
-    return !!(group && (group.type === 'timeline' || group.type === 'contents'));
+  function isTimelineOrViewpointGroup(group) {
+    return !!(group && (group.type === 'timeline' || group.type === 'viewpoint'));
   }
 
-  function isTimelineOrContentsAxisTarget(target) {
+  function isTimelineOrViewpointAxisTarget(target) {
     if (!target) {
       return false;
     }
 
     return !!(target.pseudo && (
       target.groupType === 'timelineAxis' ||
-      target.groupType === 'contentsAxis' ||
+      target.groupType === 'viewpointAxis' ||
       target.linkType === 'timeline-axis' ||
-      target.linkType === 'contents-axis'
+      target.linkType === 'viewpoint-axis'
     ));
   }
 
   function findAxisGroupForConnectionTarget(target) {
     var group;
 
-    if (!isTimelineOrContentsAxisTarget(target)) {
+    if (!isTimelineOrViewpointAxisTarget(target)) {
       return null;
     }
 
     group = target.groupRef ? findGroupById(target.groupRef) : null;
-    if (isTimelineOrContentsGroup(group)) {
+    if (isTimelineOrViewpointGroup(group)) {
       return group;
     }
 
@@ -3173,15 +3285,15 @@ wuwei.model = (function () {
     var group = findAxisGroupForConnectionTarget(target);
     var representative;
 
-    if (!isTimelineOrContentsGroup(group)) {
+    if (!isTimelineOrViewpointGroup(group)) {
       return target;
     }
 
     representative = group.representativeNodeId ? findNodeById(group.representativeNodeId) : null;
     if (!representative && typeof ensureGroupRepresentativeTopic === 'function') {
       representative = ensureGroupRepresentativeTopic(group, {
-        topicKind: group.type === 'timeline' ? 'timeline-representative' : 'contents-representative',
-        label: group.name || (group.type === 'timeline' ? 'Timeline' : 'Contents')
+        topicKind: group.type === 'timeline' ? 'timeline-representative' : 'viewpoint-representative',
+        label: group.name || (group.type === 'timeline' ? 'Timeline' : 'Viewpoint')
       });
     }
     return representative || target;
@@ -3192,16 +3304,16 @@ wuwei.model = (function () {
     var target = targetNode;
 
     /*
-     * Only a line drawn from Content to the Timeline/Contents axis pseudo link
+     * Only a line drawn from Content to the Timeline/Viewpoint axis pseudo link
      * means a relationship to the whole group.  In that case, connect the
      * visible line to the representative topic.  Lines drawn directly to
      * PageMarker, Segment, or the representative topic itself
      * remain direct node-to-node relationships.
      */
-    if (isContentConnectionNode(source) && isTimelineOrContentsAxisTarget(target)) {
+    if (isContentConnectionNode(source) && isTimelineOrViewpointAxisTarget(target)) {
       target = resolveGroupRepresentativeForConnection(target);
     }
-    if (isContentConnectionNode(target) && isTimelineOrContentsAxisTarget(source)) {
+    if (isContentConnectionNode(target) && isTimelineOrViewpointAxisTarget(source)) {
       source = resolveGroupRepresentativeForConnection(source);
     }
 
@@ -3295,10 +3407,10 @@ wuwei.model = (function () {
     if (!id) {
       return;
     }
-    if (link && wuwei.collab && typeof wuwei.collab.canDeleteObject === 'function' &&
-      !wuwei.collab.canDeleteObject(link)) {
-      if (typeof wuwei.collab.notifyReadOnly === 'function') {
-        wuwei.collab.notifyReadOnly();
+    if (link && wuwei.joint && typeof wuwei.joint.canDeleteObject === 'function' &&
+      !wuwei.joint.canDeleteObject(link)) {
+      if (typeof wuwei.joint.notifyReadOnly === 'function') {
+        wuwei.joint.notifyReadOnly();
       }
       return;
     }
@@ -3506,16 +3618,43 @@ wuwei.model = (function () {
       label: title,
       description: { format: 'asciidoc', body: '' },
       resource: {
-        kind: 'general',
+        id: id,
+        source: 'remote',
+        kind: 'other',
+        documentKind: '',
+        videoKind: '',
+        audioKind: '',
+        imageKind: '',
         uri: '',
         canonicalUri: '',
         mimeType: 'text/plain',
         title: title,
-        owner: '',
-        copyright: '',
+        thumbnailUri: '',
+        original: {
+          url: '',
+          canonicalUrl: '',
+          type: 'remote',
+          accessedAt: '',
+          identifiers: []
+        },
+        storage: {
+          managed: false,
+          copyPolicy: 'metadataOnly',
+          files: []
+        },
+        rights: {
+          owner: '',
+          copyright: '',
+          license: '',
+          attribution: ''
+        },
         viewer: {
           supportedModes: ['infoPane', 'newTab', 'newWindow', 'download'],
-          defaultMode: 'infoPane'
+          defaultMode: 'infoPane',
+          embed: {
+            thumbnailUri: ''
+          },
+          thumbnailUri: ''
         }
       },
       thumbnailUri: '',
@@ -3664,37 +3803,6 @@ wuwei.model = (function () {
     };
   };
 
-  // --- environment helper ---------------------------------------------
-  function getRuntimeEnv() {
-    const origin = (window.location.origin || '').toLowerCase();
-
-    // 例:
-    // local  http://localhost, http://127.0.0.1, http://192.168.x.x
-    // ec2    https://www.sambuichi.jp など
-    const isLocal =
-      /^https?:\/\/localhost(?::\d+)?$/.test(origin) ||
-      /^https?:\/\/127\.0\.0\.1(?::\d+)?$/.test(origin) ||
-      /^https?:\/\/192\.168\.\d+\.\d+(?::\d+)?$/.test(origin);
-
-    return {
-      origin: origin,
-      isLocal: isLocal,
-      isEc2: !isLocal
-    };
-  }
-
-  function getCgiPath(name) {
-    const env = getRuntimeEnv();
-
-    if (env.isLocal) {
-      // 例: http://localhost/nocgi-bin/upload.py
-      return `${window.location.origin}/nocgi-bin/${name}.py`;
-    }
-
-    // 例: https://www.sambuichi.jp/wu_wei2/server/upload.cgi
-    return `${window.location.origin}/wu_wei2/server/${name}.cgi`;
-  }
-
   function isHostedVideoUrl(uri) {
     var host = '';
     var lower = String(uri || '').trim().toLowerCase();
@@ -3796,7 +3904,7 @@ wuwei.model = (function () {
         match = String(candidates[i] || '').replace(/\\/g, '/').match(/^(\d{4}\/\d{2}\/\d{2})\/([^/]+)\//);
         if (match) {
           return {
-            kind: 'upload',
+            source: 'upload',
             id: match[2],
             resourceId: resourceDef && resourceDef.id || match[2],
             date: match[1]
@@ -3806,11 +3914,19 @@ wuwei.model = (function () {
       return null;
     }
 
-    function uploadFileUri(uploadRef, filename) {
-      if (!uploadRef || !filename || !util.toPublicResourceUri) {
+    function uploadLogicalPath(uploadRef, filename) {
+      if (!uploadRef || !filename) {
         return '';
       }
-      return util.toPublicResourceUri('upload', uploadRef.date + '/' + uploadRef.id + '/' + filename, state.currentUser && state.currentUser.user_id);
+      return uploadRef.date + '/' + uploadRef.id + '/' + filename;
+    }
+
+    function uploadFileUri(uploadRef, filename, role) {
+      var path = uploadLogicalPath(uploadRef, filename);
+      if (!path || !util.toPublicResourceUri) {
+        return path;
+      }
+      return util.toPublicResourceUri('upload', path, state.currentUser && state.currentUser.user_id, role || 'original');
     }
 
     function uploadRoleFile(role) {
@@ -3824,6 +3940,72 @@ wuwei.model = (function () {
       const found = uploadRoleFile(role);
       const path = found ? String(found.path || '').replace(/\\/g, '/') : '';
       return path ? path.split('/').pop() : fallback;
+    }
+
+    function resourceContentKindFromExtension(kind) {
+      if (kind === 'image' || kind === 'video' || kind === 'audio') {
+        return kind;
+      }
+      if (kind === 'pdf' || kind === 'office' || kind === 'html' || kind === 'text') {
+        return 'document';
+      }
+      return '';
+    }
+
+    function inferUploadedContentKind() {
+      var mediaKind = resourceDef && resourceDef.media && resourceDef.media.kind;
+      var explicitKind = resourceDef && resourceDef.kind;
+      var mime = String((resourceDef && resourceDef.media && resourceDef.media.mimeType) || (resourceDef && resourceDef.mimeType) || format || '').toLowerCase();
+      var kind = resourceContentKindFromExtension(extensionKind);
+
+      if (/^(document|video|audio|image|other)$/.test(String(explicitKind || '').toLowerCase())) {
+        return String(explicitKind).toLowerCase();
+      }
+      if (/^(document|video|audio|image|other)$/.test(String(mediaKind || '').toLowerCase())) {
+        return String(mediaKind).toLowerCase();
+      }
+      if (kind) {
+        return kind;
+      }
+      if (mime.indexOf('image/') === 0) { return 'image'; }
+      if (mime.indexOf('video/') === 0) { return 'video'; }
+      if (mime.indexOf('audio/') === 0) { return 'audio'; }
+      if (mime.indexOf('application/pdf') === 0 || mime.indexOf('text/') === 0) { return 'document'; }
+      return 'other';
+    }
+
+    function subtypeFromExtension(path) {
+      var m = String(path || '').toLowerCase().replace(/[?#].*$/, '').match(/\.([a-z0-9]+)$/);
+      return m ? m[1] : '';
+    }
+
+    function inferDocumentKindForUpload(contentKind) {
+      if (contentKind !== 'document') { return ''; }
+      if (extensionKind === 'pdf' || extensionKind === 'office' || extensionKind === 'html' || extensionKind === 'text') {
+        return extensionKind;
+      }
+      if (resourceDef && resourceDef.documentKind) {
+        return resourceDef.documentKind;
+      }
+      return 'text';
+    }
+
+    function inferVideoKindForUpload(contentKind, filename) {
+      if (contentKind !== 'video') { return ''; }
+      if (resourceDef && resourceDef.videoKind) { return resourceDef.videoKind; }
+      return subtypeFromExtension(filename) || 'mp4';
+    }
+
+    function inferAudioKindForUpload(contentKind, filename) {
+      if (contentKind !== 'audio') { return ''; }
+      if (resourceDef && resourceDef.audioKind) { return resourceDef.audioKind; }
+      return subtypeFromExtension(filename) || 'mp3';
+    }
+
+    function inferImageKindForUpload(contentKind, filename) {
+      if (contentKind !== 'image') { return ''; }
+      if (resourceDef && resourceDef.imageKind) { return resourceDef.imageKind; }
+      return subtypeFromExtension(filename) || '';
     }
 
     function resolveUploadedThumbnail() {
@@ -3912,10 +4094,18 @@ wuwei.model = (function () {
     const uploadOriginalName = uploadRoleFileName('original', originalFile.path ? String(originalFile.path).replace(/\\/g, '/').split('/').pop() : String(downloadUrl || uri || '').replace(/\\/g, '/').split(/[?#]/)[0].split('/').pop());
     const uploadPreviewName = uploadRoleFileName('preview', '');
     const uploadThumbnailName = uploadRoleFileName('thumbnail', uploadThumbnailFile ? 'thumbnail.jpg' : '');
-    const uploadOriginalUri = uploadFileUri(uploadRef, uploadOriginalName) || downloadUrl || '';
-    const uploadPreviewUri = uploadPreviewName ? uploadFileUri(uploadRef, uploadPreviewName) : '';
-    const uploadThumbnailUri = uploadFileUri(uploadRef, uploadThumbnailName) || snapshotThumbnailUri;
+    const uploadOriginalPath = uploadLogicalPath(uploadRef, uploadOriginalName);
+    const uploadPreviewPath = uploadPreviewName ? uploadLogicalPath(uploadRef, uploadPreviewName) : '';
+    const uploadThumbnailPath = uploadThumbnailName ? uploadLogicalPath(uploadRef, uploadThumbnailName) : '';
+    const uploadOriginalUri = uploadFileUri(uploadRef, uploadOriginalName, 'original') || downloadUrl || '';
+    const uploadPreviewUri = uploadPreviewName ? uploadFileUri(uploadRef, uploadPreviewName, 'preview') : '';
+    const uploadThumbnailUri = uploadFileUri(uploadRef, uploadThumbnailName, 'thumbnail') || snapshotThumbnailUri;
     const uploadDisplayUri = uploadPreviewUri || nodeUrl || runtimeResourceUri || uploadOriginalUri;
+    const uploadContentKind = inferUploadedContentKind();
+    const uploadDocumentKind = inferDocumentKindForUpload(uploadContentKind);
+    const uploadVideoKind = inferVideoKindForUpload(uploadContentKind, uploadOriginalName);
+    const uploadAudioKind = inferAudioKindForUpload(uploadContentKind, uploadOriginalName);
+    const uploadImageKind = inferImageKindForUpload(uploadContentKind, uploadOriginalName);
     const uploadFiles = uploadRef ? [
       {
         role: 'original',
@@ -3941,17 +4131,26 @@ wuwei.model = (function () {
       });
     }
     const runtimeResource = uploadRef ? {
-      kind: 'upload',
+      source: 'upload',
+      kind: uploadContentKind,
+      documentKind: uploadDocumentKind,
+      videoKind: uploadVideoKind,
+      audioKind: uploadAudioKind,
+      imageKind: uploadImageKind,
       id: uploadRef.id,
       date: uploadRef.date,
       file: uploadOriginalName,
       title: resourceIdentity.title || resourceDef && resourceDef.title || label || '',
       mimeType: (resourceDef && resourceDef.media && resourceDef.media.mimeType) || resourceDef && resourceDef.mimeType || format || '',
-      uri: uploadDisplayUri,
-      canonicalUri: uploadOriginalUri,
-      thumbnailUri: uploadThumbnailUri,
+      uri: uploadPreviewPath || uploadOriginalPath || '',
+      canonicalUri: uploadOriginalPath || '',
+      thumbnailUri: uploadThumbnailPath || '',
       owner: currentUserId,
-      media: resourceDef && resourceDef.media ? Object.assign({}, resourceDef.media) : undefined,
+      media: Object.assign({}, resourceDef && resourceDef.media ? resourceDef.media : {}, {
+        kind: uploadContentKind,
+        mimeType: (resourceDef && resourceDef.media && resourceDef.media.mimeType) || resourceDef && resourceDef.mimeType || format || '',
+        downloadable: true
+      }),
       contents: resourceDef && resourceDef.contents ? util.clone(resourceDef.contents) : undefined,
       rights: {
         owner: currentUserId,
@@ -3979,11 +4178,11 @@ wuwei.model = (function () {
         supportedModes: ['infoPane', 'newTab', 'newWindow', 'download'],
         defaultMode: 'infoPane',
         embed: {
-          enabled: !!uploadDisplayUri,
-          uri: uploadDisplayUri,
-          thumbnailUri: uploadThumbnailUri
+          enabled: !!(uploadPreviewPath || uploadOriginalPath),
+          uri: uploadPreviewPath || uploadOriginalPath || '',
+          thumbnailUri: uploadThumbnailPath || ''
         },
-        thumbnailUri: uploadThumbnailUri
+        thumbnailUri: uploadThumbnailPath || ''
       }
     } : (resourceDef ? Object.assign({}, resourceDef, {
       id: resourceDef.id || content_id,
@@ -4039,7 +4238,11 @@ wuwei.model = (function () {
       },
       resourceRef: uploadRef ? uploadRef.id : ((resourceDef && resourceDef.id) || content_id),
       resource: runtimeResource || {
-        kind: isVideo ? 'video' : (isOffice ? 'office' : (isTextPlain ? 'document' : ('webpage' === response.option ? 'webpage' : 'general'))),
+        source: /^https?:\/\//i.test(downloadUrl || nodeUrl || uri || '')
+          ? 'remote'
+          : ((response.option && response.option !== 'webpage') || value.file || file ? 'upload' : 'embedded'),
+        kind: isVideo ? 'video' : ((isOffice || isTextPlain || 'webpage' === response.option) ? 'document' : 'other'),
+        documentKind: isOffice ? 'office' : (isTextPlain ? 'text' : ('webpage' === response.option ? 'html' : '')),
         uri: nodeUrl || uri || '',
         canonicalUri: downloadUrl || nodeUrl || uri || '',
         mimeType: format || 'text/plain',
@@ -4050,6 +4253,18 @@ wuwei.model = (function () {
           originalUri: downloadUrl || '',
           previewUri: nodeUrl || uri || '',
           thumbnailUri: snapshotThumbnailUri || ''
+        },
+        original: /^https?:\/\//i.test(downloadUrl || nodeUrl || uri || '') ? {
+          url: downloadUrl || nodeUrl || uri || '',
+          canonicalUrl: downloadUrl || nodeUrl || uri || '',
+          type: 'remote',
+          accessedAt: '',
+          identifiers: []
+        } : {
+          url: '',
+          canonicalUrl: '',
+          type: 'upload',
+          storageRole: 'original'
         },
         viewer: {
           supportedModes: ['infoPane', 'newTab', 'newWindow', 'download'],
@@ -4544,7 +4759,7 @@ wuwei.model = (function () {
   function isTimelineGroupPseudoLink(link) {
     return !!(link &&
       true === link.pseudo &&
-      ('timelineAxis' === link.groupType || 'contentsAxis' === link.groupType) &&
+      ('timelineAxis' === link.groupType || 'viewpointAxis' === link.groupType) &&
       link.groupRef);
   }
 
@@ -4577,9 +4792,9 @@ wuwei.model = (function () {
     }
 
     /*
-     * The source Content of Timeline / Contents is intentionally not treated
+     * The source Content of Timeline / Viewpoint is intentionally not treated
      * as a group operation target.  One Content node can have multiple
-     * Contents groups, so moving or aligning a group must not move the
+     * Viewpoint groups, so moving or aligning a group must not move the
      * original Content node.
      */
 
@@ -4625,7 +4840,7 @@ wuwei.model = (function () {
 
 
   function isSemanticAttachedGroup(group) {
-    return !!(group && (group.type === 'timeline' || group.type === 'contents'));
+    return !!(group && (group.type === 'timeline' || group.type === 'viewpoint'));
   }
 
   function getSemanticGroupTargetNodeId(group) {
@@ -4653,6 +4868,9 @@ wuwei.model = (function () {
         if (!group || !group.id || group.id === excludeGroupId || seen[group.id]) {
           return;
         }
+        if (!canMoveGroupByCurrentUser(group)) {
+          return;
+        }
         seen[group.id] = true;
         out[group.id] = {
           groupId: group.id,
@@ -4675,7 +4893,7 @@ wuwei.model = (function () {
     Object.keys(snapshotMap).forEach(function (groupId) {
       var item = snapshotMap[groupId];
       var group = findGroupById(groupId);
-      if (!group || !item || !item.origin) {
+      if (!group || !item || !item.origin || !canMoveGroupByCurrentUser(group)) {
         return;
       }
       applyGroupTranslate(group, item.origin, dx, dy);
@@ -4696,7 +4914,134 @@ wuwei.model = (function () {
 
 
   function isAxisLayoutGroup(group) {
-    return !!(group && ('timeline' === group.type || 'contents' === group.type));
+    return !!(group && ('timeline' === group.type || 'viewpoint' === group.type));
+  }
+
+  function isTeamJointNoteForModel() {
+    var current = (common && common.current) || {};
+    var stateValue = String(current.jointNoteState || current.collabNoteState || '').toLowerCase();
+    var scope = String(current.note_scope || '').toLowerCase();
+    var origin = (current.origin && typeof current.origin === 'object') ? current.origin : {};
+    var originType = String(origin.type || '').toLowerCase();
+    var originSource = String(origin.source || '').toLowerCase();
+
+    if (wuwei.joint && typeof wuwei.joint.isTeamNote === 'function') {
+      try {
+        return !!wuwei.joint.isTeamNote(current);
+      }
+      catch (e) {
+        /* fall through to local detection */
+      }
+    }
+
+    if (stateValue === 'team') {
+      return true;
+    }
+    if (stateValue === 'own' || stateValue === 'imported') {
+      return false;
+    }
+    if (originType === 'import' || originSource === 'export-package') {
+      return false;
+    }
+
+    return !!(
+      scope === 'team' ||
+      (current.joint && current.joint.enabled === true) ||
+      (current.collaboration && current.collaboration.enabled === true) ||
+      originType === 'team' ||
+      originSource === 'team-note' ||
+      current.team_id
+    );
+  }
+
+  function canMoveRecordByCurrentUser(record) {
+    var ownerId;
+    var currentOwnerId;
+
+    if (!record) {
+      return false;
+    }
+
+    /*
+     * In ordinary personal/imported notes, another user's objects can be
+     * repositioned locally as part of the current user's layout.
+     */
+    if (!isTeamJointNoteForModel()) {
+      return true;
+    }
+
+    ownerId = getRecordOwnerId(record);
+    currentOwnerId = common.getCurrentOwnerId ? common.getCurrentOwnerId() : '';
+    return isOwnerIdSameForGroupMove(ownerId, currentOwnerId);
+  }
+
+  function getCurrentOwnerIdForGroupMove() {
+    return (common && typeof common.getCurrentOwnerId === 'function'
+      ? common.getCurrentOwnerId()
+      : '') ||
+      (state && state.currentUser && state.currentUser.user_id) ||
+      '';
+  }
+
+  function getGroupOwnerIdForMove(group) {
+    if (!group || typeof group !== 'object') {
+      return '';
+    }
+    if (group.audit && typeof group.audit === 'object' && group.audit.createdBy) {
+      return String(group.audit.createdBy);
+    }
+    try {
+      return getRecordOwnerId(group);
+    }
+    catch (e) {
+      return '';
+    }
+  }
+
+  function isOwnerIdSameForGroupMove(ownerId, currentOwnerId) {
+    if (!ownerId || !currentOwnerId) {
+      /*
+       * Legacy group data can lack audit.createdBy.  Do not make such data
+       * impossible to move only because it is old.
+       */
+      return true;
+    }
+    if (ownerId === currentOwnerId) {
+      return true;
+    }
+    if (common &&
+      typeof common.isTemporaryOwnerId === 'function' &&
+      common.isTemporaryOwnerId(ownerId) &&
+      common.isTemporaryOwnerId(currentOwnerId)) {
+      return true;
+    }
+    return false;
+  }
+
+  function canMoveGroupByCurrentUser(group) {
+    var ownerId;
+    var currentOwnerId;
+
+    /*
+     * The strict movement lock applies only to active team notes.  In ordinary
+     * personal/imported notes, users can adjust another user's Viewpoint /
+     * Timeline layout locally.
+     */
+    if (!isTeamJointNoteForModel()) {
+      return true;
+    }
+
+    /*
+     * In team notes, ordinary group move rules remain unchanged, but semantic
+     * axis groups owned by another user are locked.
+     */
+    if (!isAxisLayoutGroup(group)) {
+      return true;
+    }
+
+    ownerId = getGroupOwnerIdForMove(group);
+    currentOwnerId = getCurrentOwnerIdForGroupMove();
+    return isOwnerIdSameForGroupMove(ownerId, currentOwnerId);
   }
 
   function getAxisDragDelta(group, dx, dy) {
@@ -4706,6 +5051,10 @@ wuwei.model = (function () {
   function applyGroupTranslate(group, origin, dx, dy) {
     var axisGroup = isAxisLayoutGroup(group);
     var axisDelta = axisGroup ? getAxisDragDelta(group, dx, dy) : 0;
+
+    if (!canMoveGroupByCurrentUser(group)) {
+      return false;
+    }
 
     Object.keys((origin && origin.members) || {}).forEach(function (nodeId) {
       var node = findNodeById(nodeId);
@@ -4718,7 +5067,7 @@ wuwei.model = (function () {
       node.y = finiteOr(base.y, 0) + dy;
 
       /*
-       * Timeline / Contents members are laid out from axisPos during the next
+       * Timeline / Viewpoint members are laid out from axisPos during the next
        * graph rebuild.  If only x/y are translated, normalizeAxisGroup() restores
        * the old axisPos-derived coordinate.  Therefore the axis scalar must move
        * by the same delta as the dragged axis.
@@ -4763,6 +5112,9 @@ wuwei.model = (function () {
     dy = Number(dy || 0);
 
     if (!group || !Number.isFinite(dx) || !Number.isFinite(dy) || (0 === dx && 0 === dy)) {
+      return false;
+    }
+    if (!canMoveGroupByCurrentUser(group)) {
       return false;
     }
 
@@ -4812,7 +5164,12 @@ wuwei.model = (function () {
     var page = common.current ? common.current.page : null;
     var point;
 
-    if (!group) {
+    if (!group || !canMoveGroupByCurrentUser(group)) {
+      state.groupDragGroupId = null;
+      state.groupDragAnchor = null;
+      state.groupDragOrigin = null;
+      state.groupAttachedSemanticGroupOrigin = null;
+      state.dragging = false;
       return;
     }
 
@@ -5129,13 +5486,13 @@ wuwei.model = (function () {
         })
         .on('click', function (d) {
           if (window.wuwei &&
-            wuwei.contents &&
-            typeof wuwei.contents.isContentsPageNode === 'function' &&
-            wuwei.contents.isContentsPageNode(d) &&
+            wuwei.viewpoint &&
+            typeof wuwei.viewpoint.isViewpointPageNode === 'function' &&
+            wuwei.viewpoint.isViewpointPageNode(d) &&
             !state.Selecting) {
             d3.event.stopPropagation();
-            if (wuwei.menu && wuwei.menu.contents && typeof wuwei.menu.contents.openContentTargetInInfo === 'function') {
-              wuwei.menu.contents.openContentTargetInInfo(d);
+            if (wuwei.menu && wuwei.menu.viewpoint && typeof wuwei.menu.viewpoint.openContentTargetInInfo === 'function') {
+              wuwei.menu.viewpoint.openContentTargetInInfo(d);
             }
             return;
           }
@@ -5150,11 +5507,11 @@ wuwei.model = (function () {
         })
         .on('dblclick', function (d) {
           if (window.wuwei &&
-            wuwei.contents &&
-            typeof wuwei.contents.isContentsPageNode === 'function' &&
-            wuwei.contents.isContentsPageNode(d)) {
-            if (wuwei.menu && wuwei.menu.contents && typeof wuwei.menu.contents.openContentTargetInInfo === 'function') {
-              wuwei.menu.contents.openContentTargetInInfo(d);
+            wuwei.viewpoint &&
+            typeof wuwei.viewpoint.isViewpointPageNode === 'function' &&
+            wuwei.viewpoint.isViewpointPageNode(d)) {
+            if (wuwei.menu && wuwei.menu.viewpoint && typeof wuwei.menu.viewpoint.openContentTargetInInfo === 'function') {
+              wuwei.menu.viewpoint.openContentTargetInInfo(d);
             }
             return;
           }
@@ -5671,7 +6028,12 @@ wuwei.model = (function () {
     var page = common.current ? common.current.page : null;
     var point;
 
-    if (!group) {
+    if (!group || !canMoveGroupByCurrentUser(group)) {
+      state.groupDragGroupId = null;
+      state.groupDragAnchor = null;
+      state.groupDragOrigin = null;
+      state.groupAttachedSemanticGroupOrigin = null;
+      state.dragging = false;
       return;
     }
 
@@ -5707,7 +6069,7 @@ wuwei.model = (function () {
     var point, dx, dy;
     var isAxisGroup;
 
-    if (!group || !state.groupDragOrigin || !state.groupDragAnchor) {
+    if (!group || !canMoveGroupByCurrentUser(group) || !state.groupDragOrigin || !state.groupDragAnchor) {
       return;
     }
 
@@ -8222,30 +8584,30 @@ wuwei.model = (function () {
     return null;
   }
 
-  function isContentsVisibilityPoint(node) {
+  function isViewpointVisibilityPoint(node) {
     return !!(node && node.type === 'PageMarker' && node.groupRef);
   }
 
-  function isContentsVisibilityAxisLink(link) {
+  function isViewpointVisibilityAxisLink(link) {
     return !!(
       link &&
       link.type === 'Link' &&
       (
-        link.linkType === 'contents-axis' ||
-        link.groupType === 'contentsAxis'
+        link.linkType === 'viewpoint-axis' ||
+        link.groupType === 'viewpointAxis'
       ) &&
       link.groupRef
     );
   }
 
-  function getContentsVisibilityGroup(target) {
+  function getViewpointVisibilityGroup(target) {
     if (!target) {
       return null;
     }
-    if (isContentsVisibilityPoint(target)) {
+    if (isViewpointVisibilityPoint(target)) {
       return findGroupById(target.groupRef);
     }
-    if (isContentsVisibilityAxisLink(target)) {
+    if (isViewpointVisibilityAxisLink(target)) {
       return findGroupById(target.groupRef);
     }
     return null;
@@ -8296,14 +8658,14 @@ wuwei.model = (function () {
       return findGroupById(node.groupRef);
     }
 
-    if (isContentsVisibilityPoint(node)) {
+    if (isViewpointVisibilityPoint(node)) {
       return findGroupById(node.groupRef);
     }
 
     if (util && typeof util.isNode === 'function' && util.isNode(node) && node.id) {
       groups = findGroupsByNodeId(node.id).filter(function (group) {
         return isTimelineVisibilityGroup(group) ||
-          isContentsVisibilityGroup(group) ||
+          isViewpointVisibilityGroup(group) ||
           isRegularVisibilityGroup(group);
       });
       return groups[0] || null;
@@ -8337,8 +8699,8 @@ wuwei.model = (function () {
     return null;
   }
 
-  function isContentsVisibilityGroup(group) {
-    return !!(group && group.type === 'contents');
+  function isViewpointVisibilityGroup(group) {
+    return !!(group && group.type === 'viewpoint');
   }
 
   function isTimelineVisibilityGroup(group) {
@@ -8363,7 +8725,7 @@ wuwei.model = (function () {
       return group;
     }
 
-    group = getContentsVisibilityGroup(target);
+    group = getViewpointVisibilityGroup(target);
     if (group) {
       return group;
     }
@@ -8471,7 +8833,7 @@ wuwei.model = (function () {
     return changed;
   }
 
-  function setContentsFamilyVisible(group, visible, nodesBucket, linksBucket, hideConnectedLinks) {
+  function setViewpointFamilyVisible(group, visible, nodesBucket, linksBucket, hideConnectedLinks) {
     var changed = false;
     var members, axisLinks, member, linked, visibles, i, j;
     var shown = !!visible;
@@ -8488,7 +8850,7 @@ wuwei.model = (function () {
       changed = true;
     }
 
-    members = getContentsVisibilityMembers(group);
+    members = getViewpointVisibilityMembers(group);
     for (i = 0; i < members.length; i++) {
       member = members[i];
       if (!member) {
@@ -8512,7 +8874,7 @@ wuwei.model = (function () {
           if (!linked) {
             continue;
           }
-          if (isContentsVisibilityAxisLink(linked) && linked.groupRef === group.id) {
+          if (isViewpointVisibilityAxisLink(linked) && linked.groupRef === group.id) {
             continue;
           }
           if (linked.visible) {
@@ -8526,7 +8888,7 @@ wuwei.model = (function () {
 
     changed = appendRepresentativeNodes(group, nodesBucket, shown, hideConnectedLinks, linksBucket) || changed;
 
-    axisLinks = getContentsVisibilityAxisLinks(group);
+    axisLinks = getViewpointVisibilityAxisLinks(group);
     for (i = 0; i < axisLinks.length; i++) {
       if (!axisLinks[i]) {
         continue;
@@ -8559,8 +8921,8 @@ wuwei.model = (function () {
     if (isTimelineVisibilityGroup(group)) {
       return setTimelineFamilyVisible(group, visible, nodesBucket, linksBucket, hideConnectedLinks);
     }
-    if (isContentsVisibilityGroup(group)) {
-      return setContentsFamilyVisible(group, visible, nodesBucket, linksBucket, hideConnectedLinks);
+    if (isViewpointVisibilityGroup(group)) {
+      return setViewpointFamilyVisible(group, visible, nodesBucket, linksBucket, hideConnectedLinks);
     }
     if (isRegularVisibilityGroup(group)) {
       return setRegularGroupFamilyVisible(group, visible, nodesBucket, linksBucket, hideConnectedLinks);
@@ -8611,7 +8973,7 @@ wuwei.model = (function () {
     if (target.groupRef) {
       return findGroupById(target.groupRef);
     }
-    if (target.type && ['simple', 'horizontal', 'vertical', 'timeline', 'contents'].indexOf(target.type) >= 0) {
+    if (target.type && ['simple', 'horizontal', 'vertical', 'timeline', 'viewpoint'].indexOf(target.type) >= 0) {
       return findGroupById(target.id);
     }
     return null;
@@ -8626,10 +8988,10 @@ wuwei.model = (function () {
     page.groups.forEach(function (group) {
       if (group && group.id === groupId) {
         removed = group;
-        if (wuwei.collab && typeof wuwei.collab.canDeleteObject === 'function' &&
-          !wuwei.collab.canDeleteObject(group)) {
-          if (typeof wuwei.collab.notifyReadOnly === 'function') {
-            wuwei.collab.notifyReadOnly();
+        if (wuwei.joint && typeof wuwei.joint.canDeleteObject === 'function' &&
+          !wuwei.joint.canDeleteObject(group)) {
+          if (typeof wuwei.joint.notifyReadOnly === 'function') {
+            wuwei.joint.notifyReadOnly();
           }
           return;
         }
@@ -9814,8 +10176,13 @@ wuwei.model = (function () {
       node.shape = 'CIRCLE';
       node.size = { radius: (node.size && node.size.radius) || 20 };
 
-      node.color = (node.axisRole === 'point') ? Color.nodeFill : '#fff8d8';
-      node.outline = (node.axisRole === 'point') ? Color.nodeOutline : '#b08a00';
+      node.style = (node.style && 'object' === typeof node.style) ? node.style : {};
+      node.style.fill = node.style.fill || ((node.axisRole === 'point') ? Color.nodeFill : '#fff8d8');
+      node.style.line = (node.style.line && 'object' === typeof node.style.line) ? node.style.line : {};
+      node.style.line.kind = node.style.line.kind || 'SOLID';
+      node.style.line.color = node.style.line.color || ((node.axisRole === 'point') ? Color.nodeOutline : '#b08a00');
+      node.style.line.width = finiteOr(node.style.line.width, 1);
+      expandNodeRuntimeStyle(node);
       node.visible = (false !== node.visible);
       node.changed = true;
       node.order = index + 1;
@@ -9824,20 +10191,40 @@ wuwei.model = (function () {
     });
   }
 
+  function expandPageNodeRuntimeStyles(page) {
+    var expander = wuwei && wuwei.note && wuwei.note.v2 && wuwei.note.v2.expandNodeRuntimeStyle;
+    if (!page || !Array.isArray(page.nodes) || typeof expander !== 'function') {
+      return;
+    }
+    page.nodes.forEach(function (node) {
+      expander(node);
+    });
+  }
+
   function setGraphFromCurrentPage() {
     const current = getCurrent();
     const page = getCurrentPage();
     if (page) {
-      wuwei.timeline.normalizeAllAxisGroups(page);
+      assertNoLegacyContentsInPage(page, 'wuwei.model.setGraphFromCurrentPage');
     }
     if (page) {
-      wuwei.contents.normalizeAllAxisGroups(page);
+      wuwei.timeline.normalizeAllAxisGroups(page);
     }
+    /*
+     * Viewpoint axis compatibility normalization is intentionally not executed
+     * during canvas graph reconstruction.  Legacy Contents data must be
+     * converted by wuwei.note.v2 before page data reaches this point.  If a
+     * legacy Contents token remains, assertNoLegacyContentsInPage() above
+     * raises an error instead of silently treating it as Viewpoint data.
+     */
     if (page) {
       ensureRegularGroupRepresentatives(page);
     }
     if (page) {
       cleanupGroupRepresentativeNodes(page);
+    }
+    if (page) {
+      expandPageNodeRuntimeStyles(page);
     }
     const pseudo = buildGroupPseudoGroups(page);
     if (current && page) {
@@ -9968,7 +10355,7 @@ wuwei.model = (function () {
       if ('timeline' === g.type) {
         return Array.isArray(g.members) && g.members.length >= 2;
       }
-      if ('contents' === g.type) {
+      if ('viewpoint' === g.type) {
         return Array.isArray(g.members) && g.members.length >= 1;
       }
       if ('horizontal' === g.type || 'vertical' === g.type) {
@@ -10024,9 +10411,9 @@ wuwei.model = (function () {
           return;
         }
         node.shape = sourceNode.shape;
-        node.color = sourceNode.color;
-        node.outline = sourceNode.outline;
         node.size = clone(sourceNode.size || {});
+        node.style = clone(sourceNode.style || {});
+        expandNodeRuntimeStyle(node);
         node.changed = true;
       });
     });

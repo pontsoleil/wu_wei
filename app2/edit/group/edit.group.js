@@ -101,6 +101,9 @@ wuwei.edit.group = wuwei.edit.group || {};
   }
 
   function open(target) {
+    if (wuwei.edit && typeof wuwei.edit.closeInfoPaneForEdit === 'function') {
+      wuwei.edit.closeInfoPaneForEdit();
+    }
     var group = resolveGroup(target);
     var pane = $('edit-group');
 

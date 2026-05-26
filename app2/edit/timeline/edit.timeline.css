@@ -120,7 +120,8 @@
   color: #555;
 }
 
-.edit-timeline-capture-actions {
+.edit-timeline-capture-actions,
+.edit-timeline-jump-actions {
   flex-wrap: wrap;
 }
 

@@ -41,6 +41,18 @@ wuwei.timeline = wuwei.timeline || {};
   }
 
 
+  function expandNodeRuntimeStyle(node) {
+    if (wuwei && wuwei.style &&
+        typeof wuwei.style.expandNodeRuntimeStyle === 'function') {
+      wuwei.style.expandNodeRuntimeStyle(node);
+    }
+    else if (wuwei && wuwei.note && wuwei.note.v2 &&
+        typeof wuwei.note.v2.expandNodeRuntimeStyle === 'function') {
+      wuwei.note.v2.expandNodeRuntimeStyle(node);
+    }
+    return node;
+  }
+
   function makeStablePseudoId(holder, key) {
     if (!holder) {
       return makeUuid();
@@ -403,7 +415,7 @@ wuwei.timeline = wuwei.timeline || {};
 
   function getMediaSourceUrl(videoNode) {
     var resource = (videoNode && videoNode.resource) || {};
-    return String(resource.canonicalUri || resource.uri || '');
+    return String((resource.original && resource.original.url) || (resource.original && resource.original.url) || resource.uri || resource.canonicalUri || '');
   }
 
   function detectMediaSource(videoNode) {
@@ -624,6 +636,44 @@ wuwei.timeline = wuwei.timeline || {};
     return group;
   }
 
+  function getDefaultPlayDuration(group) {
+    var value = group && Number(group.defaultPlayDuration);
+    if (!Number.isFinite(value) && group && group.timeline) {
+      value = Number(group.timeline.defaultPlayDuration);
+    }
+    return Math.max(1, Number.isFinite(value) ? value : 15);
+  }
+
+  function getDefaultEndSegmentStart(group, fixedEnd) {
+    fixedEnd = Math.max(0, Number(fixedEnd || 0));
+    return Math.max(0, fixedEnd - getDefaultPlayDuration(group));
+  }
+
+  function resolveEndSegmentStart(group, node, fixedEnd) {
+    var mediaStart;
+    var playDuration;
+    fixedEnd = Math.max(0, Number(fixedEnd || 0));
+    mediaStart = Number(node && node.mediaStart);
+    playDuration = Number(node && node.playDuration);
+
+    if (!Number.isFinite(mediaStart) || mediaStart < 0 || mediaStart > fixedEnd) {
+      return getDefaultEndSegmentStart(group, fixedEnd);
+    }
+
+    /*
+     * The end Segment has a fixed end time, but its start time represents
+     * the clip start.  Old data and earlier implementations stored both
+     * mediaStart and mediaEnd at the media end, resulting in a zero-length
+     * final Segment.  Treat that case as missing and restore the default
+     * start at (media end - defaultPlayDuration).
+     */
+    if (mediaStart >= fixedEnd && (!Number.isFinite(playDuration) || playDuration <= 0)) {
+      return getDefaultEndSegmentStart(group, fixedEnd);
+    }
+
+    return Math.max(0, Math.min(fixedEnd, mediaStart));
+  }
+
   function createSegmentNode(group, param) {
     param = param || {};
     var mediaStart = Number.isFinite(Number(param.mediaStart)) ? Number(param.mediaStart) : Math.max(0, Number(param.startAt || 0));
@@ -698,17 +748,14 @@ wuwei.timeline = wuwei.timeline || {};
       : { format: 'plain/text', body: '' };
     node.shape = 'CIRCLE';
     node.size = { radius: Number((node.size && node.size.radius) || 20) };
-    node.color = node.color || ((node.axisRole === 'point') ? common.Color.nodeFill : '#fff8d8');
-    node.outline = node.outline || ((node.axisRole === 'point') ? common.Color.nodeOutline : '#b08a00');
     node.style = (node.style && 'object' === typeof node.style) ? node.style : {};
+    node.style.fill = node.style.fill || node.color || ((node.axisRole === 'point') ? common.Color.nodeFill : '#fff8d8');
     node.style.font = node.style.font || common.defaultFont;
     node.style.line = (node.style.line && 'object' === typeof node.style.line) ? node.style.line : {};
     node.style.line.kind = node.style.line.kind || 'SOLID';
-    node.style.line.color = node.style.line.color || node.outline;
+    node.style.line.color = node.style.line.color || node.outline || ((node.axisRole === 'point') ? common.Color.nodeOutline : '#b08a00');
     node.style.line.width = Math.max(0, Number(node.style.line.width || node.outlineWidth || 1));
-    node.outline = node.style.line.color;
-    node.outlineWidth = node.style.line.width;
-    node.font = node.font || common.defaultFont;
+    expandNodeRuntimeStyle(node);
     node.visible = (false !== node.visible);
     node.changed = true;
     if (!Number.isFinite(Number(node.x))) { node.x = 0; }
@@ -1074,9 +1121,10 @@ wuwei.timeline = wuwei.timeline || {};
         node.axisPos = axisOrientation(group) === 'vertical' ? anchor.y : anchor.x;
       }
       else if (node.axisRole === 'end') {
-        node.mediaStart = end;
+        mediaStart = resolveEndSegmentStart(group, node, end);
+        node.mediaStart = Math.max(start, Math.min(end, mediaStart));
         node.mediaEnd = end;
-        node.playDuration = 0;
+        node.playDuration = Math.max(0, node.mediaEnd - node.mediaStart);
         node.axisPos = (axisOrientation(group) === 'vertical' ? anchor.y : anchor.x) + length;
       }
       else {
@@ -1217,9 +1265,9 @@ wuwei.timeline = wuwei.timeline || {};
     if (!endNode) {
       endNode = createSegmentNode(group, {
         axisRole: 'end',
-        mediaStart: group.timeEnd,
+        mediaStart: getDefaultEndSegmentStart(group, group.timeEnd),
         mediaEnd: group.timeEnd,
-        playDuration: 0,
+        playDuration: Math.max(0, Number(group.timeEnd || 0) - getDefaultEndSegmentStart(group, group.timeEnd)),
         label: formatTime(group.timeEnd)
       });
       page.nodes.push(endNode);
@@ -1231,10 +1279,10 @@ wuwei.timeline = wuwei.timeline || {};
     startNode.label = formatTime(startNode.mediaStart);
     delete startNode.name;
 
-    endNode.mediaStart = group.timeEnd;
-    endNode.mediaEnd = endNode.mediaStart;
-    endNode.playDuration = 0;
-    endNode.label = formatTime(endNode.mediaStart);
+    endNode.mediaStart = resolveEndSegmentStart(group, endNode, group.timeEnd);
+    endNode.mediaEnd = group.timeEnd;
+    endNode.playDuration = Math.max(0, endNode.mediaEnd - endNode.mediaStart);
+    endNode.label = endNode.label || formatTime(group.timeEnd);
     delete endNode.name;
 
     ensureTimelineRepresentativeEntryLink(page, group);
@@ -1386,8 +1434,8 @@ wuwei.timeline = wuwei.timeline || {};
       color: '#c0c0c0',
       size: 2,
       groupRef: group.id,
-      linkRole: 'contents-first-entry',
-      linkType: 'contents-first-entry',
+      linkRole: 'viewpoint-first-entry',
+      linkType: 'viewpoint-first-entry',
       audit: {
         owner: 'guest',
         createdBy: getCurrentOwnerId(),
@@ -1417,7 +1465,7 @@ wuwei.timeline = wuwei.timeline || {};
     existing = null;
     page.links = (page.links || []).filter(function (item) {
       if (!item || item.groupRef !== group.id ||
-          (item.linkRole !== 'contents-first-entry' && item.linkRole !== 'timeline-entry')) {
+          (item.linkRole !== 'viewpoint-first-entry' && item.linkRole !== 'timeline-entry')) {
         return true;
       }
       if (getLinkSourceId(item) === representative.id && getLinkTargetId(item) === firstNode.id) {
@@ -1434,8 +1482,8 @@ wuwei.timeline = wuwei.timeline || {};
       existing.visible = true;
       existing.changed = true;
       existing.relation = existing.relation || 'timeline';
-      existing.linkRole = 'contents-first-entry';
-      existing.linkType = 'contents-first-entry';
+      existing.linkRole = 'viewpoint-first-entry';
+      existing.linkType = 'viewpoint-first-entry';
       setLinkTargetId(existing, firstNode.id);
       existing.from = representative.id;
       if (undefined !== existing.source) {
@@ -1577,9 +1625,9 @@ wuwei.timeline = wuwei.timeline || {};
 
     endNode = createSegmentNode(group, {
       axisRole: 'end',
-      mediaStart: duration,
+      mediaStart: getDefaultEndSegmentStart(group, duration),
       mediaEnd: duration,
-      playDuration: 0,
+      playDuration: Math.max(0, Number(duration || 0) - getDefaultEndSegmentStart(group, duration)),
       label: formatTime(duration)
     });
 
@@ -1751,11 +1799,11 @@ wuwei.timeline = wuwei.timeline || {};
       delete startNode.name;
     }
     if (endNode) {
-      endNode.mediaStart = group.timeEnd;
+      endNode.mediaStart = resolveEndSegmentStart(group, endNode, group.timeEnd);
       endNode.mediaEnd = group.timeEnd;
-      endNode.playDuration = 0;
+      endNode.playDuration = Math.max(0, endNode.mediaEnd - endNode.mediaStart);
       endNode.axisPos = anchorPos + Math.max(60, Number(group.length || 480));
-      endNode.label = formatTime(group.timeEnd);
+      endNode.label = endNode.label || formatTime(group.timeEnd);
       delete endNode.name;
     }
 
@@ -1778,6 +1826,7 @@ wuwei.timeline = wuwei.timeline || {};
     patch = patch || {};
     segment = record.segment;
     group = record.group;
+    group.axis = group.axis || {};
 
     if (Number.isFinite(Number(patch.mediaStart))) {
       segment.mediaStart = Math.max(0, Number(patch.mediaStart));
@@ -1815,11 +1864,16 @@ wuwei.timeline = wuwei.timeline || {};
       group.axis.start = 0;
     }
     else if (segment.axisRole === 'end') {
-      group.timeEnd = Math.max(0, segment.mediaStart);
-      group.axis.end = group.timeEnd;
-      segment.mediaStart = group.timeEnd;
-      segment.mediaEnd = group.timeEnd;
-      segment.playDuration = 0;
+      var fixedEnd = Math.max(0, Number(
+        group.timeEnd != null ? group.timeEnd :
+          (group.axis && group.axis.end != null ? group.axis.end :
+            (segment.mediaEnd != null ? segment.mediaEnd : segment.mediaStart))
+      ) || 0);
+      segment.mediaStart = resolveEndSegmentStart(group, segment, fixedEnd);
+      segment.mediaEnd = fixedEnd;
+      segment.playDuration = Math.max(0, segment.mediaEnd - segment.mediaStart);
+      group.timeEnd = fixedEnd;
+      group.axis.end = fixedEnd;
     }
     else if (segment.mediaStart > Number(group.timeEnd || 0)) {
       group.timeEnd = segment.mediaStart;
@@ -1932,6 +1986,13 @@ wuwei.timeline = wuwei.timeline || {};
     }
     else if (isAxisGroup(target)) {
       group = target;
+    }
+    else if (model && typeof model.isRepresentativeTopic === 'function' &&
+      model.isRepresentativeTopic(target) && target.groupRef) {
+      group = model.findGroupById(target.groupRef);
+      if (group && !isAxisGroup(group)) {
+        group = null;
+      }
     }
 
     if (!group || !group.mediaRef) {

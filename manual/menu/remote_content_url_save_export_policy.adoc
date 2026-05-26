@@ -1,0 +1,39 @@
+= WuWei remote Content URL save/export policy
+三分一信之（三分一技術士事務所）
+:revnumber: ver 1.0
+:revdate: 2026-05-25
+:revremark:
+:version-label!:
+:doctype: book
+:toc:
+:toclevels: 3
+:sectnums:
+
+== 問題
+
+remote Content の URL を編集しても、通常保存又はエキスポート時の `note.json` に URL が残らない場合があった。
+
+原因は、remote Content の URL を `resource.uri`、`resource.canonicalUri`、`resource.original.url`、`resource.original.canonicalUrl` に同期する処理が十分でなく、保存前に `current.resources` と `current.page.nodes[].resource` の同期も保証されていなかったことである。
+
+== 仕様
+
+* ヘッダーメニューの「コンテンツ」は remote Content として作成する。
+* サーバーにアップロードされた Content は upload Content とする。
+* remote Content は内容タブで URL を編集可能とする。
+* upload Content の URL / storage は編集不可とする。
+* 保存 / エキスポート時、remote URL は次に同期して保存する。
+
+[source,json]
+----
+resource.uri
+resource.canonicalUri
+resource.original.url
+resource.original.canonicalUrl
+----
+
+== 実装
+
+* `wuwei.edit.js` で URL 入力時に remote resource へ正規化する。
+* `wuwei.edit.js` で node resource だけでなく `current.resources` 側にも反映する。
+* `wuwei.note.js` で保存 / エキスポート直前に remote Content URL を再同期する。
+* Vimeo / YouTube は media provider と video id からも URL を補完可能とする。

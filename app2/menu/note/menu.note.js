@@ -540,8 +540,7 @@ wuwei.menu.note = wuwei.menu.note || {};
           const current = wuwei.common.current;
           current.note_name = note_name;
           document.querySelector('#note .ajax_result').innerHTML = result;
-          document.querySelector('#note_name .name').innerHTML = current.note_name;
-          document.querySelector('#note_name .description').innerHTML = current.description;
+          updateCurrentNoteNameDisplay(current);
 
           close();
 
@@ -568,12 +567,38 @@ wuwei.menu.note = wuwei.menu.note || {};
     wuwei.menu.publish.publish({ close: close });
   }
 
+  function normalizeExportNoteId(value) {
+    let text = String(value || '').trim();
+
+    if (/^t-/i.test(text)) {
+      text = text.slice(2);
+    }
+
+    text = text.replace(/^_+/, '');
+
+    const m = text.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    if (m) {
+      return m[0].toLowerCase();
+    }
+
+    if (wuwei.util && typeof wuwei.util.createUuid === 'function') {
+      return String(wuwei.util.createUuid() || '')
+        .replace(/^t-/i, '')
+        .replace(/^_+/, '')
+        .toLowerCase();
+    }
+
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+      return window.crypto.randomUUID().toLowerCase();
+    }
+
+    return String(Date.now());
+  }
+
   function makeFileName(ext) {
     const current = wuwei.common.current || {};
-    const base = String(current.note_name || current.note_id || 'wuwei-note')
-      .replace(/[\\/:*?"<>|]+/g, '_')
-      .replace(/\s+/g, '_')
-      .replace(/^_+|_+$/g, '') || 'wuwei-note';
+    const noteId = normalizeExportNoteId(current.note_id);
+    const base = `t-${noteId}`.replace(/[\\/:*?"<>|]+/g, '_');
     return `${base}${ext || '.txt'}`;
   }
 
@@ -589,15 +614,15 @@ wuwei.menu.note = wuwei.menu.note || {};
     const summary = {
       note_id: noteJson && noteJson.note_id,
       pages: 0,
-      contentsGroups: [],
+      viewpointGroups: [],
       pageMarkers: []
     };
     const pages = Array.isArray(noteJson && noteJson.pages) ? noteJson.pages : [];
     summary.pages = pages.length;
     pages.forEach(function (page, pageIndex) {
       (page.groups || []).forEach(function (group) {
-        if (group && group.type === 'contents') {
-          summary.contentsGroups.push({
+        if (group && group.type === 'viewpoint') {
+          summary.viewpointGroups.push({
             page: pageIndex + 1,
             id: group.id,
             documentRef: group.documentRef,
@@ -614,7 +639,7 @@ wuwei.menu.note = wuwei.menu.note || {};
         }
       });
       (page.nodes || []).forEach(function (node) {
-        if (node && (node.type === 'PageMarker' || node.topicKind === 'contents-page')) {
+        if (node && (node.type === 'PageMarker' || node.topicKind === 'viewpoint-page')) {
           summary.pageMarkers.push({
             page: pageIndex + 1,
             id: node.id,
@@ -839,6 +864,25 @@ wuwei.menu.note = wuwei.menu.note || {};
     }
   }
 
+  function updateCurrentNoteNameDisplay(current) {
+    var nameEl;
+    var descEl;
+
+    if (wuwei.note && typeof wuwei.note.updateNoteNameDisplay === 'function') {
+      wuwei.note.updateNoteNameDisplay(current || wuwei.common.current);
+      return;
+    }
+
+    nameEl = document.querySelector('#note_name .name');
+    descEl = document.querySelector('#note_name .description');
+    if (nameEl) {
+      nameEl.textContent = current && current.note_name || '';
+    }
+    if (descEl) {
+      descEl.textContent = current && current.description || '';
+    }
+  }
+
   function applyImportedNote(noteJson) {
     const cu = wuwei.common.state && wuwei.common.state.currentUser || {};
     noteJson.exchange = Object.assign({}, noteJson.exchange || {}, {
@@ -848,14 +892,11 @@ wuwei.menu.note = wuwei.menu.note || {};
       importedBy: cu.user_id || '',
       importedAt: new Date().toISOString()
     });
-    noteJson.collabNoteState = 'imported';
+    noteJson.jointNoteState = 'imported';
     noteJson.note_scope = 'personal';
     noteJson.team_id = '';
     const current = wuwei.note.updateNote(noteJson);
-    const nameEl = document.querySelector('#note_name .name');
-    const descEl = document.querySelector('#note_name .description');
-    if (nameEl) { nameEl.textContent = current.note_name || ''; }
-    if (descEl) { descEl.textContent = current.description || ''; }
+    updateCurrentNoteNameDisplay(current);
     renderCurrentNoteNow();
     setTimeout(function () {
       if (Array.isArray(current.pages) && current.pages.length > 1) {
@@ -960,15 +1001,7 @@ wuwei.menu.note = wuwei.menu.note || {};
   function openNoteFromJson(noteJson) {
     current = wuwei.note.updateNote(noteJson);
 
-    const nameEl = document.querySelector('#note_name .name');
-    const descEl = document.querySelector('#note_name .description');
-
-    if (nameEl) {
-      nameEl.textContent = current.note_name || '';
-    }
-    if (descEl) {
-      descEl.textContent = current.description || '';
-    }
+    updateCurrentNoteNameDisplay(current);
 
     renderCurrentNoteNow();
 

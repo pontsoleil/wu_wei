@@ -232,16 +232,16 @@ wuwei.info.generic.markup = (function () {
       option.displayedPageMarker ||
       option.contentTarget ||
       option.contentTargetPoint ||
-      option.contentsPoint
+      option.viewpointPoint
     );
     var explicitUri = option && (option.contentViewerUri || option.pdfjsUri)
       ? String(option.contentViewerUri || option.pdfjsUri || '')
       : '';
-    var page = option && (option.page || option.pageNumber || option.contentsPageNumber);
+    var page = option && (option.page || option.pageNumber || option.viewpointPageNumber);
     var computedUri;
 
-    if (point && wuwei.contents && typeof wuwei.contents.getContentTargetViewerUrl === 'function') {
-      computedUri = wuwei.contents.getContentTargetViewerUrl(node, page, point);
+    if (point && wuwei.viewpoint && typeof wuwei.viewpoint.getContentTargetViewerUrl === 'function') {
+      computedUri = wuwei.viewpoint.getContentTargetViewerUrl(node, page, point);
       if (computedUri) {
         return prepareViewerUriForInfo(node, computedUri);
       }
@@ -280,7 +280,7 @@ wuwei.info.generic.markup = (function () {
     }
 
     // Current model: external references are represented as normal URLs.
-    uri = String(embed.uri || (resource && (resource.uri || resource.canonicalUri)) || '').trim();
+    uri = String(embed.uri || (resource && ((resource.original && resource.original.url) || resource.uri || resource.canonicalUri)) || '').trim();
     if (/^https?:\/\//i.test(uri) && uri.indexOf('/wu_wei2/') < 0) {
       return uri;
     }
@@ -328,7 +328,7 @@ wuwei.info.generic.markup = (function () {
     }
     originalUri = util.getResourceOriginalUri
       ? util.getResourceOriginalUri(node)
-      : String((resource && (resource.canonicalUri || resource.uri)) || '');
+      : String((resource && ((resource.original && resource.original.url) || (resource.original && resource.original.url) || resource.uri || resource.canonicalUri)) || '');
     if (canUseOfficeViewer(originalUri)) {
       return 'https://view.officeapps.live.com/op/embed.aspx?src=' +
         encodeURIComponent(toOfficeViewerFetchUri(originalUri, node));
@@ -477,11 +477,11 @@ wuwei.info.generic.markup = (function () {
       option.displayedPageMarker ||
       option.contentTarget ||
       option.contentTargetPoint ||
-      option.contentsPoint
+      option.viewpointPoint
     );
     var value = point && point.pageNumber;
     if (value == null || value === '') {
-      value = option && (option.pageNumber || option.contentsPageNumber || option.page);
+      value = option && (option.pageNumber || option.viewpointPageNumber || option.page);
     }
     if (value == null || value === '') {
       return '';
@@ -493,7 +493,7 @@ wuwei.info.generic.markup = (function () {
     var page = option && option.page;
     var text = String(uri || '');
     if ((page == null || page === '') && option) {
-      page = option.contentsPageNumber;
+      page = option.viewpointPageNumber;
     }
     if (page == null || page === '' || !text || /#page=/i.test(text) || !isPdfLikeUri(text)) {
       return text;

@@ -24,9 +24,13 @@ wuwei.init.registry = (function () {
   getModules = function () {
     return [
       { name: 'wuwei.util', target: function () { return wuwei.util; } },
+      { name: 'wuwei.style', target: function () { return wuwei.style; } },
+      { name: 'wuwei.resource', target: function () { return wuwei.resource; } },
+      { name: 'wuwei.document', target: function () { return wuwei.document; } },
+      { name: 'wuwei.video', target: function () { return wuwei.video; } },
+      { name: 'wuwei.audio', target: function () { return wuwei.audio; } },
       { name: 'wuwei.model', target: function () { return wuwei.model; } },
       { name: 'wuwei.data', target: function () { return wuwei.data; } },
-      { name: 'wuwei.video', target: function () { return wuwei.video; } },
       { name: 'wuwei.log', target: function () { return wuwei.log; } },
       { name: 'wuwei.menu', target: function () { return wuwei.menu; } },
       { name: 'wuwei.draw', target: function () { return wuwei.draw; } },

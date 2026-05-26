@@ -225,13 +225,71 @@ wuwei.edit = wuwei.edit || {};
       return result;
     }
 
-    if (/\.(png|jpe?g|gif|webp|svg)(\?|#|$)/.test(lowerResourceUri)) {
+    if (/\.png(\?|#|$)/.test(lowerResourceUri)) {
       result.kind = 'image';
+      result.subtype = 'png';
+      result.mimeType = 'image/png';
+      return result;
+    }
+    if (/\.jpe?g(\?|#|$)/.test(lowerResourceUri)) {
+      result.kind = 'image';
+      result.subtype = 'jpeg';
+      result.mimeType = 'image/jpeg';
+      return result;
+    }
+    if (/\.gif(\?|#|$)/.test(lowerResourceUri)) {
+      result.kind = 'image';
+      result.subtype = 'gif';
+      result.mimeType = 'image/gif';
+      return result;
+    }
+    if (/\.webp(\?|#|$)/.test(lowerResourceUri)) {
+      result.kind = 'image';
+      result.subtype = 'webp';
+      result.mimeType = 'image/webp';
+      return result;
+    }
+    if (/\.svg(\?|#|$)/.test(lowerResourceUri)) {
+      result.kind = 'image';
+      result.subtype = 'svg';
+      result.mimeType = 'image/svg+xml';
       return result;
     }
 
-    if (/\.(mp3|wav|m4a|aac|flac|oga)(\?|#|$)/.test(lowerResourceUri)) {
+    if (/\.mp3(\?|#|$)/.test(lowerResourceUri)) {
       result.kind = 'audio';
+      result.subtype = 'mp3';
+      result.mimeType = 'audio/mpeg';
+      return result;
+    }
+    if (/\.wav(\?|#|$)/.test(lowerResourceUri)) {
+      result.kind = 'audio';
+      result.subtype = 'wav';
+      result.mimeType = 'audio/wav';
+      return result;
+    }
+    if (/\.m4a(\?|#|$)/.test(lowerResourceUri)) {
+      result.kind = 'audio';
+      result.subtype = 'm4a';
+      result.mimeType = 'audio/mp4';
+      return result;
+    }
+    if (/\.aac(\?|#|$)/.test(lowerResourceUri)) {
+      result.kind = 'audio';
+      result.subtype = 'aac';
+      result.mimeType = 'audio/aac';
+      return result;
+    }
+    if (/\.flac(\?|#|$)/.test(lowerResourceUri)) {
+      result.kind = 'audio';
+      result.subtype = 'flac';
+      result.mimeType = 'audio/flac';
+      return result;
+    }
+    if (/\.oga(\?|#|$)/.test(lowerResourceUri)) {
+      result.kind = 'audio';
+      result.subtype = 'oga';
+      result.mimeType = 'audio/ogg';
       return result;
     }
 
@@ -255,7 +313,7 @@ wuwei.edit = wuwei.edit || {};
     }
 
     if (kind === 'webpage') {
-      node.resource.kind = 'other';
+      node.resource.kind = 'document';
       node.resource.documentKind = 'html';
     }
     else if (kind === 'document') {
@@ -278,9 +336,15 @@ wuwei.edit = wuwei.edit || {};
       if (kind === 'video' && detected.subtype) {
         node.resource.videoKind = detected.subtype;
       }
+      if (kind === 'audio' && detected.subtype) {
+        node.resource.audioKind = detected.subtype;
+      }
+      if (kind === 'image' && detected.subtype) {
+        node.resource.imageKind = detected.subtype;
+      }
     }
 
-    if (!node.resource.mimeType && detected.mimeType) {
+    if (detected.mimeType) {
       node.resource.mimeType = detected.mimeType;
     }
   }
@@ -332,18 +396,25 @@ wuwei.edit = wuwei.edit || {};
     owner = String((state.currentUser && state.currentUser.user_id) || '');
     now = new Date().toISOString();
     title = String(node.label || resource.title || sourceUrl || 'Web content');
-    kind = resource.kind || (detected.kind === 'webpage' ? 'web' : detected.kind) || 'web';
+    kind = resource.kind || (detected.kind === 'webpage' ? 'document' : detected.kind) || 'web';
     mimeType = resource.mimeType || detected.mimeType || (detected.kind === 'webpage' ? 'text/html' : 'text/plain');
 
     resource.id = resource.id || node.id;
     resource.title = resource.title || title;
-    resource.kind = (detected.kind === 'document') ? 'document' : (detected.kind === 'webpage' ? 'other' : kind);
-    if (detected.kind === 'document') {
-      resource.documentKind = detected.subtype === 'pdf' ? 'pdf' :
-        (/^(word|excel|powerpoint|office-online)$/.test(detected.subtype || '') ? 'office' : 'html');
+    resource.kind = (detected.kind === 'document' || detected.kind === 'webpage') ? 'document' : kind;
+    if (detected.kind === 'document' || detected.kind === 'webpage') {
+      resource.documentKind = detected.kind === 'webpage' ? 'html' :
+        (detected.subtype === 'pdf' ? 'pdf' :
+          (/^(word|excel|powerpoint|office-online)$/.test(detected.subtype || '') ? 'office' : 'html'));
     }
     if (detected.kind === 'video') {
       resource.videoKind = detected.subtype || resource.videoKind || '';
+    }
+    if (detected.kind === 'audio') {
+      resource.audioKind = detected.subtype || resource.audioKind || '';
+    }
+    if (detected.kind === 'image') {
+      resource.imageKind = detected.subtype || resource.imageKind || '';
     }
     resource.mimeType = mimeType;
     resource.uri = sourceUrl;
@@ -439,6 +510,17 @@ wuwei.edit = wuwei.edit || {};
     target[parts[parts.length - 1]] = value;
   }
 
+  function expandNodeRuntimeStyle(node) {
+    if (wuwei && wuwei.style &&
+        typeof wuwei.style.expandNodeRuntimeStyle === 'function') {
+      wuwei.style.expandNodeRuntimeStyle(node);
+    }
+    else if (wuwei && wuwei.note && wuwei.note.v2 &&
+        typeof wuwei.note.v2.expandNodeRuntimeStyle === 'function') {
+      wuwei.note.v2.expandNodeRuntimeStyle(node);
+    }
+  }
+
   function syncNodeRuntimeMirrors(node, path, value) {
     if (!node) {
       return;
@@ -468,38 +550,11 @@ wuwei.edit = wuwei.edit || {};
       );
       return;
     }
-    if ('style.fill' === path) {
-      node.color = value;
+    if (path === 'style.fill' || path === 'style.line.color' || path === 'style.line.width' ||
+        path === 'style.font.color' || path === 'style.font.size' ||
+        path === 'style.font.family' || path === 'style.font.align') {
+      expandNodeRuntimeStyle(node);
       return;
-    }
-    if ('style.line.color' === path) {
-      node.outline = value;
-      return;
-    }
-    if ('style.line.width' === path) {
-      node.outlineWidth = Number(value || 1);
-      return;
-    }
-    if ('style.font.color' === path) {
-      node.font = node.font || {};
-      node.font.color = value;
-      return;
-    }
-    if ('style.font.size' === path) {
-      node.font = node.font || {};
-      node.font.size = value;
-      return;
-    }
-    if ('style.font.family' === path) {
-      node.font = node.font || {};
-      node.font.family = value;
-      return;
-    }
-    if ('style.font.align' === path) {
-      node.font = node.font || {};
-      node.font['text-anchor'] =
-        ('left' === value) ? 'start' :
-          (('right' === value) ? 'end' : 'middle');
     }
   }
 
@@ -531,9 +586,9 @@ wuwei.edit = wuwei.edit || {};
 
   function shouldAppendImportedDescription(node, path) {
     return !!(
-      wuwei.collab &&
-      typeof wuwei.collab.canAppendImportedDescription === 'function' &&
-      wuwei.collab.canAppendImportedDescription(node, path, 'node')
+      wuwei.joint &&
+      typeof wuwei.joint.canAppendImportedDescription === 'function' &&
+      wuwei.joint.canAppendImportedDescription(node, path, 'node')
     );
   }
 
@@ -823,6 +878,135 @@ wuwei.edit = wuwei.edit || {};
     syncLinkRuntimeMirrors(link, path, value);
   }
 
+  function updateThumbnailUriRowVisibility(shape) {
+    var visible = String(shape || '').toUpperCase() === 'THUMBNAIL';
+    document.querySelectorAll('#edit .thumbnail-uri-row').forEach(function (row) {
+      row.style.display = visible ? 'block' : 'none';
+    });
+  }
+
+  function isLoadFileRuntimeUrl(value) {
+    return /(?:^|\/)(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i.test(String(value || ''));
+  }
+
+  function getUrlHash(value) {
+    var s = String(value || '');
+    var index = s.indexOf('#');
+    return index >= 0 ? s.slice(index) : '';
+  }
+
+  function extractRawLoadFilePath(value) {
+    var s = String(value || '').trim();
+    var match;
+
+    if (!s || !isLoadFileRuntimeUrl(s)) {
+      return s;
+    }
+
+    /*
+     * The edit pane should show the user-facing logical path, not the runtime
+     * URL and not the percent-encoded query value.
+     */
+    match = s.match(/[?&]path=([^&#]*)/);
+    if (!match) {
+      return s;
+    }
+
+    try {
+      return decodeURIComponent(match[1]) + getUrlHash(s);
+    }
+    catch (e) {
+      return match[1].replace(/%2F/ig, '/') + getUrlHash(s);
+    }
+  }
+
+  function normalizeEditableResourceUrl(value) {
+    return extractRawLoadFilePath(value);
+  }
+
+  function isRemoteResource(resource) {
+    resource = resource && typeof resource === 'object' ? resource : {};
+    return String(resource.source || '').toLowerCase() === 'remote' ||
+      !!(resource.original && String(resource.original.type || '').toLowerCase() === 'remote') ||
+      (!!resource.uri && /^https?:\/\//i.test(String(resource.uri || '')));
+  }
+
+  function ensureRemoteOriginal(resource) {
+    resource.original = (resource.original && typeof resource.original === 'object') ? resource.original : {};
+    resource.original.type = 'remote';
+    if (!Array.isArray(resource.original.identifiers)) {
+      resource.original.identifiers = [];
+    }
+    return resource.original;
+  }
+
+  function syncRemoteResourceUrl(node, path, value) {
+    var resource;
+    var original;
+    var text;
+    if (!node) {
+      return;
+    }
+    node.resource = (node.resource && typeof node.resource === 'object') ? node.resource : {};
+    resource = node.resource;
+    value = String(value || '').trim();
+    text = value || String(resource.uri || resource.canonicalUri ||
+      resource.original && (resource.original.url || resource.original.canonicalUrl) || '');
+
+    /*
+     * A URL typed in the content tab defines a remote resource even when the
+     * placeholder node had source=embedded/other.  Upload resources remain
+     * upload unless the user explicitly supplies an external http(s) URL.
+     */
+    if (!isRemoteResource(resource) && !/^https?:\/\//i.test(text)) {
+      return;
+    }
+
+    resource.source = 'remote';
+    original = ensureRemoteOriginal(resource);
+
+    if (path === 'resource.original.canonicalUrl' || path === 'resource.canonicalUri') {
+      original.canonicalUrl = value;
+      resource.canonicalUri = value;
+      if (!resource.uri && value) {
+        resource.uri = value;
+      }
+      if (!original.url && value) {
+        original.url = value;
+      }
+      return;
+    }
+
+    original.url = value;
+    resource.uri = value;
+    if (!resource.canonicalUri || path === 'resource.uri' || path === 'resource.original.url') {
+      resource.canonicalUri = value;
+    }
+    if (!original.canonicalUrl || path === 'resource.uri' || path === 'resource.original.url') {
+      original.canonicalUrl = value;
+    }
+  }
+
+  function syncCurrentResourceDefinitionFromNode(node) {
+    var current = wuwei.common && wuwei.common.current;
+    var resource = node && node.resource;
+    var resources;
+    var found;
+
+    if (!current || !resource || !resource.id) {
+      return;
+    }
+    resources = Array.isArray(current.resources) ? current.resources : [];
+    found = resources.find(function (item) { return item && item.id === resource.id; });
+    if (found) {
+      Object.assign(found, JSON.parse(JSON.stringify(resource)));
+    }
+    else if (node.resourceRef && node.resourceRef === resource.id) {
+      resources.push(JSON.parse(JSON.stringify(resource)));
+      current.resources = resources;
+    }
+  }
+
   function updateShapeInputsForNode(node, shape) {
     var radiusInput = document.getElementById('size_radius');
     var widthInput = document.getElementById('size_width');
@@ -831,6 +1015,7 @@ wuwei.edit = wuwei.edit || {};
     var widthHeightEl = document.getElementById('width-height');
     var radius, width, height;
 
+    updateThumbnailUriRowVisibility(shape);
     if (!node || !node.size) {
       return;
     }
@@ -878,6 +1063,8 @@ wuwei.edit = wuwei.edit || {};
       resource_uri: 'resource.uri',
       resource_kind: 'resource.kind',
       resource_canonicalUri: 'resource.canonicalUri',
+      resource_original_url: 'resource.original.url',
+      resource_original_canonicalUrl: 'resource.original.canonicalUrl',
       thumbnailUri: 'resource.thumbnailUri',
       shape: 'shape',
       style_fill: 'style.fill',
@@ -946,7 +1133,7 @@ wuwei.edit = wuwei.edit || {};
     fields.forEach(function (el) {
       var path = fieldIdToPath(el.id, el);
       if (!path || /^edit[A-Z]/.test(el.id) || 'editRole' === el.id || 'applyToGroup' === el.id ||
-        'applyToTimelineGroup' === el.id || 'applyToContentsGroup' === el.id) {
+        'applyToTimelineGroup' === el.id || 'applyToViewpointGroup' === el.id) {
         return;
       }
       el.classList.add('edit-value');
@@ -1052,10 +1239,10 @@ wuwei.edit = wuwei.edit || {};
     if (!targetInfo || !targetInfo.object || !path) {
       return false;
     }
-    if (wuwei.collab && typeof wuwei.collab.canEditPath === 'function' &&
-      !wuwei.collab.canEditPath(targetInfo.object, path, targetInfo.kind)) {
-      if (typeof wuwei.collab.notifyReadOnly === 'function') {
-        wuwei.collab.notifyReadOnly();
+    if (wuwei.joint && typeof wuwei.joint.canEditPath === 'function' &&
+      !wuwei.joint.canEditPath(targetInfo.object, path, targetInfo.kind)) {
+      if (typeof wuwei.joint.notifyReadOnly === 'function') {
+        wuwei.joint.notifyReadOnly();
       }
       return false;
     }
@@ -1077,22 +1264,28 @@ wuwei.edit = wuwei.edit || {};
 
   function applyNodeEditPath(node, path, value, el) {
     var pageEl, page, detectedMedia, kindEl;
+    var isRemoteUrlPath = ['resource.uri', 'resource.canonicalUri', 'resource.original.url', 'resource.original.canonicalUrl'].indexOf(path) >= 0;
     if (!node) {
       return;
     }
-    if ('resource.uri' === path || 'resource.canonicalUri' === path) {
+    if (isRemoteUrlPath) {
+      value = normalizeEditableResourceUrl(value);
       pageEl = document.getElementById('pdfPage');
       page = pageEl ? (pageEl.value || pageEl.innerText || '') : '';
-      if (page) {
+      if (page && (path === 'resource.uri' || path === 'resource.canonicalUri')) {
         value = String(value || '').split('#')[0] + '#page=' + page;
-        if (el) {
-          el.value = value;
-        }
+      }
+      if (el) {
+        el.value = value;
       }
       node.resource = (node.resource && 'object' === typeof node.resource) ? node.resource : {};
-      node.resource.uri = String(value || '');
-      node.resource.canonicalUri = String(value || '');
-      updateOriginalStorageFileFromEditedUri(node, value);
+      if (path === 'resource.uri' || path === 'resource.canonicalUri') {
+        node.resource.uri = String(value || '');
+        node.resource.canonicalUri = String(value || '');
+        updateOriginalStorageFileFromEditedUri(node, value);
+      }
+      syncRemoteResourceUrl(node, path, value);
+      syncCurrentResourceDefinitionFromNode(node);
     }
     if (state.Selecting && Array.isArray(stateMap.selecteds) &&
       ['shape', 'size.radius', 'size.width', 'size.height', 'style.fill', 'style.line.color',
@@ -1100,8 +1293,8 @@ wuwei.edit = wuwei.edit || {};
         'style.font.align', 'style.label.width', 'style.label.lines',
         'style.label.offset.x', 'style.label.offset.y'].indexOf(path) >= 0) {
       stateMap.selecteds.forEach(function (selectedNode) {
-        if (wuwei.collab && typeof wuwei.collab.canEditPath === 'function' &&
-          !wuwei.collab.canEditPath(selectedNode, path, 'node')) {
+        if (wuwei.joint && typeof wuwei.joint.canEditPath === 'function' &&
+          !wuwei.joint.canEditPath(selectedNode, path, 'node')) {
           return;
         }
         setNodePath(selectedNode, path, value);
@@ -1114,7 +1307,7 @@ wuwei.edit = wuwei.edit || {};
     if (path === 'resource.contents.firstPageNumber') {
       normalizeContentFirstPageNumber(node);
     }
-    if (('resource.uri' === path || 'resource.canonicalUri' === path) && node.resource) {
+    if ((isRemoteUrlPath || 'resource.uri' === path || 'resource.canonicalUri' === path) && node.resource) {
       if (wuwei.util && typeof wuwei.util.toStorageRelativePath === 'function' &&
         (String(value || '').match(/^(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i) ||
           String(value || '').match(/(?:^|\/)upload\//))) {
@@ -1127,11 +1320,19 @@ wuwei.edit = wuwei.edit || {};
         node.resource.canonicalUri = String(value || '');
         updateOriginalStorageFileFromEditedUri(node, value);
       }
-      detectedMedia = detectMediaFromUrl(value || '');
+      detectedMedia = detectMediaFromUrl(value || node.resource.uri || (node.resource.original && node.resource.original.url) || '');
       if (detectedMedia.kind === 'video' || node.option === 'video' || node.resource.kind === 'video') {
         normalizeVideoResourceSource(node, value);
+        syncCurrentResourceDefinitionFromNode(node);
       }
-      if (!node.resource.kind || detectedMedia.kind === 'video' || node.resource.kind === 'web' || node.resource.kind === 'webpage') {
+      if (!node.resource.kind ||
+        detectedMedia.kind === 'document' ||
+        detectedMedia.kind === 'video' ||
+        detectedMedia.kind === 'webpage' ||
+        node.resource.kind === 'web' ||
+        node.resource.kind === 'webpage' ||
+        node.resource.kind === 'other' ||
+        node.resource.kind === 'general') {
         applyMediaDetectionToNode(node, detectedMedia.kind || '');
         kindEl = document.getElementById('resource_kind');
         if (kindEl && detectedMedia.kind) {
@@ -1141,16 +1342,11 @@ wuwei.edit = wuwei.edit || {};
     }
     if ('resource.thumbnailUri' === path) {
       node.resource = (node.resource && 'object' === typeof node.resource) ? node.resource : {};
-      if (wuwei.util && typeof wuwei.util.toStorageRelativePath === 'function' &&
-        (String(value || '').match(/^(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i) ||
-          String(value || '').match(/\/(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i) ||
-          String(value || '').match(/(?:^|\/)(upload|resource|note|thumbnail|content)\//))) {
-        value = wuwei.util.toStorageRelativePath(value, null, '');
-        if (el) {
-          el.value = value;
-        }
-        setNodePath(node, path, value);
+      value = normalizeEditableResourceUrl(value);
+      if (el) {
+        el.value = value;
       }
+      setNodePath(node, path, value);
       updateThumbnailStorageFileFromEditedUri(node, value);
       node.thumbnailUri = String(value || '');
       node.resource.viewer = (node.resource.viewer && 'object' === typeof node.resource.viewer)
@@ -1181,7 +1377,7 @@ wuwei.edit = wuwei.edit || {};
     if (!target || !target.id || !target.closest || !target.closest('#edit')) {
       return;
     }
-    if ('applyToGroup' === target.id || 'applyToTimelineGroup' === target.id || 'applyToContentsGroup' === target.id) {
+    if ('applyToGroup' === target.id || 'applyToTimelineGroup' === target.id || 'applyToViewpointGroup' === target.id) {
       if (!stateMap.option || 'object' !== typeof stateMap.option) {
         stateMap.option = {};
       }
@@ -1337,11 +1533,11 @@ wuwei.edit = wuwei.edit || {};
       editPane.style.display = 'block';
       hideEdits();
 
-      if (param.link && isContentsAxisTarget(param.link)) {
-        resolve(wuwei.edit.contents.openAxisProperties(param.link, param.option || {}));
+      if (param.link && isViewpointAxisTarget(param.link)) {
+        resolve(wuwei.edit.viewpoint.openAxisProperties(param.link, param.option || {}));
       }
-      else if (param.node && isContentsAxisTarget(param.node)) {
-        resolve(wuwei.edit.contents.openAxisProperties(param.node, param.option || {}));
+      else if (param.node && isViewpointAxisTarget(param.node)) {
+        resolve(wuwei.edit.viewpoint.openAxisProperties(param.node, param.option || {}));
       }
       else if (param.link && isTimelineAxisLink(param.link) && hasTimelineEditor()) {
         resolve(wuwei.edit.timeline.open(param.link, param.option || {}));
@@ -1363,11 +1559,17 @@ wuwei.edit = wuwei.edit || {};
       else if (param.node && ['Topic', 'Memo'].includes(param.node.type)) {
         resolve(wuwei.edit.generic.open(param));
       }
-      else if (param.node && param.node.topicKind === 'contents-page') {
-        resolve(wuwei.edit.contents.openPageMarker(param));
+      else if (param.node && param.node.topicKind === 'viewpoint-page') {
+        resolve(wuwei.edit.viewpoint.openPageMarker(param));
       }
-      else if (param.node && wuwei.video.isVideoNode(param.node)) {
+      else if (isVideoContentNode(param.node) && wuwei.edit.video && typeof wuwei.edit.video.open === 'function') {
         resolve(wuwei.edit.video.open(param));
+      }
+      else if (isAudioContentNode(param.node) && wuwei.edit.audio && typeof wuwei.edit.audio.open === 'function') {
+        resolve(wuwei.edit.audio.open(param));
+      }
+      else if (isImageContentNode(param.node) && wuwei.edit.image && typeof wuwei.edit.image.open === 'function') {
+        resolve(wuwei.edit.image.open(param));
       }
       else if (isUploadedContentNode(param.node)) {
         resolve(wuwei.edit.uploaded.open(param));
@@ -1420,6 +1622,37 @@ wuwei.edit = wuwei.edit || {};
     );
   }
 
+
+  function isVideoContentNode(node) {
+    return !!(
+      node &&
+      node.type === 'Content' &&
+      wuwei.video &&
+      typeof wuwei.video.isVideoNode === 'function' &&
+      wuwei.video.isVideoNode(node)
+    );
+  }
+
+  function isAudioContentNode(node) {
+    return !!(
+      node &&
+      node.type === 'Content' &&
+      wuwei.audio &&
+      typeof wuwei.audio.isAudioNode === 'function' &&
+      wuwei.audio.isAudioNode(node)
+    );
+  }
+
+  function isImageContentNode(node) {
+    return !!(
+      node &&
+      node.type === 'Content' &&
+      wuwei.resource &&
+      typeof wuwei.resource.isImage === 'function' &&
+      wuwei.resource.isImage(node)
+    );
+  }
+
   function isTimelinePointNode(node) {
     return !!(
       node &&
@@ -1441,22 +1674,71 @@ wuwei.edit = wuwei.edit || {};
     );
   }
 
-  function isContentsAxisTarget(target) {
-    if (!target || !wuwei.edit.contents || typeof wuwei.edit.contents.canOpen !== 'function') {
+  function isViewpointAxisTarget(target) {
+    if (!target || !wuwei.edit.viewpoint || typeof wuwei.edit.viewpoint.canOpen !== 'function') {
       return false;
     }
-    return wuwei.edit.contents.canOpen(target);
+    return wuwei.edit.viewpoint.canOpen(target);
+  }
+
+  function closeInfoPaneForEdit() {
+    var infoPane = document.getElementById('info');
+    if (!infoPane || infoPane.style.display === 'none') {
+      return;
+    }
+    if (wuwei.info && typeof wuwei.info.close === 'function') {
+      wuwei.info.close();
+      return;
+    }
+    infoPane.innerHTML = '';
+    infoPane.style.display = 'none';
+  }
+
+  function showOnlyEditRoot(activeId) {
+    if (activeId) {
+      closeInfoPaneForEdit();
+    }
+
+    var roots = [
+      'edit-generic',
+      'edit-group',
+      'edit-link',
+      'edit-uploaded',
+      'edit-video',
+      'edit-audio',
+      'edit-image',
+      'edit-viewpoint',
+      'edit-timeline'
+    ];
+
+    roots.forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) {
+        el.style.display = (id === activeId) ? 'block' : 'none';
+      }
+    });
+
+    if (activeId !== 'edit-viewpoint') {
+      if (document.getElementById('edit-viewpoint-axis')) {
+        document.getElementById('edit-viewpoint-axis').style.display = 'none';
+      }
+      if (document.getElementById('edit-viewpoint-page-marker')) {
+        document.getElementById('edit-viewpoint-page-marker').style.display = 'none';
+      }
+    }
+    if (activeId !== 'edit-timeline') {
+      if (document.getElementById('edit-timeline-axis')) {
+        document.getElementById('edit-timeline-axis').style.display = 'none';
+      }
+      if (document.getElementById('edit-timeline-point')) {
+        document.getElementById('edit-timeline-point').style.display = 'none';
+      }
+    }
   }
 
   function hideEdits() {
     if (!document.getElementById('edit').innerHTML) { return; }
-    if (document.getElementById('edit-generic')) { document.getElementById('edit-generic').style.display = 'none'; }
-    if (document.getElementById('edit-group')) { document.getElementById('edit-group').style.display = 'none'; }
-    if (document.getElementById('edit-uploaded')) { document.getElementById('edit-uploaded').style.display = 'none'; }
-    if (document.getElementById('edit-video')) { document.getElementById('edit-video').style.display = 'none'; }
-    if (document.getElementById('edit-link')) { document.getElementById('edit-link').style.display = 'none'; }
-    if (document.getElementById('edit-contents-axis')) { document.getElementById('edit-contents-axis').style.display = 'none'; }
-    if (document.getElementById('edit-contents-page-marker')) { document.getElementById('edit-contents-page-marker').style.display = 'none'; }
+    showOnlyEditRoot('');
   }
 
   function hideControls() {
@@ -1480,8 +1762,8 @@ wuwei.edit = wuwei.edit || {};
     stateMap.option = {};
     stateMap.param = {};
 
-    if (infoPane) {
-      infoPane.style.display = 'none';
+    if (infoPane && infoPane.style.display !== 'none') {
+      closeInfoPaneForEdit();
     }
     if (editPane && wuwei.edit.markup && typeof wuwei.edit.markup.template === 'function') {
       editPane.innerHTML = wuwei.edit.markup.template();
@@ -1512,10 +1794,10 @@ wuwei.edit = wuwei.edit || {};
       }
     }
 
-    if (wuwei.collab && typeof wuwei.collab.canEditObject === 'function' &&
-      !wuwei.collab.canEditObject(node)) {
-      if (typeof wuwei.collab.notifyReadOnly === 'function') {
-        wuwei.collab.notifyReadOnly(node);
+    if (wuwei.joint && typeof wuwei.joint.canEditObject === 'function' &&
+      !wuwei.joint.canEditObject(node)) {
+      if (typeof wuwei.joint.notifyReadOnly === 'function') {
+        wuwei.joint.notifyReadOnly(node);
       }
       return false;
     }
@@ -1530,10 +1812,7 @@ wuwei.edit = wuwei.edit || {};
       close();
     }
 
-    var currentInfoPane = document.getElementById('info');
-    if (currentInfoPane && currentInfoPane.style.display !== 'none') {
-      wuwei.info.close();
-    }
+    closeInfoPaneForEdit();
 
     /** open */
     var editPane = document.getElementById('edit');
@@ -1614,9 +1893,9 @@ wuwei.edit = wuwei.edit || {};
       canvasEl.appendChild(editingCircle);
     }
 
-    if (isContentsAxisTarget(node)) {
+    if (isViewpointAxisTarget(node)) {
       editPane.style.display = 'block';
-      return wuwei.edit.contents.openAxisProperties(node, option || {});
+      return wuwei.edit.viewpoint.openAxisProperties(node, option || {});
     }
 
     if (isTimelinePointNode(node)) {
@@ -1787,10 +2066,10 @@ wuwei.edit = wuwei.edit || {};
     close();
   }
 
-  function flushContentsEntryFields() {
+  function flushViewpointEntryFields() {
     var pageNumberEl;
     var pageNumber;
-    if (!stateMap.node || stateMap.node.topicKind !== 'contents-page') {
+    if (!stateMap.node || stateMap.node.topicKind !== 'viewpoint-page') {
       return;
     }
     pageNumberEl = document.getElementById('pageNumber');
@@ -1887,7 +2166,7 @@ wuwei.edit = wuwei.edit || {};
     flushVideoEditFields();
     flushVideoResourceFields();
     flushNetworkResourceFields();
-    flushContentsEntryFields();
+    flushViewpointEntryFields();
     flushGroupEditFields();
     // Timeline edits are buffered in the timeline panel fields,
     // so the global save icon must apply them before storing the log.
@@ -1896,21 +2175,21 @@ wuwei.edit = wuwei.edit || {};
       typeof wuwei.edit.timeline.commit === 'function') {
       committed = wuwei.edit.timeline.commit();
     }
-    if (state.contentsEdit) {
-      committed = wuwei.edit.contents.commit();
+    if (state.viewpointEdit) {
+      committed = wuwei.edit.viewpoint.commit();
     }
 
     if (false === committed) {
       return false;
     }
 
-    if (stateMap.option && stateMap.option.pendingContentsEntry &&
-      stateMap.node && wuwei.contents && typeof wuwei.contents.commitEntryDraft === 'function') {
-      committed = wuwei.contents.commitEntryDraft(stateMap.node);
+    if (stateMap.option && stateMap.option.pendingViewpointEntry &&
+      stateMap.node && wuwei.viewpoint && typeof wuwei.viewpoint.commitEntryDraft === 'function') {
+      committed = wuwei.viewpoint.commitEntryDraft(stateMap.node);
     }
-    else if (stateMap.node && stateMap.node.topicKind === 'contents-page' &&
-      wuwei.contents && typeof wuwei.contents.updateEntryFromNode === 'function') {
-      committed = wuwei.contents.updateEntryFromNode(stateMap.node);
+    else if (stateMap.node && stateMap.node.topicKind === 'viewpoint-page' &&
+      wuwei.viewpoint && typeof wuwei.viewpoint.updateEntryFromNode === 'function') {
+      committed = wuwei.viewpoint.updateEntryFromNode(stateMap.node);
     }
 
     if (false === committed) {
@@ -1925,15 +2204,106 @@ wuwei.edit = wuwei.edit || {};
     return true;
   }
 
+  function resolveTimelineEditInfoTarget() {
+    var editState = state && state.timelineEdit;
+    var target = null;
+
+    if (!editState || !editState.mode) {
+      return null;
+    }
+
+    if (editState.pointId && model && typeof model.findNodeById === 'function') {
+      target = model.findNodeById(editState.pointId);
+    }
+    if (!target && editState.groupId && model && typeof model.findGroupById === 'function') {
+      target = model.findGroupById(editState.groupId);
+    }
+    if (!target && editState.targetId) {
+      if (model && typeof model.findNodeById === 'function') {
+        target = model.findNodeById(editState.targetId);
+      }
+      if (!target && model && typeof model.findGroupById === 'function') {
+        target = model.findGroupById(editState.targetId);
+      }
+    }
+    return target;
+  }
+
+  function openTimelineEditTargetInInfo() {
+    var target = resolveTimelineEditInfoTarget();
+
+    if (!target || !wuwei.info || !wuwei.info.timeline ||
+      typeof wuwei.info.timeline.open !== 'function') {
+      return false;
+    }
+
+    close();
+    wuwei.info.timeline.open(target);
+    return true;
+  }
+
+  function resolveViewpointEditInfoTarget() {
+    var editState = state && state.viewpointEdit;
+    var target = null;
+
+    if (wuwei.edit.viewpoint &&
+      typeof wuwei.edit.viewpoint.getCurrentPoint === 'function') {
+      target = wuwei.edit.viewpoint.getCurrentPoint();
+    }
+    if (!target && editState && editState.pointId && model &&
+      typeof model.findNodeById === 'function') {
+      target = model.findNodeById(editState.pointId);
+    }
+    if (!target && wuwei.edit.viewpoint &&
+      typeof wuwei.edit.viewpoint.getCurrentGroup === 'function') {
+      target = wuwei.edit.viewpoint.getCurrentGroup();
+    }
+    if (!target && editState && editState.groupId && model &&
+      typeof model.findGroupById === 'function') {
+      target = model.findGroupById(editState.groupId);
+    }
+    return target;
+  }
+
+  function openViewpointEditTargetInInfo() {
+    var target = resolveViewpointEditInfoTarget();
+
+    if (!state.viewpointEdit || !target || !wuwei.edit.viewpoint ||
+      typeof wuwei.edit.viewpoint.openInfo !== 'function') {
+      return false;
+    }
+
+    close();
+    wuwei.edit.viewpoint.openInfo(target);
+    return true;
+  }
+
   function infoOpen() {
     var targetNode = stateMap.node;
     var targetOption = stateMap.option;
-    var contentsGroup = null;
-    flushContentsEntryFields();
+    flushViewpointEntryFields();
     flushGroupEditFields();
+
+    if (openTimelineEditTargetInInfo()) {
+      return;
+    }
+    if (openViewpointEditTargetInInfo()) {
+      return;
+    }
+
     if (!targetNode && stateMap.group) {
       var targetGroup = stateMap.group;
       close();
+      if (targetGroup && targetGroup.type === 'viewpoint' &&
+        wuwei.info && wuwei.info.viewpoint && typeof wuwei.info.viewpoint.openAxis === 'function') {
+        wuwei.info.viewpoint.openAxis(targetGroup);
+        return;
+      }
+      if (targetGroup && targetGroup.type === 'timeline' &&
+        wuwei.info && wuwei.info.timeline && typeof wuwei.info.timeline.open === 'function') {
+        wuwei.info.timeline.open(targetGroup);
+        return;
+      }
       wuwei.info.open({
         id: targetGroup.pseudoNodeId || targetGroup.pseudoLinkId || targetGroup.id,
         type: 'Group',
@@ -1942,20 +2312,10 @@ wuwei.edit = wuwei.edit || {};
       }, targetOption);
       return;
     }
-    if (!targetNode && state.contentsEdit && wuwei.edit.contents &&
-      typeof wuwei.edit.contents.getCurrentGroup === 'function' &&
-      typeof wuwei.edit.contents.openInfo === 'function') {
-      contentsGroup = wuwei.edit.contents.getCurrentGroup();
-      if (contentsGroup) {
-        close();
-        wuwei.edit.contents.openInfo(contentsGroup);
-        return;
-      }
-    }
-    if (targetNode && targetNode.topicKind === 'contents-page' &&
-      wuwei.menu && wuwei.menu.contents && typeof wuwei.menu.contents.openContentTargetInInfo === 'function') {
+    if (targetNode && targetNode.topicKind === 'viewpoint-page' &&
+      wuwei.menu && wuwei.menu.viewpoint && typeof wuwei.menu.viewpoint.openContentTargetInInfo === 'function') {
       close();
-      wuwei.menu.contents.openContentTargetInInfo(targetNode);
+      wuwei.menu.viewpoint.openContentTargetInInfo(targetNode);
       return;
     }
     close();
@@ -1971,11 +2331,17 @@ wuwei.edit = wuwei.edit || {};
       if ('generic' === stateMap.node.option) {
         wuwei.edit.generic.close();
       }
+      else if (isVideoContentNode(stateMap.node) && wuwei.edit.video && typeof wuwei.edit.video.close === 'function') {
+        wuwei.edit.video.close();
+      }
+      else if (isAudioContentNode(stateMap.node) && wuwei.edit.audio && typeof wuwei.edit.audio.close === 'function') {
+        wuwei.edit.audio.close();
+      }
+      else if (isImageContentNode(stateMap.node) && wuwei.edit.image && typeof wuwei.edit.image.close === 'function') {
+        wuwei.edit.image.close();
+      }
       else if (isUploadedContentNode(stateMap.node)) {
         wuwei.edit.uploaded.close();
-      }
-      else if ('video' === stateMap.node.option) {
-        wuwei.edit.video.close();
       }
       else if ('memo' === stateMap.node.option) {
         wuwei.edit.memo.close();
@@ -1997,8 +2363,14 @@ wuwei.edit = wuwei.edit || {};
     if (wuwei.edit.timeline && typeof wuwei.edit.timeline.close === 'function') {
       wuwei.edit.timeline.close();
     }
-    if (wuwei.edit.contents && typeof wuwei.edit.contents.close === 'function') {
-      wuwei.edit.contents.close();
+    if (wuwei.edit.viewpoint && typeof wuwei.edit.viewpoint.close === 'function') {
+      wuwei.edit.viewpoint.close();
+    }
+    if (wuwei.edit.audio && typeof wuwei.edit.audio.close === 'function') {
+      wuwei.edit.audio.close();
+    }
+    if (wuwei.edit.image && typeof wuwei.edit.image.close === 'function') {
+      wuwei.edit.image.close();
     }
 
     document.getElementById('edit').innerHTML = '';
@@ -2042,6 +2414,12 @@ wuwei.edit = wuwei.edit || {};
     }
     if (wuwei.edit.video && typeof wuwei.edit.video.initModule === 'function') {
       wuwei.edit.video.initModule();
+    }
+    if (wuwei.edit.audio && typeof wuwei.edit.audio.initModule === 'function') {
+      wuwei.edit.audio.initModule();
+    }
+    if (wuwei.edit.image && typeof wuwei.edit.image.initModule === 'function') {
+      wuwei.edit.image.initModule();
     }
     if (wuwei.edit.timeline && typeof wuwei.edit.timeline.initModule === 'function') {
       wuwei.edit.timeline.initModule();
@@ -2093,6 +2471,8 @@ wuwei.edit = wuwei.edit || {};
   ns.closeEdit = closeEdit;
   ns.resetForExternalEditor = resetForExternalEditor;
   ns.update = update;
+  ns.showOnlyEditRoot = showOnlyEditRoot;
+  ns.closeInfoPaneForEdit = closeInfoPaneForEdit;
   ns.fieldIdToPath = fieldIdToPath;
   ns.pathToFieldId = pathToFieldId;
   ns.asciiDocToPlainText = asciiDocToPlainText;

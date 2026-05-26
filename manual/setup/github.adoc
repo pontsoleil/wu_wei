@@ -1,0 +1,44 @@
+ローカル本体で修正したあと、GitHub へ反映する基本手順です。
+
+```powershell
+cd C:\Apache24\htdocs\wu_wei2
+
+# 1. 修正したファイルを Git 作業ツリーへコピー
+Copy-Item app2\xxx\file.js GIT\app2\xxx\file.js
+
+# 2. Git 作業ツリーへ移動
+cd GIT
+
+# 3. 差分確認
+git status --short
+git diff --stat
+git diff --check
+
+# 4. 必要なファイルだけ stage
+git add app2/xxx/file.js index.html
+
+# 5. commit
+git commit -m "変更内容を短く説明"
+
+# 6. GitHub へ push
+git push origin master
+```
+
+今回のように `index.html` も変えた場合は、必ず `GIT/index.html` にも反映してから `git add index.html` します。
+
+確認用によく使うコマンド:
+
+```powershell
+node --check app2\model\wuwei.model.js
+node --check app2\menu\wuwei.menu.js
+node --check app2\edit\wuwei.edit.js
+```
+
+EC2 側へ取り込むときは:
+
+```bash
+cd /ebs/www/sambuichi.jp/public_html/wu_wei2
+git pull origin master
+chmod +x server/*.cgi server/is-login server/bin/*
+sudo chown -R nginx:nginx data server/log public
+```

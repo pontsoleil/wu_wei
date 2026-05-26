@@ -1,0 +1,33 @@
+= WuWei remote Content 内容タブ編集対応
+三分一信之（三分一技術士事務所）
+:revnumber: ver 1.0
+:revdate: 2026-05-25
+:revremark:
+:version-label!:
+:doctype: book
+:toc:
+:toclevels: 3
+:sectnums:
+
+== 方針
+
+`resource.source == "remote"` の Content では、内容タブで参照 URL を編集可能にする。
+
+`resource.source == "upload"` の Content では、サーバー登録済みの URI、storage、MIME、viewer などは編集不可のままとする。
+
+== 編集可能項目
+
+remote Content では、内容タブで次を編集可能にする。
+
+* `resource.uri`
+* `resource.canonicalUri`
+* `resource.original.url`
+* `resource.title`
+* `resource.videoKind` / `resource.audioKind` / `resource.documentKind` / `resource.imageKind`
+
+URL を編集した場合、`resource.uri` と `resource.original.url` を同期する。
+
+== 注意
+
+既にエキスポート済みのノートで URL が空になっている場合、URL は復元できないため、内容タブで再入力する。
+今後は remote Content の URL を内容タブで保存できるため、再エキスポート時に URL が保持される。
