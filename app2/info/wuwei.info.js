@@ -26,6 +26,13 @@ wuwei.info = wuwei.info || {};
       _window: new Map()
     };
 
+  function t(str) {
+    if (wuwei.nls && typeof wuwei.nls.translate === 'function') {
+      return wuwei.nls.translate(str);
+    }
+    return String(str || '');
+  }
+
   function isTimelinePointNode(node) {
     return !!(
       node &&
