@@ -4337,9 +4337,24 @@ wuwei.menu = wuwei.menu || {};
     );
   }
 
+  function isContextContentWithOpenUrl(allNodes) {
+    var target = getContextTarget(allNodes);
+
+    if (!target || target.type !== 'Content') {
+      return false;
+    }
+    try {
+      return !!getOpenUrl(target);
+    }
+    catch (e) {
+      return false;
+    }
+  }
+
   function isContextOpenableTarget(allNodes) {
     return (
       isContextDocumentLikeContent(allNodes) ||
+      isContextContentWithOpenUrl(allNodes) ||
       isContextTimelinePlayable(allNodes) ||
       isContextViewpointPage(allNodes) ||
       isContextViewpointRepresentative(allNodes)
