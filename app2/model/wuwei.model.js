@@ -4564,12 +4564,14 @@ wuwei.model = (function () {
     var alignment_baseline = font['alignment-baseline'] || 'baseline';
 
     var labelGap = (options && options.labelGap != null) ? options.labelGap : 10;
+    var labelOffsetX = Number(options && options.labelOffsetX);
     var lineHeight = (options && options.lineHeight != null) ? options.lineHeight : 20;
     var maxWidthFactor = (options && options.maxWidthFactor != null) ? options.maxWidthFactor : 3;
     var optionWrapWidth = Number(options && options.wrapWidth);
     var optionMaxLines = Number(options && options.maxLines);
 
     var anchor = getTopLabelAnchor(shape, width, height, radius, text_anchor, labelGap);
+    var labelX = anchor.x + (Number.isFinite(labelOffsetX) ? labelOffsetX : 0);
     var baseFigureWidth;
     var wrapWidth;
     var gText;
@@ -4594,7 +4596,7 @@ wuwei.model = (function () {
 
     gText = d3node.append('text')
       .attr('class', 'node-label')
-      .attr('x', anchor.x)
+      .attr('x', labelX)
       .attr('y', 0)
       .attr('font-family', font_family)
       .attr('font-size', font_size)
@@ -4622,7 +4624,7 @@ wuwei.model = (function () {
     }
 
     for (i = 0; i < tspans.length; i++) {
-      tspans[i].setAttribute('x', anchor.x + 'px');
+      tspans[i].setAttribute('x', labelX + 'px');
       tspans[i].setAttribute('y', (i * lineHeight) + 'px');
     }
 
@@ -5818,6 +5820,7 @@ wuwei.model = (function () {
     if (('THUMBNAIL' === shape || 'Content' === type) && label) {
       renderWrappedTopLabel(d3node, node, label, {
         paddingX: 4,
+        labelOffsetX: Number.isFinite(Number(labelStyle.offset.x)) ? Number(labelStyle.offset.x) : 0,
         labelGap: Number.isFinite(Number(labelStyle.offset.y)) ? Number(labelStyle.offset.y) : 10,
         lineHeight: 20,
         wrapWidth: labelStyle.width,
