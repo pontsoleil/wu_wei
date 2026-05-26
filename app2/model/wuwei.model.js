@@ -400,6 +400,9 @@ wuwei.model = (function () {
     }
 
     for (link of (graph.links || [])) {
+      if (isDeletedRecord(link)) {
+        continue;
+      }
       if (link.from !== node.id && link.to !== node.id) {
         continue;
       }
@@ -3418,6 +3421,9 @@ wuwei.model = (function () {
       markDeletedRecord(link);
       updateLink(link);
       d3.select('g.link#' + id).remove();
+      if (typeof updateLinkCount === 'function') {
+        updateLinkCount();
+      }
     }
   };
 
@@ -3471,6 +3477,9 @@ wuwei.model = (function () {
     }
 
     for (const link of (graph.links || [])) {
+      if (isDeletedRecord(link)) {
+        continue;
+      }
       if (!link || !link.from || !link.to) {
         util.appendById(undefineds, link);
         continue;
@@ -8485,7 +8494,7 @@ wuwei.model = (function () {
       node,
       linkCount, d3node, d3linkCount;
     nodes = graph.nodes.filter(function (n) {
-      return n.visible && !n.filterout;
+      return isNodeShown(n);
     });
     for (node of nodes) {
       linkCount = countHiddenLink(node);
