@@ -11,6 +11,24 @@
 wuwei.info = wuwei.info || {};
 wuwei.info.uploaded = wuwei.info.uploaded || {};
 wuwei.info.uploaded.markup = ( function () {
+  function fallbackNotice(uri, className) {
+    if (wuwei.info && typeof wuwei.info.iframeNoticeHtml === 'function') {
+      return wuwei.info.iframeNoticeHtml(uri, { className: className || 'iframe-fallback w3-row' });
+    }
+    return '<div class="' + escapeAttr(className || 'iframe-fallback w3-row') + '" style="display:block;">' +
+      t('This page may require login or block iframe preview. Open it in a tab or window.') +
+      '<br><a href="' + escapeAttr(uri) + '" target="_blank" rel="noopener noreferrer">' + escapeAttr(uri) + '</a></div>';
+  }
+
+  function fallbackActions(uri, options) {
+    if (wuwei.info && typeof wuwei.info.openActionsHtml === 'function') {
+      return wuwei.info.openActionsHtml(uri, options);
+    }
+    return '<div class="' + escapeAttr((options && options.className) || 'w3-row info-uploaded-actions') + '">' +
+      '<a href="' + escapeAttr(uri) + '" target="_blank" rel="noopener noreferrer">' +
+      t('Click to open tab') + '<i class="fas fa-external-link-alt"></i></a></div>';
+  }
+
   const template = function( param ) {
     let
       node = param.node,
@@ -77,11 +95,11 @@ wuwei.info.uploaded.markup = ( function () {
     : ''
   }
   ${uri
-    ? wuwei.info.iframeNoticeHtml(uri, { className: 'iframe-fallback w3-row' })
+    ? fallbackNotice(uri, 'iframe-fallback w3-row')
     : ``
   }
   ${uri
-    ? wuwei.info.openActionsHtml(uri, {
+    ? fallbackActions(uri, {
         className: 'w3-row info-uploaded-actions',
         windowFeatures: 'width=600,height=400'
       })

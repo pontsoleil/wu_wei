@@ -20,6 +20,24 @@ wuwei.info.contents.markup = (function () {
     return wuwei.nls.translate(text);
   }
 
+  function fallbackNotice(uri, className) {
+    if (wuwei.info && typeof wuwei.info.iframeNoticeHtml === 'function') {
+      return wuwei.info.iframeNoticeHtml(uri, { className: className || 'contents-iframe-notice' });
+    }
+    return '<div class="' + esc(className || 'contents-iframe-notice') + '" style="display:block;">' +
+      esc(t('This page may require login or block iframe preview. Open it in a tab or window.')) +
+      '<br><a href="' + esc(uri) + '" target="_blank" rel="noopener noreferrer">' + esc(uri) + '</a></div>';
+  }
+
+  function fallbackActions(uri, options) {
+    if (wuwei.info && typeof wuwei.info.openActionsHtml === 'function') {
+      return wuwei.info.openActionsHtml(uri, options);
+    }
+    return '<div class="' + esc((options && options.className) || 'contents-open-window') + '">' +
+      '<a href="' + esc(uri) + '" target="_blank" rel="noopener noreferrer">' +
+      esc(t('Click to open tab')) + '<i class="fas fa-external-link-alt"></i></a></div>';
+  }
+
   function block(label, value, klass) {
     if (!!label) {
       return '' +
@@ -108,8 +126,8 @@ wuwei.info.contents.markup = (function () {
       '</div>' +
       (viewerUri
         ? '<div class="contents-viewer-wrap">' +
-        wuwei.info.iframeNoticeHtml(viewerUri, { className: 'contents-iframe-notice' }) +
-        wuwei.info.openActionsHtml(viewerUri, {
+        fallbackNotice(viewerUri, 'contents-iframe-notice') +
+        fallbackActions(viewerUri, {
           className: 'contents-open-window',
           windowFeatures: 'width=600,height=400,resizable=yes,scrollbars=yes'
         }) +

@@ -34,6 +34,24 @@ wuwei.info.document.markup = (function () {
     return wuwei.info.markup.rowcount(value || '');
   }
 
+  function fallbackNotice(uri) {
+    if (wuwei.info && typeof wuwei.info.iframeNoticeHtml === 'function') {
+      return wuwei.info.iframeNoticeHtml(uri);
+    }
+    return '<div class="iframe-fallback" style="display:block;">' +
+      t('This page may require login or block iframe preview. Open it in a tab or window.') +
+      '<br><a href="' + esc(uri) + '" target="_blank" rel="noopener noreferrer">' + esc(uri) + '</a></div>';
+  }
+
+  function fallbackActions(uri, options) {
+    if (wuwei.info && typeof wuwei.info.openActionsHtml === 'function') {
+      return wuwei.info.openActionsHtml(uri, options);
+    }
+    return '<div class="' + esc((options && options.className) || 'info-document-actions') + '">' +
+      '<a href="' + esc(uri) + '" target="_blank" rel="noopener noreferrer">' +
+      t('Click to open tab') + '<i class="fas fa-external-link-alt"></i></a></div>';
+  }
+
   function getResource(node) {
     if (wuwei.resource && typeof wuwei.resource.getResource === 'function') {
       return wuwei.resource.getResource(node);
@@ -103,8 +121,8 @@ wuwei.info.document.markup = (function () {
       label ? '<div class="w3-row"><textarea id="label" class="w3-col s12" rows="' + rowcount(label) + '" disabled>' + esc(label) + '</textarea></div>' : '',
       documentKind ? '<div class="w3-row"><label class="w3-col s5">' + t('Document kind') + '</label><span class="w3-col s7">' + esc(documentKind) + '</span></div>' : '',
       page ? '<div class="w3-row info-page-number"><label class="w3-col s5">' + t('Page number') + '</label><span class="w3-col s7">' + esc(page) + '</span></div>' : '',
-      frameUrl ? wuwei.info.iframeNoticeHtml(openUrl || frameUrl) : '',
-      frameUrl ? wuwei.info.openActionsHtml(openUrl || frameUrl, {
+      frameUrl ? fallbackNotice(openUrl || frameUrl) : '',
+      frameUrl ? fallbackActions(openUrl || frameUrl, {
         className: 'info-document-actions',
         windowFeatures: 'width=800,height=600'
       }) : '',
