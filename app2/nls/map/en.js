@@ -210,6 +210,7 @@ wuwei.nls.EN = {
   'Align Bottom': 'Align Bottom',
   'Align Right': 'Align Right',
   'Align Left': 'Align Left',
+  'Click to open tab': 'Click to open tab',
   'Click to open window': 'Click to open window',
   'Comment': 'Comment',
   'Background': 'Background',

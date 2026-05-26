@@ -82,9 +82,10 @@ wuwei.info.uploaded.markup = ( function () {
     : ``
   }
   ${uri
-    ? `<span class="player w3-row" onclick="wuwei.info.openWindow('${jsUri}', 'wuwei', 'width=600, height=400')">
-        ${t('Click to open window')}<i class="fas fa-external-link-alt"></i>
-      </span>`
+    ? wuwei.info.openActionsHtml(uri, {
+        className: 'w3-row info-uploaded-actions',
+        windowFeatures: 'width=600,height=400'
+      })
     : ``
   }
   ${value && value.length > 0

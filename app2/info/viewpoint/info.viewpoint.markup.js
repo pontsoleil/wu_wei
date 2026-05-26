@@ -110,10 +110,10 @@ wuwei.info.viewpoint.markup = (function () {
         ? '<div class="viewpoint-viewer-wrap">' +
         '<iframe id="infoViewpointFrame" class="viewpoint-viewer-frame" src="' + esc(viewerUri) + '" ' +
         'onerror="wuwei.info.iframeError()"></iframe>' +
-        '<span class="viewpoint-open-window" data-open-uri="' + esc(viewerUri) + '" ' +
-        'onclick="wuwei.info.openWindow(this.getAttribute(\'data-open-uri\'), null, \'width=600,height=400,resizable=yes,scrollbars=yes\')">' +
-        esc(t('Click to open window')) + '<i class="fas fa-external-link-alt"></i>' +
-        '</span>' +
+        wuwei.info.openActionsHtml(viewerUri, {
+          className: 'viewpoint-open-window',
+          windowFeatures: 'width=600,height=400,resizable=yes,scrollbars=yes'
+        }) +
         '</div>'
         : '') +
       (description

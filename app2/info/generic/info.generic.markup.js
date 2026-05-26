@@ -62,11 +62,10 @@ wuwei.info.generic.markup = (function () {
           ${t('This site refused to be displayed in an iframe.')}
           <br><a href="${wuwei.util.encodeHtml(uri)}" target="_blank" rel="noopener noreferrer">${wuwei.util.encodeHtml(uri)}</a>
         </div>
-        <div class="link"
-          data-open-uri="${wuwei.util.encodeHtml(uri)}"
-          onclick="wuwei.info.openWindow(this.getAttribute('data-open-uri'), null, 'width=600,height=400,resizable=yes,scrollbars=yes')">
-          ${t('Click to open window')}<i class="fas fa-external-link-alt"></i>
-        </div>`
+        ${wuwei.info.openActionsHtml(uri, {
+          className: 'link info-generic-actions',
+          windowFeatures: 'width=600,height=400,resizable=yes,scrollbars=yes'
+        })}`
       : (thumbnailUri
         ? `<div class="frame">
             <img src="${wuwei.util.encodeHtml(thumbnailUri)}"

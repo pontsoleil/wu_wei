@@ -1237,6 +1237,50 @@ wuwei.info = wuwei.info || {};
     }
   }
 
+  function encodeActionAttr(value) {
+    if (wuwei.util && typeof wuwei.util.encodeHtml === 'function') {
+      return wuwei.util.encodeHtml(value);
+    }
+    return String(value || '').replace(/[&<>"']/g, function (ch) {
+      return {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[ch];
+    });
+  }
+
+  function openActionsHtml(uri, options) {
+    var className;
+    var features;
+    var encodedUri;
+
+    if (!uri) {
+      return '';
+    }
+    options = options || {};
+    className = options.className || 'info-open-actions';
+    features = options.windowFeatures || 'width=600,height=400,resizable=yes,scrollbars=yes';
+    encodedUri = encodeActionAttr(uri);
+
+    return [
+      '<div class="' + encodeActionAttr(className) + '">',
+      '<span class="player info-open-tab" data-open-uri="' + encodedUri + '" ',
+      'onclick="wuwei.info.openNewTab(this.getAttribute(\'data-open-uri\'))">',
+      t('Click to open tab') + '<i class="fas fa-external-link-alt"></i>',
+      '</span>',
+      '<span class="info-open-separator"> / </span>',
+      '<span class="player info-open-window" data-open-uri="' + encodedUri + '" ',
+      'data-window-features="' + encodeActionAttr(features) + '" ',
+      'onclick="wuwei.info.openWindow(this.getAttribute(\'data-open-uri\'), null, this.getAttribute(\'data-window-features\'))">',
+      t('Click to open window') + '<i class="fas fa-external-link-alt"></i>',
+      '</span>',
+      '</div>'
+    ].join('');
+  }
+
   function iframeError() {
     var frame = document.getElementById('infoFrame');
     var fallback = frame && frame.parentNode
@@ -1368,6 +1412,7 @@ wuwei.info = wuwei.info || {};
   ns.openWindow = openWindow;
   ns.closeWindow = closeWindow;
   ns.openNewTab = openNewTab;
+  ns.openActionsHtml = openActionsHtml;
   ns.iframeError = iframeError;
   ns.initModule = initModule;
   ns.hasAsciiDocValue = hasAsciiDocValue;

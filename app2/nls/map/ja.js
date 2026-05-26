@@ -211,6 +211,7 @@ wuwei.nls.JA = {
   'Align Bottom': '下に揃える',
   'Align Right': '右に揃える',
   'Align Left': '左に揃える',
+  'Click to open tab': 'クリックしてタブを開く',
   'Click to open window': 'クリックしてウィンドウを開く',
   'Comment': '解説',
   'Background': '背景',
