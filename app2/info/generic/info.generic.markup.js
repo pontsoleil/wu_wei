@@ -52,20 +52,20 @@ wuwei.info.generic.markup = (function () {
       : ''
   }
   ${uri
-      ? `<iframe id="infoFrame"
-          src="${wuwei.util.encodeHtml(uri)}"
-          data-resource-uri="${wuwei.util.encodeHtml(uri)}"
-          onload="this.dataset.loaded='1'"
-          onerror="wuwei.info.iframeError()"
-          style="display:block; width:100%; min-height:768px; border:none; overflow:auto; box-sizing:border-box;"></iframe>
-        <div class="iframe-fallback" style="display:none;">
-          ${t('This site refused to be displayed in an iframe.')}
+      ? `<div class="iframe-fallback" style="display:block;">
+          ${t('This page may require login or block iframe preview. Open it in a tab or window.')}
           <br><a href="${wuwei.util.encodeHtml(uri)}" target="_blank" rel="noopener noreferrer">${wuwei.util.encodeHtml(uri)}</a>
         </div>
         ${wuwei.info.openActionsHtml(uri, {
           className: 'link info-generic-actions',
           windowFeatures: 'width=600,height=400,resizable=yes,scrollbars=yes'
-        })}`
+        })}
+        <iframe id="infoFrame"
+          src="${wuwei.util.encodeHtml(uri)}"
+          data-resource-uri="${wuwei.util.encodeHtml(uri)}"
+          onload="this.dataset.loaded='1'"
+          onerror="wuwei.info.iframeError()"
+          style="display:block; width:100%; min-height:480px; border:none; overflow:auto; box-sizing:border-box;"></iframe>`
       : (thumbnailUri
         ? `<div class="frame">
             <img src="${wuwei.util.encodeHtml(thumbnailUri)}"

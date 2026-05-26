@@ -74,6 +74,7 @@ wuwei.nls.JA = {
   'Format': '形式',
   'Saved': '保存しました',
   'This site refused iframe preview.': 'このサイトは iframe での表示を拒否しました。',
+  'This page may require login or block iframe preview. Open it in a tab or window.': 'このページはログインが必要、またはサイトの制限により iframe で表示できない場合があります。タブまたはウィンドウで開いてください。',
   'Delete this timeline segment?': 'このタイムライン区間を削除しますか？',
   'OpenPlayer': 'プレイヤーで開く',
   'Create timeline axis': 'タイムライン軸を作成',

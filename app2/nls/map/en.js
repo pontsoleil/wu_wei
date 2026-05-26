@@ -73,6 +73,7 @@ wuwei.nls.EN = {
   'Format': 'Format',
   'Saved': 'Saved',
   'This site refused iframe preview.': 'This site refused iframe preview.',
+  'This page may require login or block iframe preview. Open it in a tab or window.': 'This page may require login or block iframe preview. Open it in a tab or window.',
   'Delete this timeline segment?': 'Delete this timeline segment?',
   'OpenPlayer': 'Open player',
   'Create timeline axis': 'Create timeline axis',
