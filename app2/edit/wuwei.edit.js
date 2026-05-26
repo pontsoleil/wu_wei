@@ -1065,6 +1065,7 @@ wuwei.edit = wuwei.edit || {};
       resource_canonicalUri: 'resource.canonicalUri',
       resource_original_url: 'resource.original.url',
       resource_original_canonicalUrl: 'resource.original.canonicalUrl',
+      resource_thumbnailUri: 'resource.thumbnailUri',
       thumbnailUri: 'resource.thumbnailUri',
       shape: 'shape',
       style_fill: 'style.fill',
