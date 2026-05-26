@@ -108,12 +108,13 @@ wuwei.info.viewpoint.markup = (function () {
       '</div>' +
       (viewerUri
         ? '<div class="viewpoint-viewer-wrap">' +
-        '<iframe id="infoViewpointFrame" class="viewpoint-viewer-frame" src="' + esc(viewerUri) + '" ' +
-        'onerror="wuwei.info.iframeError()"></iframe>' +
+        wuwei.info.iframeNoticeHtml(viewerUri, { className: 'viewpoint-iframe-notice' }) +
         wuwei.info.openActionsHtml(viewerUri, {
           className: 'viewpoint-open-window',
           windowFeatures: 'width=600,height=400,resizable=yes,scrollbars=yes'
         }) +
+        '<iframe id="infoViewpointFrame" class="viewpoint-viewer-frame" src="' + esc(viewerUri) + '" ' +
+        'onerror="wuwei.info.iframeError()"></iframe>' +
         '</div>'
         : '') +
       (description

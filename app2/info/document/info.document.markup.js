@@ -103,11 +103,12 @@ wuwei.info.document.markup = (function () {
       label ? '<div class="w3-row"><textarea id="label" class="w3-col s12" rows="' + rowcount(label) + '" disabled>' + esc(label) + '</textarea></div>' : '',
       documentKind ? '<div class="w3-row"><label class="w3-col s5">' + t('Document kind') + '</label><span class="w3-col s7">' + esc(documentKind) + '</span></div>' : '',
       page ? '<div class="w3-row info-page-number"><label class="w3-col s5">' + t('Page number') + '</label><span class="w3-col s7">' + esc(page) + '</span></div>' : '',
-      frameUrl ? '<iframe id="infoDocumentFrame" class="info-document-frame" src="' + esc(frameUrl) + '"></iframe>' : '',
+      frameUrl ? wuwei.info.iframeNoticeHtml(openUrl || frameUrl) : '',
       frameUrl ? wuwei.info.openActionsHtml(openUrl || frameUrl, {
         className: 'info-document-actions',
         windowFeatures: 'width=800,height=600'
       }) : '',
+      frameUrl ? '<iframe id="infoDocumentFrame" class="info-document-frame" src="' + esc(frameUrl) + '"></iframe>' : '',
       body ? '<div class="w3-row"><textarea id="description_body" class="w3-col s12" rows="' + rowcount(body) + '" disabled>' + esc(body) + '</textarea></div>' : '',
       rights.credit ? '<div class="w3-row"><label class="w3-col s4">' + t('Credit') + '</label><input type="text" class="w3-col s8" value="' + esc(rights.credit) + '" disabled></div>' : '',
       rights.license ? '<div class="w3-row"><label class="w3-col s4">' + t('License') + '</label><input type="text" class="w3-col s8" value="' + esc(rights.license) + '" disabled></div>' : '',

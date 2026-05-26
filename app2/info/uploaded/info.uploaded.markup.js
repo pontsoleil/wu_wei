@@ -77,8 +77,7 @@ wuwei.info.uploaded.markup = ( function () {
     : ''
   }
   ${uri
-    ? `<iframe id="infoFrame" onerror="wuwei.info.iframeError()" src="${frameUri}"
-        style="width:100%; min-height:480px; border:none; overflow:auto;"></iframe>`
+    ? wuwei.info.iframeNoticeHtml(uri, { className: 'iframe-fallback w3-row' })
     : ``
   }
   ${uri
@@ -86,6 +85,11 @@ wuwei.info.uploaded.markup = ( function () {
         className: 'w3-row info-uploaded-actions',
         windowFeatures: 'width=600,height=400'
       })
+    : ``
+  }
+  ${uri
+    ? `<iframe id="infoFrame" onerror="wuwei.info.iframeError()" src="${frameUri}"
+        style="width:100%; min-height:360px; border:none; overflow:auto;"></iframe>`
     : ``
   }
   ${value && value.length > 0

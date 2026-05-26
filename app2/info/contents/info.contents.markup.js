@@ -108,12 +108,13 @@ wuwei.info.contents.markup = (function () {
       '</div>' +
       (viewerUri
         ? '<div class="contents-viewer-wrap">' +
-        '<iframe id="infoContentsFrame" class="contents-viewer-frame" src="' + esc(viewerUri) + '" ' +
-        'onerror="wuwei.info.iframeError()"></iframe>' +
+        wuwei.info.iframeNoticeHtml(viewerUri, { className: 'contents-iframe-notice' }) +
         wuwei.info.openActionsHtml(viewerUri, {
           className: 'contents-open-window',
           windowFeatures: 'width=600,height=400,resizable=yes,scrollbars=yes'
         }) +
+        '<iframe id="infoContentsFrame" class="contents-viewer-frame" src="' + esc(viewerUri) + '" ' +
+        'onerror="wuwei.info.iframeError()"></iframe>' +
         '</div>'
         : '') +
       (description

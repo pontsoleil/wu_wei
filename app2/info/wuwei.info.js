@@ -1281,6 +1281,25 @@ wuwei.info = wuwei.info || {};
     ].join('');
   }
 
+  function iframeNoticeHtml(uri, options) {
+    var className;
+    var encodedUri;
+
+    if (!uri) {
+      return '';
+    }
+    options = options || {};
+    className = options.className || 'iframe-fallback';
+    encodedUri = encodeActionAttr(uri);
+
+    return [
+      '<div class="' + encodeActionAttr(className) + '" style="display:block;">',
+      t('This page may require login or block iframe preview. Open it in a tab or window.'),
+      '<br><a href="' + encodedUri + '" target="_blank" rel="noopener noreferrer">' + encodedUri + '</a>',
+      '</div>'
+    ].join('');
+  }
+
   function iframeError() {
     var frame = document.getElementById('infoFrame');
     var fallback = frame && frame.parentNode
@@ -1413,6 +1432,7 @@ wuwei.info = wuwei.info || {};
   ns.closeWindow = closeWindow;
   ns.openNewTab = openNewTab;
   ns.openActionsHtml = openActionsHtml;
+  ns.iframeNoticeHtml = iframeNoticeHtml;
   ns.iframeError = iframeError;
   ns.initModule = initModule;
   ns.hasAsciiDocValue = hasAsciiDocValue;

@@ -52,10 +52,7 @@ wuwei.info.generic.markup = (function () {
       : ''
   }
   ${uri
-      ? `<div class="iframe-fallback" style="display:block;">
-          ${t('This page may require login or block iframe preview. Open it in a tab or window.')}
-          <br><a href="${wuwei.util.encodeHtml(uri)}" target="_blank" rel="noopener noreferrer">${wuwei.util.encodeHtml(uri)}</a>
-        </div>
+      ? `${wuwei.info.iframeNoticeHtml(uri)}
         ${wuwei.info.openActionsHtml(uri, {
           className: 'link info-generic-actions',
           windowFeatures: 'width=600,height=400,resizable=yes,scrollbars=yes'
