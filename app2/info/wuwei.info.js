@@ -817,6 +817,7 @@ wuwei.info = wuwei.info || {};
     else if (shouldOpenGeneric(resolvedNode, hasAdoc) &&
       wuwei.info.generic &&
       'function' === typeof wuwei.info.generic.open) {
+      showInfoPane('info-generic');
       wuwei.info.generic.open({
         node: resolvedNode,
         option: stateMap.option
