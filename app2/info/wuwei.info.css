@@ -17,7 +17,8 @@
   -moz-box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
   -ms-box-shadow: 0.1rem 0.3rem 0.5rem rgba(64, 64, 64, 0.4);
 
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   cursor: default;
   z-index: 20;
   box-sizing: border-box;
@@ -51,6 +52,20 @@
 #info-viewpoint,
 #info .info {
   margin-top: 8px;
+}
+
+#info-generic,
+#info-group,
+#info-uploaded,
+#info-video,
+#info-audio,
+#info-image,
+#info-asciidoc,
+#info-timeline,
+#info-viewpoint,
+#info-contents {
+  box-sizing: border-box;
+  width: 100%;
 }
 
 #info * {
