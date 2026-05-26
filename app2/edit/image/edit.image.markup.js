@@ -188,7 +188,6 @@ wuwei.edit.image.markup = (function () {
   }
 
   function contentRows(resource, node) {
-    var thumbnailUrl = getThumbnailUrl(node, resource);
     var previewUrl = getPreviewUrl(node);
     var originalUrl = getOriginalUrl(node);
     var runtimeUrl = getImageUrl(node);
@@ -200,12 +199,9 @@ wuwei.edit.image.markup = (function () {
       resourceTextRow(resource, 'resource_title', 'Title', resource.title || ''),
       readonlyRow('resource_mimeType', 'MIME', resource.mimeType || ''),
       resourceTextRow(resource, 'resource_uri', 'URL:', editableResourceUrl(resource.uri || (resource.original && resource.original.url) || ''), 's5', 's7', 'https://...'),
-      resourceTextRow(resource, 'resource_canonicalUri', 'Canonical URI', editableResourceUrl(resource.canonicalUri || (resource.original && resource.original.canonicalUrl) || '')),
-      resourceTextRow(resource, 'resource_original_url', 'Original URL', editableResourceUrl(resource.original && resource.original.url || resource.uri || ''), 's5', 's7', 'https://...'),
       readonlyRow('resource_runtimeUri', 'Runtime URL', runtimeUrl),
       readonlyRow('resource_originalUri', 'Original URL', originalUrl),
       readonlyRow('resource_previewUri', 'Preview URL', previewUrl),
-      readonlyRow('thumbnailUri', 'THUMBNAIL', thumbnailUrl),
       readonlyRow('resource_media_width', 'Width', getMediaValue(resource, 'width')),
       readonlyRow('resource_media_height', 'Height', getMediaValue(resource, 'height'))
     ].join('\n');

@@ -178,9 +178,6 @@ wuwei.edit.uploaded.markup = ( function () {
       resourceTextRow(resource, 'resource_title', 'Title', resource.title || ''),
       readonlyRow('resource_mimeType', 'MIME', resource.mimeType || ''),
       resourceTextRow(resource, 'resource_uri', 'URL:', editableResourceUrl(resource.uri || (resource.original && resource.original.url) || ''), 's5', 's7', 'https://...'),
-      resourceTextRow(resource, 'resource_canonicalUri', 'Canonical URI', editableResourceUrl(resource.canonicalUri || (resource.original && resource.original.canonicalUrl) || '')),
-      resourceTextRow(resource, 'resource_original_url', 'Original URL', editableResourceUrl(resource.original && resource.original.url || resource.uri || ''), 's5', 's7', 'https://...'),
-      readonlyRow('thumbnailUri', 'THUMBNAIL', thumbnailUri || '')
     ];
 
     if (wuwei.document && typeof wuwei.document.isDocumentNode === 'function' && wuwei.document.isDocumentNode(node)) {

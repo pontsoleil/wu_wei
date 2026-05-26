@@ -169,10 +169,7 @@ wuwei.edit.audio.markup = (function () {
       resourceTextRow(resource, 'resource_title', 'Title', resource.title || ''),
       readonlyRow('resource_mimeType', 'MIME', resource.mimeType || ''),
       resourceTextRow(resource, 'resource_uri', 'URL:', editableResourceUrl(resource.uri || (resource.original && resource.original.url) || ''), 's5', 's7', 'https://...'),
-      resourceTextRow(resource, 'resource_canonicalUri', 'Canonical URI', editableResourceUrl(resource.canonicalUri || (resource.original && resource.original.canonicalUrl) || '')),
-      resourceTextRow(resource, 'resource_original_url', 'Original URL', editableResourceUrl(resource.original && resource.original.url || resource.uri || ''), 's5', 's7', 'https://...'),
       readonlyRow('resource_runtimeUri', 'Runtime URL', src),
-      readonlyRow('thumbnailUri', 'THUMBNAIL', getThumbnailUrl(node, resource)),
       readonlyRow('resource_media_duration', 'Duration', durationText),
       readonlyRow('resource_media_kind', 'Media kind', media.kind || '')
     ].join('\n');

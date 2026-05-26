@@ -157,8 +157,6 @@ wuwei.edit.document.markup = (function () {
       resourceTextRow(resource, 'resource_title', 'Title', resource.title || ''),
       readonlyRow('document_resource_mimeType', 'MIME', resource.mimeType || ''),
       resourceTextRow(resource, 'resource_uri', 'URL:', editableResourceUrl(resource.uri || (resource.original && resource.original.url) || ''), 's5', 's7', 'https://...'),
-      resourceTextRow(resource, 'resource_canonicalUri', 'Canonical URI', editableResourceUrl(resource.canonicalUri || (resource.original && resource.original.canonicalUrl) || '')),
-      resourceTextRow(resource, 'resource_original_url', 'Original URL', editableResourceUrl(resource.original && resource.original.url || resource.uri || ''), 's5', 's7', 'https://...'),
       readonlyRow('document_resource_viewerUrl', 'Viewer URL', viewerUrl || '', 's5', 's7', 'edit-document-viewer-url'),
       readonlyRow('document_resource_openUrl', 'Open URL', openUrl || '', 's5', 's7', 'edit-document-viewer-url'),
       '<div class="w3-row">',

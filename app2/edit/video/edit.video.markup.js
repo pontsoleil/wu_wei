@@ -210,9 +210,6 @@ wuwei.edit.video.markup = (function () {
       resourceTextRow(resource, 'resource_title', 'Title', resource.title || ''),
       readonlyRow('resource_mimeType', 'MIME', resource.mimeType || ''),
       resourceTextRow(resource, 'resource_uri', 'URL:', editableResourceUrl(resource.uri || (resource.original && resource.original.url) || ''), 's5', 's7', 'https://...'),
-      resourceTextRow(resource, 'resource_canonicalUri', 'Canonical URI', editableResourceUrl(resource.canonicalUri || (resource.original && resource.original.canonicalUrl) || '')),
-      resourceTextRow(resource, 'resource_original_url', 'Original URL', editableResourceUrl(resource.original && resource.original.url || resource.uri || ''), 's5', 's7', 'https://...'),
-      readonlyRow('thumbnailUri', 'THUMBNAIL', resource.thumbnailUri || ''),
       readonlyRow('resource_media_provider', 'Provider', media.provider || ''),
       readonlyRow('resource_media_videoId', 'Video ID', media.videoId || ''),
       readonlyRow('resource_media_duration', 'Duration', durationText)
