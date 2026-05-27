@@ -1995,7 +1995,7 @@ wuwei.menu = wuwei.menu || {};
   }
 
   function notifyFlockError(message) {
-    message = message || 'Cannot align grouped nodes and ungrouped nodes together. Select the group itself, or select only nodes from the same grouping level.';
+    message = message || 'Alignment commands require two or more ungrouped nodes.';
     if (wuwei.menu && wuwei.menu.snackbar && typeof wuwei.menu.snackbar.open === 'function') {
       wuwei.menu.snackbar.open({
         type: 'warning',
@@ -2009,23 +2009,74 @@ wuwei.menu = wuwei.menu || {};
     }
   }
 
-  function hasMixedGroupedAndUngroupedNodeSelection(selectedNodes) {
-    var hasGrouped = false;
-    var hasUngrouped = false;
+  function collectAlignmentSelection() {
+    var out = {
+      ungroupedNodes: [],
+      groupedNodes: [],
+      groupIds: []
+    };
+    var seenNodes = {};
+    var seenGroups = {};
 
-    (selectedNodes || []).forEach(function (node) {
-      if (!node || !node.id || (node.groupRole === 'representative' && node.groupRef)) {
+    function findNode(nodeId) {
+      if (!nodeId) {
+        return null;
+      }
+      return (model.findNodeById && model.findNodeById(nodeId)) ||
+        (graph.nodes || []).find(function (candidate) {
+          return candidate && candidate.id === nodeId;
+        }) ||
+        null;
+    }
+
+    function addGroup(groupId) {
+      if (!groupId || seenGroups[groupId]) {
+        return;
+      }
+      seenGroups[groupId] = true;
+      out.groupIds.push(groupId);
+    }
+
+    function addNode(node) {
+      if (node && node.id) {
+        node = findNode(node.id) || node;
+      }
+      if (!node || !node.id || seenNodes[node.id]) {
+        return;
+      }
+      seenNodes[node.id] = true;
+      if (node.groupRole === 'representative' && node.groupRef) {
+        addGroup(node.groupRef);
         return;
       }
       if (model.isNodeInAnyGroup && model.isNodeInAnyGroup(node.id)) {
-        hasGrouped = true;
+        out.groupedNodes.push(node);
       }
       else {
-        hasUngrouped = true;
+        out.ungroupedNodes.push(node);
       }
+    }
+
+    d3.selectAll('g.node.selected').each(function (d) {
+      addNode(d && d.id ? d : findNode(this && this.id));
     });
 
-    return hasGrouped && hasUngrouped;
+    d3.selectAll('circle.selected').each(function (d) {
+      var nodeId;
+      if (d && d.groupRef && (isRepresentativeTopic(d) || d.type === 'Group' || d.pseudo)) {
+        addGroup(d.groupRef);
+        return;
+      }
+      nodeId = d && d.id ? d.id : (this && this.parentNode && this.parentNode.id);
+      addNode(findNode(nodeId));
+    });
+
+    (Array.isArray(state.selectedNodeIds) ? state.selectedNodeIds : []).forEach(function (nodeId) {
+      addNode(findNode(nodeId));
+    });
+    (Array.isArray(state.selectedGroupIds) ? state.selectedGroupIds : []).forEach(addGroup);
+
+    return out;
   }
 
   function isUngroupedFlockNode(node) {
@@ -2036,12 +2087,12 @@ wuwei.menu = wuwei.menu || {};
   }
 
   function isAlignableFlockSelection() {
-    var selectedNodes = getScreenSelectedNodes([]);
-    var selectedGroupIds = getEffectiveSelectedGroupIds(getCurrentPage());
+    var selection = collectAlignmentSelection();
 
-    return selectedGroupIds.length === 0 &&
-      selectedNodes.length >= 2 &&
-      selectedNodes.every(isUngroupedFlockNode);
+    return selection.groupIds.length === 0 &&
+      selection.groupedNodes.length === 0 &&
+      selection.ungroupedNodes.length >= 2 &&
+      selection.ungroupedNodes.every(isUngroupedFlockNode);
   }
 
   function getEffectiveSelectedGroupIds(page, option) {
@@ -3311,7 +3362,10 @@ wuwei.menu = wuwei.menu || {};
         'alignVertical', 'alignRight', 'horizontalEqual', 'verticalEqual'].includes(method);
 
       if (isGroupPositionOperation) {
-        if (!isAlignableFlockSelection()) {
+        var alignmentSelection = collectAlignmentSelection();
+        if (!(alignmentSelection.groupIds.length === 0 &&
+          alignmentSelection.groupedNodes.length === 0 &&
+          alignmentSelection.ungroupedNodes.length >= 2)) {
           state.lastFlockOperation = {
             method: method,
             selectedNodeIds: Array.isArray(state.selectedNodeIds) ? state.selectedNodeIds.slice() : [],
@@ -3322,7 +3376,20 @@ wuwei.menu = wuwei.menu || {};
           notifyFlockError('Alignment commands require two or more ungrouped nodes.');
           return;
         }
-        operationTargets = buildGroupOperationTargets(allNodes);
+        allNodes = alignmentSelection.ungroupedNodes;
+        operationTargets = allNodes.map(function (node) {
+          var bounds = getNodeOperationBounds(node);
+          if (!bounds) {
+            return null;
+          }
+          return {
+            kind: 'node',
+            node: node,
+            bounds: bounds,
+            x: bounds.cx,
+            y: bounds.cy
+          };
+        }).filter(Boolean);
         operationMetrics = getOperationTargetMetrics(operationTargets);
         if (!operationMetrics || operationMetrics.count < 1) {
           state.lastFlockOperation = {
