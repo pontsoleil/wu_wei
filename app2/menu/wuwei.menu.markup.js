@@ -301,7 +301,6 @@ wuwei.menu.markup = (function () {
     </span>
     <div class="operators">
       <div class="operator-section">
-        <div class="operator-section-title">${translate('Align')}</div>
       <div class="operator AlignTop selecting">
         <i class="fas fa-align-left fa-rotate-90 fa-fw"></i>
         <span>${translate('Align Top')}</span>
@@ -348,7 +347,6 @@ wuwei.menu.markup = (function () {
     </span>
     <div class="operators">
       <div class="operator-section">
-        <div class="operator-section-title">${translate('Define / Ungroup')}</div>
       <div class="operator DefineSimpleGroup selecting">
         <i class="far fa-object-group fa-fw"></i>
         <span>${translate('Define simple group')}</span>
