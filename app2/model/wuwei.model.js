@@ -149,13 +149,13 @@ wuwei.model = (function () {
     erase,
     bloom,
     hide,
-    showGroup,
-    hasHiddenGroupNodes,
     root,
     forward,
     backward,
     wilt,
     showAll,
+    showGroup,
+    hasHiddenGroupNodes,
     copy,
     clipboard,
     paste,
@@ -8927,72 +8927,6 @@ wuwei.model = (function () {
     return false;
   }
 
-  function getVisibilityGroupFamilyNodes(group) {
-    var nodes = [];
-
-    if (!group) {
-      return nodes;
-    }
-
-    if (isTimelineVisibilityGroup(group)) {
-      nodes = getTimelineVisibilityMembers(group).slice();
-    }
-    else if (isViewpointVisibilityGroup(group)) {
-      nodes = getViewpointVisibilityMembers(group).slice();
-    }
-    else if (isRegularVisibilityGroup(group)) {
-      nodes = findGroupNodes(group.id).slice();
-    }
-
-    getGroupRepresentativeNodes(group).forEach(function (representative) {
-      util.appendById(nodes, representative);
-    });
-
-    return nodes.filter(function (node) {
-      return !!(node && node.id && !isDeletedRecord(node));
-    });
-  }
-
-  hasHiddenGroupNodes = function (target) {
-    var group = getVisibilityGroup(target) || findGroupByTarget(target);
-    var nodes;
-
-    if (!group) {
-      return false;
-    }
-
-    nodes = getVisibilityGroupFamilyNodes(group);
-    return nodes.some(function (node) {
-      return !!(node && false === node.visible);
-    });
-  };
-
-  showGroup = function (_targets) {
-    var target = Array.isArray(_targets) ? _targets[0] : _targets;
-    var group = getVisibilityGroup(target) || findGroupByTarget(target);
-    var nodes = [];
-    var links = [];
-    var changed;
-
-    if (!group) {
-      return null;
-    }
-
-    changed = setVisibilityGroupFamilyVisible(group, true, nodes, links, false);
-    if (changed) {
-      setGraphFromCurrentPage();
-    }
-    updateLinkCount();
-
-    return {
-      command: 'showGroup',
-      param: {
-        node: nodes,
-        link: links
-      }
-    };
-  };
-
   function isRegularVisibilityGroup(group) {
     return !!(group &&
       ('simple' === group.type || 'horizontal' === group.type || 'vertical' === group.type));
@@ -9618,6 +9552,100 @@ wuwei.model = (function () {
     return changed;
   }
 
+  function resolveGroupForGroupWideVisibilityTarget(target) {
+    var group;
+
+    if (!target) {
+      return null;
+    }
+
+    /*
+     * Group-wide show/hide commands are available only from a representative,
+     * a group object, or a group axis/pseudo outline target.  A normal member
+     * node must remain an ordinary graph node so that bloom / wilt can traverse
+     * its own links.
+     */
+    group = getVisibilityGroup(target);
+    if (group) {
+      return group;
+    }
+
+    if (target && target.id && target.members &&
+      ['simple', 'horizontal', 'vertical', 'timeline', 'viewpoint'].indexOf(target.type) >= 0) {
+      return findGroupById(target.id);
+    }
+
+    return null;
+  }
+
+  function getVisibilityNodesForGroup(group) {
+    var nodes = [];
+
+    if (!group) {
+      return nodes;
+    }
+
+    if (isTimelineVisibilityGroup(group)) {
+      nodes = getTimelineVisibilityMembers(group).slice();
+    }
+    else if (isViewpointVisibilityGroup(group)) {
+      nodes = getViewpointVisibilityMembers(group).slice();
+    }
+    else if (isRegularVisibilityGroup(group)) {
+      nodes = findGroupNodes(group.id).slice();
+    }
+
+    getGroupRepresentativeNodes(group).forEach(function (node) {
+      util.appendById(nodes, node);
+    });
+
+    return nodes.filter(function (node) {
+      return !!(node && !node.pseudo && !isDeletedRecord(node));
+    });
+  }
+
+  function hasHiddenGroupNodes(target) {
+    var group = resolveGroupForGroupWideVisibilityTarget(target);
+    var nodes;
+
+    if (!group) {
+      return false;
+    }
+
+    nodes = getVisibilityNodesForGroup(group);
+    return nodes.some(function (node) {
+      return node && false === node.visible;
+    });
+  }
+
+  showGroup = function (_nodes) {
+    var target = Array.isArray(_nodes) ? _nodes[0] : _nodes;
+    var group = resolveGroupForGroupWideVisibilityTarget(target);
+    var nodes = [];
+    var links = [];
+    var changed = false;
+
+    if (!group) {
+      return null;
+    }
+
+    changed = setVisibilityGroupFamilyVisible(group, true, nodes, links, false);
+
+    if (changed) {
+      setGraphFromCurrentPage();
+    }
+
+    updateLinkCount();
+
+    return {
+      command: 'showGroup',
+      param: {
+        node: nodes,
+        link: links
+      }
+    };
+  };
+
   bloom = function (_nodes) {
     var nodes = [],
       links = [],
@@ -9887,105 +9915,110 @@ wuwei.model = (function () {
     };
   };
 
-  function collectGroupRootNodeIds(group, rootNode) {
+  function buildRepresentativeRootKeepSet(root) {
     var keep = {};
+    var group;
+    var visibleMemberIds = {};
 
-    if (rootNode && rootNode.id) {
-      keep[rootNode.id] = true;
+    if (!root || !isGroupRepresentativeVisibilityNode(root)) {
+      if (root && root.id) {
+        keep[root.id] = true;
+      }
+      return {
+        group: null,
+        keepNodeIds: keep
+      };
     }
+
+    group = findGroupById(root.groupRef);
+    keep[root.id] = true;
+
     if (!group) {
-      return keep;
+      return {
+        group: null,
+        keepNodeIds: keep
+      };
     }
 
     getGroupNodeIds(group).forEach(function (nodeId) {
-      if (nodeId) {
-        keep[nodeId] = true;
-      }
-    });
-    getGroupRepresentativeNodes(group).forEach(function (representative) {
-      if (representative && representative.id) {
-        keep[representative.id] = true;
+      var node = findNodeById(nodeId);
+      if (node && node.visible && !isDeletedRecord(node)) {
+        keep[node.id] = true;
+        visibleMemberIds[node.id] = true;
       }
     });
 
-    return keep;
+    getGroupRepresentativeNodes(group).forEach(function (node) {
+      if (node && node.visible && !isDeletedRecord(node)) {
+        keep[node.id] = true;
+      }
+    });
+
+    return {
+      group: group,
+      keepNodeIds: keep,
+      visibleMemberIds: visibleMemberIds
+    };
   }
 
-  function isGroupRootVisibleLink(link, group, keepNodeIds) {
-    var fromNode;
-    var toNode;
+  function isSameGroupPseudoNode(node, group) {
+    return !!(
+      node &&
+      group &&
+      node.pseudo &&
+      node.groupRef === group.id &&
+      node.visible
+    );
+  }
 
-    if (!link || !group) {
+  function isSameGroupAxisLink(link, group) {
+    if (!link || !group || link.groupRef !== group.id || !link.visible) {
       return false;
     }
-
-    if (link.groupRef === group.id) {
-      return true;
-    }
-
-    if (!(link.from && link.to && keepNodeIds[link.from] && keepNodeIds[link.to])) {
-      return false;
-    }
-
-    fromNode = findNodeById(link.from);
-    toNode = findNodeById(link.to);
-
-    return !!(fromNode && toNode && fromNode.visible && toNode.visible);
+    return !!(
+      isTimelineVisibilityAxisLink(link) ||
+      isViewpointVisibilityAxisLink(link) ||
+      isTopicGroupPseudoLink(link)
+    );
   }
 
   root = function (_nodes) {
     var
-      root = _nodes && _nodes[0],
-      root_id = root && root.id,
-      rootGroup = getVisibilityGroup(root),
-      keepNodeIds = collectGroupRootNodeIds(rootGroup, root),
+      root = _nodes[0],
+      root_id = root.id,
+      preserved = buildRepresentativeRootKeepSet(root),
+      group = preserved.group,
+      keepNodeIds = preserved.keepNodeIds || {},
       nodes = [],
-      links = [];
-
-    if (!root_id) {
-      return null;
-    }
+      links = [],
+      keepLink;
 
     for (let node of graph.nodes) {
-      if (!node || !node.id) {
-        nodes.push(node);
-        continue;
+      if (root_id === node.id) {
+        node.visible = true;
       }
-
-      if (rootGroup && keepNodeIds[node.id]) {
-        /*
-         * Root on a group representative means "root this group".
-         * Keep current member visibility as-is, and force only the selected
-         * representative itself to visible.  Hidden members are restored by
-         * the separate group-wide Show command.
-         */
-        if (root_id === node.id) {
-          setNodeShown(node, true);
-        }
+      else if (group && isSameGroupPseudoNode(node, group)) {
+        node.visible = true;
+        keepNodeIds[node.id] = true;
       }
-      else if (root_id === node.id) {
-        setNodeShown(node, true);
-      }
-      else if (node.visible) {
-        setNodeShown(node, false);
+      else if (node.visible && !keepNodeIds[node.id]) {
+        node.visible = false;
       }
       nodes.push(node);
     }
 
     for (let link of graph.links) {
-      if (!link) {
-        links.push(link);
-        continue;
+      keepLink = false;
+
+      if (group && isSameGroupAxisLink(link, group)) {
+        keepLink = true;
+      }
+      else if (link.visible && keepNodeIds[link.from] && keepNodeIds[link.to]) {
+        keepLink = true;
       }
 
-      if (rootGroup && isGroupRootVisibleLink(link, rootGroup, keepNodeIds)) {
-        /*
-         * Preserve currently visible group-internal links and group axis /
-         * pseudo links.  Do not restore links that were already hidden.
-         */
-      }
-      else if (link.visible) {
-        setLinkShown(link, false);
+      if (link.visible && !keepLink) {
+        link.visible = false;
       }
       links.push(link);
     }
@@ -11001,6 +11034,8 @@ wuwei.model = (function () {
     backward: backward,
     wilt: wilt,
     showAll: showAll,
+    showGroup: showGroup,
+    hasHiddenGroupNodes: hasHiddenGroupNodes,
     copy: copy,
     clipboard: clipboard,
     paste: paste,

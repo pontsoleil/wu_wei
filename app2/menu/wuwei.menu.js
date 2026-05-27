@@ -4278,6 +4278,7 @@ wuwei.menu = wuwei.menu || {};
     type: {
       'Node': [
         'bloom',
+        'showGroup',
         'wilt',
         'root',
         'forward',
@@ -5324,6 +5325,21 @@ wuwei.menu = wuwei.menu || {};
       },
       null,
       'fas fa-expand-arrows-alt fa-lg fa-fw'
+    ],
+
+    'showGroup': ['Show Group',
+      function (allNodes) {
+        var node = getContextTarget(allNodes);
+        if (util.isEmpty(node) || state.Selecting || state.Connecting) {
+          return false;
+        }
+        if (!model || typeof model.hasHiddenGroupNodes !== 'function') {
+          return false;
+        }
+        return allNodes.length === 1 && model.hasHiddenGroupNodes(node);
+      },
+      null,
+      'fas fa-eye fa-lg fa-fw'
     ],
 
     'root': ['Root',
