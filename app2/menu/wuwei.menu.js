@@ -3377,6 +3377,30 @@ wuwei.menu = wuwei.menu || {};
 
       if (isGroupPositionOperation) {
         var alignmentSelection = collectAlignmentSelection();
+        if (alignmentSelection.groupIds.length === 1 &&
+          alignmentSelection.groupedNodes.length === 0 &&
+          alignmentSelection.ungroupedNodes.length === 0 &&
+          model && typeof model.distributeTopicGroupMembers === 'function') {
+          var selectedAxisGroup = model.findGroupById(alignmentSelection.groupIds[0]);
+          var canDistributeAxisGroup =
+            (selectedAxisGroup && selectedAxisGroup.type === 'horizontal' && 'horizontalEqual' === method) ||
+            (selectedAxisGroup && selectedAxisGroup.type === 'vertical' && 'verticalEqual' === method);
+          if (canDistributeAxisGroup && model.distributeTopicGroupMembers(selectedAxisGroup)) {
+            state.lastFlockOperation = {
+              method: method,
+              selectedNodeIds: Array.isArray(state.selectedNodeIds) ? state.selectedNodeIds.slice() : [],
+              selectedGroupIds: Array.isArray(state.selectedGroupIds) ? state.selectedGroupIds.slice() : [],
+              targetCount: (model.findGroupNodes ? model.findGroupNodes(selectedAxisGroup.id) : []).length
+            };
+            log.storeLog({ operation: method });
+            state.hoveredNode = undefined;
+            draw.redraw();
+            closeContextMenu();
+            updateUndoRedoButton();
+            updateClipboardMenu(method);
+            return;
+          }
+        }
         if (!(alignmentSelection.groupIds.length === 0 &&
           alignmentSelection.groupedNodes.length === 0 &&
           alignmentSelection.ungroupedNodes.length >= 2)) {

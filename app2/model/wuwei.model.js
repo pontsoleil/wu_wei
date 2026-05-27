@@ -9359,6 +9359,81 @@ wuwei.model = (function () {
     return true;
   }
 
+  function distributeTopicGroupMembers(groupOrTarget) {
+    var group = findGroupByTarget(groupOrTarget) || groupOrTarget;
+    var type = group && group.type;
+    var members;
+    var anchor;
+    var minPos;
+    var maxPos;
+    var step;
+
+    function clearFixedPosition(node) {
+      if (!node) {
+        return;
+      }
+      node.fx = null;
+      node.fy = null;
+      node.changed = true;
+    }
+
+    if (!group || !('horizontal' === type || 'vertical' === type)) {
+      return false;
+    }
+
+    members = findGroupNodes(group.id).filter(function (node) {
+      return node &&
+        !node.pseudo &&
+        'representative' !== node.groupRole &&
+        Number.isFinite(Number(node.x)) &&
+        Number.isFinite(Number(node.y));
+    });
+
+    if (members.length < 2) {
+      return false;
+    }
+
+    anchor = group.axis && group.axis.anchor ? group.axis.anchor : {};
+
+    if ('vertical' === type) {
+      members.sort(function (a, b) {
+        return Number(a.y) - Number(b.y);
+      });
+      minPos = Number(members[0].y);
+      maxPos = Number(members[members.length - 1].y);
+      step = (maxPos - minPos) / (members.length - 1);
+      members.forEach(function (node, index) {
+        node.x = Number.isFinite(Number(anchor.x)) ? Number(anchor.x) : node.x;
+        node.y = minPos + step * index;
+        node.axisPos = node.y;
+        clearFixedPosition(node);
+      });
+    }
+    else {
+      members.sort(function (a, b) {
+        return Number(a.x) - Number(b.x);
+      });
+      minPos = Number(members[0].x);
+      maxPos = Number(members[members.length - 1].x);
+      step = (maxPos - minPos) / (members.length - 1);
+      members.forEach(function (node, index) {
+        node.x = minPos + step * index;
+        node.y = Number.isFinite(Number(anchor.y)) ? Number(anchor.y) : node.y;
+        node.axisPos = node.x;
+        clearFixedPosition(node);
+      });
+    }
+
+    group.axis = group.axis && 'object' === typeof group.axis ? group.axis : {};
+    group.axis.anchor = {
+      x: Number.isFinite(Number(anchor.x)) ? Number(anchor.x) : Number(members[0].x),
+      y: Number.isFinite(Number(anchor.y)) ? Number(anchor.y) : Number(members[0].y)
+    };
+    group.changed = true;
+    setGraphFromCurrentPage();
+    return true;
+  }
+
   function copyGroup(target) {
     var group = findGroupByTarget(target);
     var page = getCurrentPage();
@@ -11074,6 +11149,7 @@ wuwei.model = (function () {
     copyGroup: copyGroup,
     eraseGroup: eraseGroup,
     reflowGroupMembers: reflowGroupMembers,
+    distributeTopicGroupMembers: distributeTopicGroupMembers,
     isNodeInAnyGroup: isNodeInAnyGroup,
     pruneGroups: pruneGroups,
     removeNodeFromAllGroups: removeNodeFromAllGroups,

@@ -95,7 +95,7 @@ wuwei.edit.group.markup = (function () {
     <input type="color" id="spine_color" name="spine.color" class="w3-col s4 pointer edit-value" value="${esc(spine.color || '#888888')}">
   </div>
   <div class="w3-row">
-    <label for="spine_padding" class="w3-col s4">Padding</label>
+    <label for="spine_padding" class="w3-col s4">${t('Padding')}</label>
     <input type="number" id="spine_padding" name="spine.padding" class="w3-col s4 edit-value" value="${num(spine.padding, isSimple ? 16 : 12)}">
     <label class="w3-col s4"><input type="checkbox" id="spine_visible" name="spine.visible" class="edit-value"${checked(spine.visible)}> ${t('Visible')}</label>
   </div>

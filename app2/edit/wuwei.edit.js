@@ -1417,9 +1417,29 @@ wuwei.edit = wuwei.edit || {};
   }
 
   function handleEditPaneClickEvent(event) {
-    var target, value, targetInfo;
+    var target, value, targetInfo, reverseButton;
     target = event && event.target;
     if (!target || !target.closest || !target.closest('#edit')) {
+      return;
+    }
+    reverseButton = target.closest('#link_reverse');
+    if (reverseButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      targetInfo = getCurrentEditableTarget(reverseButton);
+      if (targetInfo && 'link' === targetInfo.kind && model && typeof model.reverse === 'function') {
+        model.reverse([targetInfo.object]);
+        markEditedTarget('link', targetInfo.object);
+        redrawEditedGraph();
+        if (wuwei.edit.link && typeof wuwei.edit.link.open === 'function') {
+          wuwei.edit.link.open({
+            link: targetInfo.object,
+            option: stateMap.option || {}
+          }).then(function () {
+            normalizeEditFieldPaths(document.getElementById('editform'));
+          });
+        }
+      }
       return;
     }
     if (!(target.classList && target.classList.contains('font_text-anchor'))) {

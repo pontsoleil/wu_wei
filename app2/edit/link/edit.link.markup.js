@@ -109,6 +109,11 @@ html += `    ${selectOptions('style.line.kind', lineKindValue, strokeDasharray, 
     <input type="checkbox" id="editRole" class="w3-col s1">
     <input type="text" id="relation" name="relation" value="${escapeHtml(relation)}" class="w3-col s8 edit-value">
   </div>
+  <div class="w3-row">
+    <button type="button" id="link_reverse" class="w3-button w3-small w3-col s12">
+      <i class="fas fa-exchange-alt fa-fw"></i>${t('Reverse')}
+    </button>
+  </div>
 </form>
 `;
     return html;
