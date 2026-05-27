@@ -149,6 +149,8 @@ wuwei.model = (function () {
     erase,
     bloom,
     hide,
+    showGroup,
+    hasHiddenGroupNodes,
     root,
     forward,
     backward,
@@ -8587,9 +8589,12 @@ wuwei.model = (function () {
     if (!target) {
       return null;
     }
-    if (isTimelineVisibilityPoint(target)) {
-      return findGroupById(target.groupRef);
-    }
+
+    /*
+     * A Segment is a timeline member node. Bloom / wilt / hide issued from
+     * the member itself must behave like an ordinary node operation.
+     * Therefore, only the timeline axis link is treated as a group target here.
+     */
     if (isTimelineVisibilityAxisLink(target)) {
       return findGroupById(target.groupRef);
     }
@@ -8616,9 +8621,13 @@ wuwei.model = (function () {
     if (!target) {
       return null;
     }
-    if (isViewpointVisibilityPoint(target)) {
-      return findGroupById(target.groupRef);
-    }
+
+    /*
+     * A PageMarker is a contents/viewpoint member node. Bloom / wilt / hide
+     * issued from the member itself must behave like an ordinary node
+     * operation. Therefore, only the contents/viewpoint axis link is treated
+     * as a group target here.
+     */
     if (isViewpointVisibilityAxisLink(target)) {
       return findGroupById(target.groupRef);
     }
@@ -8656,58 +8665,34 @@ wuwei.model = (function () {
   }
 
   function getMemberVisibilityGroup(node) {
-    var groups;
-
     if (!node) {
       return null;
     }
 
+    /*
+     * Only representative nodes are promoted to group visibility targets.
+     * Ordinary group members, including h/v/simple members, Segment and
+     * PageMarker nodes, must be treated as normal graph nodes so that bloom
+     * and wilt can traverse their own links.
+     */
     if (isGroupRepresentativeVisibilityNode(node)) {
       return findGroupById(node.groupRef);
-    }
-
-    if (isTimelineVisibilityPoint(node)) {
-      return findGroupById(node.groupRef);
-    }
-
-    if (isViewpointVisibilityPoint(node)) {
-      return findGroupById(node.groupRef);
-    }
-
-    if (util && typeof util.isNode === 'function' && util.isNode(node) && node.id) {
-      groups = findGroupsByNodeId(node.id).filter(function (group) {
-        return isTimelineVisibilityGroup(group) ||
-          isViewpointVisibilityGroup(group) ||
-          isRegularVisibilityGroup(group);
-      });
-      return groups[0] || null;
     }
 
     return null;
   }
 
   function getEndpointVisibilityGroup(link) {
-    var fromNode;
-    var toNode;
-    var group;
-
     if (!(link && util && typeof util.isLink === 'function' && util.isLink(link))) {
       return null;
     }
 
-    fromNode = findNodeById(link.from);
-    toNode = findNodeById(link.to);
-
-    group = getMemberVisibilityGroup(fromNode);
-    if (group) {
-      return group;
-    }
-
-    group = getMemberVisibilityGroup(toNode);
-    if (group) {
-      return group;
-    }
-
+    /*
+     * Do not promote a normal link to a group operation merely because one
+     * endpoint is a group member. Otherwise a link from an h-group member to
+     * a simple-group member is consumed as a group visibility operation and
+     * bloom cannot traverse it as a normal graph edge.
+     */
     return null;
   }
 
@@ -8942,6 +8927,72 @@ wuwei.model = (function () {
     return false;
   }
 
+  function getVisibilityGroupFamilyNodes(group) {
+    var nodes = [];
+
+    if (!group) {
+      return nodes;
+    }
+
+    if (isTimelineVisibilityGroup(group)) {
+      nodes = getTimelineVisibilityMembers(group).slice();
+    }
+    else if (isViewpointVisibilityGroup(group)) {
+      nodes = getViewpointVisibilityMembers(group).slice();
+    }
+    else if (isRegularVisibilityGroup(group)) {
+      nodes = findGroupNodes(group.id).slice();
+    }
+
+    getGroupRepresentativeNodes(group).forEach(function (representative) {
+      util.appendById(nodes, representative);
+    });
+
+    return nodes.filter(function (node) {
+      return !!(node && node.id && !isDeletedRecord(node));
+    });
+  }
+
+  hasHiddenGroupNodes = function (target) {
+    var group = getVisibilityGroup(target) || findGroupByTarget(target);
+    var nodes;
+
+    if (!group) {
+      return false;
+    }
+
+    nodes = getVisibilityGroupFamilyNodes(group);
+    return nodes.some(function (node) {
+      return !!(node && false === node.visible);
+    });
+  };
+
+  showGroup = function (_targets) {
+    var target = Array.isArray(_targets) ? _targets[0] : _targets;
+    var group = getVisibilityGroup(target) || findGroupByTarget(target);
+    var nodes = [];
+    var links = [];
+    var changed;
+
+    if (!group) {
+      return null;
+    }
+
+    changed = setVisibilityGroupFamilyVisible(group, true, nodes, links, false);
+    if (changed) {
+      setGraphFromCurrentPage();
+    }
+    updateLinkCount();
+
+    return {
+      command: 'showGroup',
+      param: {
+        node: nodes,
+        link: links
+      }
+    };
+  };
+
   function isRegularVisibilityGroup(group) {
     return !!(group &&
       ('simple' === group.type || 'horizontal' === group.type || 'vertical' === group.type));
@@ -8957,22 +9008,20 @@ wuwei.model = (function () {
   }
 
   function getRegularVisibilityGroup(target) {
-    var groups;
-
     if (!target) {
       return null;
     }
 
+    /*
+     * Regular h/v/simple group visibility is a group operation only when the
+     * group object itself or the pseudo axis/group link is selected.
+     * Member nodes remain ordinary nodes for bloom / wilt traversal.
+     */
     if (target.groupRef && (
       ('Group' === target.type && 'simple' === target.groupType) ||
       isTopicGroupPseudoLink(target)
     )) {
       return findGroupById(target.groupRef);
-    }
-
-    if (util && typeof util.isNode === 'function' && util.isNode(target) && target.id) {
-      groups = findGroupsByNodeId(target.id).filter(isRegularVisibilityGroup);
-      return groups[0] || null;
     }
 
     return null;
@@ -9766,31 +9815,14 @@ wuwei.model = (function () {
     };
 
     const hideGroupByMember = function (memberNode) {
-      var groups, memberGroup, changed;
-
-      if (!memberNode || !memberNode.id) {
+      /*
+       * A group member reached while pruning from another node must be treated
+       * as an ordinary node. Do not collapse the member's whole h/v/simple,
+       * timeline, or contents group here. Group-wide wilt remains available
+       * by selecting the group representative, axis, pseudo group link, or the
+       * group object itself.
+       */
         return false;
-      }
-
-      groups = findGroupsByNodeId(memberNode.id).filter(function (group) {
-        return false !== group.visible && getGroupNodeIds(group).indexOf(root.id) < 0;
-      });
-
-      memberGroup = getVisibilityGroup(memberNode);
-      if (memberGroup && false !== memberGroup.visible && getGroupNodeIds(memberGroup).indexOf(root.id) < 0) {
-        util.appendById(groups, memberGroup);
-      }
-
-      if (!groups.length) {
-        return false;
-      }
-
-      changed = false;
-      groups.forEach(function (group) {
-        changed = setVisibilityGroupFamilyVisible(group, false, nodes_data, links_data, true) || changed;
-      });
-
-      return changed;
     };
 
     const prune = function (node, parentNode, parentLink, depth, path) {
@@ -9855,24 +9887,105 @@ wuwei.model = (function () {
     };
   };
 
+  function collectGroupRootNodeIds(group, rootNode) {
+    var keep = {};
+
+    if (rootNode && rootNode.id) {
+      keep[rootNode.id] = true;
+    }
+    if (!group) {
+      return keep;
+    }
+
+    getGroupNodeIds(group).forEach(function (nodeId) {
+      if (nodeId) {
+        keep[nodeId] = true;
+      }
+    });
+    getGroupRepresentativeNodes(group).forEach(function (representative) {
+      if (representative && representative.id) {
+        keep[representative.id] = true;
+      }
+    });
+
+    return keep;
+  }
+
+  function isGroupRootVisibleLink(link, group, keepNodeIds) {
+    var fromNode;
+    var toNode;
+
+    if (!link || !group) {
+      return false;
+    }
+
+    if (link.groupRef === group.id) {
+      return true;
+    }
+
+    if (!(link.from && link.to && keepNodeIds[link.from] && keepNodeIds[link.to])) {
+      return false;
+    }
+
+    fromNode = findNodeById(link.from);
+    toNode = findNodeById(link.to);
+
+    return !!(fromNode && toNode && fromNode.visible && toNode.visible);
+  }
+
   root = function (_nodes) {
     var
-      root = _nodes[0],
-      root_id = root.id,
+      root = _nodes && _nodes[0],
+      root_id = root && root.id,
+      rootGroup = getVisibilityGroup(root),
+      keepNodeIds = collectGroupRootNodeIds(rootGroup, root),
       nodes = [],
       links = [];
+
+    if (!root_id) {
+      return null;
+    }
+
     for (let node of graph.nodes) {
-      if (node.visible && root_id !== node.id) {
-        node.visible = false;
+      if (!node || !node.id) {
+        nodes.push(node);
+        continue;
+      }
+
+      if (rootGroup && keepNodeIds[node.id]) {
+        /*
+         * Root on a group representative means "root this group".
+         * Keep current member visibility as-is, and force only the selected
+         * representative itself to visible.  Hidden members are restored by
+         * the separate group-wide Show command.
+         */
+        if (root_id === node.id) {
+          setNodeShown(node, true);
+        }
       }
       else if (root_id === node.id) {
-        node.visible = true;
+        setNodeShown(node, true);
+      }
+      else if (node.visible) {
+        setNodeShown(node, false);
       }
       nodes.push(node);
     }
+
     for (let link of graph.links) {
-      if (link.visible) {
-        link.visible = false;
+      if (!link) {
+        links.push(link);
+        continue;
+      }
+
+      if (rootGroup && isGroupRootVisibleLink(link, rootGroup, keepNodeIds)) {
+        /*
+         * Preserve currently visible group-internal links and group axis /
+         * pseudo links.  Do not restore links that were already hidden.
+         */
+      }
+      else if (link.visible) {
+        setLinkShown(link, false);
       }
       links.push(link);
     }
