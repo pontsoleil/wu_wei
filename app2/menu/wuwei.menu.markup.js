@@ -17,6 +17,8 @@ wuwei.menu.markup = (function () {
       current = common.current;
     var nls = common.nls;
     var Selecting = common.state.Selecting;
+    var currentUser = (state && state.currentUser) || {};
+    var userStatusClass = state.loggedIn ? 'loggedIn' : (currentUser.user_id === common.GUEST_USER_ID ? 'guestUser' : '');
     var previousVersionEnabled = !!(state && (state.previousVersion || state.previous_version));
     var previousVersionNoteOperators = previousVersionEnabled ? `
       <div class="operator OpenV0 loggedin">
@@ -56,7 +58,7 @@ wuwei.menu.markup = (function () {
     <i></i>
   </a>
 
-  <a id="user_status" ${state.loggedIn ? `class="loggedIn"` : ''}>
+  <a id="user_status" ${userStatusClass ? `class="${userStatusClass}"` : ''}>
     <i class="fas fa-user"></i>
   </a>
 

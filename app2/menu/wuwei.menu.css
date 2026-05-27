@@ -530,6 +530,10 @@ a.command:hover {
 #menu.loggedIn #user_status i {
   color: #0099CC;
 }
+#menu.guestUser #user_status i,
+#user_status.guestUser i {
+  color: #9acd32;
+}
 #menu .operator .icon {
   width: 24px;
   height: 24px;
@@ -1142,4 +1146,3 @@ button[disabled] {
   min-width: 4.5rem;
   color: #666;
 }
-

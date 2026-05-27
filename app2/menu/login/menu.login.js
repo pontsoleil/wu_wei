@@ -228,6 +228,21 @@ wuwei.menu.login = wuwei.menu.login || {};
     return (common && common.state && common.state.currentUser) || {};
   }
 
+  function setUserStatusClass(status) {
+    var menuEl = document.getElementById('menu');
+    var userStatusEl = document.getElementById('user_status');
+    var els = [menuEl, userStatusEl];
+
+    els.forEach(function (el) {
+      if (!el) { return; }
+      el.classList.remove('loggedIn');
+      el.classList.remove('guestUser');
+      if (status) {
+        el.classList.add(status);
+      }
+    });
+  }
+
   function refreshUserStatusMenu() {
     var user = getCurrentUser();
     var loginEl = document.getElementById('loginUserLogin');
@@ -263,21 +278,18 @@ wuwei.menu.login = wuwei.menu.login || {};
       if (oldOwnerId && common.isTemporaryOwnerId && common.isTemporaryOwnerId(oldOwnerId)) {
         migratePageOwnership(oldOwnerId, nextUser.user_id);
       }
-      document.getElementById('menu')?.classList.add('loggedIn');
-      document.getElementById('user_status')?.classList.add('loggedIn');
+      setUserStatusClass('loggedIn');
     } else if (currentUser && currentUser.user_id === common.GUEST_USER_ID) {
       common.state.loggedIn = false;
       nextUser = Object.assign({}, fallbackGuestUser(), currentUser);
       nextUser.role = nextUser.role || 'author';
       common.state.currentUser = nextUser;
-      document.getElementById('menu')?.classList.remove('loggedIn');
-      document.getElementById('user_status')?.classList.remove('loggedIn');
+      setUserStatusClass('guestUser');
     } else {
       common.state.loggedIn = false;
       nextUser = fallbackGuestUser();
       common.state.currentUser = nextUser;
-      document.getElementById('menu')?.classList.remove('loggedIn');
-      document.getElementById('user_status')?.classList.remove('loggedIn');
+      setUserStatusClass('guestUser');
     }
   }
 
