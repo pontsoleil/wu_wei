@@ -2222,6 +2222,34 @@ wuwei.menu = wuwei.menu || {};
     return nodes;
   }
 
+  function operationHalfWidth(node) {
+    var size = node && node.size ? node.size : {};
+    var radius = Number(size.radius);
+    var width = Number(size.width);
+
+    if (Number.isFinite(radius) && radius > 0) {
+      return radius;
+    }
+    if (Number.isFinite(width) && width > 0) {
+      return width / 2;
+    }
+    return 0;
+  }
+
+  function operationHalfHeight(node) {
+    var size = node && node.size ? node.size : {};
+    var radius = Number(size.radius);
+    var height = Number(size.height);
+
+    if (Number.isFinite(radius) && radius > 0) {
+      return radius;
+    }
+    if (Number.isFinite(height) && height > 0) {
+      return height / 2;
+    }
+    return 0;
+  }
+
   function getNodeOperationBounds(node) {
     var halfW;
     var halfH;
@@ -2230,8 +2258,8 @@ wuwei.menu = wuwei.menu || {};
       return null;
     }
 
-    halfW = halfW_(node);
-    halfH = halfH_(node);
+    halfW = operationHalfWidth(node);
+    halfH = operationHalfHeight(node);
 
     return {
       left: Number(node.x) - halfW,
@@ -2678,20 +2706,6 @@ wuwei.menu = wuwei.menu || {};
           cloneEls[i].style.display = 'none';
         }
       }
-    }
-
-    function halfW_(d) {
-      if (!d || !d.size) {
-        return null;
-      }
-      return d.size.radius || d.size.width / 2;
-    }
-
-    function halfH_(d) {
-      if (!d || !d.size) {
-        return null;
-      }
-      return d.size.radius || d.size.height / 2;
     }
 
     if ('edit-flock' === method && state.Selecting) {
@@ -3327,8 +3341,8 @@ wuwei.menu = wuwei.menu || {};
           .each(function (d) {
             allNodes.push(d);
             count++;
-            halfW = halfW_(d);
-            halfH = halfH_(d);
+            halfW = operationHalfWidth(d);
+            halfH = operationHalfHeight(d);
             if (d.x - halfW < xMin) { xMin = d.x - halfW; LeftNode = d; }
             if (d.x + halfW > xMax) { xMax = d.x + halfW; RightNode = d; }
             if (d.y - halfH < yMin) { yMin = d.y - halfH; TopNode = d; }
@@ -3339,8 +3353,8 @@ wuwei.menu = wuwei.menu || {};
         if (!allNodes.length) {
           allNodes = getScreenSelectedNodes([]);
           allNodes.forEach(function (d) {
-            halfW = halfW_(d);
-            halfH = halfH_(d);
+            halfW = operationHalfWidth(d);
+            halfH = operationHalfHeight(d);
             if (!d || !Number.isFinite(Number(d.x)) || !Number.isFinite(Number(d.y)) ||
               !Number.isFinite(Number(halfW)) || !Number.isFinite(Number(halfH))) {
               return;
