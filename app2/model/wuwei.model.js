@@ -9165,7 +9165,7 @@ wuwei.model = (function () {
     var center;
     var pivot;
     var sorted;
-    var spreadStep = 50;
+    var axisConversion;
 
     function scalarForType(node, type, fallback) {
       if ('vertical' === type) {
@@ -9175,6 +9175,9 @@ wuwei.model = (function () {
     }
 
     function clearFixedPosition(node) {
+      if (!node) {
+        return;
+      }
       node.fx = null;
       node.fy = null;
       node.changed = true;
@@ -9194,26 +9197,81 @@ wuwei.model = (function () {
       clearFixedPosition(node);
     }
 
-    function projectToCanonicalAxis(node, type) {
-      /*
-       * Canonical h/v group definition rules:
-       *   horizontal : keep member x, project y to the group centre line
-       *   vertical   : keep member y, project x to the group centre line
-       * This is used for a new definition from free nodes, simple groups, or
-       * re-normalising the same h/v group type.  It must not redistribute
-       * members by index because that changes the user's original coordinates.
-       */
+    function defaultNodeSizePart(part) {
+      return Number.isFinite(Number(common.defaultSize && common.defaultSize[part]))
+        ? Number(common.defaultSize[part])
+        : (part === 'width' ? 100 : 40);
+    }
+
+    function nodeSizePart(node, part) {
+      return Number.isFinite(Number(node && node.size && node.size[part]))
+        ? Number(node.size[part])
+        : defaultNodeSizePart(part);
+    }
+
+    function nodeHalfWidth(node) {
+      return Math.max(0, nodeSizePart(node, 'width') / 2);
+    }
+
+    function nodeHalfHeight(node) {
+      return Math.max(0, nodeSizePart(node, 'height') / 2);
+    }
+
+    function topicGroupGap() {
+      var style = (common && common.defaultStyle && common.defaultStyle.group) || {};
+      return Number.isFinite(Number(style.dist)) ? Number(style.dist) : 40;
+    }
+
+    function projectToCanonicalAxis(node, type, axisCenter) {
       if ('vertical' === type) {
-        node.x = pivot.x;
-        node.y = finiteOr(node.y, pivot.y);
+        /* v group: keep member y, project member x to the centre axis. */
+        node.x = finiteOr(axisCenter.x, node.x);
+        node.y = finiteOr(node.y, axisCenter.y);
         node.axisPos = node.y;
       }
       else {
-        node.x = finiteOr(node.x, pivot.x);
-        node.y = pivot.y;
+        /* h group: keep member x, project member y to the centre axis. */
+        node.x = finiteOr(node.x, axisCenter.x);
+        node.y = finiteOr(axisCenter.y, node.y);
         node.axisPos = node.x;
       }
       clearFixedPosition(node);
+    }
+
+    function placeRepresentativeAfterMemberAlignment(rep, type, axisCenter, axisMembers) {
+      var gap = topicGroupGap();
+      var edge;
+
+      if (!rep) {
+        return axisCenter;
+      }
+
+      if (!axisMembers.length) {
+        rep.x = finiteOr(axisCenter.x, rep.x);
+        rep.y = finiteOr(axisCenter.y, rep.y);
+      }
+      else if ('vertical' === type) {
+        edge = Math.min.apply(null, axisMembers.map(function (node) {
+          return Number(node.y) - nodeHalfHeight(node);
+        }));
+        rep.x = finiteOr(axisCenter.x, rep.x);
+        rep.y = edge - gap - nodeHalfHeight(rep);
+      }
+      else {
+        edge = Math.min.apply(null, axisMembers.map(function (node) {
+          return Number(node.x) - nodeHalfWidth(node);
+        }));
+        rep.x = edge - gap - nodeHalfWidth(rep);
+        rep.y = finiteOr(axisCenter.y, rep.y);
+      }
+
+      rep.axisPos = ('vertical' === type) ? Number(rep.y) : Number(rep.x);
+      clearFixedPosition(rep);
+
+      return {
+        x: Number(rep.x),
+        y: Number(rep.y)
+      };
     }
 
     if (!group || !('horizontal' === nextType || 'vertical' === nextType || 'simple' === nextType)) {
@@ -9221,27 +9279,39 @@ wuwei.model = (function () {
     }
 
     previousType = previousType || group.previousType || '';
+    axisConversion = ('horizontal' === previousType || 'vertical' === previousType) && previousType !== nextType;
+
     members = findGroupNodes(group.id).filter(function (node) {
-      return node && !node.pseudo && Number.isFinite(Number(node.x)) && Number.isFinite(Number(node.y));
+      return node &&
+        !node.pseudo &&
+        'representative' !== node.groupRole &&
+        Number.isFinite(Number(node.x)) &&
+        Number.isFinite(Number(node.y));
     });
-    representative = syncGroupRepresentative(group);
+    representative = group.representativeNodeId ? findNodeById(group.representativeNodeId) : null;
+
     if (members.length === 0 && !representative) {
       return false;
     }
 
     center = groupNodeCenter(members, representative || group.origin || (group.axis && group.axis.anchor));
     pivot = {
-      x: representative && Number.isFinite(Number(representative.x)) ? Number(representative.x) : center.x,
-      y: representative && Number.isFinite(Number(representative.y)) ? Number(representative.y) : center.y
+      x: Number.isFinite(Number(group.axis && group.axis.anchor && group.axis.anchor.x))
+        ? Number(group.axis.anchor.x)
+        : (representative && Number.isFinite(Number(representative.x)) ? Number(representative.x) : center.x),
+      y: Number.isFinite(Number(group.axis && group.axis.anchor && group.axis.anchor.y))
+        ? Number(group.axis.anchor.y)
+        : (representative && Number.isFinite(Number(representative.y)) ? Number(representative.y) : center.y)
     };
 
     if ('simple' === nextType) {
       /*
        * A simple group is a free outer box.  Defining or changing to simple
-       * must not move member nodes.  Only the representative topic is kept at
-       * the visual centre of the member-node extent.
+       * must not move member nodes.  Only the representative topic is created
+       * after member handling and placed at the visual centre of the members.
        */
       pivot = center;
+      representative = syncGroupRepresentative(group);
       if (representative) {
         representative.x = center.x;
         representative.y = center.y;
@@ -9252,29 +9322,42 @@ wuwei.model = (function () {
     else {
       sorted = sortMembersForAxisConversion(members, previousType, nextType);
 
-      if (('horizontal' === previousType || 'vertical' === previousType) && previousType !== nextType) {
+      if (axisConversion) {
         /*
-         * h <-> v conversion uses a 90 degree axis conversion around the
-         * representative topic.  This avoids collapsing all members when the
-         * old group already had a shared perpendicular coordinate.
+         * h <-> v conversion is the exceptional case where preserving the
+         * unchanged member coordinate would collapse all members onto the
+         * representative.  Keep the representative as the axis anchor and
+         * re-place members from that anchor at a fixed interval.
          */
-        sorted.forEach(function (node) {
-          var oldStart = ('vertical' === previousType) ? pivot.y : pivot.x;
-          var oldScalar = scalarForType(node, previousType, oldStart);
-          placeOnAxis(node, nextType, oldScalar - oldStart);
+        representative = syncGroupRepresentative(group);
+        if (representative) {
+          pivot = {
+            x: Number.isFinite(Number(representative.x)) ? Number(representative.x) : pivot.x,
+            y: Number.isFinite(Number(representative.y)) ? Number(representative.y) : pivot.y
+          };
+          representative.x = pivot.x;
+          representative.y = pivot.y;
+          representative.axisPos = ('vertical' === nextType) ? pivot.y : pivot.x;
+          clearFixedPosition(representative);
+        }
+        sorted.forEach(function (node, index) {
+          placeOnAxis(node, nextType, (index + 1) * 50);
         });
       }
       else {
+        /*
+         * New h/v group definition:
+         * - align member nodes first;
+         * - h group keeps member x and projects y to the centre line;
+         * - v group keeps member y and projects x to the centre line;
+         * - define/place the representative topic last, outside the first
+         *   member with about a 40 px visual gap.
+         */
         sorted.forEach(function (node) {
-          projectToCanonicalAxis(node, nextType);
+          projectToCanonicalAxis(node, nextType, center);
         });
-      }
-
-      if (representative) {
-        representative.x = pivot.x;
-        representative.y = pivot.y;
-        representative.axisPos = ('vertical' === nextType) ? pivot.y : pivot.x;
-        clearFixedPosition(representative);
+        representative = syncGroupRepresentative(group);
+        pivot = placeRepresentativeAfterMemberAlignment(representative, nextType, center, sorted);
       }
     }
 
