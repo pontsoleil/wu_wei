@@ -2095,6 +2095,9 @@ wuwei.note = (function () {
       const saveResult = parseSaveResponse(responseText);
       if (saveResult.note_id && util.isUUIDid(saveResult.note_id)) {
         current.note_id = saveResult.note_id;
+        if (wuwei.tablock && typeof wuwei.tablock.activateForCurrentNote === 'function') {
+          wuwei.tablock.activateForCurrentNote();
+        }
       }
       delete current.bundle;
       delete current.portable;

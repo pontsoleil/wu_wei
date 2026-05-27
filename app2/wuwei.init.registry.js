@@ -31,6 +31,7 @@ wuwei.init.registry = (function () {
       { name: 'wuwei.audio', target: function () { return wuwei.audio; } },
       { name: 'wuwei.model', target: function () { return wuwei.model; } },
       { name: 'wuwei.data', target: function () { return wuwei.data; } },
+      { name: 'wuwei.tablock', target: function () { return wuwei.tablock; } },
       { name: 'wuwei.log', target: function () { return wuwei.log; } },
       { name: 'wuwei.menu', target: function () { return wuwei.menu; } },
       { name: 'wuwei.draw', target: function () { return wuwei.draw; } },

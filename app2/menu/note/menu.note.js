@@ -1001,6 +1001,10 @@ wuwei.menu.note = wuwei.menu.note || {};
   function openNoteFromJson(noteJson) {
     current = wuwei.note.updateNote(noteJson);
 
+    if (wuwei.tablock && typeof wuwei.tablock.activateForCurrentNote === 'function') {
+      wuwei.tablock.activateForCurrentNote();
+    }
+
     updateCurrentNoteNameDisplay(current);
 
     renderCurrentNoteNow();
