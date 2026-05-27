@@ -8587,12 +8587,9 @@ wuwei.model = (function () {
     if (!target) {
       return null;
     }
-
-    /*
-     * A Segment is a timeline member node.  Bloom / wilt / hide issued from
-     * the member itself must behave like an ordinary node operation.
-     * Therefore, only the timeline axis link is treated as a group target here.
-     */
+    if (isTimelineVisibilityPoint(target)) {
+      return findGroupById(target.groupRef);
+    }
     if (isTimelineVisibilityAxisLink(target)) {
       return findGroupById(target.groupRef);
     }
@@ -8619,13 +8616,9 @@ wuwei.model = (function () {
     if (!target) {
       return null;
     }
-
-    /*
-     * A PageMarker is a contents/viewpoint member node.  Bloom / wilt / hide
-     * issued from the member itself must behave like an ordinary node
-     * operation.  Therefore, only the contents/viewpoint axis link is treated
-     * as a group target here.
-     */
+    if (isViewpointVisibilityPoint(target)) {
+      return findGroupById(target.groupRef);
+    }
     if (isViewpointVisibilityAxisLink(target)) {
       return findGroupById(target.groupRef);
     }
@@ -8663,34 +8656,58 @@ wuwei.model = (function () {
   }
 
   function getMemberVisibilityGroup(node) {
+    var groups;
+
     if (!node) {
       return null;
     }
 
-    /*
-     * Only representative nodes are promoted to group visibility targets.
-     * Ordinary group members, including h/v/simple members, Segment and
-     * PageMarker nodes, must be treated as normal graph nodes so that bloom
-     * and wilt can traverse their own links.
-     */
     if (isGroupRepresentativeVisibilityNode(node)) {
       return findGroupById(node.groupRef);
+    }
+
+    if (isTimelineVisibilityPoint(node)) {
+      return findGroupById(node.groupRef);
+    }
+
+    if (isViewpointVisibilityPoint(node)) {
+      return findGroupById(node.groupRef);
+    }
+
+    if (util && typeof util.isNode === 'function' && util.isNode(node) && node.id) {
+      groups = findGroupsByNodeId(node.id).filter(function (group) {
+        return isTimelineVisibilityGroup(group) ||
+          isViewpointVisibilityGroup(group) ||
+          isRegularVisibilityGroup(group);
+      });
+      return groups[0] || null;
     }
 
     return null;
   }
 
   function getEndpointVisibilityGroup(link) {
+    var fromNode;
+    var toNode;
+    var group;
+
     if (!(link && util && typeof util.isLink === 'function' && util.isLink(link))) {
       return null;
     }
 
-    /*
-     * Do not promote a normal link to a group operation merely because one
-     * endpoint is a group member.  Otherwise a link from an h-group member to
-     * a simple-group member is consumed as a group visibility operation and
-     * bloom cannot traverse it as a normal graph edge.
-     */
+    fromNode = findNodeById(link.from);
+    toNode = findNodeById(link.to);
+
+    group = getMemberVisibilityGroup(fromNode);
+    if (group) {
+      return group;
+    }
+
+    group = getMemberVisibilityGroup(toNode);
+    if (group) {
+      return group;
+    }
+
     return null;
   }
 
@@ -8940,15 +8957,12 @@ wuwei.model = (function () {
   }
 
   function getRegularVisibilityGroup(target) {
+    var groups;
+
     if (!target) {
       return null;
     }
 
-    /*
-     * Regular h/v/simple group visibility is a group operation only when the
-     * group object itself or the pseudo axis/group link is selected.
-     * Member nodes remain ordinary nodes for bloom / wilt traversal.
-     */
     if (target.groupRef && (
       ('Group' === target.type && 'simple' === target.groupType) ||
       isTopicGroupPseudoLink(target)
@@ -8956,11 +8970,11 @@ wuwei.model = (function () {
       return findGroupById(target.groupRef);
     }
 
-    /*
-     * Do not return a group for ordinary member nodes.  A member node must be
-     * bloomable/wiltable through its own links, in the same way as a normal
-     * Topic / Content / Memo node.
-     */
+    if (util && typeof util.isNode === 'function' && util.isNode(target) && target.id) {
+      groups = findGroupsByNodeId(target.id).filter(isRegularVisibilityGroup);
+      return groups[0] || null;
+    }
+
     return null;
   }
 
@@ -9160,6 +9174,12 @@ wuwei.model = (function () {
       return finiteOr(node && node.x, fallback);
     }
 
+    function clearFixedPosition(node) {
+      node.fx = null;
+      node.fy = null;
+      node.changed = true;
+    }
+
     function placeOnAxis(node, type, distance) {
       if ('vertical' === type) {
         node.x = pivot.x;
@@ -9171,9 +9191,29 @@ wuwei.model = (function () {
         node.y = pivot.y;
         node.axisPos = node.x;
       }
-      node.fx = null;
-      node.fy = null;
-      node.changed = true;
+      clearFixedPosition(node);
+    }
+
+    function projectToCanonicalAxis(node, type) {
+      /*
+       * Canonical h/v group definition rules:
+       *   horizontal : keep member x, project y to the group centre line
+       *   vertical   : keep member y, project x to the group centre line
+       * This is used for a new definition from free nodes, simple groups, or
+       * re-normalising the same h/v group type.  It must not redistribute
+       * members by index because that changes the user's original coordinates.
+       */
+      if ('vertical' === type) {
+        node.x = pivot.x;
+        node.y = finiteOr(node.y, pivot.y);
+        node.axisPos = node.y;
+      }
+      else {
+        node.x = finiteOr(node.x, pivot.x);
+        node.y = pivot.y;
+        node.axisPos = node.x;
+      }
+      clearFixedPosition(node);
     }
 
     if (!group || !('horizontal' === nextType || 'vertical' === nextType || 'simple' === nextType)) {
@@ -9206,9 +9246,7 @@ wuwei.model = (function () {
         representative.x = center.x;
         representative.y = center.y;
         representative.axisPos = undefined;
-        representative.fx = null;
-        representative.fy = null;
-        representative.changed = true;
+        clearFixedPosition(representative);
       }
     }
     else {
@@ -9216,10 +9254,9 @@ wuwei.model = (function () {
 
       if (('horizontal' === previousType || 'vertical' === previousType) && previousType !== nextType) {
         /*
-         * h <-> v conversion is a 90 degree axis conversion around the
-         * representative topic.  The representative itself becomes the axis
-         * start/anchor.  Each member keeps its signed distance from the old
-         * axis anchor and is projected onto the new axis.
+         * h <-> v conversion uses a 90 degree axis conversion around the
+         * representative topic.  This avoids collapsing all members when the
+         * old group already had a shared perpendicular coordinate.
          */
         sorted.forEach(function (node) {
           var oldStart = ('vertical' === previousType) ? pivot.y : pivot.x;
@@ -9228,13 +9265,8 @@ wuwei.model = (function () {
         });
       }
       else {
-        sorted.forEach(function (node, index) {
-          /*
-           * New h/v definition from a simple or free selection uses the
-           * representative as the axis start and lays members out from that
-           * start point in the positive axis direction.
-           */
-          placeOnAxis(node, nextType, (index + 1) * spreadStep);
+        sorted.forEach(function (node) {
+          projectToCanonicalAxis(node, nextType);
         });
       }
 
@@ -9242,9 +9274,7 @@ wuwei.model = (function () {
         representative.x = pivot.x;
         representative.y = pivot.y;
         representative.axisPos = ('vertical' === nextType) ? pivot.y : pivot.x;
-        representative.fx = null;
-        representative.fy = null;
-        representative.changed = true;
+        clearFixedPosition(representative);
       }
     }
 
@@ -9653,14 +9683,31 @@ wuwei.model = (function () {
     };
 
     const hideGroupByMember = function (memberNode) {
-      /*
-       * A group member reached while pruning from another node must be treated
-       * as an ordinary node.  Do not collapse the member's whole h/v/simple,
-       * timeline, or contents group here.  Group-wide wilt remains available
-       * by selecting the group representative, axis, pseudo group link, or the
-       * group object itself.
-       */
+      var groups, memberGroup, changed;
+
+      if (!memberNode || !memberNode.id) {
         return false;
+      }
+
+      groups = findGroupsByNodeId(memberNode.id).filter(function (group) {
+        return false !== group.visible && getGroupNodeIds(group).indexOf(root.id) < 0;
+      });
+
+      memberGroup = getVisibilityGroup(memberNode);
+      if (memberGroup && false !== memberGroup.visible && getGroupNodeIds(memberGroup).indexOf(root.id) < 0) {
+        util.appendById(groups, memberGroup);
+      }
+
+      if (!groups.length) {
+        return false;
+      }
+
+      changed = false;
+      groups.forEach(function (group) {
+        changed = setVisibilityGroupFamilyVisible(group, false, nodes_data, links_data, true) || changed;
+      });
+
+      return changed;
     };
 
     const prune = function (node, parentNode, parentLink, depth, path) {
