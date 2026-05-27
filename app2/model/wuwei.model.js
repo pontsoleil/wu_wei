@@ -9657,6 +9657,24 @@ wuwei.model = (function () {
     return changed;
   }
 
+  function getRegularGroupForMemberVisibility(node) {
+    var groups;
+
+    if (!node || !node.id || isGroupRepresentativeVisibilityNode(node)) {
+      return null;
+    }
+
+    groups = findGroupsByNodeId(node.id).filter(function (group) {
+      return isRegularVisibilityGroup(group) && false !== group.visible;
+    });
+
+    if (groups.length !== 1) {
+      return null;
+    }
+
+    return groups[0];
+  }
+
   function resolveGroupForGroupWideVisibilityTarget(target) {
     var group;
 
@@ -9948,14 +9966,14 @@ wuwei.model = (function () {
     };
 
     const hideGroupByMember = function (memberNode) {
-      /*
-       * A group member reached while pruning from another node must be treated
-       * as an ordinary node. Do not collapse the member's whole h/v/simple,
-       * timeline, or contents group here. Group-wide wilt remains available
-       * by selecting the group representative, axis, pseudo group link, or the
-       * group object itself.
-       */
+      var regularGroup = getRegularGroupForMemberVisibility(memberNode);
+
+      if (!regularGroup) {
         return false;
+      }
+
+      timelineChanged = setRegularGroupFamilyVisible(regularGroup, false, nodes_data, links_data, true) || timelineChanged;
+      return true;
     };
 
     const prune = function (node, parentNode, parentLink, depth, path) {
