@@ -109,6 +109,8 @@ wuwei.menu = wuwei.menu || {};
     /** flock */
     flockClicked,
     closeFlockClicked,
+    alignClicked,
+    closeAlignClicked,
     /** timeline */
     timelineClicked,
     closeTimelineClicked,
@@ -2026,6 +2028,22 @@ wuwei.menu = wuwei.menu || {};
     return hasGrouped && hasUngrouped;
   }
 
+  function isUngroupedFlockNode(node) {
+    if (!node || !node.id || (node.groupRole === 'representative' && node.groupRef)) {
+      return false;
+    }
+    return !(model.isNodeInAnyGroup && model.isNodeInAnyGroup(node.id));
+  }
+
+  function isAlignableFlockSelection() {
+    var selectedNodes = getScreenSelectedNodes([]);
+    var selectedGroupIds = getEffectiveSelectedGroupIds(getCurrentPage());
+
+    return selectedGroupIds.length === 0 &&
+      selectedNodes.length >= 2 &&
+      selectedNodes.every(isUngroupedFlockNode);
+  }
+
   function getEffectiveSelectedGroupIds(page, option) {
     var selectedGroupIds = Array.isArray(state.selectedGroupIds) ? state.selectedGroupIds.slice() : [];
     var allowedTypes = option && Array.isArray(option.types)
@@ -3293,15 +3311,15 @@ wuwei.menu = wuwei.menu || {};
         'alignVertical', 'alignRight', 'horizontalEqual', 'verticalEqual'].includes(method);
 
       if (isGroupPositionOperation) {
-        if (hasMixedGroupedAndUngroupedNodeSelection(allNodes)) {
+        if (!isAlignableFlockSelection()) {
           state.lastFlockOperation = {
             method: method,
             selectedNodeIds: Array.isArray(state.selectedNodeIds) ? state.selectedNodeIds.slice() : [],
             selectedGroupIds: Array.isArray(state.selectedGroupIds) ? state.selectedGroupIds.slice() : [],
             targetCount: 0,
-            error: 'mixed-grouped-and-ungrouped-nodes'
+            error: 'alignment-requires-ungrouped-nodes'
           };
-          notifyFlockError('Cannot align grouped nodes and ungrouped nodes together. Select the group itself, or select only nodes from the same grouping level.');
+          notifyFlockError('Alignment commands require two or more ungrouped nodes.');
           return;
         }
         operationTargets = buildGroupOperationTargets(allNodes);
@@ -3627,7 +3645,7 @@ wuwei.menu = wuwei.menu || {};
       pulldown = document.getElementsByClassName('pulldown'),
       display = menu.getAttribute('style').match(/display:\s[a-z]+;/g)[0].match(/[\w\.\-]+/g)[1],
       menuId = menu.getAttribute('id'),
-      keepSelecting = ('flockMenu' === menuId || 'timelineMenu' === menuId),
+      keepSelecting = ('flockMenu' === menuId || 'alignMenu' === menuId || 'timelineMenu' === menuId),
       i, len = pulldown.length;
     state.hoveredNode = null;
 
@@ -3671,6 +3689,9 @@ wuwei.menu = wuwei.menu || {};
       menu.style.display = 'none';
       if ('flockMenu' === menuId) {
         closeFlockClicked();
+      }
+      else if ('alignMenu' === menuId) {
+        closeAlignClicked();
       }
       else if ('timelineMenu' === menuId) {
         closeTimelineClicked();
@@ -3812,6 +3833,23 @@ wuwei.menu = wuwei.menu || {};
     state.Selecting = false;
     clearSelectionState();
     var menu = document.getElementById('flockMenu');
+    menu.style.display = 'none';
+    closeContextMenu();
+    draw.redraw();
+    return false;
+  };
+
+  alignClicked = function () {
+    state.Selecting = true;
+    const menu = document.getElementById('alignMenu');
+    menuOpen(menu);
+    return false;
+  };
+
+  closeAlignClicked = function () {
+    state.Selecting = false;
+    clearSelectionState();
+    var menu = document.getElementById('alignMenu');
     menu.style.display = 'none';
     closeContextMenu();
     draw.redraw();
@@ -6044,6 +6082,8 @@ wuwei.menu = wuwei.menu || {};
     // flockIcon
     registerClick('#flockIcon', flockClicked);
     registerClick('.pulldown.flock .header i.fa-times', closeFlockClicked);
+    registerClick('#alignIcon', alignClicked);
+    registerClick('#alignMenu .header i.fa-times', closeAlignClicked);
     registerClick('.pulldown.flock .operators .operator.DeselectFlock', () => {
       common.state.selectedNodeIds = [];
       d3.selectAll('g.node.selected circle.selected').remove();
@@ -6054,28 +6094,28 @@ wuwei.menu = wuwei.menu || {};
       common.state.selectedGroupMarks = {};
       draw.redraw();
     });
-    registerClick('.pulldown.flock .operators .operator.AlignTop', () => {
+    registerClick('#alignMenu .operators .operator.AlignTop', () => {
       ContextOperate('alignTop');
     });
-    registerClick('.pulldown.flock .operators .operator.AlignHorizontal', () => {
+    registerClick('#alignMenu .operators .operator.AlignHorizontal', () => {
       ContextOperate('alignHorizontal');
     });
-    registerClick('.pulldown.flock .operators .operator.AlignBottom', () => {
+    registerClick('#alignMenu .operators .operator.AlignBottom', () => {
       ContextOperate('alignBottom');
     });
-    registerClick('.pulldown.flock .operators .operator.AlignLeft', () => {
+    registerClick('#alignMenu .operators .operator.AlignLeft', () => {
       ContextOperate('alignLeft');
     });
-    registerClick('.pulldown.flock .operators .operator.AlignVertical', () => {
+    registerClick('#alignMenu .operators .operator.AlignVertical', () => {
       ContextOperate('alignVertical');
     });
-    registerClick('.pulldown.flock .operators .operator.AlignRight', () => {
+    registerClick('#alignMenu .operators .operator.AlignRight', () => {
       ContextOperate('alignRight');
     });
-    registerClick('.pulldown.flock .operators .operator.HorizontalEqual', () => {
+    registerClick('#alignMenu .operators .operator.HorizontalEqual', () => {
       ContextOperate('horizontalEqual');
     });
-    registerClick('.pulldown.flock .operators .operator.VerticalEqual', () => {
+    registerClick('#alignMenu .operators .operator.VerticalEqual', () => {
       ContextOperate('verticalEqual');
     });
     registerClick('.pulldown.flock .operators .operator.DefineSimpleGroup', () => {
@@ -6175,6 +6215,8 @@ wuwei.menu = wuwei.menu || {};
   /** flock */
   ns.flockClicked = flockClicked;
   ns.closeFlockClicked = closeFlockClicked;
+  ns.alignClicked = alignClicked;
+  ns.closeAlignClicked = closeAlignClicked;
   /** timeline */
   ns.timelineClicked = timelineClicked;
   ns.closeTimelineClicked = closeTimelineClicked;

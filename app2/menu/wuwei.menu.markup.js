@@ -167,6 +167,10 @@ wuwei.menu.markup = (function () {
     <a href="#" id="flockIcon" class="command">
       <i class="far fa-object-group fa-lg fa-fw"></i>
       <span class="tooltiptext">${translate('Flock')}</span>
+    </a>
+    <a href="#" id="alignIcon" class="command">
+      <i class="fas fa-align-center fa-lg fa-fw"></i>
+      <span class="tooltiptext">${translate('Align')}</span>
     </a>`,
   `</div>`
     ]);
@@ -288,12 +292,12 @@ wuwei.menu.markup = (function () {
   </div>
 `);
 
-    // flock menu
+    // align menu
     html.push(`
-  <div id="flockMenu" class="pulldown flock" style="display: none;">
+  <div id="alignMenu" class="pulldown align" style="display: none;">
     <span class="header">
-      <i class="far fa-object-group fa-fw">${translate('Flock')}</i>
-      <i class="fas fa-times fa-fw">&nbsp;${translate('Flock')}</i>
+      <i class="fas fa-align-center fa-fw">${translate('Align')}</i>
+      <i class="fas fa-times fa-fw">&nbsp;${translate('Align')}</i>
     </span>
     <div class="operators">
       <div class="operator-section">
@@ -331,6 +335,18 @@ wuwei.menu.markup = (function () {
         <span>${translate('Vertical Equal')}</span>
       </div>
       </div>
+    </div>
+  </div>
+`);
+
+    // flock menu
+    html.push(`
+  <div id="flockMenu" class="pulldown flock" style="display: none;">
+    <span class="header">
+      <i class="far fa-object-group fa-fw">${translate('Flock')}</i>
+      <i class="fas fa-times fa-fw">&nbsp;${translate('Flock')}</i>
+    </span>
+    <div class="operators">
       <div class="operator-section">
         <div class="operator-section-title">${translate('Define / Ungroup')}</div>
       <div class="operator DefineSimpleGroup selecting">
@@ -352,32 +368,6 @@ wuwei.menu.markup = (function () {
       <div class="operator DeleteGroup danger selecting">
         <i class="far fa-trash-alt fa-fw"></i>
         <span>${translate('Delete')}</span>
-      </div>
-      </div>
-      <div class="operator-section">
-        <div class="operator-section-title">${translate('Other')}</div>
-      <div class="operator Copy selecting">
-        <i class="fa fa-clone fa-fw"></i>
-        <span>${translate('Copy')}</span>
-      </div>
-      <div class="operator Clipboard selecting">
-        <i class="far fa-clipboard fa-fw"></i>
-        <span>${translate('Clipboard')}</span>
-      </div>
-      <div class="operator Paste selecting" style="display:none">
-        <i class="fas fa-paste fa-fw"></i>
-        <span>${translate('Paste')}</span>
-      </div>
-      <div class="operator Clone selecting" style="display:none">
-        <i class="far fa-clone fa-fw"></i>
-        <span>${translate('Clone')}</span>
-      </div>
-      <div class="operator Edit selecting">
-        <i class="fas fa-edit fa-fw"></i>
-        <span>${translate('Edit')}</span>
-      </div>
-      <div class="operator DeselectFlock selecting">
-        <span>${translate('Deselect')}</span>
       </div>
       </div>
     </div>
