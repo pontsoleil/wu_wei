@@ -73,17 +73,23 @@ wuwei.info.generic.markup = (function () {
       : ''
   }
   ${uri
-      ? `<iframe id="infoFrame"
+      ? `<div class="info-viewer-block" style="display:block; width:100%;">
+        <iframe id="infoFrame"
           src="${wuwei.util.encodeHtml(uri)}"
           data-resource-uri="${wuwei.util.encodeHtml(uri)}"
           onload="this.dataset.loaded='1'"
           onerror="wuwei.info.iframeError()"
           style="display:block; width:100%; min-height:480px; border:none; overflow:auto; box-sizing:border-box;"></iframe>
-        ${infoFallbackHtml(uri)}
-        ${openActionsHtml(uri, {
-          className: 'link info-generic-actions',
-          windowFeatures: 'width=600,height=400,resizable=yes,scrollbars=yes'
-        })}`
+
+        <div class="info-iframe-footer"
+          style="display:block; position:static; clear:both; width:100%; margin-top:0.5rem;">
+          ${infoFallbackHtml(uri)}
+          ${openActionsHtml(uri, {
+            className: 'info-generic-actions',
+            windowFeatures: 'width=600,height=400,resizable=yes,scrollbars=yes'
+          })}
+        </div>
+      </div>`
       : (thumbnailUri
         ? `<div class="frame">
             <img src="${wuwei.util.encodeHtml(thumbnailUri)}"
@@ -94,7 +100,7 @@ wuwei.info.generic.markup = (function () {
               }>
           </div>`
         : '')
-  }
+  }  
   <!--/.Card image-->
   <div class="w3-container ${fontClass}" style="font-size:${Number(fontSize) || 14}px;">
       <!--Card content-->
@@ -531,4 +537,4 @@ wuwei.info.generic.markup = (function () {
     template: template
   };
 })();
-// info.generic.markup.js last modified 2026-03-2805-07
+// info.generic.markup.js last modified 2026-05-27
