@@ -7940,167 +7940,6 @@ wuwei.model = (function () {
     return point;
   }
 
-  function resolveNodeVisualBounds(node, padding) {
-    var x, y, shape, size, width, height, radius, pad;
-
-    if (!node) {
-      return null;
-    }
-
-    x = Number(node.x);
-    y = Number(node.y);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) {
-      return null;
-    }
-
-    size = node.size || {};
-    shape = node.shape || 'RECTANGLE';
-    width = Number(size.width);
-    height = Number(size.height);
-    radius = Number(size.radius);
-    pad = Number.isFinite(Number(padding)) ? Number(padding) : 0;
-
-    if (!Number.isFinite(width) || width <= 0) {
-      width = Number(defaultSize.width || 120);
-    }
-    if (!Number.isFinite(height) || height <= 0) {
-      height = Number(defaultSize.height || 40);
-    }
-    if (!Number.isFinite(radius) || radius <= 0) {
-      radius = Number(defaultSize.radius || 24);
-    }
-
-    switch (shape) {
-      case 'CIRCLE':
-        return {
-          minX: x - radius - pad,
-          maxX: x + radius + pad,
-          minY: y - radius - pad,
-          maxY: y + radius + pad
-        };
-
-      case 'TRIANGLE':
-        return {
-          minX: x - width / 2 - pad,
-          maxX: x + width / 2 + pad,
-          minY: y - (2 * height / 3) - pad,
-          maxY: y + (height / 3) + pad
-        };
-
-      case 'RHOMBUS':
-      case 'RECTANGLE':
-      case 'ELLIPSE':
-      case 'ROUNDED':
-      case 'THUMBNAIL':
-      case 'MEMO':
-      case 'TABLE':
-      default:
-        return {
-          minX: x - width / 2 - pad,
-          maxX: x + width / 2 + pad,
-          minY: y - height / 2 - pad,
-          maxY: y + height / 2 + pad
-        };
-    }
-  }
-
-  function subtractAxisIntervals(start, end, intervals, minLength) {
-    var low = Math.min(Number(start), Number(end));
-    var high = Math.max(Number(start), Number(end));
-    var segments = [{ start: low, end: high }];
-    var minimum = Number.isFinite(Number(minLength)) ? Number(minLength) : 1;
-
-    intervals
-      .filter(function (interval) {
-        return interval &&
-          Number.isFinite(Number(interval.start)) &&
-          Number.isFinite(Number(interval.end));
-      })
-      .map(function (interval) {
-        return {
-          start: Math.max(low, Math.min(Number(interval.start), Number(interval.end))),
-          end: Math.min(high, Math.max(Number(interval.start), Number(interval.end)))
-        };
-      })
-      .filter(function (interval) {
-        return interval.end > interval.start;
-      })
-      .sort(function (a, b) {
-        return a.start - b.start;
-      })
-      .forEach(function (interval) {
-        var next = [];
-        segments.forEach(function (segment) {
-          if (interval.end <= segment.start || interval.start >= segment.end) {
-            next.push(segment);
-            return;
-          }
-          if (interval.start - segment.start >= minimum) {
-            next.push({ start: segment.start, end: interval.start });
-          }
-          if (segment.end - interval.end >= minimum) {
-            next.push({ start: interval.end, end: segment.end });
-          }
-        });
-        segments = next;
-      });
-
-    return segments;
-  }
-
-  function resolveVisibleAxisHitSegments(group, spine, hitWidth) {
-    var horizontal, axisScalar, lineStart, lineEnd, nodeBounds, intervals, scalarSegments;
-    var padding = Math.max(2, Number(hitWidth || 20) / 2);
-
-    if (!group || !spine) {
-      return [];
-    }
-
-    horizontal = Math.abs(Number(spine.x2) - Number(spine.x1)) >=
-      Math.abs(Number(spine.y2) - Number(spine.y1));
-    axisScalar = horizontal ? Number(spine.y1) : Number(spine.x1);
-    lineStart = horizontal ? Number(spine.x1) : Number(spine.y1);
-    lineEnd = horizontal ? Number(spine.x2) : Number(spine.y2);
-
-    nodeBounds = getGroupBorderNodes(group)
-      .map(function (node) {
-        return resolveNodeVisualBounds(node, padding);
-      })
-      .filter(function (bounds) {
-        return !!bounds;
-      });
-
-    intervals = nodeBounds
-      .filter(function (bounds) {
-        return horizontal
-          ? (axisScalar >= bounds.minY && axisScalar <= bounds.maxY)
-          : (axisScalar >= bounds.minX && axisScalar <= bounds.maxX);
-      })
-      .map(function (bounds) {
-        return horizontal
-          ? { start: bounds.minX, end: bounds.maxX }
-          : { start: bounds.minY, end: bounds.maxY };
-      });
-
-    scalarSegments = subtractAxisIntervals(lineStart, lineEnd, intervals, 4);
-    return scalarSegments.map(function (segment) {
-      if (horizontal) {
-        return {
-          x1: segment.start,
-          y1: spine.y1,
-          x2: segment.end,
-          y2: spine.y2
-        };
-      }
-      return {
-        x1: spine.x1,
-        y1: segment.start,
-        x2: spine.x2,
-        y2: segment.end
-      };
-    });
-  }
-
   /**
    * renderTopicGroupLink
    *
@@ -8130,10 +7969,9 @@ wuwei.model = (function () {
     var group = findGroupById(link.groupRef);
     var spine = resolveGroupSpine(group && group.id);
     var canvas = d3.select('g#' + state.canvasId);
-    var gBack, gHit, firstNode, hitSegments;
+    var gBack, gHit, firstNode;
     var touchState = null;
     var TOUCH_TAP_TOLERANCE = 12;
-    var HIT_WIDTH = 20;
 
     function getAxisMidPoint() {
       return getAxisMenuPoint(spine.x1, spine.y1, spine.x2, spine.y2);
@@ -8183,101 +8021,6 @@ wuwei.model = (function () {
       }, 0);
     }
 
-    function decorateHitLine(hitLine) {
-      hitLine
-        .attr('class', 'group-axis-hit')
-        .attr('stroke', 'transparent')
-        .attr('stroke-width', HIT_WIDTH)
-        .style('cursor', 'move')
-        .style('pointer-events', 'stroke')
-        .style('touch-action', 'none')
-        .style('-ms-touch-action', 'none')
-        .style('-webkit-user-select', 'none')
-        .style('-webkit-touch-callout', 'none')
-        .style('-webkit-tap-highlight-color', 'transparent')
-        .on('mouseover', function () {
-          d3.event.preventDefault();
-          scheduleGroupHoverMenu(link, getAxisMidPoint());
-        })
-        .on('mousemove', function () {
-          if (!canOpenGroupHoverMenu()) {
-            cancelGroupHoverMenu(false);
-          }
-        })
-        .on('mouseout', function () {
-          d3.event.preventDefault();
-          clearTimeout(state.menuTimer);
-          state.menuTimer = setTimeout(function () {
-            if (!state.dragging && !state.groupDragGroupId) {
-              menu.closeContextMenu();
-            }
-          }, MENU_TIMEOUT);
-        })
-        .on('touchstart', function () {
-          var ev = d3.event;
-          var p = getTouchPoint(ev);
-
-          touchState = {
-            start: p,
-            moved: false
-          };
-
-          cancelGroupHoverMenu(false);
-
-          if (ev && typeof ev.stopPropagation === 'function') {
-            ev.stopPropagation();
-          }
-        })
-        .on('touchmove', function () {
-          var ev = d3.event;
-          var p = getTouchPoint(ev);
-
-          if (!touchState || !touchState.start || !p) {
-            return;
-          }
-
-          if (Math.abs(p.x - touchState.start.x) > TOUCH_TAP_TOLERANCE ||
-            Math.abs(p.y - touchState.start.y) > TOUCH_TAP_TOLERANCE) {
-            touchState.moved = true;
-
-            if (ev && typeof ev.preventDefault === 'function') {
-              ev.preventDefault();
-            }
-            if (ev && typeof ev.stopPropagation === 'function') {
-              ev.stopPropagation();
-            }
-          }
-        })
-        .on('touchend', function () {
-          var ev = d3.event;
-          var shouldOpen = !!(touchState && !touchState.moved);
-
-          if (shouldOpen) {
-            if (ev && typeof ev.preventDefault === 'function') {
-              ev.preventDefault();
-            }
-            if (ev && typeof ev.stopPropagation === 'function') {
-              ev.stopPropagation();
-            }
-          }
-
-          resetTouchState();
-
-          if (shouldOpen) {
-            openGroupAxisMenu();
-          }
-        })
-        .on('touchcancel', function () {
-          resetTouchState();
-        })
-        .call(
-          d3.drag()
-            .on('start', function () { groupDragStarted(group); })
-            .on('drag', function () { groupDragged(group); })
-            .on('end', function () { groupDragEnded(group); })
-        );
-    }
-
     if (!group || !spine) {
       return null;
     }
@@ -8307,8 +8050,13 @@ wuwei.model = (function () {
       .attr('stroke-dasharray', spine.dasharray || null)
       .attr('stroke-linecap', 'round');
 
-    // 操作用 hit 線は前面
-    gHit = canvas.append('g')
+    // Keep the transparent hit line below member nodes. Covered areas should
+    // belong to the node; only visible axis gaps should select the axis.
+    gHit = firstNode
+      ? d3.select(canvas.node().insertBefore(document.createElementNS('http://www.w3.org/2000/svg', 'g'), firstNode))
+      : canvas.append('g');
+
+    gHit
       .attr('class', 'link group-link group-link-hit')
       .attr('id', link.id)
       .datum(link);
@@ -8412,16 +8160,6 @@ wuwei.model = (function () {
           .on('drag', function () { groupDragged(group); })
           .on('end', function () { groupDragEnded(group); })
       );
-
-    gHit.selectAll('line.group-axis-hit').remove();
-    hitSegments = resolveVisibleAxisHitSegments(group, spine, HIT_WIDTH);
-    hitSegments.forEach(function (segment) {
-      decorateHitLine(gHit.append('line')
-        .attr('x1', segment.x1)
-        .attr('y1', segment.y1)
-        .attr('x2', segment.x2)
-        .attr('y2', segment.y2));
-    });
 
     return gHit;
   }
