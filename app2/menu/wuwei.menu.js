@@ -2873,6 +2873,18 @@ wuwei.menu = wuwei.menu || {};
       closeContextMenu();
       return;
     }
+
+    else if ('distributeTopicGroupMembers' === method) {
+      node = resolveContextTargetRecord(state.hoveredNode);
+      if (!node || !model || typeof model.distributeTopicGroupMembers !== 'function') { return; }
+      wuwei.log.savePrevious();
+      if (model.distributeTopicGroupMembers(node)) {
+        wuwei.log.storeLog({ operation: 'distributeTopicGroupMembers' });
+        draw.redraw();
+      }
+      closeContextMenu();
+      return;
+    }
     else if ('deleteViewpointTarget' === method) {
       node = resolveContextTargetRecord(state.hoveredNode);
       if (!node || !wuwei.viewpoint || typeof wuwei.viewpoint.deleteTarget !== 'function') { return; }
@@ -4371,6 +4383,7 @@ wuwei.menu = wuwei.menu || {};
         'addMemo',
         'copyViewpointTarget',
         'distributeViewpointPageMarkers',
+        'distributeTopicGroupMembers',
         'deleteViewpointTarget',
         'horizontal',
         'vertical',
@@ -5907,6 +5920,25 @@ wuwei.menu = wuwei.menu || {};
         return !state.Selecting &&
           !state.Connecting &&
           isContextViewpointRepresentative(allNodes);
+      },
+      null,
+      'fas fa-arrows-alt-h fa-lg fa-fw'
+    ],
+
+    'distributeTopicGroupMembers': ['Distribute group members',
+      function (allNodes) {
+        var target = getContextTarget(allNodes);
+        var group = target && target.groupRef && model.findGroupById
+          ? model.findGroupById(target.groupRef)
+          : null;
+        return !!(
+          !state.Selecting &&
+          !state.Connecting &&
+          target &&
+          isRepresentativeTopic(target) &&
+          group &&
+          ('horizontal' === group.type || 'vertical' === group.type)
+        );
       },
       null,
       'fas fa-arrows-alt-h fa-lg fa-fw'

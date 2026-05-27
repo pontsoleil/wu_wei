@@ -360,6 +360,7 @@ wuwei.nls.EN = {
   'Horizontal Axis': 'Horizontal Axis',
   'Horizontal Equal': 'Horizontal Equal',
   'Distribute PageMarkers': 'Distribute PageMarkers',
+  'Distribute group members': 'Distribute group members',
   'In case you cannot load iframe contents': 'In case you cannot load iframe contents',
   'Introduction': 'Introduction',
   'item(s) listed below': 'item(s) listed below',
