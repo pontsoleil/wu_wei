@@ -116,14 +116,14 @@ wuwei.util = (function () {
     getCurrentUserId,
     toStorageRelativePath,
     toPublicResourceUri,
-      getResourceFile,
-      getResourceFilePath,
-      getResourceFileUri,
-      getResourceDirectFileUri,
-      getResourcePdfPreviewUri,
-      getResourcePreviewUri,
-      getResourceOriginalPath,
-      getResourceOriginalUri,
+    getResourceFile,
+    getResourceFilePath,
+    getResourceFileUri,
+    getResourceDirectFileUri,
+    getResourcePdfPreviewUri,
+    getResourcePreviewUri,
+    getResourceOriginalPath,
+    getResourceOriginalUri,
     getResourceThumbnailUri,
     getThumbnailUri,
     getResource,
@@ -1105,6 +1105,7 @@ wuwei.util = (function () {
     return { 'x': x, 'y': y, 'shape': shape, 'size': size };
   };
 
+
   setScale = function (s) {
     var id = 'g#' + common.state.canvasId,
       canvas = d3.select(id);
@@ -1115,7 +1116,8 @@ wuwei.util = (function () {
       x = transform.x;
       y = transform.y;
       scale = transform.scale;
-    } else {
+    }
+    else {
       x = 0;
       y = 0;
       scale = 1;
@@ -1123,58 +1125,149 @@ wuwei.util = (function () {
 
     scale = scale * s;
     scale = Math.round(scale * 100) / 100;
+
     if (scale < 0.2) {
       scale = 0.2;
-    } else if (scale > 5) {
+    }
+    else if (scale > 5) {
       scale = 5;
     }
 
-    var translate = 'translate(' + [x, y] + ') scale(' + scale + ')';
-    canvas.attr('transform', translate);
+    canvas.attr('transform', 'translate(' + [x, y] + ') scale(' + scale + ')');
+
     setPageTransform(current.page, Object.assign({}, getPageTransform(current.page), {
       x: x,
       y: y,
       scale: scale
     }));
+
+    if (common.graph) {
+      common.graph.transform = Object.assign({}, common.graph.transform || {}, {
+        x: x,
+        y: y,
+        scale: scale
+      });
+    }
+
     return scale;
   };
 
+
   zoomin = function () {
-    var
-      scale = setScale(1.25);
-    setPageTransform(current.page, Object.assign({}, getPageTransform(current.page), { scale: scale }));
-    return scale;
+    return setScale(1.25);
   };
 
 
   zoomout = function () {
-    var
-      scale = setScale(0.8);
-    setPageTransform(current.page, Object.assign({}, getPageTransform(current.page), { scale: scale }));
-    return scale;
+    return setScale(0.8);
   };
 
 
   resetview = function () {
-    var
-      self = this,
-      id = 'g#' + common.state.canvasId,
+    var id = 'g#' + common.state.canvasId,
       canvas = d3.select(id),
       transform = getTransform(id),
       xTrans, yTrans;
+
     if (transform) {
       xTrans = Math.round(transform.x || 0);
       yTrans = Math.round(transform.y || 0);
-    } else {
-      xTrans = yTrans = 0;
     }
-    var
-      translate;
-    translate = 'translate(' + [xTrans, yTrans] + ') scale(1)';
-    canvas.attr('transform', translate);
-    setPageTransform(current.page, { x: xTrans, y: yTrans, scale: 1 });
-  };
+    else {
+      xTrans = 0;
+      yTrans = 0;
+    }
 
+    canvas.attr('transform', 'translate(' + [xTrans, yTrans] + ') scale(1)');
+
+    setPageTransform(current.page, {
+      x: xTrans,
+      y: yTrans,
+      scale: 1
+    });
+
+    if (common.graph) {
+      common.graph.transform = Object.assign({}, common.graph.transform || {}, {
+        x: xTrans,
+        y: yTrans,
+        scale: 1
+      });
+    }
+
+    return 1;
+  };
+  /*
+    setScale = function (s) {
+      var id = 'g#' + common.state.canvasId,
+        canvas = d3.select(id);
+      var transform, x, y, scale;
+  
+      transform = getTransform(id);
+      if (transform) {
+        x = transform.x;
+        y = transform.y;
+        scale = transform.scale;
+      } else {
+        x = 0;
+        y = 0;
+        scale = 1;
+      }
+  
+      scale = scale * s;
+      scale = Math.round(scale * 100) / 100;
+      if (scale < 0.2) {
+        scale = 0.2;
+      } else if (scale > 5) {
+        scale = 5;
+      }
+  
+      var translate = 'translate(' + [x, y] + ') scale(' + scale + ')';
+      canvas.attr('transform', translate);
+      setPageTransform(current.page, Object.assign({}, getPageTransform(current.page), {
+        x: x,
+        y: y,
+        scale: scale
+      }));
+      return scale;
+    };
+  
+  
+    zoomin = function () {
+      var
+        scale = setScale(1.25);
+      setPageTransform(current.page, Object.assign({}, getPageTransform(current.page), { scale: scale }));
+      return scale;
+    };
+  
+  
+    zoomout = function () {
+      var
+        scale = setScale(0.8);
+      setPageTransform(current.page, Object.assign({}, getPageTransform(current.page), { scale: scale }));
+      return scale;
+    };
+  
+  
+    resetview = function () {
+      var
+        self = this,
+        id = 'g#' + common.state.canvasId,
+        canvas = d3.select(id),
+        transform = getTransform(id),
+        xTrans, yTrans;
+      if (transform) {
+        xTrans = Math.round(transform.x || 0);
+        yTrans = Math.round(transform.y || 0);
+      } else {
+        xTrans = yTrans = 0;
+      }
+      var
+        translate;
+      translate = 'translate(' + [xTrans, yTrans] + ') scale(1)';
+      canvas.attr('transform', translate);
+      setPageTransform(current.page, { x: xTrans, y: yTrans, scale: 1 });
+    };
+  */
 
   createThumbnail = function (param) {
     var svgString = buildMiniatureSvgString({
@@ -4385,7 +4478,7 @@ wuwei.util = (function () {
     }
     if (explicit) {
       if (!/^https?:\/\//i.test(explicit) || explicit.indexOf('/wu_wei2/') >= 0 ||
-          /(?:^|\/)(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i.test(explicit)) {
+        /(?:^|\/)(?:cgi-bin|server)\/load-file\.(?:py|cgi)\?/i.test(explicit)) {
         return toPublicResourceUri('thumbnail', toStorageRelativePath(explicit, null, 'thumbnail'), null, 'thumbnail');
       }
       return explicit;
@@ -4540,14 +4633,14 @@ wuwei.util = (function () {
     toStorageRelativePath: toStorageRelativePath,
     toLogicalResourcePath: toLogicalResourcePath,
     toPublicResourceUri: toPublicResourceUri,
-      getResourceFile: getResourceFile,
-      getResourceFilePath: getResourceFilePath,
-      getResourceFileUri: getResourceFileUri,
-      getResourceDirectFileUri: getResourceDirectFileUri,
-      getResourcePdfPreviewUri: getResourcePdfPreviewUri,
-      getResourcePreviewUri: getResourcePreviewUri,
-      getResourceOriginalPath: getResourceOriginalPath,
-      getResourceOriginalUri: getResourceOriginalUri,
+    getResourceFile: getResourceFile,
+    getResourceFilePath: getResourceFilePath,
+    getResourceFileUri: getResourceFileUri,
+    getResourceDirectFileUri: getResourceDirectFileUri,
+    getResourcePdfPreviewUri: getResourcePdfPreviewUri,
+    getResourcePreviewUri: getResourcePreviewUri,
+    getResourceOriginalPath: getResourceOriginalPath,
+    getResourceOriginalUri: getResourceOriginalUri,
     getResourceThumbnailUri: getResourceThumbnailUri,
     getThumbnailUri: getThumbnailUri,
     getResource: getResource,

@@ -1848,7 +1848,7 @@ wuwei.menu = wuwei.menu || {};
     }
     candidates.push(
       href,
-      
+
       identity.title,
       node && node.label
     );
@@ -1863,7 +1863,7 @@ wuwei.menu = wuwei.menu || {};
       }
     }
 
-    fallback = fallback || String( identity.title || (node && node.label) || 'download');
+    fallback = fallback || String(identity.title || (node && node.label) || 'download');
     return fallback;
   }
 
@@ -3720,43 +3720,89 @@ wuwei.menu = wuwei.menu || {};
   };
 
   /** zoom in/out/reset */
-  updateResetview = function (zoom) {
-    const current = wuwei.common.current;
+  updateResetview = function (scale) {
     const resetIcon = document.querySelector('.resetview.icon');
     const scaleEl = document.querySelector('.resetview.scale');
-    const scale = util.getPageTransform(current && current.page).scale;
 
-    if (!resetIcon || !scaleEl) {
+    if (!scaleEl) {
       return;
     }
 
-    if (scale < 0.99 || 1.01 < scale) {
-      scaleEl.innerHTML = util.precisionRound(scale, 2);
-      scaleEl.style.display = 'block';
-      resetIcon.style.display = 'none';
+    scale = Number(scale);
+
+    if (!Number.isFinite(scale)) {
+      scale = 1;
+    }
+
+    if (Math.abs(scale - 1) > 0.01) {
+      scaleEl.textContent = util.precisionRound(scale, 2);
     }
     else {
-      scaleEl.innerHTML = '';
-      scaleEl.style.display = 'none';
-      resetIcon.style.display = 'block';
+      scaleEl.textContent = '=';
     }
-  }
+
+    scaleEl.style.display = 'block';
+
+    if (resetIcon) {
+      resetIcon.style.display = 'none';
+    }
+  };
+
 
   zoomInClicked = function () {
-    util.zoomin();
-    updateResetview('zoomin');
+    const scale = util.zoomin();
+    updateResetview(scale);
   };
+
 
   resetViewClicked = function () {
-    util.resetview();
-    updateResetview('reset');
+    const scale = util.resetview();
+    updateResetview(scale);
   };
+
 
   zoomOutClicked = function () {
-    util.zoomout();
-    updateResetview('zoomout');
+    const scale = util.zoomout();
+    updateResetview(scale);
   };
-
+  /*
+    updateResetview = function (zoom) {
+      const current = wuwei.common.current;
+      const resetIcon = document.querySelector('.resetview.icon');
+      const scaleEl = document.querySelector('.resetview.scale');
+      const scale = util.getPageTransform(current && current.page).scale;
+  
+      if (!resetIcon || !scaleEl) {
+        return;
+      }
+  
+      if (scale < 0.99 || 1.01 < scale) {
+        scaleEl.innerHTML = util.precisionRound(scale, 2);
+        scaleEl.style.display = 'block';
+        resetIcon.style.display = 'none';
+      }
+      else {
+        scaleEl.innerHTML = '';
+        scaleEl.style.display = 'none';
+        resetIcon.style.display = 'block';
+      }
+    }
+  
+    zoomInClicked = function () {
+      util.zoomin();
+      updateResetview('zoomin');
+    };
+  
+    resetViewClicked = function () {
+      util.resetview();
+      updateResetview('reset');
+    };
+  
+    zoomOutClicked = function () {
+      util.zoomout();
+      updateResetview('zoomout');
+    };
+  */
   /** undo / redo */
   updateUndoRedoButton = function () {
     var
@@ -3963,7 +4009,7 @@ wuwei.menu = wuwei.menu || {};
 
       'EditNode': [
         'edit',
-'createTimelineAxis',
+        'createTimelineAxis',
         'createViewpointAxis',
         'addContent',
         'addTopic',
@@ -3974,7 +4020,7 @@ wuwei.menu = wuwei.menu || {};
 
       'EditLink': [
         'edit',
-'reverse',
+        'reverse',
         'normal',
         'horizontal',
         'vertical',
@@ -4089,7 +4135,7 @@ wuwei.menu = wuwei.menu || {};
       }
       return true;
     },
-    
+
     getSupported: function (allNodes, context) {
       var
         self = this,
