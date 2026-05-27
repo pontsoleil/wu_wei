@@ -10143,12 +10143,18 @@ wuwei.model = (function () {
 
   forward = function (_nodes) {
     var node = _nodes[0];
+    var page = getCurrentPage();
+    var pageNode = node && node.id ? findNodeById(node.id) : null;
+    if (page && Array.isArray(page.nodes) && pageNode) {
+      util.append(page.nodes, pageNode);
+      pageNode.changed = true;
+    }
     graph.nodes = util.append(graph.nodes, node);
     // log
     var logData = {
-      command: 'root',
+      command: 'forward',
       param: {
-        node: graph.nodes,
+        node: pageNode ? [pageNode] : [node],
         link: graph.links
       }
     };
@@ -10157,12 +10163,18 @@ wuwei.model = (function () {
 
   backward = function (_nodes) {
     var node = _nodes[0];
+    var page = getCurrentPage();
+    var pageNode = node && node.id ? findNodeById(node.id) : null;
+    if (page && Array.isArray(page.nodes) && pageNode) {
+      util.prepend(page.nodes, pageNode);
+      pageNode.changed = true;
+    }
     graph.nodes = util.prepend(graph.nodes, node);
     // log
     var logData = {
-      command: 'root',
+      command: 'backward',
       param: {
-        node: graph.nodes,
+        node: pageNode ? [pageNode] : [node],
         link: graph.links
       }
     };
