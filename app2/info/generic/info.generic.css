@@ -25,3 +25,33 @@
 .info-generic-card iframe {
   background: #ffffff;
 }
+
+#info-generic .info-viewer-block {
+  display: block;
+  width: 100%;
+}
+
+#info-generic .info-viewer-block iframe {
+  display: block;
+  width: 100%;
+}
+
+#info-generic .info-iframe-footer {
+  display: block;
+  position: static !important;
+  clear: both;
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+#info-generic .info-iframe-footer .iframe-fallback,
+#info-generic .info-iframe-footer .info-generic-actions,
+#info-generic .info-iframe-footer .link {
+  display: block;
+  position: static !important;
+  float: none !important;
+}
+
+#info-generic .info-iframe-footer .info-generic-actions {
+  margin-top: 0.25rem;
+}
