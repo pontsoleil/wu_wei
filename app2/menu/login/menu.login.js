@@ -268,11 +268,13 @@ wuwei.menu.login = wuwei.menu.login || {};
   function update(currentUser) {
     var oldOwnerId = common.state.currentUser && common.state.currentUser.user_id;
     var previousUser = common.state.currentUser || {};
+    var baseUser;
     var nextUser;
 
     if (currentUser && wuwei.util.isUUID(currentUser.user_id)) {
       common.state.loggedIn = true;
-      nextUser = Object.assign({}, previousUser, currentUser);
+      baseUser = previousUser.user_id === common.GUEST_USER_ID ? {} : previousUser;
+      nextUser = Object.assign({}, baseUser, currentUser);
       nextUser.role = nextUser.role || 'author';
       common.state.currentUser = nextUser;
       if (oldOwnerId && common.isTemporaryOwnerId && common.isTemporaryOwnerId(oldOwnerId)) {
