@@ -79,6 +79,19 @@ wuwei.edit = wuwei.edit || {};
     );
   }
 
+  function storePendingEditLog(operation) {
+    if (!snapshotTaken) {
+      return false;
+    }
+
+    snapshotTaken = false;
+    if (hasEditChanges()) {
+      log.storeLog({ operation: operation || 'edit' });
+      return true;
+    }
+    return false;
+  }
+
   function getCurrentPage() {
     var common = wuwei.common;
     return common && common.current ? common.current.page || null : null;
@@ -2057,9 +2070,16 @@ wuwei.edit = wuwei.edit || {};
     }
   }
 
-  function close() {
+  function close(option) {
+    option = option || {};
+    if (!option.skipLog) {
+      storePendingEditLog('edit');
+    }
+    else {
+      snapshotTaken = false;
+    }
+
     state.Editing = false;
-    snapshotTaken = false;
     document.getElementById('Editing').style.opacity = '0';
 
     closeEdit();
@@ -2080,11 +2100,8 @@ wuwei.edit = wuwei.edit || {};
   }
 
   function dismiss() {
-    snapshotTaken = false;
-    if (hasEditChanges()) {
-      log.storeLog({ operation: 'edit' });
-    }
-    close();
+    storePendingEditLog('edit');
+    close({ skipLog: true });
   }
 
   function flushViewpointEntryFields() {
@@ -2221,7 +2238,7 @@ wuwei.edit = wuwei.edit || {};
     // Store the log after timeline graph rebuild has been confirmed.
     log.storeLog({ operation: 'edit' });
     registerNetworkResourceOnCommit();
-    close();
+    close({ skipLog: true });
     return true;
   }
 

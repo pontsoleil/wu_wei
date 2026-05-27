@@ -239,6 +239,11 @@ wuwei.log = (function () {
       removedLog = { nodes: removedNs, links: removedLs };
     }
 
+    if (!createdLog && !modifiedLog && !removedLog && !groupsChanged) {
+      menu.updateUndoRedoButton();
+      return false;
+    }
+
     // undo 用の 1 エントリを JSON 化して保存する。
     // groups は node/link とは独立した構造差分として記録する。
     logJSON = JSON.stringify({
@@ -257,6 +262,7 @@ wuwei.log = (function () {
 
     // 履歴状態に応じて undo/redo ボタンの有効状態を更新する。
     menu.updateUndoRedoButton();
+    return true;
   };
 
   storeLog = function (item) {
