@@ -1897,6 +1897,7 @@ wuwei.menu = wuwei.menu || {};
   };
 
   function clearSelectionState() {
+    state.selectedNodeIds = [];
     state.selectedGroupIds = [];
     state.selectedGroupMarks = {};
     d3.selectAll('g.node.selected circle.selected').remove();
@@ -1908,9 +1909,15 @@ wuwei.menu = wuwei.menu || {};
 
   function getScreenSelectedNodes(fallbackNodes) {
     var page = getCurrentPage();
-    var selectedIds = [];
     var nodes = [];
     var seen = {};
+
+    function addNode(node) {
+      if (node && node.id && !seen[node.id]) {
+        seen[node.id] = true;
+        nodes.push(node);
+      }
+    }
 
     d3.selectAll('g.node.selected').each(function () {
       var nodeId = this && this.id;
@@ -1928,15 +1935,12 @@ wuwei.menu = wuwei.menu || {};
         }
         return;
       }
-      if (node && !seen[node.id]) {
-        seen[node.id] = true;
-        nodes.push(node);
-      }
+      addNode(node);
     });
 
-    if (nodes.length > 0) {
-      return nodes;
-    }
+    (Array.isArray(state.selectedNodeIds) ? state.selectedNodeIds : []).forEach(function (nodeId) {
+      addNode(model.findNodeById(nodeId));
+    });
 
     if (Array.isArray(fallbackNodes)) {
       fallbackNodes.forEach(function (n) {
@@ -1949,10 +1953,7 @@ wuwei.menu = wuwei.menu || {};
           }
           return;
         }
-        if (n && n.id && !seen[n.id]) {
-          seen[n.id] = true;
-          nodes.push(n);
-        }
+        addNode(n);
       });
     }
 
@@ -2171,6 +2172,23 @@ wuwei.menu = wuwei.menu || {};
     return targets;
   }
 
+  function translateSelectedGroupMark(groupId, dx, dy) {
+    var mark;
+    if (!groupId || !state.selectedGroupMarks || 'object' !== typeof state.selectedGroupMarks) {
+      return;
+    }
+    mark = state.selectedGroupMarks[groupId];
+    if (!mark) {
+      return;
+    }
+    if (Number.isFinite(Number(mark.x))) {
+      mark.x = Number(mark.x) + dx;
+    }
+    if (Number.isFinite(Number(mark.y))) {
+      mark.y = Number(mark.y) + dy;
+    }
+  }
+
   function applyOperationTargetTranslate(target, dx, dy) {
     if (!target) {
       return;
@@ -2184,7 +2202,9 @@ wuwei.menu = wuwei.menu || {};
     }
 
     if ('group' === target.kind && target.group) {
-      model.translateGroupBy(target.group, dx, dy);
+      if (model.translateGroupBy(target.group, dx, dy)) {
+        translateSelectedGroupMark(target.group.id, dx, dy);
+      }
       return;
     }
 
@@ -3147,6 +3167,24 @@ wuwei.menu = wuwei.menu || {};
             xSum += d.x;
             ySum += d.y;
           });
+        if (!allNodes.length) {
+          allNodes = getScreenSelectedNodes([]);
+          allNodes.forEach(function (d) {
+            halfW = halfW_(d);
+            halfH = halfH_(d);
+            if (!d || !Number.isFinite(Number(d.x)) || !Number.isFinite(Number(d.y)) ||
+              !Number.isFinite(Number(halfW)) || !Number.isFinite(Number(halfH))) {
+              return;
+            }
+            count++;
+            if (d.x - halfW < xMin) { xMin = d.x - halfW; LeftNode = d; }
+            if (d.x + halfW > xMax) { xMax = d.x + halfW; RightNode = d; }
+            if (d.y - halfH < yMin) { yMin = d.y - halfH; TopNode = d; }
+            if (d.y + halfH > yMax) { yMax = d.y + halfH; BottomNode = d; }
+            xSum += d.x;
+            ySum += d.y;
+          });
+        }
       }
       var operationTargets = null;
       var operationMetrics = null;
@@ -3500,6 +3538,7 @@ wuwei.menu = wuwei.menu || {};
             selected_g[i].removeChild(selected_circle);
           }
         }
+        state.selectedNodeIds = [];
         state.selectedGroupIds = [];
         state.selectedGroupMarks = {};
       }
@@ -5882,6 +5921,7 @@ wuwei.menu = wuwei.menu || {};
     registerClick('#flockIcon', flockClicked);
     registerClick('.pulldown.flock .header i.fa-times', closeFlockClicked);
     registerClick('.pulldown.flock .operators .operator.DeselectFlock', () => {
+      common.state.selectedNodeIds = [];
       d3.selectAll('g.node.selected circle.selected').remove();
       d3.selectAll('g.node.selected').nodes().map(node => {
         d3.select(node).classed('selected', false);
