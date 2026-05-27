@@ -8946,6 +8946,23 @@ wuwei.model = (function () {
     });
   }
 
+  function getRegularVisibilityPseudoNodes(group) {
+    if (!group || !group.id) {
+      return [];
+    }
+    return (graph.nodes || []).filter(function (node) {
+      return !!(
+        node &&
+        node.pseudo &&
+        node.groupRef === group.id &&
+        (
+          ('Group' === node.type && 'simple' === node.groupType) ||
+          ('Group' === node.type && isRegularVisibilityGroup(group))
+        )
+      );
+    });
+  }
+
   function getRegularVisibilityGroup(target) {
     if (!target) {
       return null;
@@ -9547,7 +9564,8 @@ wuwei.model = (function () {
     var changed = false;
     var shown = !!visible;
     var members;
-    var axisLinks;
+    var pseudoNodes;
+    var groupLinks;
     var memberIds = {};
 
     nodesBucket = nodesBucket || [];
@@ -9565,6 +9583,10 @@ wuwei.model = (function () {
     members = findGroupNodes(group.id);
     getGroupRepresentativeNodes(group).forEach(function (representative) {
       util.appendById(members, representative);
+    });
+    pseudoNodes = getRegularVisibilityPseudoNodes(group);
+    pseudoNodes.forEach(function (pseudoNode) {
+      util.appendById(members, pseudoNode);
     });
     members.forEach(function (member) {
       if (!member || !member.id) {
@@ -9617,8 +9639,11 @@ wuwei.model = (function () {
       });
     });
 
-    axisLinks = getRegularVisibilityAxisLinks(group);
-    axisLinks.forEach(function (link) {
+    groupLinks = getGroupVisibilityLinks(group);
+    getRegularVisibilityAxisLinks(group).forEach(function (link) {
+      util.appendById(groupLinks, link);
+    });
+    groupLinks.forEach(function (link) {
       if (!link) {
         return;
       }
