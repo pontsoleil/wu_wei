@@ -8587,9 +8587,12 @@ wuwei.model = (function () {
     if (!target) {
       return null;
     }
-    if (isTimelineVisibilityPoint(target)) {
-      return findGroupById(target.groupRef);
-    }
+
+    /*
+     * A Segment is a group member node, but bloom / wilt / hide from the
+     * member itself shall behave like an ordinary node operation.
+     * Therefore only the timeline axis link is treated as a group target here.
+     */
     if (isTimelineVisibilityAxisLink(target)) {
       return findGroupById(target.groupRef);
     }
@@ -8616,9 +8619,13 @@ wuwei.model = (function () {
     if (!target) {
       return null;
     }
-    if (isViewpointVisibilityPoint(target)) {
-      return findGroupById(target.groupRef);
-    }
+
+    /*
+     * A PageMarker is a group member node, but bloom / wilt / hide from the
+     * member itself shall behave like an ordinary node operation.
+     * Therefore only the contents/viewpoint axis link is treated as a group
+     * target here.
+     */
     if (isViewpointVisibilityAxisLink(target)) {
       return findGroupById(target.groupRef);
     }
@@ -8727,10 +8734,12 @@ wuwei.model = (function () {
       return group;
     }
 
-    group = getEndpointVisibilityGroup(target);
-    if (group) {
-      return group;
-    }
+    /*
+     * Do not promote a normal node/link operation to a group operation merely
+     * because one endpoint is a group member.  Group member nodes must support
+     * bloom / wilt / hide through their own normal links.  Group-wide visibility
+     * is handled only by representative nodes and axis/pseudo group links.
+     */
 
     group = getTimelineVisibilityGroup(target);
     if (group) {
@@ -8957,8 +8966,6 @@ wuwei.model = (function () {
   }
 
   function getRegularVisibilityGroup(target) {
-    var groups;
-
     if (!target) {
       return null;
     }
@@ -8970,11 +8977,11 @@ wuwei.model = (function () {
       return findGroupById(target.groupRef);
     }
 
-    if (util && typeof util.isNode === 'function' && util.isNode(target) && target.id) {
-      groups = findGroupsByNodeId(target.id).filter(isRegularVisibilityGroup);
-      return groups[0] || null;
-    }
-
+    /*
+     * Do not return a group for ordinary member nodes.  A member node must be
+     * bloomable/wiltable through its own links, in the same way as a normal
+     * Topic / Content / Memo node.
+     */
     return null;
   }
 
