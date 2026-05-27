@@ -302,6 +302,10 @@ wuwei.draw = wuwei.draw || {};
       }
     });
 
+    if (log && typeof log.savePrevious === 'function') {
+      log.savePrevious();
+    }
+
     state.dragging = true;
     state.groupDragIds = nodes.map(function (n) { return n.id; });
     state.groupDragAnchor = { x: d3.event.x, y: d3.event.y };

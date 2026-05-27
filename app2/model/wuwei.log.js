@@ -25,10 +25,7 @@ wuwei.log = (function () {
     redoLog = common.redoLog,
     MAX_LOG = 48, //common.MAX_LOG,
     /** current */
-    current = common.current,
-    note_id = current.note_id,
-    pp = current.page.pp,
-    user_id = current.user_id,
+    pp = 1,
     /** function */
     savePrevious,
     resumePrevious,
@@ -48,6 +45,11 @@ wuwei.log = (function () {
     return common && common.current ? common.current.page || null : null;
   }
 
+  function getCurrentPageNumber() {
+    var page = getCurrentPage();
+    return (page && page.pp) ? page.pp : 1;
+  }
+
   savePrevious = function () {
     var page = getCurrentPage();
 
@@ -60,6 +62,7 @@ wuwei.log = (function () {
 
   resumePrevious = function () {
     var page = getCurrentPage();
+    var current = wuwei.common && wuwei.common.current ? wuwei.common.current : null;
 
     if (!page || !previous.page) {
       return;
@@ -68,8 +71,10 @@ wuwei.log = (function () {
     page.nodes = util.clone(previous.page.nodes || []);
     page.links = util.clone(previous.page.links || []);
     page.groups = util.clone(previous.page.groups || []);
-    current.page = page;
-    if (Array.isArray(current.pages)) {
+    if (current) {
+      current.page = page;
+    }
+    if (current && Array.isArray(current.pages)) {
       var idx = current.pages.findIndex(function (item) { return item && item.id === page.id; });
       if (idx >= 0) {
         current.pages[idx] = page;
@@ -267,10 +272,10 @@ wuwei.log = (function () {
 
   storeLog = function (item) {
     // operation がないものはログ要求として無効。
-    if (!item || !item.operation) return;
+    if (!item || (!item.operation && !item.command)) return;
 
-    let operation = item.operation;
-    pp = current.page.pp;
+    let operation = item.operation || item.command;
+    pp = getCurrentPageNumber();
 
     // ここでの DELETE は「削除操作を記録する」の意味ではなく、
     // そのページの履歴自体を初期化するための特別コマンド。
@@ -327,7 +332,7 @@ wuwei.log = (function () {
 
   undoState = function () {
     let logJSON, undolog, redolog, log;
-    pp = current.page.pp;
+    pp = getCurrentPageNumber();
 
     undolog = undoLog.get(pp) || [];
     logJSON = (undolog.length > 0)
@@ -393,7 +398,7 @@ wuwei.log = (function () {
 
   redoState = function () {
     let logJSON, undolog, redolog, log;
-    pp = current.page.pp;
+    pp = getCurrentPageNumber();
 
     undolog = undoLog.get(pp) || [];
     redolog = redoLog.get(pp) || [];

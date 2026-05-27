@@ -33,10 +33,14 @@ wuwei.filter = (function () {
     (page.groups || []).forEach(callback);
   }
 
+  function isDeletedRecord(obj) {
+    return !!(obj && obj.state === 'deleted');
+  }
+
   function showAllPageData() {
     forEachPageObject(function (obj) {
       if (!obj) { return; }
-      obj.visible = true;
+      obj.visible = !isDeletedRecord(obj);
       obj.filterout = false;
       obj.changed = true;
     });
@@ -46,6 +50,13 @@ wuwei.filter = (function () {
   function setLinkVisibilityFromNodes(page) {
     if (!page) { return; }
     (page.links || []).forEach(function (link) {
+      if (!link || isDeletedRecord(link)) {
+        if (link) {
+          link.visible = false;
+          link.changed = true;
+        }
+        return;
+      }
       var fromId = link.from;
       var toId = link.to;
       var fromNode = model && typeof model.findNodeById === 'function' ? model.findNodeById(fromId) : null;
@@ -62,16 +73,34 @@ wuwei.filter = (function () {
     var matcher = wuwei.search && wuwei.search.this_note && wuwei.search.this_note.matchesObject;
     if (!page || typeof matcher !== 'function') { return; }
     (page.nodes || []).forEach(function (node) {
+      if (isDeletedRecord(node)) {
+        node.visible = false;
+        node.filterout = false;
+        node.changed = true;
+        return;
+      }
       node.visible = !!matcher(node, condition || {});
       node.filterout = false;
       node.changed = true;
     });
     (page.groups || []).forEach(function (group) {
+      if (isDeletedRecord(group)) {
+        group.visible = false;
+        group.filterout = false;
+        group.changed = true;
+        return;
+      }
       group.visible = !!matcher(group, condition || {});
       group.filterout = false;
       group.changed = true;
     });
     (page.links || []).forEach(function (link) {
+      if (isDeletedRecord(link)) {
+        link.visible = false;
+        link.filterout = false;
+        link.changed = true;
+        return;
+      }
       link.visible = !!matcher(link, condition || {});
       link.filterout = false;
       link.changed = true;

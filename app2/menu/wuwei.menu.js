@@ -3697,6 +3697,7 @@ wuwei.menu = wuwei.menu || {};
             method = param.method,
             allNodes = param.allNodes,
             logData;
+          log.savePrevious();
           logData = model[method](allNodes);
           log.storeLog({ operation: method });
           return logData;

@@ -1581,6 +1581,9 @@ wuwei.model = (function () {
     d.dragging = true;
     state.dragging = true;
     menu.closeContextMenu();
+    if (log && typeof log.savePrevious === 'function') {
+      log.savePrevious();
+    }
 
     page = common.current ? common.current.page : null;
 
@@ -2811,6 +2814,9 @@ wuwei.model = (function () {
     let sP = startPoint(link), eP = endPoint(link);
 
     d._dragEnd = null;
+    if (log && typeof log.savePrevious === 'function') {
+      log.savePrevious();
+    }
     if (Math.abs(mouse.x - sP.x) + Math.abs(mouse.y - sP.y) < 8) {
       d._dragEnd = 'start';
       console.log(`mouse[${mouse.x.toFixed(1)},${mouse.y.toFixed(1)}] START[${sP.x.toFixed(1)},${sP.y.toFixed(1)}]`);
@@ -9989,12 +9995,59 @@ wuwei.model = (function () {
       links_data.push(l);
     };
 
-    const hideGroupByMember = function (memberNode) {
+    const hideGroupByMember = function (memberNode, incomingLink, path) {
       var regularGroup = getRegularGroupForMemberVisibility(memberNode);
+      var groupNodes;
+      var groupNodeIds = {};
+      var externalLinks = [];
 
       if (!regularGroup) {
         return false;
       }
+
+      groupNodes = getVisibilityNodesForGroup(regularGroup);
+      groupNodes.forEach(function (groupNode) {
+        if (!groupNode || !groupNode.id) {
+          return;
+        }
+        groupNodeIds[groupNode.id] = true;
+      });
+
+      groupNodes.forEach(function (groupNode) {
+        var links;
+
+        if (!groupNode || !groupNode.id) {
+          return;
+        }
+
+        links = visibleLinks(groupNode);
+        links.forEach(function (link) {
+          var other;
+
+          if (!link || (incomingLink && link.id === incomingLink.id)) {
+            return;
+          }
+          if (isSameGroupAxisLink(link, regularGroup) || isTopicGroupPseudoLink(link)) {
+            return;
+          }
+          other = findOtherNode(link, groupNode);
+          if (!other || groupNodeIds[other.id]) {
+            return;
+          }
+          util.appendById(externalLinks, link);
+        });
+      });
+
+      externalLinks.forEach(function (link) {
+        var fromNode = findNodeById(link.from);
+        var toNode = findNodeById(link.to);
+        var outsideNode = fromNode && !groupNodeIds[fromNode.id] ? fromNode : toNode;
+
+        if (!outsideNode || !outsideNode.visible || (path && path.has(outsideNode.id))) {
+          return;
+        }
+        prune(outsideNode, memberNode, link, 1, path || new Set());
+      });
 
       timelineChanged = setRegularGroupFamilyVisible(regularGroup, false, nodes_data, links_data, true) || timelineChanged;
       return true;
@@ -10008,7 +10061,7 @@ wuwei.model = (function () {
       }
       path.add(node.id);
 
-      if (parentLink && hideGroupByMember(node)) {
+      if (parentLink && hideGroupByMember(node, parentLink, path)) {
         path.delete(node.id);
         setGraphFromCurrentPage();
         return true;
@@ -10138,6 +10191,8 @@ wuwei.model = (function () {
       keepNodeIds = preserved.keepNodeIds || {},
       nodes = [],
       links = [],
+      groups = [],
+      page = getCurrentPage(),
       keepLink;
 
     for (let node of graph.nodes) {
@@ -10170,6 +10225,19 @@ wuwei.model = (function () {
       links.push(link);
     }
 
+    ((page && page.groups) || []).forEach(function (item) {
+      var keepGroup = !!(group && item && item.id === group.id);
+
+      if (!item) {
+        return;
+      }
+      if (item.visible !== keepGroup) {
+        item.visible = keepGroup;
+        item.changed = true;
+      }
+      groups.push(item);
+    });
+
     updateLinkCount();
 
     // log
@@ -10177,7 +10245,8 @@ wuwei.model = (function () {
       command: 'root',
       param: {
         node: nodes,
-        link: links
+        link: links,
+        group: groups
       }
     };
     return logData;
