@@ -1912,7 +1912,24 @@ wuwei.menu = wuwei.menu || {};
     var nodes = [];
     var seen = {};
 
+    function findOperationNodeById(nodeId) {
+      var node;
+      if (!nodeId) {
+        return null;
+      }
+      node = model.findNodeById(nodeId);
+      if (node) {
+        return node;
+      }
+      return (graph.nodes || []).find(function (candidate) {
+        return candidate && candidate.id === nodeId;
+      }) || null;
+    }
+
     function addNode(node) {
+      if (node && node.id) {
+        node = findOperationNodeById(node.id) || node;
+      }
       if (node && node.id && !seen[node.id]) {
         seen[node.id] = true;
         nodes.push(node);
@@ -1925,7 +1942,7 @@ wuwei.menu = wuwei.menu || {};
       if (!nodeId) {
         return;
       }
-      node = model.findNodeById(nodeId);
+      node = findOperationNodeById(nodeId);
       if (node && isRepresentativeTopic(node) && node.groupRef) {
         if (!Array.isArray(state.selectedGroupIds)) {
           state.selectedGroupIds = [];
@@ -1938,8 +1955,23 @@ wuwei.menu = wuwei.menu || {};
       addNode(node);
     });
 
+    d3.selectAll('circle.selected').each(function (d) {
+      var nodeId;
+      if (d && d.groupRef && (isRepresentativeTopic(d) || d.type === 'Group' || d.pseudo)) {
+        if (!Array.isArray(state.selectedGroupIds)) {
+          state.selectedGroupIds = [];
+        }
+        if (state.selectedGroupIds.indexOf(d.groupRef) < 0) {
+          state.selectedGroupIds.push(d.groupRef);
+        }
+        return;
+      }
+      nodeId = d && d.id ? d.id : (this && this.parentNode && this.parentNode.id);
+      addNode(findOperationNodeById(nodeId));
+    });
+
     (Array.isArray(state.selectedNodeIds) ? state.selectedNodeIds : []).forEach(function (nodeId) {
-      addNode(model.findNodeById(nodeId));
+      addNode(findOperationNodeById(nodeId));
     });
 
     if (Array.isArray(fallbackNodes)) {
@@ -1960,15 +1992,71 @@ wuwei.menu = wuwei.menu || {};
     return nodes;
   }
 
+  function notifyFlockError(message) {
+    message = message || 'Cannot align grouped nodes and ungrouped nodes together. Select the group itself, or select only nodes from the same grouping level.';
+    if (wuwei.menu && wuwei.menu.snackbar && typeof wuwei.menu.snackbar.open === 'function') {
+      wuwei.menu.snackbar.open({
+        type: 'warning',
+        message: message
+      });
+    }
+    else {
+      window.alert(wuwei.nls && typeof wuwei.nls.translate === 'function'
+        ? wuwei.nls.translate(message)
+        : message);
+    }
+  }
+
+  function hasMixedGroupedAndUngroupedNodeSelection(selectedNodes) {
+    var hasGrouped = false;
+    var hasUngrouped = false;
+
+    (selectedNodes || []).forEach(function (node) {
+      if (!node || !node.id || (node.groupRole === 'representative' && node.groupRef)) {
+        return;
+      }
+      if (model.isNodeInAnyGroup && model.isNodeInAnyGroup(node.id)) {
+        hasGrouped = true;
+      }
+      else {
+        hasUngrouped = true;
+      }
+    });
+
+    return hasGrouped && hasUngrouped;
+  }
+
   function getEffectiveSelectedGroupIds(page, option) {
     var selectedGroupIds = Array.isArray(state.selectedGroupIds) ? state.selectedGroupIds.slice() : [];
     var allowedTypes = option && Array.isArray(option.types)
       ? option.types
       : ['simple', 'horizontal', 'vertical', 'timeline', 'viewpoint'];
 
+    function normalizeGroupType(group) {
+      if (!group) {
+        return '';
+      }
+      if (group.type === 'simpleGroup') {
+        return 'simple';
+      }
+      if (group.type === 'horizontalGroup') {
+        return 'horizontal';
+      }
+      if (group.type === 'verticalGroup') {
+        return 'vertical';
+      }
+      if (group.type === 'topicGroup') {
+        return group.orientation === 'horizontal' ? 'horizontal' : 'vertical';
+      }
+      if ((group.type === 'Group' || group.type === 'topicGroup') && group.groupType === 'axis') {
+        return 'timeline';
+      }
+      return group.type || group.groupType || '';
+    }
+
     return selectedGroupIds.filter(function (gid, index, arr) {
       var group = model.findGroupById(gid);
-      return arr.indexOf(gid) === index && !!group && allowedTypes.indexOf(group.type) >= 0;
+      return arr.indexOf(gid) === index && !!group && allowedTypes.indexOf(normalizeGroupType(group)) >= 0;
     });
   }
 
@@ -2189,7 +2277,21 @@ wuwei.menu = wuwei.menu || {};
     }
   }
 
+  function moveNodeRecord(node, dx, dy) {
+    if (!node) {
+      return;
+    }
+    node.x = Number(node.x || 0) + dx;
+    node.y = Number(node.y || 0) + dy;
+    node.fx = null;
+    node.fy = null;
+    node.vx = 0;
+    node.vy = 0;
+    node.changed = true;
+  }
+
   function applyOperationTargetTranslate(target, dx, dy) {
+    var pageNode;
     if (!target) {
       return;
     }
@@ -2209,13 +2311,11 @@ wuwei.menu = wuwei.menu || {};
     }
 
     if ('node' === target.kind && target.node) {
-      target.node.x = Number(target.node.x || 0) + dx;
-      target.node.y = Number(target.node.y || 0) + dy;
-      target.node.fx = null;
-      target.node.fy = null;
-      target.node.vx = 0;
-      target.node.vy = 0;
-      target.node.changed = true;
+      pageNode = target.node.id && model.findNodeById ? model.findNodeById(target.node.id) : null;
+      if (pageNode && pageNode !== target.node) {
+        moveNodeRecord(pageNode, dx, dy);
+      }
+      moveNodeRecord(target.node, dx, dy);
     }
   }
 
@@ -3185,6 +3285,7 @@ wuwei.menu = wuwei.menu || {};
             ySum += d.y;
           });
         }
+        state.lastFlockSelectionCount = allNodes.length;
       }
       var operationTargets = null;
       var operationMetrics = null;
@@ -3192,11 +3293,34 @@ wuwei.menu = wuwei.menu || {};
         'alignVertical', 'alignRight', 'horizontalEqual', 'verticalEqual'].includes(method);
 
       if (isGroupPositionOperation) {
+        if (hasMixedGroupedAndUngroupedNodeSelection(allNodes)) {
+          state.lastFlockOperation = {
+            method: method,
+            selectedNodeIds: Array.isArray(state.selectedNodeIds) ? state.selectedNodeIds.slice() : [],
+            selectedGroupIds: Array.isArray(state.selectedGroupIds) ? state.selectedGroupIds.slice() : [],
+            targetCount: 0,
+            error: 'mixed-grouped-and-ungrouped-nodes'
+          };
+          notifyFlockError('Cannot align grouped nodes and ungrouped nodes together. Select the group itself, or select only nodes from the same grouping level.');
+          return;
+        }
         operationTargets = buildGroupOperationTargets(allNodes);
         operationMetrics = getOperationTargetMetrics(operationTargets);
         if (!operationMetrics || operationMetrics.count < 1) {
+          state.lastFlockOperation = {
+            method: method,
+            selectedNodeIds: Array.isArray(state.selectedNodeIds) ? state.selectedNodeIds.slice() : [],
+            selectedGroupIds: Array.isArray(state.selectedGroupIds) ? state.selectedGroupIds.slice() : [],
+            targetCount: 0
+          };
           return;
         }
+        state.lastFlockOperation = {
+          method: method,
+          selectedNodeIds: Array.isArray(state.selectedNodeIds) ? state.selectedNodeIds.slice() : [],
+          selectedGroupIds: Array.isArray(state.selectedGroupIds) ? state.selectedGroupIds.slice() : [],
+          targetCount: operationMetrics.count
+        };
         count = operationMetrics.count;
         xMin = operationMetrics.xMin;
         xMax = operationMetrics.xMax;
