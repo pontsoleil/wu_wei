@@ -31,11 +31,32 @@ wuwei.info.audio.markup = (function () {
     return wuwei.info.markup.rowcount(str || '');
   }
 
+  function shouldRenderDescription(description) {
+    var role, format;
+    if (!description || typeof description !== 'object') {
+      return false;
+    }
+    if (wuwei.info && typeof wuwei.info.shouldRenderInfoDescription === 'function') {
+      return wuwei.info.shouldRenderInfoDescription(description);
+    }
+    role = String(description.role || 'original').toLowerCase();
+    format = String(description.format || 'plain/text').toLowerCase();
+    if (role !== 'original') {
+      return true;
+    }
+    return !(format === 'asciidoc' || format === 'adoc' ||
+      format === 'markdown' || format === 'md' ||
+      format === 'html' || format === 'text/html' ||
+      format.indexOf('asciidoc') >= 0 ||
+      format.indexOf('markdown') >= 0 ||
+      format.indexOf('html') >= 0);
+  }
+
   function renderDescription(description) {
     var format;
     var body;
     var html;
-    if (!description || typeof description !== 'object') {
+    if (!shouldRenderDescription(description)) {
       return '';
     }
     format = String(description.format || 'plain/text').toLowerCase();

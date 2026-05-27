@@ -552,11 +552,71 @@ wuwei.info = wuwei.info || {};
   }
 
   function hasAsciiDocValue(node) {
-    return !!(node && node.description &&
-      'object' === typeof node.description &&
-      'string' === typeof node.description.body &&
-      node.description.body.trim() &&
-      String(node.description.format || '').toLowerCase().indexOf('asciidoc') >= 0);
+    var description = getOriginalDescription(node && node.description);
+    return !!(description &&
+      'string' === typeof description.body &&
+      description.body.trim() &&
+      isRichDescriptionFormat(description.format));
+  }
+
+  function getOriginalDescription(description) {
+    var i, entry, role;
+    if (!description || typeof description !== 'object') {
+      return null;
+    }
+    if (Array.isArray(description)) {
+      for (i = 0; i < description.length; i += 1) {
+        entry = description[i];
+        if (!entry || typeof entry !== 'object') {
+          continue;
+        }
+        role = String(entry.role || (i ? 'supplement' : 'original')).toLowerCase();
+        if (role === 'original') {
+          return entry;
+        }
+      }
+      return null;
+    }
+    return description;
+  }
+
+  function normalizeDescriptionFormat(format) {
+    return String(format || 'plain/text').toLowerCase();
+  }
+
+  function isPlainTextDescriptionFormat(format) {
+    var fmt = normalizeDescriptionFormat(format);
+    return !fmt ||
+      fmt === 'plain' ||
+      fmt === 'text' ||
+      fmt === 'txt' ||
+      fmt === 'plain/text' ||
+      fmt === 'text/plain';
+  }
+
+  function isRichDescriptionFormat(format) {
+    var fmt = normalizeDescriptionFormat(format);
+    return fmt === 'asciidoc' ||
+      fmt === 'adoc' ||
+      fmt === 'markdown' ||
+      fmt === 'md' ||
+      fmt === 'html' ||
+      fmt === 'text/html' ||
+      fmt.indexOf('asciidoc') >= 0 ||
+      fmt.indexOf('markdown') >= 0 ||
+      fmt.indexOf('html') >= 0;
+  }
+
+  function shouldRenderInfoDescription(description) {
+    var role, format;
+    if (!description || typeof description !== 'object') {
+      return false;
+    }
+    role = String(description.role || 'original').toLowerCase();
+    format = description.format || 'plain/text';
+    return role !== 'original' ||
+      isPlainTextDescriptionFormat(format) ||
+      !isRichDescriptionFormat(format);
   }
 
   function isVideoNode(node) {
@@ -1444,5 +1504,7 @@ wuwei.info = wuwei.info || {};
   ns.iframeError = iframeError;
   ns.initModule = initModule;
   ns.hasAsciiDocValue = hasAsciiDocValue;
+  ns.isRichDescriptionFormat = isRichDescriptionFormat;
+  ns.shouldRenderInfoDescription = shouldRenderInfoDescription;
 })(wuwei.info);
 // wuwei.info.js last updated 2026-04-16

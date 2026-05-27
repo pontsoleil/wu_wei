@@ -99,12 +99,33 @@ wuwei.info.document.markup = (function () {
     };
   }
 
+  function shouldRenderDescription(description) {
+    var role, format;
+    if (!description || typeof description !== 'object') {
+      return false;
+    }
+    if (wuwei.info && typeof wuwei.info.shouldRenderInfoDescription === 'function') {
+      return wuwei.info.shouldRenderInfoDescription(description);
+    }
+    role = String(description.role || 'original').toLowerCase();
+    format = String(description.format || 'plain/text').toLowerCase();
+    if (role !== 'original') {
+      return true;
+    }
+    return !(format === 'asciidoc' || format === 'adoc' ||
+      format === 'markdown' || format === 'md' ||
+      format === 'html' || format === 'text/html' ||
+      format.indexOf('asciidoc') >= 0 ||
+      format.indexOf('markdown') >= 0 ||
+      format.indexOf('html') >= 0);
+  }
+
   function template(param) {
     var node = param && param.node;
     var option = param && param.option;
     var resource = getResource(node);
     var description = node && node.description;
-    var body = (description && typeof description.body === 'string') ? description.body : '';
+    var body = shouldRenderDescription(description) && typeof description.body === 'string' ? description.body : '';
     var label = (node && node.label) ||  '';
     var frameUrl = getFrameUrl(node, option);
     var openUrl = (wuwei.document && typeof wuwei.document.getOpenUrl === 'function')

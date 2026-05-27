@@ -29,6 +29,27 @@ wuwei.info.uploaded.markup = ( function () {
       t('Click to open tab') + '<i class="fas fa-external-link-alt"></i></a></div>';
   }
 
+  function shouldRenderDescription(description) {
+    var role, format;
+    if (!description || typeof description !== 'object') {
+      return false;
+    }
+    if (wuwei.info && typeof wuwei.info.shouldRenderInfoDescription === 'function') {
+      return wuwei.info.shouldRenderInfoDescription(description);
+    }
+    role = String(description.role || 'original').toLowerCase();
+    format = String(description.format || 'plain/text').toLowerCase();
+    if (role !== 'original') {
+      return true;
+    }
+    return !(format === 'asciidoc' || format === 'adoc' ||
+      format === 'markdown' || format === 'md' ||
+      format === 'html' || format === 'text/html' ||
+      format.indexOf('asciidoc') >= 0 ||
+      format.indexOf('markdown') >= 0 ||
+      format.indexOf('html') >= 0);
+  }
+
   const template = function( param ) {
     let
       node = param.node,
@@ -36,7 +57,7 @@ wuwei.info.uploaded.markup = ( function () {
     const
       common = wuwei.common,
       lang = common.nls.LANG,
-      value = (node.description && typeof node.description.body === 'string') ? node.description.body : '',
+      value = (shouldRenderDescription(node.description) && typeof node.description.body === 'string') ? node.description.body : '',
       creativeCommons = common.nls.creativeCommons[lang];
     let uri = resolveInfoUri(node);
     let label = (node && node.label) || "";

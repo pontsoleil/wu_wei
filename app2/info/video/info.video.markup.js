@@ -22,6 +22,7 @@ wuwei.info.video.markup = (function () {
     template,
     escapeHtml,
     escapeAttr,
+    shouldRenderDescription,
     renderDescription,
     rowcount,
     translate;
@@ -136,9 +137,29 @@ wuwei.info.video.markup = (function () {
     return escapeHtml(s).replace(/`/g, '&#96;');
   };
 
+  shouldRenderDescription = function (description) {
+    if (!description || 'object' !== typeof description) {
+      return false;
+    }
+    if (wuwei.info && typeof wuwei.info.shouldRenderInfoDescription === 'function') {
+      return wuwei.info.shouldRenderInfoDescription(description);
+    }
+    var role = String(description.role || 'original').toLowerCase();
+    var format = String(description.format || 'plain/text').toLowerCase();
+    if (role !== 'original') {
+      return true;
+    }
+    return !(format === 'asciidoc' || format === 'adoc' ||
+      format === 'markdown' || format === 'md' ||
+      format === 'html' || format === 'text/html' ||
+      format.indexOf('asciidoc') >= 0 ||
+      format.indexOf('markdown') >= 0 ||
+      format.indexOf('html') >= 0);
+  };
+
   renderDescription = function (description) {
     var format, body, html;
-    if (!description || 'object' !== typeof description) {
+    if (!shouldRenderDescription(description)) {
       return '';
     }
     format = String(description.format || 'plain/text').toLowerCase();

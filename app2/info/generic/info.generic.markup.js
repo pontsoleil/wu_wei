@@ -151,7 +151,7 @@ wuwei.info.generic.markup = (function () {
     }
     if (description && typeof description === 'object') {
       return [{
-        role: 'original',
+        role: String(description.role || 'original'),
         format: String(description.format || 'plain/text'),
         body: descriptionEntryBody(description)
       }];
@@ -203,6 +203,9 @@ wuwei.info.generic.markup = (function () {
     var i, entry, bodyHtml, label;
     for (i = 0; i < entries.length; i += 1) {
       entry = entries[i];
+      if (!shouldRenderDescriptionEntry(entry)) {
+        continue;
+      }
       bodyHtml = renderFormattedDescription(entry.body, entry.format);
       if (!bodyHtml) {
         continue;
@@ -216,6 +219,32 @@ wuwei.info.generic.markup = (function () {
       );
     }
     return html.join('');
+  }
+
+  function shouldRenderDescriptionEntry(entry) {
+    var role, format, info;
+    if (!entry || typeof entry !== 'object') {
+      return false;
+    }
+    info = wuwei.info || {};
+    if (typeof info.shouldRenderInfoDescription === 'function') {
+      return info.shouldRenderInfoDescription(entry);
+    }
+    role = String(entry.role || 'original').toLowerCase();
+    format = String(entry.format || 'plain/text').toLowerCase();
+    if (role !== 'original') {
+      return true;
+    }
+    if (format === 'plain' || format === 'text' || format === 'txt' ||
+      format === 'plain/text' || format === 'text/plain') {
+      return true;
+    }
+    return !(format === 'asciidoc' || format === 'adoc' ||
+      format === 'markdown' || format === 'md' ||
+      format === 'html' || format === 'text/html' ||
+      format.indexOf('asciidoc') >= 0 ||
+      format.indexOf('markdown') >= 0 ||
+      format.indexOf('html') >= 0);
   }
 
   function sanitizeDescriptionHtml(html) {

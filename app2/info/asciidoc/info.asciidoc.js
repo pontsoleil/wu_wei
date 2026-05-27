@@ -149,13 +149,30 @@ wuwei.info.asciidoc = wuwei.info.asciidoc || {};
 
 
   function getSource(node) {
+    var description, i, entry, role;
     if (!node) {
       return { format: '', body: '' };
     }
-    if (node.description && typeof node.description.body === 'string' && String(node.description.body).trim()) {
+    description = node.description;
+    if (Array.isArray(description)) {
+      for (i = 0; i < description.length; i += 1) {
+        entry = description[i];
+        if (!entry || typeof entry !== 'object') {
+          continue;
+        }
+        role = String(entry.role || (i ? 'supplement' : 'original')).toLowerCase();
+        if (role === 'original' && typeof entry.body === 'string' && String(entry.body).trim()) {
+          return {
+            format: String(entry.format || 'plain').toLowerCase(),
+            body: String(entry.body)
+          };
+        }
+      }
+    }
+    if (description && typeof description.body === 'string' && String(description.body).trim()) {
       return {
-        format: String(node.description.format || 'plain').toLowerCase(),
-        body: String(node.description.body)
+        format: String(description.format || 'plain').toLowerCase(),
+        body: String(description.body)
       };
     }
     return { format: '', body: '' };
@@ -175,6 +192,10 @@ wuwei.info.asciidoc = wuwei.info.asciidoc || {};
 
     if (fmt === 'markdown' || fmt === 'md') {
       return convertMarkdown(text);
+    }
+
+    if (fmt === 'html' || fmt === 'text/html' || fmt.indexOf('html') >= 0) {
+      return sanitizeHtml(text);
     }
 
     return plainTextToHtml(text);
