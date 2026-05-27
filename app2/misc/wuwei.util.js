@@ -3472,6 +3472,126 @@ wuwei.util = (function () {
     return '<pre class="plainText">' + escapeHtml(text || '') + '</pre>';
   }
 
+  function looksLikeMarkdown(text) {
+    var s = String(text || '');
+    return /(^|\n)#{1,6}\s+\S/.test(s) ||
+      /(^|\n)```/.test(s) ||
+      /(^|\n)>\s+\S/.test(s) ||
+      /(^|\n)\s*[-+*]\s+\S/.test(s) ||
+      /(^|\n)\s*\d+\.\s+\S/.test(s);
+  }
+
+  function markdownInlineToHtml(text) {
+    return escapeHtml(String(text || ''))
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/__([^_]+)__/g, '<strong>$1</strong>')
+      .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+      .replace(/_([^_]+)_/g, '<em>$1</em>');
+  }
+
+  function renderMarkdownFallback(source) {
+    var lines = String(source || '').split(/\r?\n/);
+    var html = [];
+    var paragraph = [];
+    var inCode = false;
+    var code = [];
+    var listTag = '';
+
+    function closeParagraph() {
+      if (paragraph.length) {
+        html.push('<p>' + markdownInlineToHtml(paragraph.join(' ')) + '</p>');
+        paragraph = [];
+      }
+    }
+
+    function closeList() {
+      if (listTag) {
+        html.push('</' + listTag + '>');
+        listTag = '';
+      }
+    }
+
+    function openList(tag) {
+      closeParagraph();
+      if (listTag !== tag) {
+        closeList();
+        html.push('<' + tag + '>');
+        listTag = tag;
+      }
+    }
+
+    lines.forEach(function (line) {
+      var match;
+
+      if (/^\s*```/.test(line)) {
+        if (inCode) {
+          html.push('<pre><code>' + escapeHtml(code.join('\n')) + '</code></pre>');
+          code = [];
+          inCode = false;
+        }
+        else {
+          closeParagraph();
+          closeList();
+          inCode = true;
+        }
+        return;
+      }
+
+      if (inCode) {
+        code.push(line);
+        return;
+      }
+
+      if (!String(line || '').trim()) {
+        closeParagraph();
+        closeList();
+        return;
+      }
+
+      match = line.match(/^\s*(#{1,6})\s+(.+)$/);
+      if (match) {
+        closeParagraph();
+        closeList();
+        html.push('<h' + match[1].length + '>' + markdownInlineToHtml(match[2]) + '</h' + match[1].length + '>');
+        return;
+      }
+
+      match = line.match(/^\s*>\s+(.+)$/);
+      if (match) {
+        closeParagraph();
+        closeList();
+        html.push('<blockquote><p>' + markdownInlineToHtml(match[1]) + '</p></blockquote>');
+        return;
+      }
+
+      match = line.match(/^\s*[-+*]\s+(.+)$/);
+      if (match) {
+        openList('ul');
+        html.push('<li>' + markdownInlineToHtml(match[1]) + '</li>');
+        return;
+      }
+
+      match = line.match(/^\s*\d+\.\s+(.+)$/);
+      if (match) {
+        openList('ol');
+        html.push('<li>' + markdownInlineToHtml(match[1]) + '</li>');
+        return;
+      }
+
+      closeList();
+      paragraph.push(line.trim());
+    });
+
+    if (inCode) {
+      html.push('<pre><code>' + escapeHtml(code.join('\n')) + '</code></pre>');
+    }
+    closeParagraph();
+    closeList();
+
+    return html.join('');
+  }
+
 
   function renderAsciiDoc(source, options) {
     var text = String(source || '');
@@ -3486,6 +3606,10 @@ wuwei.util = (function () {
 
     if (opts.allowHtml !== false && looksLikeHtml(text)) {
       return sanitizeHtml(text);
+    }
+
+    if (looksLikeMarkdown(text)) {
+      return sanitizeHtml(renderMarkdownFallback(text));
     }
 
     attrs = Object.assign(

@@ -119,6 +119,23 @@ wuwei.info.asciidoc = wuwei.info.asciidoc || {};
       return sanitizeHtml(text);
     }
 
+    if (window.wuwei &&
+      wuwei.util &&
+      typeof wuwei.util.renderAsciiDoc === 'function') {
+      try {
+        return wuwei.util.renderAsciiDoc(text, {
+          showtitle: false,
+          allowHtml: true,
+          attributes: {
+            icons: 'font'
+          }
+        });
+      }
+      catch (err0) {
+        console.error('info.asciidoc: util render failed', err0);
+      }
+    }
+
     if (window.asciidoctor && typeof window.asciidoctor.convert === 'function') {
       try {
         return sanitizeHtml(window.asciidoctor.convert(text, {
