@@ -614,9 +614,7 @@ wuwei.info = wuwei.info || {};
     }
     role = String(description.role || 'original').toLowerCase();
     format = description.format || 'plain/text';
-    return role !== 'original' ||
-      isPlainTextDescriptionFormat(format) ||
-      !isRichDescriptionFormat(format);
+    return role !== 'original' || isPlainTextDescriptionFormat(format);
   }
 
   function isVideoNode(node) {

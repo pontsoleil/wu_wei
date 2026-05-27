@@ -44,12 +44,8 @@ wuwei.info.audio.markup = (function () {
     if (role !== 'original') {
       return true;
     }
-    return !(format === 'asciidoc' || format === 'adoc' ||
-      format === 'markdown' || format === 'md' ||
-      format === 'html' || format === 'text/html' ||
-      format.indexOf('asciidoc') >= 0 ||
-      format.indexOf('markdown') >= 0 ||
-      format.indexOf('html') >= 0);
+    return format === 'plain' || format === 'text' || format === 'txt' ||
+      format === 'plain/text' || format === 'text/plain';
   }
 
   function renderDescription(description) {

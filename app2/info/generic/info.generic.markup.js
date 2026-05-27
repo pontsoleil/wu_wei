@@ -239,12 +239,7 @@ wuwei.info.generic.markup = (function () {
       format === 'plain/text' || format === 'text/plain') {
       return true;
     }
-    return !(format === 'asciidoc' || format === 'adoc' ||
-      format === 'markdown' || format === 'md' ||
-      format === 'html' || format === 'text/html' ||
-      format.indexOf('asciidoc') >= 0 ||
-      format.indexOf('markdown') >= 0 ||
-      format.indexOf('html') >= 0);
+    return false;
   }
 
   function sanitizeDescriptionHtml(html) {
