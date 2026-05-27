@@ -634,16 +634,18 @@ wuwei.model = (function () {
   };
 
   reverse = function (param) {
-    var link = param && param[0];
+    var sourceLink = param && param[0];
+    var link = sourceLink && sourceLink.id ? findLinkById(sourceLink.id) || sourceLink : sourceLink;
     var from, to, routing, startArrow, endArrow, startPosition, endPosition;
+    var linkStartPosition, linkEndPosition;
 
     if (!link) {
       console.log('reverse NO link.');
       return null;
     }
 
-    from = link.from;
-    to = link.to;
+    from = link.from || link.source;
+    to = link.to || link.target;
 
     if (!from || !to) {
       console.log('reverse NO from or to. link:', link);
@@ -651,8 +653,16 @@ wuwei.model = (function () {
     }
 
     // 端点を反転
+    linkStartPosition = link.startPosition;
+    linkEndPosition = link.endPosition;
     link.from = to;
     link.to = from;
+    if (Object.prototype.hasOwnProperty.call(link, 'source')) { link.source = link.from; }
+    if (Object.prototype.hasOwnProperty.call(link, 'target')) { link.target = link.to; }
+    link.startPosition = linkEndPosition;
+    link.endPosition = linkStartPosition;
+    if (!link.startPosition) { delete link.startPosition; }
+    if (!link.endPosition) { delete link.endPosition; }
 
     // 矢印・接続位置定義があれば始点・終点を入れ替える
     routing = (link.routing && typeof link.routing === 'object') ? link.routing : null;
@@ -676,6 +686,20 @@ wuwei.model = (function () {
       link.audit.lastModifiedBy =
         (state.currentUser && state.currentUser.user_id) || common.TEMP_OWNER_ID;
       link.audit.lastModifiedAt = (new Date()).toISOString();
+    }
+    link.changed = true;
+
+    if (sourceLink && sourceLink !== link) {
+      sourceLink.from = link.from;
+      sourceLink.to = link.to;
+      if (Object.prototype.hasOwnProperty.call(sourceLink, 'source')) { sourceLink.source = link.from; }
+      if (Object.prototype.hasOwnProperty.call(sourceLink, 'target')) { sourceLink.target = link.to; }
+      sourceLink.startPosition = link.startPosition;
+      sourceLink.endPosition = link.endPosition;
+      if (!sourceLink.startPosition) { delete sourceLink.startPosition; }
+      if (!sourceLink.endPosition) { delete sourceLink.endPosition; }
+      sourceLink.routing = link.routing;
+      sourceLink.changed = true;
     }
 
     return {
