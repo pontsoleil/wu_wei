@@ -353,6 +353,7 @@ wuwei.nls.JA = {
   'Go to': '移動',
   'Green Memo': '緑の付箋紙',
   'Group': '分類',//kcua,
+  'Edit group': 'グループを編集',
   'Height': '高さ',
   'Hidden': '非表示',
   'Hide': '非表示',

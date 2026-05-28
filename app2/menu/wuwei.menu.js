@@ -2778,7 +2778,10 @@ wuwei.menu = wuwei.menu || {};
         }
       }
 
-      if (node.groupRef && model.findGroupById(node.groupRef)) {
+      if (node.type === 'Group' && node.groupRef && model.findGroupById(node.groupRef)) {
+        wuwei.edit.open(model.findGroupById(node.groupRef), editOption);
+      }
+      else if (node.groupRef && model.findGroupById(node.groupRef)) {
         wuwei.edit.open(node, Object.assign({ forceNode: true }, editOption));
       }
       else if (util.isNode(node)) {
@@ -2792,6 +2795,21 @@ wuwei.menu = wuwei.menu || {};
       else if (util.isLink(node)) {
         link = node;
         wuwei.edit.open(link, editOption);
+      }
+      closeContextMenu();
+      return;
+    }
+    else if ('editGroup' === method) {
+      node = resolveContextTargetRecord(state.hoveredNode);
+      if (!node) { return; }
+
+      var groupForEdit = getContextGroupFromTarget(node, getContextTimelineSpec([node]), getContextViewpointSpec([node]));
+      if (groupForEdit && ['simple', 'horizontal', 'vertical'].indexOf(groupForEdit.type) >= 0) {
+        wuwei.edit.open(groupForEdit, {
+          editor: false,
+          citation: false,
+          cc: false
+        });
       }
       closeContextMenu();
       return;
@@ -4377,6 +4395,7 @@ wuwei.menu = wuwei.menu || {};
 
       'EditGroupRepresentative': [
         'edit',
+        'editGroup',
         'addTimelineSegmentFromPlayer',
         'addViewpointEntry',
         'addContent',
@@ -5061,6 +5080,7 @@ wuwei.menu = wuwei.menu || {};
     ];
     var nonTeamDisplayLayoutAllowed = [
       'edit',
+      'editGroup',
       'horizontal',
       'vertical',
       'normal',
@@ -5292,6 +5312,23 @@ wuwei.menu = wuwei.menu || {};
       },
       null,
       'fas fa-pencil-alt fa-lg fa-fw'
+    ],
+
+    'editGroup': ['Edit group',
+      function (allNodes) {
+        var node = getContextTarget(allNodes);
+        var group;
+
+        if (graph.mode === 'view' || state.viewOnly || state.published ||
+          state.Selecting || state.Connecting || util.isEmpty(node)) {
+          return false;
+        }
+
+        group = getContextGroupFromTarget(node, getContextTimelineSpec([node]), getContextViewpointSpec([node]));
+        return !!(group && ['simple', 'horizontal', 'vertical'].indexOf(group.type) >= 0);
+      },
+      null,
+      'fas fa-object-group fa-lg fa-fw'
     ],
 
     'connect': ['Connect',

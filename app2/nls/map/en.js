@@ -351,6 +351,7 @@ wuwei.nls.EN = {
   'Go to': 'Go to',
   'Green Memo': 'Green Memo',
   'Group': 'Group',
+  'Edit group': 'Edit group',
   'Height': 'Height',
   'Hidden': 'Hidden',
   'Hide': 'Hide',
