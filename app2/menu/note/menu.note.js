@@ -760,6 +760,16 @@ wuwei.menu.note = wuwei.menu.note || {};
     }
   }
 
+  function openExportCompleteModal(filename) {
+    if (wuwei.menu.modal && typeof wuwei.menu.modal.open === 'function') {
+      wuwei.menu.modal.open({
+        type: 'info',
+        message: 'Export completed: ' + filename,
+        timeout: 5000
+      });
+    }
+  }
+
   function downloadBlob(blob, filename) {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -818,6 +828,7 @@ wuwei.menu.note = wuwei.menu.note || {};
         return;
       }
       const filename = makeFileName('.zip');
+      let exported = false;
       openExportWritable(filename).then(function (writable) {
         if (writable === false) {
           return null;
@@ -844,6 +855,8 @@ wuwei.menu.note = wuwei.menu.note || {};
           });
         }).then(function (blob) {
           return saveExportBlob(blob, filename, writable);
+        }).then(function () {
+          exported = true;
         });
       }).catch(function (e) {
         console.error(e);
@@ -853,6 +866,9 @@ wuwei.menu.note = wuwei.menu.note || {};
         });
       }).finally(function () {
         closeBusyModal();
+        if (exported) {
+          openExportCompleteModal(filename);
+        }
       });
     }
     catch (e) {
