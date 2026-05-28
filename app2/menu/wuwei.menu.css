@@ -194,6 +194,38 @@ input.search[type=text]:focus {
   right: 2rem;
   z-index: 2;
 }
+
+#user_status .tooltiptext {
+  position: absolute;
+  visibility: hidden;
+  width: 120px;
+  background-color: #808080;
+  color: #fff;
+  text-align: center;
+  border-radius: 6px;
+  padding: 5px 0;
+  top: calc(100% + 10px);
+  left: 50%;
+  margin-left: -60px;
+  margin-top: 10px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+#user_status .tooltiptext::after {
+  content: " ";
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 5px;
+  border-style: solid;
+  border-color: transparent transparent #808080 transparent;
+}
+
+#user_status:hover .tooltiptext {
+  visibility: visible;
+}
 /**
  * page status
  */

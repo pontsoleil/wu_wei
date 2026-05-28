@@ -248,9 +248,12 @@ wuwei.menu.login = wuwei.menu.login || {};
     var loginEl = document.getElementById('loginUserLogin');
     var nameEl = document.getElementById('loginUserName');
     var roleEl = document.getElementById('loginUserRole');
+    var tooltipEl = document.getElementById('userStatusTooltip');
+    var statusEl = document.getElementById('user_status');
     var loginText = user.login || user.login_id || user.user || user.user_id || '';
     var nameText = user.name || user.userName || user.displayName || '';
     var roleText = user.role || '';
+    var tooltipText = nameText || loginText || user.user_id || 'User';
 
     if (loginEl) {
       loginEl.textContent = loginText;
@@ -260,6 +263,12 @@ wuwei.menu.login = wuwei.menu.login || {};
     }
     if (roleEl) {
       roleEl.textContent = roleText;
+    }
+    if (tooltipEl) {
+      tooltipEl.textContent = tooltipText;
+    }
+    if (statusEl) {
+      statusEl.setAttribute('aria-label', tooltipText);
     }
 
     return user;
@@ -293,6 +302,7 @@ wuwei.menu.login = wuwei.menu.login || {};
       common.state.currentUser = nextUser;
       setUserStatusClass('guestUser');
     }
+    refreshUserStatusMenu();
   }
 
   function close() {

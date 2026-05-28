@@ -60,6 +60,7 @@ wuwei.menu.markup = (function () {
 
   <a id="user_status" ${userStatusClass ? `class="${userStatusClass}"` : ''}>
     <i class="fas fa-user"></i>
+    <span id="userStatusTooltip" class="tooltiptext"></span>
   </a>
 
   <div id="userMenu" class="pulldown user" style="display: none;">
