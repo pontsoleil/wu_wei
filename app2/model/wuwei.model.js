@@ -636,7 +636,7 @@ wuwei.model = (function () {
   reverse = function (param) {
     var sourceLink = param && param[0];
     var link = sourceLink && sourceLink.id ? findLinkById(sourceLink.id) || sourceLink : sourceLink;
-    var from, to, routing, startArrow, endArrow, startPosition, endPosition;
+    var from, to, routing, startPosition, endPosition;
     var linkStartPosition, linkEndPosition;
 
     if (!link) {
@@ -644,8 +644,8 @@ wuwei.model = (function () {
       return null;
     }
 
-    from = link.from || link.source;
-    to = link.to || link.target;
+    from = link.from;
+    to = link.to;
 
     if (!from || !to) {
       console.log('reverse NO from or to. link:', link);
@@ -667,16 +667,10 @@ wuwei.model = (function () {
     // 矢印・接続位置定義があれば始点・終点を入れ替える
     routing = (link.routing && typeof link.routing === 'object') ? link.routing : null;
     if (routing) {
-      startArrow = routing.startArrow;
-      endArrow = routing.endArrow;
       startPosition = routing.startPosition;
       endPosition = routing.endPosition;
-      routing.startArrow = endArrow;
-      routing.endArrow = startArrow;
       routing.startPosition = endPosition;
       routing.endPosition = startPosition;
-      if (!routing.startArrow) { delete routing.startArrow; }
-      if (!routing.endArrow) { delete routing.endArrow; }
       if (!routing.startPosition) { delete routing.startPosition; }
       if (!routing.endPosition) { delete routing.endPosition; }
     }
