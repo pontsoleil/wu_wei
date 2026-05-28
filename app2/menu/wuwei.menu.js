@@ -5118,7 +5118,7 @@ wuwei.menu = wuwei.menu || {};
       return isNonOwnerAllowedEditOperation(operation, profile);
     }
 
-    if (context === 'CMND' && !isTeamJointNoteForMenu()) {
+    if (context === 'CMND' && (state.published || state.viewOnly || !isTeamJointNoteForMenu())) {
       return true;
     }
 
