@@ -275,11 +275,16 @@ wuwei.info = wuwei.info || {};
   function updateHeaderEditAction(record) {
     var editBtn = document.getElementById('editOpen');
     var canEdit = canOpenEditFromInfo(record);
+    var infoPane = document.getElementById('info');
+    var readOnly = !!(state.viewOnly || state.published || !common.graph || common.graph.mode === 'view');
 
     if (!editBtn) {
       return;
     }
 
+    if (infoPane) {
+      infoPane.classList.toggle('readonly', readOnly);
+    }
     editBtn.style.display = canEdit ? '' : 'none';
     editBtn.classList.toggle('is-visible', canEdit);
     editBtn.setAttribute('aria-hidden', canEdit ? 'false' : 'true');

@@ -266,3 +266,8 @@
 #info .pane-header-actions #editOpen.is-visible {
   display: inline-flex !important;
 }
+
+#info.readonly .pane-header-actions #editOpen,
+#info.readonly .pane-header-actions #editOpen.is-visible {
+  display: none !important;
+}
