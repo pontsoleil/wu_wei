@@ -27,28 +27,23 @@ wuwei.search.markup = ( function () {
     <i class="fas fa-filter fa-lg fa-fw"></i>
   </a> -->
   <!-- MENU -->
-  <!--<ul>
-    <li>
-      <a id="wikipedia" onclick="wuwei.search.clicked('s3object')">
-        <span class="font-weight-bold">${translate('Archives')}</span>
-      </a>
-    </li>
+  <!--
+  <ul>
     <li>
       <a id="note" onclick="wuwei.search.clicked('note')">
         <span class="font-weight-bold"><i class="fas fa-book"></i>${translate('Notebook')}</span>
       </a>
     </li>
+    -->
+    <!--
     <li>
       <a id="uploaded" onclick="wuwei.search.clicked('uploaded')">
         <span class="font-weight-bold"><i class="fas fa-cloud"></i>${translate('Upload')}</span>
       </a>
-    </li>-->
-    <!-- li>
-      <a id="ISO_PC295" onclick="wuwei.search.clicked('ISO_PC295')">
-        <span class="font-weight-bold">ISO/PC295</span>
-      </a>
-    </li -->
-<!--    <li>
+    </li>
+    -->
+    <!--
+    <li>
       <a id="youTube" onclick="wuwei.search.clicked('youTube')">
         <span class="font-weight-bold"><i class="fab fa-youtube "></i> YouTube</span>
       </a>
@@ -57,30 +52,21 @@ wuwei.search.markup = ( function () {
       <a id="wikipedia" onclick="wuwei.search.clicked('wikipedia')">
         <span class="font-weight-bold"><i class="fab fa-wikipedia-w"></i>ikipedia</span>
       </a>
-    </li>-->
-    <!-- li>
-      <a id="googleBooks" onclick="wuwei.search.clicked('googleBooks')">
-        <span class="font-weight-bold"><i class="fab fa-google "></i>oogleBooks</span>
-      </a>
     </li>
-    <li>
-      <a id="iTunes" onclick="wuwei.search.clicked('iTunes')">
-        <span class="font-weight-bold"><i class="fab fa-apple "></i> iTunes</span>
-      </a>
-    </li -->
-<!--  </ul>-->
+    -->
+  <!--
+  </ul>
+  -->
 </header>
 <!--/.Card header-->
 <!--Card content-->
-<!-- div id="search-pc295"></div -->
 <div id="search-this_note"></div>
-<!--<div id="search-note"></div>
-div id="search-uploaded"></div>
+<!--
+<div id="search-note"></div>
+<div id="search-uploaded"></div>
 <div id="search-youtube"></div>
 <div id="search-wikipedia"></div>
-<div id="search-google-books"></div>
-<div id="search-itunes"></div>
-<div id="search-s3object"></div>-->
+-->
 <!--/.Card content-->
 <!--/.Card-->
 `;

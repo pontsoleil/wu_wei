@@ -24,8 +24,8 @@ wuwei.search.this_note.markup = (function () {
     return [
       '<form id="searchConditionForm" class="form search-condition-form" onsubmit="return false;">',
         '<div class="form-group w3-row">',
-          '<label for="search-text" class="w3-col s3">' + t('Keyword') + '</label>',
-          '<input type="search" id="search-text" name="q" class="w3-col s9" value="' + esc(condition.keyword || '') + '" aria-label="' + esc(t('Enter search string')) + '">',
+          '<label for="search-text" class="w3-col s4">' + t('Keyword') + '</label>',
+          '<input type="search" id="search-text" name="q" class="w3-col s8" value="' + esc(condition.keyword || '') + '" aria-label="' + esc(t('Enter search string')) + '">',
         '</div>',
         '<div class="search-actions w3-row">',
           '<button id="search-button" type="button" class="w3-button w3-small w3-blue">' + t('Search') + '</button>',

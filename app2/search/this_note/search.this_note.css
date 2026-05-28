@@ -6,10 +6,10 @@
   -webkit-transition: width 0.4s ease-in-out;
   transition: width 0.4s ease-in-out;
 }
-#search-this_note input[type=search],
+/* #search-this_note input[type=search],
 #search-this_note input[type=text]:focus {
   width: 100%;
-}
+} */
 
 /** items */
 #search-this_note ul.list-group {
