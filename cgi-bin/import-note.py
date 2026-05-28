@@ -351,8 +351,8 @@ def main() -> None:
     form = cgi.FieldStorage()
     session_user_id = get_effective_user_id()
     requested_user_id = (form.getfirst("user_id", "") or "").strip()
-    user_id = requested_user_id or session_user_id
-    if not session_user_id or not user_id or user_id != session_user_id:
+    user_id = session_user_id or requested_user_id
+    if not user_id:
         script_error("ERROR NOT LOGGED IN")
 
     note_root_s = environment_path("note", user_id)

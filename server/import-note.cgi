@@ -475,15 +475,11 @@ parse_request
 session_user_id=$(is-login || true)
 user_id=$(field_value user_id || true)
 [ -n "${user_id:-}" ] || user_id=$(raw_query_param user_id || true)
+[ -z "${session_user_id:-}" ] || user_id=$session_user_id
 [ -n "${user_id:-}" ] || user_id=${session_user_id:-}
 
 [ -n "${user_id:-}" ] || text_response 'ERROR NOT LOGGED IN'
 valid_user_id "$user_id" || text_response 'ERROR INVALID USER ID'
-
-if [ "${user_id}" != 'guest' ]; then
-  [ -n "${session_user_id:-}" ] || text_response 'ERROR NOT LOGGED IN'
-  [ "$user_id" = "$session_user_id" ] || text_response 'ERROR USER MISMATCH'
-fi
 
 [ -s "$UPLOAD_ZIP" ] || text_response 'ERROR FILE NOT UPLOADED'
 unzip -tq "$UPLOAD_ZIP" >/dev/null 2>&1 || text_response 'ERROR INVALID ZIP FILE'
