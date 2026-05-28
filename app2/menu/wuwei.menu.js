@@ -5118,6 +5118,10 @@ wuwei.menu = wuwei.menu || {};
       return isNonOwnerAllowedEditOperation(operation, profile);
     }
 
+    if (context === 'CMND' && !isTeamJointNoteForMenu()) {
+      return true;
+    }
+
     return false;
   }
 
