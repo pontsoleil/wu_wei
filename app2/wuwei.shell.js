@@ -261,6 +261,7 @@ wuwei.shell = (function () {
               setTimeout(function () {
                 var settingEl = document.getElementById('setting');
                 var drawModeEl = document.getElementById('draw_mode');
+                var searchIconEl = document.getElementById('searchIcon');
                 var mainIconEl = document.getElementById('mainIcon');
                 var noteIconEl = document.getElementById('noteIcon');
                 var pageIconEl = document.getElementById('pageIcon');
@@ -268,6 +269,10 @@ wuwei.shell = (function () {
                 var flockIconEl = document.getElementById('flockIcon');
                 if (settingEl) { settingEl.classList.remove('active'); }
                 if (drawModeEl) { drawModeEl.classList.remove('active'); }
+                if (searchIconEl) {
+                  searchIconEl.classList.add('active');
+                  searchIconEl.classList.remove('simulation');
+                }
                 if (mainIconEl) { mainIconEl.style.display = 'none'; }
                 if (noteIconEl) { noteIconEl.style.display = 'none'; }
                 if (pageIconEl) { pageIconEl.style.display = 'none'; }
