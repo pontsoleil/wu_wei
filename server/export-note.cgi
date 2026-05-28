@@ -132,8 +132,7 @@ find_note_file() {
   count=$(printf '%s\n' "$found" | sed '/^$/d' | wc -l | tr -d '[:space:]')
   case "$count" in
     0) return 1 ;;
-    1) printf '%s\n' "$found"; return 0 ;;
-    *) return 2 ;;
+    *) printf '%s\n' "$found" | sed '/^$/d' | head -n 1; return 0 ;;
   esac
 }
 

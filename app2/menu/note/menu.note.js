@@ -773,6 +773,42 @@ wuwei.menu.note = wuwei.menu.note || {};
     }, 0);
   }
 
+  function openExportWritable(filename) {
+    if (typeof window.showSaveFilePicker === 'function') {
+      return window.showSaveFilePicker({
+        suggestedName: filename,
+        types: [{
+          description: 'WuWei note export',
+          accept: {
+            'application/zip': ['.zip']
+          }
+        }]
+      }).then(function (handle) {
+        return handle.createWritable();
+      }).catch(function (e) {
+        if (e && e.name === 'AbortError') {
+          return false;
+        }
+        throw e;
+      });
+    }
+    return Promise.resolve(null);
+  }
+
+  function saveExportBlob(blob, filename, writable) {
+    if (writable) {
+      return writable.write(blob).then(function () {
+        return writable.close();
+      }, function (e) {
+        return writable.close().catch(function () {}).then(function () {
+          throw e;
+        });
+      });
+    }
+    downloadBlob(blob, filename);
+    return Promise.resolve();
+  }
+
   function downloadFile() {
     try {
       const current = wuwei.common.current || {};
@@ -781,28 +817,34 @@ wuwei.menu.note = wuwei.menu.note || {};
         wuwei.menu.snackbar.open({ type: 'error', message: 'ERROR NOT LOGGED IN' });
         return;
       }
-      openBusyModal('Exporting note. Please wait...');
-      wuwei.note.saveNote().then(function () {
-        const noteId = wuwei.common.current && wuwei.common.current.note_id;
-        if (!noteId) {
-          throw new Error('ERROR NOTE ID NOT FOUND');
+      const filename = makeFileName('.zip');
+      openExportWritable(filename).then(function (writable) {
+        if (writable === false) {
+          return null;
         }
-        const action = wuwei.util.getAction('export-note');
-        const url = `${action}?id=${encodeURIComponent(noteId)}&user_id=${encodeURIComponent(cu.user_id)}`;
-        return fetch(url, { credentials: 'same-origin' }).then(function (response) {
-          if (!response.ok) {
-            throw new Error('ERROR Failed to export note: HTTP ' + response.status);
+        openBusyModal('Exporting note. Please wait...');
+        return wuwei.note.saveNote().then(function () {
+          const noteId = wuwei.common.current && wuwei.common.current.note_id;
+          if (!noteId) {
+            throw new Error('ERROR NOTE ID NOT FOUND');
           }
-          const contentType = String(response.headers.get('content-type') || '').toLowerCase();
-          if (contentType.indexOf('text/') === 0 || contentType.indexOf('json') >= 0) {
-            return response.text().then(function (text) {
-              throw new Error(String(text || '').trim() || 'ERROR Failed to export note');
-            });
-          }
-          return response.blob();
+          const action = wuwei.util.getAction('export-note');
+          const url = `${action}?id=${encodeURIComponent(noteId)}&user_id=${encodeURIComponent(cu.user_id)}`;
+          return fetch(url, { credentials: 'same-origin' }).then(function (response) {
+            if (!response.ok) {
+              throw new Error('ERROR Failed to export note: HTTP ' + response.status);
+            }
+            const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+            if (contentType.indexOf('text/') === 0 || contentType.indexOf('json') >= 0) {
+              return response.text().then(function (text) {
+                throw new Error(String(text || '').trim() || 'ERROR Failed to export note');
+              });
+            }
+            return response.blob();
+          });
+        }).then(function (blob) {
+          return saveExportBlob(blob, filename, writable);
         });
-      }).then(function (blob) {
-        downloadBlob(blob, makeFileName('.zip'));
       }).catch(function (e) {
         console.error(e);
         wuwei.menu.snackbar.open({
