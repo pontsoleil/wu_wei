@@ -46,6 +46,8 @@ def resolve_user_dir(base_user_dir: str) -> Path:
         base / "user",
         base,
         base.parent / "user",
+        SCRIPT_DIR.parent / "cgi-bin" / "user",
+        SCRIPT_DIR.parent.parent / "wu_wei2" / "cgi-bin" / "user",
         SCRIPT_DIR / "user",
     ]
     for candidate in candidates:
@@ -69,11 +71,11 @@ def lookup_user(user_id: str) -> dict:
 
     for line in member_name.read_text(encoding="utf-8", errors="ignore").splitlines():
         cols = line.strip().split()
-        if len(cols) >= 4 and cols[0] == user_id:
+        if len(cols) >= 3 and cols[0] == user_id:
             return {
                 "login": cols[1],
                 "name": cols[2],
-                "role": cols[3],
+                "role": cols[3] if len(cols) >= 4 and cols[3] else "author",
             }
 
     return {}
