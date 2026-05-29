@@ -5872,6 +5872,9 @@ wuwei.model = (function () {
         imageEl.setAttribute('y', -height / 2);
         imageEl.setAttribute('width', width);
         imageEl.setAttribute('height', height);
+        imageEl.addEventListener('error', function () {
+          notifyThumbnailLoadFailed(node, thumbnail);
+        });
         if ('safari' === state.browser) {
           imageEl.setAttributeNS('http://www.w3.org/1999/xlink', 'href', thumbnail);
         }
@@ -6809,6 +6812,31 @@ wuwei.model = (function () {
       .attr('text-anchor', textAnchor)
       .attr('dominant-baseline', 'middle')
       .text(label);
+  }
+
+  function notifyThumbnailLoadFailed(node, thumbnail) {
+    var message = 'サムネイル画像を読み込めません。ログイン状態が切れている可能性があります。ログアウトして再度ログインしてください。';
+
+    if (!state.thumbnailLoadWarningShown) {
+      state.thumbnailLoadWarningShown = true;
+      if (wuwei.shell && typeof wuwei.shell.openSnackbar === 'function') {
+        wuwei.shell.openSnackbar({ type: 'warning', message: message });
+      }
+      else if (wuwei.menu && wuwei.menu.snackbar && typeof wuwei.menu.snackbar.open === 'function') {
+        wuwei.menu.snackbar.open({ type: 'warning', message: message });
+      }
+      else if (window && typeof window.alert === 'function') {
+        window.alert(message);
+      }
+    }
+
+    if (window.console && console.warn) {
+      console.warn('Thumbnail image could not be loaded:', {
+        nodeId: node && node.id,
+        label: node && node.label,
+        thumbnail: thumbnail
+      });
+    }
   }
 
   hierarchyLink = function (link, move) {
