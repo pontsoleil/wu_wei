@@ -310,6 +310,7 @@ wuwei.draw = wuwei.draw || {};
     state.groupDragIds = nodes.map(function (n) { return n.id; });
     state.groupDragAnchor = { x: d3.event.x, y: d3.event.y };
     state.groupDragOrigin = {};
+    state.groupDragLinkOrigin = buildGroupDragLinkOrigins(page, state.groupDragIds);
     state.groupDragAxisOrigin = (group && group.axis && group.axis.anchor)
       ? { x: group.axis.anchor.x, y: group.axis.anchor.y }
       : null;
@@ -317,6 +318,68 @@ wuwei.draw = wuwei.draw || {};
       state.groupDragOrigin[n.id] = { x: n.x, y: n.y };
     });
     menu.closeContextMenu();
+  }
+
+  function isGroupControlLinkShape(shape) {
+    return ['HORIZONTAL', 'VERTICAL', 'HORIZONTAL2', 'VERTICAL2'].indexOf(shape) >= 0;
+  }
+
+  function snapshotFiniteLinkCoordinate(out, link, key) {
+    if (Number.isFinite(Number(link[key]))) {
+      out[key] = Number(link[key]);
+    }
+  }
+
+  function buildGroupDragLinkOrigins(page, nodeIds) {
+    const memberIds = {};
+    const origins = {};
+
+    (nodeIds || []).forEach(function (nodeId) {
+      if (nodeId) { memberIds[nodeId] = true; }
+    });
+
+    if (!page || !Array.isArray(page.links)) {
+      return origins;
+    }
+
+    page.links.forEach(function (link) {
+      const origin = {};
+
+      if (!link || !link.id || !isGroupControlLinkShape(link.shape)) {
+        return;
+      }
+      if (!memberIds[link.from] || !memberIds[link.to]) {
+        return;
+      }
+
+      snapshotFiniteLinkCoordinate(origin, link, 'x');
+      snapshotFiniteLinkCoordinate(origin, link, 'y');
+      snapshotFiniteLinkCoordinate(origin, link, 'x2');
+      snapshotFiniteLinkCoordinate(origin, link, 'y2');
+
+      if (Object.keys(origin).length) {
+        origins[link.id] = origin;
+      }
+    });
+
+    return origins;
+  }
+
+  function applyGroupDragLinkOrigins(origins, dx, dy) {
+    Object.keys(origins || {}).forEach(function (linkId) {
+      const link = model.findLinkById(linkId);
+      const origin = origins[linkId];
+
+      if (!link || !origin || !isGroupControlLinkShape(link.shape)) {
+        return;
+      }
+
+      if (Number.isFinite(Number(origin.x))) { link.x = Number(origin.x) + dx; }
+      if (Number.isFinite(Number(origin.y))) { link.y = Number(origin.y) + dy; }
+      if (Number.isFinite(Number(origin.x2))) { link.x2 = Number(origin.x2) + dx; }
+      if (Number.isFinite(Number(origin.y2))) { link.y2 = Number(origin.y2) + dy; }
+      link.changed = true;
+    });
   }
 
   function groupDragMove(d) {
@@ -345,6 +408,7 @@ wuwei.draw = wuwei.draw || {};
         group.axis.anchor.y = Number(state.groupDragAxisOrigin.y) + dy;
       }
     }
+    applyGroupDragLinkOrigins(state.groupDragLinkOrigin, dx, dy);
     redraw();
   }
 
@@ -353,6 +417,7 @@ wuwei.draw = wuwei.draw || {};
     state.groupDragIds = null;
     state.groupDragAnchor = null;
     state.groupDragOrigin = null;
+    state.groupDragLinkOrigin = null;
     state.groupDragAxisOrigin = null;
     util.drawMiniature();
     if (log && typeof log.storeLog === 'function') {

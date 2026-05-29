@@ -4841,6 +4841,7 @@ wuwei.model = (function () {
   function buildGroupDragOrigin(group) {
     var snapshot = {
       members: {},
+      links: {},
       origin: null,
       axisAnchor: null
     };
@@ -4858,6 +4859,8 @@ wuwei.model = (function () {
       addGroupDragSnapshotNode(snapshot, node);
     });
 
+    buildGroupLinkControlOrigins(snapshot);
+
     if (group.origin) {
       snapshot.origin = {
         x: finiteOr(group.origin.x, 0),
@@ -4873,6 +4876,50 @@ wuwei.model = (function () {
     }
 
     return snapshot;
+  }
+
+  function isGroupControlLinkShape(shape) {
+    return ['HORIZONTAL', 'VERTICAL', 'HORIZONTAL2', 'VERTICAL2'].indexOf(shape) >= 0;
+  }
+
+  function snapshotFiniteLinkCoordinate(out, link, key) {
+    if (Number.isFinite(Number(link[key]))) {
+      out[key] = Number(link[key]);
+    }
+  }
+
+  function buildGroupLinkControlOrigins(snapshot) {
+    var page = getCurrentPage();
+    var memberIds = {};
+
+    Object.keys((snapshot && snapshot.members) || {}).forEach(function (nodeId) {
+      memberIds[nodeId] = true;
+    });
+
+    if (!snapshot || !page || !Array.isArray(page.links)) {
+      return;
+    }
+
+    page.links.forEach(function (link) {
+      var origin;
+
+      if (!link || !link.id || !isGroupControlLinkShape(link.shape)) {
+        return;
+      }
+      if (!memberIds[link.from] || !memberIds[link.to]) {
+        return;
+      }
+
+      origin = {};
+      snapshotFiniteLinkCoordinate(origin, link, 'x');
+      snapshotFiniteLinkCoordinate(origin, link, 'y');
+      snapshotFiniteLinkCoordinate(origin, link, 'x2');
+      snapshotFiniteLinkCoordinate(origin, link, 'y2');
+
+      if (Object.keys(origin).length) {
+        snapshot.links[link.id] = origin;
+      }
+    });
   }
 
 
@@ -5139,6 +5186,21 @@ wuwei.model = (function () {
       group.axis.anchor.x = finiteOr(origin.axisAnchor.x, 0) + dx;
       group.axis.anchor.y = finiteOr(origin.axisAnchor.y, 0) + dy;
     }
+
+    Object.keys((origin && origin.links) || {}).forEach(function (linkId) {
+      var link = findLinkById(linkId);
+      var base = origin.links[linkId];
+
+      if (!link || !base || !isGroupControlLinkShape(link.shape)) {
+        return;
+      }
+
+      if (Number.isFinite(Number(base.x))) { link.x = Number(base.x) + dx; }
+      if (Number.isFinite(Number(base.y))) { link.y = Number(base.y) + dy; }
+      if (Number.isFinite(Number(base.x2))) { link.x2 = Number(base.x2) + dx; }
+      if (Number.isFinite(Number(base.y2))) { link.y2 = Number(base.y2) + dy; }
+      link.changed = true;
+    });
   }
 
   function translateGroupBy(groupOrId, dx, dy) {
