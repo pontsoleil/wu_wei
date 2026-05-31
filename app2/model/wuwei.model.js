@@ -5661,6 +5661,8 @@ wuwei.model = (function () {
       outline_width = Number.isFinite(Number(node.style && node.style.line && node.style.line.width))
         ? Math.max(0, Number(node.style.line.width))
         : Math.max(0, Number(node.outlineWidth || 1)),
+      outline_kind = (node.style && node.style.line && node.style.line.kind) || 'SOLID',
+      outline_dasharray = strokeDasharrayForLineKind(outline_kind, outline_width),
       font = node.font,
       font_family = (font && font.family) || 'Arial',
       font_size = (font && font.size) || '10pt',
@@ -5898,6 +5900,27 @@ wuwei.model = (function () {
         }
       }
     }
+
+    if ('THUMBNAIL' === shape && thumbnail && outline_width > 0) {
+      d3node.append('rect')
+        .attr('class', 'shape-node')
+        .attr('x', -width / 2)
+        .attr('y', -height / 2)
+        .attr('width', width)
+        .attr('height', height)
+        .attr('fill', 'none')
+        .attr('pointer-events', 'none');
+    }
+
+    d3node.selectAll('.shape-node')
+      .attr('stroke', outline)
+      .attr('stroke-width', outline_width)
+      .attr('stroke-dasharray', outline_dasharray || null);
+
+    d3node.selectAll('.memo-node')
+      .attr('stroke', outline)
+      .attr('stroke-width', outline_width)
+      .attr('stroke-dasharray', outline_dasharray || null);
 
     if (!text_anchor) {
       if ('Content' === type) {
@@ -6782,6 +6805,14 @@ wuwei.model = (function () {
 
     const label = link.label || '';
     const font = (link.style && link.style.font) ? link.style.font : (link.font || {});
+    const labelStyle = (link.style && link.style.label && typeof link.style.label === 'object')
+      ? link.style.label
+      : {};
+    const labelOffset = (labelStyle.offset && typeof labelStyle.offset === 'object')
+      ? labelStyle.offset
+      : {};
+    const offsetX = Number.isFinite(Number(labelOffset.x)) ? Number(labelOffset.x) : 0;
+    const offsetY = Number.isFinite(Number(labelOffset.y)) ? Number(labelOffset.y) : 0;
     const fontFamily = font.family || 'Arial';
     const fontSize = font.size || '10pt';
     const fontColor = font.color || '#303030';
@@ -6804,8 +6835,8 @@ wuwei.model = (function () {
     }
 
     text
-      .attr('x', x)
-      .attr('y', y)
+      .attr('x', Number(x || 0) + offsetX)
+      .attr('y', Number(y || 0) + offsetY)
       .attr('font-family', fontFamily)
       .attr('font-size', fontSize)
       .attr('fill', fontColor)

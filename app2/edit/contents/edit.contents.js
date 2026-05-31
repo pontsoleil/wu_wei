@@ -709,6 +709,9 @@ wuwei.edit.contents = wuwei.edit.contents || {};
     $('style_line_width').value = Number(
       Number.isFinite(Number(line.width)) ? line.width : 1
     );
+    if ($('style_line_kind')) {
+      $('style_line_kind').value = line.kind || 'SOLID';
+    }
     $('style_line_color').value = toHexColor(line.color || '#4c6b8a', '#4c6b8a');
     $('style_font_color').value = toHexColor(font.color || '#303030', '#303030');
     $('style_font_size').value = normalizeFontSizeValue(font.size || '12pt');
@@ -969,7 +972,8 @@ wuwei.edit.contents = wuwei.edit.contents || {};
       delete currentPoint.style.label.offset.y;
     }
     currentPoint.style.line = currentPoint.style.line || {};
-    currentPoint.style.line.kind = currentPoint.style.line.kind || 'SOLID';
+    currentPoint.style.line.kind = ($('style_line_kind') && $('style_line_kind').value) ||
+      currentPoint.style.line.kind || 'SOLID';
     currentPoint.style.line.color = $('style_line_color').value || '#4c6b8a';
     currentPoint.style.line.width = Math.max(0, Number($('style_line_width').value || 0));
     currentPoint.labelAlign = align;

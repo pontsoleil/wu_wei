@@ -24,6 +24,7 @@ wuwei.edit.video = wuwei.edit.video || {};
     wuwei.edit.style.markup.initPalettes({
       target: param && param.node,
       fillPaletteId: 'style_fill_palette',
+      linePaletteId: 'style_line_color_palette',
       fontPaletteId: 'style_font_color_palette'
     });
   }

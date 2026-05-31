@@ -279,7 +279,11 @@ wuwei.edit.style.markup = (function () {
     if (param.includeLine) {
       rows.push(
         '<div class="w3-row">',
-        '  <label for="style_line_width" class="w3-col s3">' + t('Outline') + '</label>',
+        '  <label for="style_line_kind" class="w3-col s3">' + t('Outline') + '</label>',
+        selectOptions('style.line.kind', line.kind || param.lineKind || 'SOLID', wuwei.common.strokeDasharray, t('Stroke'), 's9'),
+        '</div>',
+        '<div class="w3-row">',
+        '  <label for="style_line_width" class="w3-col s3">' + t('Size') + '</label>',
         '  <input type="number" id="style_line_width" name="style.line.width" value="' + (line.width || param.lineWidth || 1) + '" class="w3-col s3 edit-value" step="1" min="0">',
         '  <input type="color" id="style_line_color" name="style.line.color" value="' + (line.color || param.lineColor || '#4c6b8a') + '" class="w3-col s3 pointer edit-value">',
         '  <div id="' + (param.linePaletteId || 'style_line_color_palette') + '" class="w3-col s3 pointer"></div>',

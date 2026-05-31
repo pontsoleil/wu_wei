@@ -422,8 +422,10 @@ wuwei.edit.generic.markup = ( function () {
     displayHtml.push(
       wuwei.edit.style.markup.paintRows({
         style: style,
+        includeLine: true,
         fontSize: fontSizeValue,
         fillPaletteId: 'style_fill_palette',
+        linePaletteId: 'style_line_color_palette',
         fontPaletteId: 'style_font_color_palette'
       })
     );

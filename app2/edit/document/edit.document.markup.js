@@ -242,8 +242,10 @@ wuwei.edit.document.markup = (function () {
         thumbnailUriInputRow(node, getThumbnailUrl(node)),
         wuwei.edit.style.markup.paintRows({
           style: style,
+          includeLine: true,
           fontSize: normalizeFontSizeValue(font && font.size),
           fillPaletteId: 'style_fill_palette',
+          linePaletteId: 'style_line_color_palette',
           fontPaletteId: 'style_font_color_palette'
         })
       );

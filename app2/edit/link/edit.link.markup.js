@@ -47,6 +47,8 @@ wuwei.edit.link.markup = ( function () {
     const style = link.style || {};
     const line = style.line || {};
     const font = style.font || {};
+    const labelStyle = style.label || {};
+    const labelOffset = labelStyle.offset || {};
     const routing = (link.routing && 'object' === typeof link.routing) ? link.routing : {};
     const fontSizeValue = normalizeFontSizeValue(font && font.size);
     const label = link.label || '';
@@ -56,6 +58,8 @@ wuwei.edit.link.markup = ( function () {
     const lineWidthValue = finiteOr(line.width, 2);
     const lineColorValue = line.color || '#888888';
     const fontColorValue = font.color || '#000000';
+    const labelOffsetXValue = Number.isFinite(Number(labelOffset.x)) ? Number(labelOffset.x) : 0;
+    const labelOffsetYValue = Number.isFinite(Number(labelOffset.y)) ? Number(labelOffset.y) : 0;
     const startArrow = routing.startArrow || {};
     const endArrow = routing.endArrow || {};
     const
@@ -103,6 +107,12 @@ html += `    ${selectOptions('style.line.kind', lineKindValue, strokeDasharray, 
     ${selectOptions('style.font.size', fontSizeValue, fontSizes, 'Select font size', 's3')}
     <input type="color" id="style_font_color" name="style.font.color" value="${escapeHtml(fontColorValue)}" class="w3-col s3 pointer edit-value">
     <div id="style_font_color_palette" name="style_font_color_palette" class="w3-col s3 pointer"></div>
+  </div>
+  <div class="w3-row">
+    <label for="style_label_offset_x" class="w3-col s3">${t('offset X')}</label>
+    <input type="number" id="style_label_offset_x" name="style.label.offset.x" value="${labelOffsetXValue}" class="w3-col s3 edit-value" step="1">
+    <label for="style_label_offset_y" class="w3-col s3">${t('offset Y')}</label>
+    <input type="number" id="style_label_offset_y" name="style.label.offset.y" value="${labelOffsetYValue}" class="w3-col s3 edit-value" step="1">
   </div>
   <div class="w3-row">
     <label for="relation" class="w3-col s3">${t('Role')}</label>

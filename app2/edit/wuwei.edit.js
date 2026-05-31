@@ -564,6 +564,7 @@ wuwei.edit = wuwei.edit || {};
       return;
     }
     if (path === 'style.fill' || path === 'style.line.color' || path === 'style.line.width' ||
+        path === 'style.line.kind' ||
         path === 'style.font.color' || path === 'style.font.size' ||
         path === 'style.font.family' || path === 'style.font.align') {
       expandNodeRuntimeStyle(node);
@@ -1303,7 +1304,7 @@ wuwei.edit = wuwei.edit || {};
     }
     if (state.Selecting && Array.isArray(stateMap.selecteds) &&
       ['shape', 'size.radius', 'size.width', 'size.height', 'style.fill', 'style.line.color',
-        'style.line.width', 'style.font.color', 'style.font.size', 'style.font.family',
+        'style.line.width', 'style.line.kind', 'style.font.color', 'style.font.size', 'style.font.family',
         'style.font.align', 'style.label.width', 'style.label.lines',
         'style.label.offset.x', 'style.label.offset.y'].indexOf(path) >= 0) {
       stateMap.selecteds.forEach(function (selectedNode) {
@@ -1419,7 +1420,7 @@ wuwei.edit = wuwei.edit || {};
     if (applyEditPath(targetInfo, path, value, target)) {
       if (stateMap.node && 'Topic' === stateMap.node.type &&
         ['shape', 'size.radius', 'size.width', 'size.height', 'style.fill', 'style.line.color',
-          'style.line.width', 'style.font.color', 'style.font.size'].indexOf(path) >= 0) {
+          'style.line.width', 'style.line.kind', 'style.font.color', 'style.font.size'].indexOf(path) >= 0) {
         var applyToGroupEl = document.getElementById('applyToGroup');
         if (applyToGroupEl && applyToGroupEl.checked && model && typeof model.applyNodeStyleToGroup === 'function') {
           model.applyNodeStyleToGroup(stateMap.node);

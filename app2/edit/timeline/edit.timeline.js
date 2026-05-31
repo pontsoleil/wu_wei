@@ -193,7 +193,8 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
     );
     point.style = point.style || {};
     point.style.line = point.style.line || {};
-    point.style.line.kind = point.style.line.kind || 'SOLID';
+    point.style.line.kind = (pointField('style_line_kind') && pointField('style_line_kind').value) ||
+      point.style.line.kind || 'SOLID';
     point.style.line.color = toHexColor(
       pointField('style_line_color') ? pointField('style_line_color').value : (point.style.line.color || point.outline),
       point.style.line.color || point.outline || '#666666'
@@ -446,6 +447,10 @@ wuwei.edit.timeline = wuwei.edit.timeline || {};
         (point.style && point.style.line && point.style.line.color) || point.outline || '#666666',
         '#666666'
       );
+    }
+    if (pointField('style_line_kind')) {
+      pointField('style_line_kind').value =
+        (point.style && point.style.line && point.style.line.kind) || 'SOLID';
     }
     if (pointField('style_line_width')) {
       pointField('style_line_width').value = Number(
