@@ -212,6 +212,10 @@ wuwei.menu.markup = (function () {
         <i class="fas fa-file-download fa-fw"></i>
         <span>${translate('Export note')}</span>
       </div>
+      <div class="operator ExportCanvasImage">
+        <i class="fas fa-image fa-fw"></i>
+        <span>${translate('Export canvas image')}</span>
+      </div>
       <div class="operator UploadNote loggedin" ${state.viewOnly ? 'style="display:none"' : ''}>
         <i class="fas fa-file-upload fa-fw"></i>
         <span>${translate('Import note')}</span>

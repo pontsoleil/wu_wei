@@ -97,6 +97,7 @@ wuwei.menu = wuwei.menu || {};
     /** note */
     noteClicked,
     closeNoteClicked,
+    exportCanvasImage,
     /** page */
     pageClicked,
     closePageClicked,
@@ -3876,6 +3877,7 @@ wuwei.menu = wuwei.menu || {};
     if (!menu) { return; }
     const saveEl = menu.querySelector('.operators .operator.Save');
     const downloadEl = menu.querySelector('.operators .operator.Download');
+    const exportCanvasEl = menu.querySelector('.operators .operator.ExportCanvasImage');
     const publishEl = menu.querySelector('.operators .operator.Publish');
     const hasContent = currentPageHasContent();
     const canModifyContent = !(state.viewOnly || state.published || !hasContent);
@@ -3884,6 +3886,9 @@ wuwei.menu = wuwei.menu || {};
     }
     if (downloadEl) {
       downloadEl.style.display = canModifyContent ? '' : 'none';
+    }
+    if (exportCanvasEl) {
+      exportCanvasEl.style.display = hasContent ? '' : 'none';
     }
     if (publishEl) {
       publishEl.style.display = canModifyContent ? '' : 'none';
@@ -3899,6 +3904,197 @@ wuwei.menu = wuwei.menu || {};
       links.filter(Boolean).length > 0 ||
       groups.filter(Boolean).length > 0;
   }
+
+  function notifyMenu(type, message) {
+    if (wuwei.menu && wuwei.menu.snackbar && typeof wuwei.menu.snackbar.open === 'function') {
+      wuwei.menu.snackbar.open({ type: type || 'info', message: message });
+    }
+  }
+
+  function canvasImageBaseName() {
+    var current = common.current || {};
+    var noteId = String(current.note_id || 'note').replace(/[\\/:*?"<>|]+/g, '_');
+    var page = current.page || {};
+    var pageName = String(page.name || page.pp || 'page').replace(/[\\/:*?"<>|]+/g, '_');
+    return 'wuwei-canvas-' + noteId + '-' + pageName;
+  }
+
+  function downloadBlob(blob, filename) {
+    var url = URL.createObjectURL(blob);
+    var anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(function () {
+      URL.revokeObjectURL(url);
+    }, 0);
+  }
+
+  function normalizeClonedCanvasForExport(clone) {
+    if (!clone || !clone.querySelectorAll) {
+      return clone;
+    }
+    clone.removeAttribute('transform');
+    Array.prototype.slice.call(clone.querySelectorAll(
+      '#ContextMenu,#Editing,#Start,#Pointer,.group-selection-marks,circle.selected,.axis'
+    )).forEach(function (el) {
+      if (el && el.parentNode) {
+        el.parentNode.removeChild(el);
+      }
+    });
+    Array.prototype.slice.call(clone.querySelectorAll('[style]')).forEach(function (el) {
+      var style = el.getAttribute('style') || '';
+      if (/opacity\s*:\s*0(?:[;\s]|$)/i.test(style) ||
+          /display\s*:\s*none(?:[;\s]|$)/i.test(style)) {
+        if (el.parentNode) {
+          el.parentNode.removeChild(el);
+        }
+      }
+    });
+    Array.prototype.slice.call(clone.querySelectorAll('[href],[xlink\\:href]')).forEach(function (el) {
+      var href = el.getAttribute('href') || el.getAttributeNS('http://www.w3.org/1999/xlink', 'href') || '';
+      if (href && href.charAt(0) !== '#') {
+        try {
+          el.setAttribute('href', new URL(href, window.location.href).href);
+        } catch (e) {
+          // Keep the original reference if URL normalisation is not possible.
+        }
+      }
+    });
+    return clone;
+  }
+
+  function buildCanvasExportSvg() {
+    var SVG_NS = 'http://www.w3.org/2000/svg';
+    var sourceSvg = document.getElementById(state.svgId || 'draw');
+    var sourceCanvas = document.getElementById(state.canvasId || 'canvas');
+    var scratchSvg, scratchCanvas, bbox, padding, width, height, exportSvg, defsRoot;
+
+    if (!sourceSvg || !sourceCanvas) {
+      throw new Error('ERROR canvas is not available');
+    }
+
+    scratchSvg = document.createElementNS(SVG_NS, 'svg');
+    scratchSvg.setAttribute('xmlns', SVG_NS);
+    scratchSvg.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+    scratchSvg.setAttribute('style', 'position:absolute;left:-100000px;top:-100000px;width:1px;height:1px;overflow:hidden;');
+    scratchCanvas = normalizeClonedCanvasForExport(sourceCanvas.cloneNode(true));
+    scratchSvg.appendChild(scratchCanvas);
+    document.body.appendChild(scratchSvg);
+    try {
+      bbox = scratchCanvas.getBBox();
+    } finally {
+      scratchSvg.remove();
+    }
+
+    if (!bbox || !isFinite(bbox.x) || !isFinite(bbox.y) ||
+        !isFinite(bbox.width) || !isFinite(bbox.height) ||
+        bbox.width <= 0 || bbox.height <= 0) {
+      throw new Error('ERROR canvas has no drawable content');
+    }
+
+    padding = 24;
+    width = Math.ceil(bbox.width + padding * 2);
+    height = Math.ceil(bbox.height + padding * 2);
+    exportSvg = document.createElementNS(SVG_NS, 'svg');
+    exportSvg.setAttribute('xmlns', SVG_NS);
+    exportSvg.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+    exportSvg.setAttribute('width', String(width));
+    exportSvg.setAttribute('height', String(height));
+    exportSvg.setAttribute('viewBox', [
+      bbox.x - padding,
+      bbox.y - padding,
+      bbox.width + padding * 2,
+      bbox.height + padding * 2
+    ].join(' '));
+    exportSvg.setAttribute('class', 'wuwei-canvas-export');
+
+    Array.prototype.slice.call(sourceSvg.children || []).forEach(function (child) {
+      if (child !== sourceCanvas && child.tagName && child.tagName.toLowerCase() !== 'g') {
+        exportSvg.appendChild(child.cloneNode(true));
+      }
+    });
+    defsRoot = sourceSvg.querySelector('defs,.symbols');
+    if (defsRoot && defsRoot.parentNode === sourceCanvas) {
+      exportSvg.insertBefore(defsRoot.cloneNode(true), exportSvg.firstChild || null);
+    }
+    exportSvg.appendChild(normalizeClonedCanvasForExport(sourceCanvas.cloneNode(true)));
+
+    return {
+      svg: exportSvg,
+      width: width,
+      height: height,
+      filenameBase: canvasImageBaseName()
+    };
+  }
+
+  function serializeSvg(svg) {
+    var text = new XMLSerializer().serializeToString(svg);
+    if (!/^<svg[^>]+xmlns=/.test(text)) {
+      text = text.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
+    }
+    if (!/^<svg[^>]+xmlns:xlink=/.test(text)) {
+      text = text.replace(/^<svg/, '<svg xmlns:xlink="http://www.w3.org/1999/xlink"');
+    }
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + text;
+  }
+
+  function exportSvgAsPng(exportData) {
+    return new Promise(function (resolve, reject) {
+      var svgText = serializeSvg(exportData.svg);
+      var svgBlob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
+      var url = URL.createObjectURL(svgBlob);
+      var image = new Image();
+      image.onload = function () {
+        var canvas = document.createElement('canvas');
+        var ctx;
+        URL.revokeObjectURL(url);
+        canvas.width = exportData.width;
+        canvas.height = exportData.height;
+        ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        try {
+          ctx.drawImage(image, 0, 0);
+          canvas.toBlob(function (blob) {
+            if (!blob) {
+              reject(new Error('ERROR failed to create PNG'));
+              return;
+            }
+            resolve(blob);
+          }, 'image/png');
+        } catch (e) {
+          reject(e);
+        }
+      };
+      image.onerror = function () {
+        URL.revokeObjectURL(url);
+        reject(new Error('ERROR failed to render SVG as PNG'));
+      };
+      image.src = url;
+    });
+  }
+
+  exportCanvasImage = function () {
+    var exportData;
+    try {
+      exportData = buildCanvasExportSvg();
+    } catch (e) {
+      notifyMenu('error', e && e.message ? e.message : 'ERROR failed to export canvas image');
+      return;
+    }
+
+    exportSvgAsPng(exportData).then(function (blob) {
+      downloadBlob(blob, exportData.filenameBase + '.png');
+      notifyMenu('success', 'Canvas image exported');
+    }).catch(function (e) {
+      var svgText = serializeSvg(exportData.svg);
+      downloadBlob(new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' }), exportData.filenameBase + '.svg');
+      notifyMenu('warning', (e && e.message ? e.message : 'PNG export failed') + '. SVG exported instead.');
+    });
+  };
 
   function closeNoteMenu() {
     var menu = document.getElementById('noteMenu');
@@ -6224,6 +6420,10 @@ wuwei.menu = wuwei.menu || {};
       wuwei.menu.note.downloadFile();
       closeNoteMenu();
     });
+    registerClick('.pulldown.note .operators .operator.ExportCanvasImage', () => {
+      exportCanvasImage();
+      closeNoteMenu();
+    });
     registerClick('.pulldown.note .operators .operator.Discard', () => {
       if (state.viewOnly || state.published) { return; }
       wuwei.menu.note.discard();
@@ -6397,6 +6597,7 @@ wuwei.menu = wuwei.menu || {};
   /** note */
   ns.noteClicked = noteClicked;
   ns.closeNoteClicked = closeNoteClicked;
+  ns.exportCanvasImage = exportCanvasImage;
   /** page */
   ns.pageClicked = pageClicked;
   ns.closePageClicked = closePageClicked;
