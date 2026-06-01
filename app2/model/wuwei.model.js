@@ -274,6 +274,42 @@ wuwei.model = (function () {
     return String(record.audit.createdBy);
   }
 
+  function getNoteNodeDefaultOverride() {
+    var note = (common && common.current) || {};
+    var noteStyle = (note.noteStyle && 'object' === typeof note.noteStyle) ? note.noteStyle : {};
+    if (noteStyle.topic && 'object' === typeof noteStyle.topic) {
+      return noteStyle.topic;
+    }
+    return (noteStyle.node && 'object' === typeof noteStyle.node) ? noteStyle.node : {};
+  }
+
+  function getNoteDefaultOverride(key) {
+    var note = (common && common.current) || {};
+    var noteStyle = (note.noteStyle && 'object' === typeof note.noteStyle) ? note.noteStyle : {};
+    return (noteStyle[key] && 'object' === typeof noteStyle[key]) ? noteStyle[key] : {};
+  }
+
+  function mergeNodeVisualStyle(baseStyle, overrideStyle) {
+    var style = clonePlainObject(baseStyle || {});
+    overrideStyle = (overrideStyle && 'object' === typeof overrideStyle) ? overrideStyle : {};
+    if (Object.prototype.hasOwnProperty.call(overrideStyle, 'fill')) {
+      style.fill = overrideStyle.fill;
+    }
+    if (overrideStyle.font && 'object' === typeof overrideStyle.font) {
+      style.font = Object.assign({}, style.font || {}, clonePlainObject(overrideStyle.font));
+    }
+    if (overrideStyle.line && 'object' === typeof overrideStyle.line) {
+      style.line = Object.assign({}, style.line || {}, clonePlainObject(overrideStyle.line));
+    }
+    return style;
+  }
+
+  function getNoteNodeDefaultStyle(kind) {
+    var defaults = (common && common.defaultStyle) || {};
+    var base = defaults[kind] || defaults.topic || {};
+    return mergeNodeVisualStyle(base, getNoteNodeDefaultOverride());
+  }
+
   function makeNodeStyle(fillColor) {
     return {
       fill: fillColor || Color.nodeFill,
@@ -292,24 +328,20 @@ wuwei.model = (function () {
   }
 
   function makeMemoStyle() {
-    return {
+    return clonePlainObject((common.defaultStyle && common.defaultStyle.memo) || {
       fill: '#FFF7B0',
-      font: {
-        family: defaultFont.family || 'sans-serif',
-        size: defaultFont.size || 14,
-        color: defaultFont.color || '#000000',
-        align: defaultFont.align || 'center'
-      },
+      font: common.defaultFont,
       line: {
         kind: 'SOLID',
-        color: Color.nodeOutline || '#666666',
+        color: '#666666',
         width: 1
       }
-    };
+    });
   }
 
   function makeLinkStyle() {
-    return {
+    var overrideStyle = getNoteDefaultOverride('link');
+    var style = {
       font: {
         family: defaultFont.family || 'sans-serif',
         size: defaultFont.size || 14,
@@ -322,6 +354,16 @@ wuwei.model = (function () {
         width: 2
       }
     };
+    if (overrideStyle.font && 'object' === typeof overrideStyle.font) {
+      style.font = Object.assign({}, style.font, clonePlainObject(overrideStyle.font));
+    }
+    if (overrideStyle.line && 'object' === typeof overrideStyle.line) {
+      style.line = Object.assign({}, style.line, clonePlainObject(overrideStyle.line));
+    }
+    if (overrideStyle.label && 'object' === typeof overrideStyle.label) {
+      style.label = clonePlainObject(overrideStyle.label);
+    }
+    return style;
   }
 
   function isDeletedRecord(record) {
@@ -721,9 +763,17 @@ wuwei.model = (function () {
      * been set while the link was horizontal/vertical or manually adjusted.
      */
     if (link.routing && typeof link.routing === 'object') {
+      delete link.routing.path;
       delete link.routing.startPosition;
       delete link.routing.endPosition;
     }
+    delete link.path;
+    delete link.x;
+    delete link.y;
+    delete link.x2;
+    delete link.y2;
+    delete link._controlPoint;
+    delete link._dragControlPoint;
     delete link.startPosition;
     delete link.endPosition;
 
@@ -861,18 +911,21 @@ wuwei.model = (function () {
 
   function groupStyleDefaults(type) {
     var style = (common && common.defaultStyle && common.defaultStyle.group) || {};
+    var overrideStyle = getNoteDefaultOverride('group');
     var typed = style[type] || {};
     var padding = numberOrDefault(typed.padding, style.padding);
+    var overridePadding = numberOrDefault(overrideStyle.padding, padding);
 
     return {
-      kind: typed.kind || style.kind,
-      color: typed.color || style.color,
-      width: numberOrDefault(typed.width, style.width),
-      padding: padding,
-      paddingTop: numberOrDefault(typed.paddingTop, padding),
-      paddingRight: numberOrDefault(typed.paddingRight, padding),
-      paddingBottom: numberOrDefault(typed.paddingBottom, padding),
-      paddingLeft: numberOrDefault(typed.paddingLeft, padding),
+      kind: overrideStyle.kind || typed.kind || style.kind,
+      color: overrideStyle.color || typed.color || style.color,
+      width: numberOrDefault(overrideStyle.width, numberOrDefault(typed.width, style.width)),
+      padding: overridePadding,
+      paddingTop: numberOrDefault(overrideStyle.paddingTop, numberOrDefault(typed.paddingTop, overridePadding)),
+      paddingRight: numberOrDefault(overrideStyle.paddingRight, numberOrDefault(typed.paddingRight, overridePadding)),
+      paddingBottom: numberOrDefault(overrideStyle.paddingBottom, numberOrDefault(typed.paddingBottom, overridePadding)),
+      paddingLeft: numberOrDefault(overrideStyle.paddingLeft, numberOrDefault(typed.paddingLeft, overridePadding)),
+      dist: numberOrDefault(overrideStyle.dist, numberOrDefault(typed.dist, style.dist)),
       visible: (typeof typed.visible === 'boolean')
         ? typed.visible
         : ((typeof style.visible === 'boolean') ? style.visible : true)
@@ -1243,23 +1296,28 @@ wuwei.model = (function () {
         self.style.fill = '#FFF7B0';
       }
       else if ('Content' === self.type) {
-        self.style.fill = Color.contentFill || Color.nodeFill;
+        self.style.fill = (Color.contentFill || Color.nodeFill);
       }
       else {
-        self.style.fill = Color.nodeFill;
+        self.style.fill = (getNoteNodeDefaultStyle('topic').fill || Color.nodeFill);
       }
     }
 
     self.style.font = self.style.font || {};
-    self.style.font.family = self.style.font.family || legacyFont.family || common.defaultFont.family;
-    self.style.font.size = self.style.font.size || legacyFont.size || common.defaultFont.size;
-    self.style.font.color = self.style.font.color || legacyFont.color || common.defaultFont.color;
+    var defaultNodeStyleForType = ('Topic' === self.type)
+      ? getNoteNodeDefaultStyle('topic')
+      : (((common && common.defaultStyle) || {})[('Memo' === self.type) ? 'memo' : 'content'] || {});
+    var defaultNodeFont = defaultNodeStyleForType.font || common.defaultFont || {};
+    var defaultNodeLine = defaultNodeStyleForType.line || {};
+    self.style.font.family = self.style.font.family || legacyFont.family || defaultNodeFont.family || common.defaultFont.family;
+    self.style.font.size = self.style.font.size || legacyFont.size || defaultNodeFont.size || common.defaultFont.size;
+    self.style.font.color = self.style.font.color || legacyFont.color || defaultNodeFont.color || common.defaultFont.color;
     self.style.font.align = self.style.font.align || textAnchorToAlign(legacyFont['text-anchor']);
 
     self.style.line = self.style.line || {};
-    self.style.line.kind = self.style.line.kind || 'SOLID';
-    self.style.line.color = self.style.line.color || legacyOutline || Color.nodeOutline;
-    self.style.line.width = finiteOr(self.style.line.width, finiteOr(legacyOutlineWidth, 1));
+    self.style.line.kind = self.style.line.kind || defaultNodeLine.kind || 'SOLID';
+    self.style.line.color = self.style.line.color || legacyOutline || defaultNodeLine.color || Color.nodeOutline;
+    self.style.line.width = finiteOr(self.style.line.width, finiteOr(legacyOutlineWidth, finiteOr(defaultNodeLine.width, 1)));
 
     if ('Memo' === self.type) {
       delete self.style.label;
@@ -1935,7 +1993,7 @@ wuwei.model = (function () {
 
   function createGroupRepresentativeTopic(group, option) {
     var page = getCurrentPage();
-    var topicStyle = util.clone((common && common.defaultStyle && common.defaultStyle.topic) || {});
+    var topicStyle = getNoteNodeDefaultStyle('topic');
     var description = group && group.description && typeof group.description === 'object'
       ? util.clone(group.description)
       : { format: 'asciidoc', body: '' };
@@ -2563,20 +2621,22 @@ wuwei.model = (function () {
     self.visible = (typeof param.visible === 'boolean') ? param.visible : true;
     normalizeRecordState(self);
 
-    self.style = (param.style && 'object' === typeof param.style) ? param.style : {};
+    var defaultLinkStyleForNote = makeLinkStyle();
+    self.style = (param.style && 'object' === typeof param.style) ? param.style : clonePlainObject(defaultLinkStyleForNote);
 
-    self.style.font = self.style.font || {
+    self.style.font = self.style.font || clonePlainObject(defaultLinkStyleForNote.font) || {
       size: common.defaultFont.size,
       color: common.defaultFont.color,
       family: common.defaultFont.family,
       align: 'center'
     };
 
-    self.style.line = self.style.line || {
+    self.style.line = self.style.line || clonePlainObject(defaultLinkStyleForNote.line) || {
       kind: 'SOLID',
       color: defaultLink.style.line.color,
       width: defaultLink.style.line.size
     };
+    self.style.label = self.style.label || clonePlainObject(defaultLinkStyleForNote.label || {});
 
     self.routing = (param.routing && 'object' === typeof param.routing) ? param.routing : {};
     self.routing.path = self.routing.path || '';
@@ -3733,7 +3793,7 @@ wuwei.model = (function () {
         width: common.defaultSize.width,
         height: common.defaultSize.height
       },
-      style: common.defaultStyle.topic,
+      style: getNoteNodeDefaultStyle('topic'),
       visible: true
     });
 
@@ -6997,6 +7057,11 @@ wuwei.model = (function () {
         .attr('stroke', color)
         .attr('stroke-width', size);
 
+      let strokedash = strokeDasharrayForLineKind(link.style.line.kind, size);
+      if (strokedash) {
+        d3path.attr('stroke-dasharray', strokedash);
+      }
+
       pathEl = linkEl && linkEl.querySelector('path.Path');
     }
 
@@ -7008,6 +7073,13 @@ wuwei.model = (function () {
     pathEl.setAttribute('fill', 'none');
     pathEl.setAttribute('stroke', color);
     pathEl.setAttribute('stroke-width', size);
+    let strokedash = strokeDasharrayForLineKind(link.style.line.kind, size);
+    if (strokedash) {
+      pathEl.setAttribute('stroke-dasharray', strokedash);
+    }
+    else {
+      pathEl.removeAttribute('stroke-dasharray');
+    }
     applyLinkMarkers(d3link, link, pathEl, color, size);
 
     return link;
@@ -10998,7 +11070,20 @@ wuwei.model = (function () {
     group.members.push(Object.assign({ nodeId: nodeId, value: '', order: group.members.length + 1, offset: 0, role: 'member' }, itemData || {}));
   }
 
-  function applyNodeStyleToGroup(sourceNode) {
+  function isNodeVisualStylePath(path) {
+    return [
+      'style.fill',
+      'style.line.color',
+      'style.line.width',
+      'style.line.kind',
+      'style.font.color',
+      'style.font.size',
+      'style.font.family',
+      'style.font.align'
+    ].indexOf(path) >= 0;
+  }
+
+  function applyNodeStyleToGroup(sourceNode, changedPath) {
     var page = getCurrentPage();
     if (!page || !sourceNode || 'Topic' !== sourceNode.type) {
       return;
@@ -11006,17 +11091,53 @@ wuwei.model = (function () {
     sourceNode.changed = true;
     const groups = findGroupsByNodeId(sourceNode.id);
     groups.forEach(function (group) {
+      var visualOnly = !!(group && ['simple', 'horizontal', 'vertical'].indexOf(group.type) >= 0);
+      if (visualOnly && changedPath && !isNodeVisualStylePath(changedPath)) {
+        return;
+      }
       findGroupNodes(group.id).forEach(function (node) {
         if (!node || node.id === sourceNode.id || 'Topic' !== node.type) {
           return;
         }
-        node.shape = sourceNode.shape;
-        node.size = clone(sourceNode.size || {});
-        node.style = clone(sourceNode.style || {});
+        if (visualOnly) {
+          applyNodeVisualStyle(sourceNode, node);
+        }
+        else {
+          node.shape = sourceNode.shape;
+          node.size = clonePlainObject(sourceNode.size || {});
+          node.style = clonePlainObject(sourceNode.style || {});
+        }
         expandNodeRuntimeStyle(node);
         node.changed = true;
       });
     });
+  }
+
+  function clonePlainObject(value) {
+    if (!value || 'object' !== typeof value) {
+      return value;
+    }
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function applyNodeVisualStyle(sourceNode, targetNode) {
+    var sourceStyle, targetStyle;
+    if (!sourceNode || !targetNode) {
+      return;
+    }
+    sourceStyle = (sourceNode.style && 'object' === typeof sourceNode.style) ? sourceNode.style : {};
+    targetStyle = (targetNode.style && 'object' === typeof targetNode.style) ? targetNode.style : {};
+    targetNode.style = targetStyle;
+
+    if (Object.prototype.hasOwnProperty.call(sourceStyle, 'fill')) {
+      targetStyle.fill = sourceStyle.fill;
+    }
+    if (sourceStyle.font && 'object' === typeof sourceStyle.font) {
+      targetStyle.font = clonePlainObject(sourceStyle.font);
+    }
+    if (sourceStyle.line && 'object' === typeof sourceStyle.line) {
+      targetStyle.line = clonePlainObject(sourceStyle.line);
+    }
   }
 
   function getGroupOrientation(groupId) {

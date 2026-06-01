@@ -1606,6 +1606,7 @@ wuwei.note = (function () {
       pages: pages,
       resources: resources,
       thumbnail: (typeof src.thumbnail === 'undefined') ? '' : src.thumbnail,
+      noteStyle: (src.noteStyle && typeof src.noteStyle === 'object') ? util.clone(src.noteStyle) : {},
       joint: normalizeJoint(src.joint || src.collaboration),
       exchange: normalizeExchange(src.exchange),
       jointNoteState: normalizeJointNoteState(src),
@@ -1884,6 +1885,7 @@ wuwei.note = (function () {
       this.currentPage = this.page.id;
       this.resources = cloneArray(param.resources).map(normalizeResourceDefinition);
       this.thumbnail = (typeof param.thumbnail === 'undefined') ? '' : param.thumbnail;
+      this.noteStyle = (param.noteStyle && typeof param.noteStyle === 'object') ? util.clone(param.noteStyle) : {};
       this.joint = normalizeJoint(param.joint || param.collaboration);
       this.exchange = normalizeExchange(param.exchange);
       this.jointNoteState = normalizeJointNoteState(param);
@@ -2059,6 +2061,7 @@ wuwei.note = (function () {
       note_name: current.note_name,
       description: current.description,
       thumbnail: currentPageThumbnail || '',
+      noteStyle: (current.noteStyle && typeof current.noteStyle === 'object') ? util.clone(current.noteStyle) : {},
       currentPage: (current.page && current.page.id) || current.currentPage,
       resources: [],
       pages: [],
@@ -2124,6 +2127,7 @@ wuwei.note = (function () {
       note_name: current.note_name || '',
       description: current.description || '',
       thumbnail: currentPageThumbnail || '',
+      noteStyle: (current.noteStyle && typeof current.noteStyle === 'object') ? util.clone(current.noteStyle) : {},
       currentPage: (current.page && current.page.id) || current.currentPage,
       resources: cloneArray(current.resources).map(normalizeResourceDefinition),
       pages: [],

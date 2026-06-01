@@ -56,12 +56,16 @@ input.search[type=text]:focus {
   */
 #open_controls {
   position: fixed;
+  display: none;
   font-size: 1.5rem;
   color: #808080;
   cursor: pointer;
   bottom: 0.1rem;
   left: 0.2rem;
   z-index: 2001;
+}
+#open_controls.active {
+  display: block;
 }
 #open_controls.open {
   color: #d0d0d0;
@@ -79,12 +83,16 @@ input.search[type=text]:focus {
  */
 #open_miniature {
   position: fixed;
+  display: none;
   font-size: 1.5rem;
   color: #808080;
   cursor: pointer;
   top: 0.4rem;
   right: 0.1rem;
   z-index: 2;
+}
+#open_miniature.active {
+  display: block;
 }
 #open_miniature.open {
   color: #d0d0d0;
@@ -127,7 +135,7 @@ input.search[type=text]:focus {
   color: #808080;
   cursor: pointer;
   top: 0.4rem;
-  right: 6rem;
+  right: 8rem;
   z-index: 2;
   display: none;
 }
@@ -299,20 +307,28 @@ input.search[type=text]:focus {
 
 #language {
   position: absolute;
+  display: none;
   width: 5rem;
   bottom: 0.5rem;
   right: 2rem;
   border: none;
 }
+#language.active {
+  display: block;
+}
 
 #state {
   position: fixed;
-  display: block;
+  display: none;
   width: 1.2em;
   height: 1.2em;
   bottom: 0.8rem;
   right: 0.6rem;
   cursor: pointer;
+}
+#state.active,
+#state.network-alert {
+  display: block;
 }
 #state span {
   position: absolute;
@@ -321,6 +337,10 @@ input.search[type=text]:focus {
   height: 0.2em;
   color: #808080;
   background: #808080;
+}
+#state.network-alert span {
+  color: #c0392b;
+  background: #c0392b;
 }
 #state span.bar1 {
   margin-left: 0em;

@@ -598,6 +598,26 @@ wuwei.edit = wuwei.edit || {};
     }
   }
 
+  function clearLinkControlPoints(link) {
+    if (!link) {
+      return;
+    }
+    delete link.x;
+    delete link.y;
+    delete link.x2;
+    delete link.y2;
+    delete link.path;
+    delete link._controlPoint;
+    delete link._dragControlPoint;
+    if (link.routing && 'object' === typeof link.routing) {
+      delete link.routing.path;
+      delete link.routing.startPosition;
+      delete link.routing.endPosition;
+    }
+    delete link.startPosition;
+    delete link.endPosition;
+  }
+
   function shouldAppendImportedDescription(node, path) {
     return !!(
       wuwei.joint &&
@@ -874,6 +894,16 @@ wuwei.edit = wuwei.edit || {};
     if (!link || !path) {
       return;
     }
+    if ('shape' === path && String(value || '').toUpperCase() === 'NORMAL') {
+      clearLinkControlPoints(link);
+    }
+    if (['x', 'y', 'x2', 'y2'].indexOf(path) >= 0 && (value === null || value === '')) {
+      delete link[path];
+      return;
+    }
+    if (['x', 'y', 'x2', 'y2'].indexOf(path) >= 0) {
+      value = Number(value);
+    }
     if ('routing.startArrow.kind' === path || 'routing.endArrow.kind' === path) {
       link.routing = link.routing || {};
       var key = ('routing.startArrow.kind' === path) ? 'startArrow' : 'endArrow';
@@ -1095,6 +1125,10 @@ wuwei.edit = wuwei.edit || {};
       style_label_lines: 'style.label.lines',
       style_label_offset_x: 'style.label.offset.x',
       style_label_offset_y: 'style.label.offset.y',
+      link_control_x: 'x',
+      link_control_y: 'y',
+      link_control_x2: 'x2',
+      link_control_y2: 'y2',
       group: 'group',
       style_line_kind: 'style.line.kind',
       routing_startArrow_kind: 'routing.startArrow.kind',
@@ -1420,13 +1454,21 @@ wuwei.edit = wuwei.edit || {};
     if (applyEditPath(targetInfo, path, value, target)) {
       if (stateMap.node && 'Topic' === stateMap.node.type &&
         ['shape', 'size.radius', 'size.width', 'size.height', 'style.fill', 'style.line.color',
-          'style.line.width', 'style.line.kind', 'style.font.color', 'style.font.size'].indexOf(path) >= 0) {
+          'style.line.width', 'style.line.kind', 'style.font.color', 'style.font.size',
+          'style.font.family', 'style.font.align'].indexOf(path) >= 0) {
         var applyToGroupEl = document.getElementById('applyToGroup');
         if (applyToGroupEl && applyToGroupEl.checked && model && typeof model.applyNodeStyleToGroup === 'function') {
-          model.applyNodeStyleToGroup(stateMap.node);
+          model.applyNodeStyleToGroup(stateMap.node, path);
         }
       }
       redrawEditedGraph();
+      if (targetInfo && 'link' === targetInfo.kind && 'shape' === path &&
+        wuwei.edit.link && typeof wuwei.edit.link.open === 'function') {
+        wuwei.edit.link.open({
+          link: targetInfo.object,
+          option: stateMap.option || {}
+        });
+      }
     }
   }
 
