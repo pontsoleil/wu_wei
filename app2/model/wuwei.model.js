@@ -274,38 +274,43 @@ wuwei.model = (function () {
     return String(record.audit.createdBy);
   }
 
+  function getNoteNodeDefaultOverride() {
+    var note = (common && common.current) || {};
+    var noteStyle = (note.noteStyle && 'object' === typeof note.noteStyle) ? note.noteStyle : {};
+    return (noteStyle.node && 'object' === typeof noteStyle.node) ? noteStyle.node : {};
+  }
+
+  function mergeNodeVisualStyle(baseStyle, overrideStyle) {
+    var style = clonePlainObject(baseStyle || {});
+    overrideStyle = (overrideStyle && 'object' === typeof overrideStyle) ? overrideStyle : {};
+    if (Object.prototype.hasOwnProperty.call(overrideStyle, 'fill')) {
+      style.fill = overrideStyle.fill;
+    }
+    if (overrideStyle.font && 'object' === typeof overrideStyle.font) {
+      style.font = Object.assign({}, style.font || {}, clonePlainObject(overrideStyle.font));
+    }
+    if (overrideStyle.line && 'object' === typeof overrideStyle.line) {
+      style.line = Object.assign({}, style.line || {}, clonePlainObject(overrideStyle.line));
+    }
+    return style;
+  }
+
+  function getNoteNodeDefaultStyle(kind) {
+    var defaults = (common && common.defaultStyle) || {};
+    var base = defaults[kind] || defaults.topic || {};
+    return mergeNodeVisualStyle(base, getNoteNodeDefaultOverride());
+  }
+
   function makeNodeStyle(fillColor) {
-    return {
-      fill: fillColor || Color.nodeFill,
-      font: {
-        family: defaultFont.family || 'sans-serif',
-        size: defaultFont.size || 14,
-        color: defaultFont.color || '#000000',
-        align: defaultFont.align || 'center'
-      },
-      line: {
-        kind: 'SOLID',
-        color: Color.nodeOutline || '#666666',
-        width: 1
-      }
-    };
+    var style = getNoteNodeDefaultStyle('topic');
+    if (fillColor) {
+      style.fill = fillColor;
+    }
+    return style;
   }
 
   function makeMemoStyle() {
-    return {
-      fill: '#FFF7B0',
-      font: {
-        family: defaultFont.family || 'sans-serif',
-        size: defaultFont.size || 14,
-        color: defaultFont.color || '#000000',
-        align: defaultFont.align || 'center'
-      },
-      line: {
-        kind: 'SOLID',
-        color: Color.nodeOutline || '#666666',
-        width: 1
-      }
-    };
+    return getNoteNodeDefaultStyle('memo');
   }
 
   function makeLinkStyle() {
@@ -1240,26 +1245,29 @@ wuwei.model = (function () {
         self.style.fill = legacyColor;
       }
       else if ('Memo' === self.type) {
-        self.style.fill = '#FFF7B0';
+        self.style.fill = (getNoteNodeDefaultStyle('memo').fill || '#FFF7B0');
       }
       else if ('Content' === self.type) {
-        self.style.fill = Color.contentFill || Color.nodeFill;
+        self.style.fill = (getNoteNodeDefaultStyle('content').fill || Color.contentFill || Color.nodeFill);
       }
       else {
-        self.style.fill = Color.nodeFill;
+        self.style.fill = (getNoteNodeDefaultStyle('topic').fill || Color.nodeFill);
       }
     }
 
     self.style.font = self.style.font || {};
-    self.style.font.family = self.style.font.family || legacyFont.family || common.defaultFont.family;
-    self.style.font.size = self.style.font.size || legacyFont.size || common.defaultFont.size;
-    self.style.font.color = self.style.font.color || legacyFont.color || common.defaultFont.color;
+    var defaultNodeStyleForType = getNoteNodeDefaultStyle(('Memo' === self.type) ? 'memo' : (('Content' === self.type) ? 'content' : 'topic'));
+    var defaultNodeFont = defaultNodeStyleForType.font || common.defaultFont || {};
+    var defaultNodeLine = defaultNodeStyleForType.line || {};
+    self.style.font.family = self.style.font.family || legacyFont.family || defaultNodeFont.family || common.defaultFont.family;
+    self.style.font.size = self.style.font.size || legacyFont.size || defaultNodeFont.size || common.defaultFont.size;
+    self.style.font.color = self.style.font.color || legacyFont.color || defaultNodeFont.color || common.defaultFont.color;
     self.style.font.align = self.style.font.align || textAnchorToAlign(legacyFont['text-anchor']);
 
     self.style.line = self.style.line || {};
-    self.style.line.kind = self.style.line.kind || 'SOLID';
-    self.style.line.color = self.style.line.color || legacyOutline || Color.nodeOutline;
-    self.style.line.width = finiteOr(self.style.line.width, finiteOr(legacyOutlineWidth, 1));
+    self.style.line.kind = self.style.line.kind || defaultNodeLine.kind || 'SOLID';
+    self.style.line.color = self.style.line.color || legacyOutline || defaultNodeLine.color || Color.nodeOutline;
+    self.style.line.width = finiteOr(self.style.line.width, finiteOr(legacyOutlineWidth, finiteOr(defaultNodeLine.width, 1)));
 
     if ('Memo' === self.type) {
       delete self.style.label;
@@ -1935,7 +1943,7 @@ wuwei.model = (function () {
 
   function createGroupRepresentativeTopic(group, option) {
     var page = getCurrentPage();
-    var topicStyle = util.clone((common && common.defaultStyle && common.defaultStyle.topic) || {});
+    var topicStyle = getNoteNodeDefaultStyle('topic');
     var description = group && group.description && typeof group.description === 'object'
       ? util.clone(group.description)
       : { format: 'asciidoc', body: '' };
@@ -3697,7 +3705,7 @@ wuwei.model = (function () {
         width: defaultSize.content,
         height: defaultSize.content
       },
-      style: common.defaultStyle.content,
+      style: getNoteNodeDefaultStyle('content'),
       visible: true
     });
 
@@ -3733,7 +3741,7 @@ wuwei.model = (function () {
         width: common.defaultSize.width,
         height: common.defaultSize.height
       },
-      style: common.defaultStyle.topic,
+      style: getNoteNodeDefaultStyle('topic'),
       visible: true
     });
 
@@ -3766,7 +3774,7 @@ wuwei.model = (function () {
         width: defaultSize.memo,
         height: defaultSize.memo
       },
-      style: common.defaultStyle.memo,
+      style: getNoteNodeDefaultStyle('memo'),
       description: {
         format: 'asciidoc',
         body: ''
@@ -10998,7 +11006,20 @@ wuwei.model = (function () {
     group.members.push(Object.assign({ nodeId: nodeId, value: '', order: group.members.length + 1, offset: 0, role: 'member' }, itemData || {}));
   }
 
-  function applyNodeStyleToGroup(sourceNode) {
+  function isNodeVisualStylePath(path) {
+    return [
+      'style.fill',
+      'style.line.color',
+      'style.line.width',
+      'style.line.kind',
+      'style.font.color',
+      'style.font.size',
+      'style.font.family',
+      'style.font.align'
+    ].indexOf(path) >= 0;
+  }
+
+  function applyNodeStyleToGroup(sourceNode, changedPath) {
     var page = getCurrentPage();
     if (!page || !sourceNode || 'Topic' !== sourceNode.type) {
       return;
@@ -11006,17 +11027,53 @@ wuwei.model = (function () {
     sourceNode.changed = true;
     const groups = findGroupsByNodeId(sourceNode.id);
     groups.forEach(function (group) {
+      var visualOnly = !!(group && ['simple', 'horizontal', 'vertical'].indexOf(group.type) >= 0);
+      if (visualOnly && changedPath && !isNodeVisualStylePath(changedPath)) {
+        return;
+      }
       findGroupNodes(group.id).forEach(function (node) {
         if (!node || node.id === sourceNode.id || 'Topic' !== node.type) {
           return;
         }
-        node.shape = sourceNode.shape;
-        node.size = clone(sourceNode.size || {});
-        node.style = clone(sourceNode.style || {});
+        if (visualOnly) {
+          applyNodeVisualStyle(sourceNode, node);
+        }
+        else {
+          node.shape = sourceNode.shape;
+          node.size = clonePlainObject(sourceNode.size || {});
+          node.style = clonePlainObject(sourceNode.style || {});
+        }
         expandNodeRuntimeStyle(node);
         node.changed = true;
       });
     });
+  }
+
+  function clonePlainObject(value) {
+    if (!value || 'object' !== typeof value) {
+      return value;
+    }
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function applyNodeVisualStyle(sourceNode, targetNode) {
+    var sourceStyle, targetStyle;
+    if (!sourceNode || !targetNode) {
+      return;
+    }
+    sourceStyle = (sourceNode.style && 'object' === typeof sourceNode.style) ? sourceNode.style : {};
+    targetStyle = (targetNode.style && 'object' === typeof targetNode.style) ? targetNode.style : {};
+    targetNode.style = targetStyle;
+
+    if (Object.prototype.hasOwnProperty.call(sourceStyle, 'fill')) {
+      targetStyle.fill = sourceStyle.fill;
+    }
+    if (sourceStyle.font && 'object' === typeof sourceStyle.font) {
+      targetStyle.font = clonePlainObject(sourceStyle.font);
+    }
+    if (sourceStyle.line && 'object' === typeof sourceStyle.line) {
+      targetStyle.line = clonePlainObject(sourceStyle.line);
+    }
   }
 
   function getGroupOrientation(groupId) {

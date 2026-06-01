@@ -3843,13 +3843,18 @@ wuwei.menu = wuwei.menu || {};
       headingMenu = document.querySelector('.heading-menu'),
       searchIcon = document.getElementById('searchIcon'),
       drawMode = document.getElementById('draw_mode'),
+      miniature = document.getElementById('open_miniature'),
+      controlToggle = document.getElementById('open_controls'),
       setting = document.getElementById('setting');
     // shareMode = document.getElementById('share_mode');
     if (headingMenu.classList.contains('active')) {
       headingMenu.classList.remove('active');
       searchIcon.classList.remove('active');
       drawMode.classList.remove('active');
-      setting.classList.remove('active');
+      miniature.classList.remove('active');
+      controlToggle.classList.remove('active');
+      updateSettingIconForMode();
+      updateUtilityIndicatorsVisibility();
       // shareMode.style.display = 'none';
       wuwei.home.toggleHome();
       // location.replace("https://www.sambuichi.jp/");
@@ -3858,7 +3863,10 @@ wuwei.menu = wuwei.menu || {};
       headingMenu.classList.add('active');
       searchIcon.classList.add('active');
       drawMode.classList.add('active');
-      setting.classList.add('active');
+      miniature.classList.add('active');
+      controlToggle.classList.add('active');
+      updateSettingIconForMode();
+      updateUtilityIndicatorsVisibility();
       // shareMode.style.display = 'block';
     }
     return false;
@@ -6243,6 +6251,85 @@ wuwei.menu = wuwei.menu || {};
     ]
   };
 
+  function updateSettingIconForMode() {
+    if (!settinIgcon) {
+      return;
+    }
+    if ('view' === graph.mode || !heading_menu || !heading_menu.classList.contains('active')) {
+      settinIgcon.classList.remove('active');
+      if (wuwei.menu.setting && 'function' === typeof wuwei.menu.setting.close) {
+        wuwei.menu.setting.close();
+      }
+      return;
+    }
+    settinIgcon.classList.add('active');
+    if (settingPane && !settingPane.classList.contains('hidden') &&
+      wuwei.menu.setting && 'function' === typeof wuwei.menu.setting.open) {
+      wuwei.menu.setting.open();
+    }
+  }
+
+  function isNetworkAlertStatus(status) {
+    return ['ioNG', 'connect_failed', 'disconnect', 'reconnect_failed'].indexOf(String(status || '')) >= 0;
+  }
+
+  function updateUtilityIndicatorsVisibility() {
+    var open = heading_menu && heading_menu.classList.contains('active');
+    var languageEl = document.getElementById('language');
+    var stateEl = document.getElementById('state');
+    if (languageEl) {
+      languageEl.classList.toggle('active', !!open);
+    }
+    if (stateEl) {
+      stateEl.classList.toggle('active', !!open);
+      stateEl.classList.toggle('network-alert',
+        !window.navigator.onLine || isNetworkAlertStatus(stateEl.dataset.socketStatus));
+    }
+  }
+
+  function setNetworkStatusIndicator(status) {
+    var stateEl = document.getElementById('state');
+    var alert;
+    if (!stateEl) {
+      return;
+    }
+    if ('string' === typeof status && status) {
+      stateEl.dataset.socketStatus = status;
+    }
+    alert = !window.navigator.onLine || isNetworkAlertStatus(stateEl.dataset.socketStatus);
+    stateEl.classList.toggle('isOnline', !alert);
+    stateEl.classList.toggle('network-alert', alert);
+    updateUtilityIndicatorsVisibility();
+  }
+
+  function menuSocketStatus(status) {
+    setNetworkStatusIndicator(status);
+  }
+
+  function bindNetworkStatusIndicator() {
+    window.removeEventListener('online', setNetworkStatusIndicator, false);
+    window.removeEventListener('offline', setNetworkStatusIndicator, false);
+    window.addEventListener('online', setNetworkStatusIndicator, false);
+    window.addEventListener('offline', setNetworkStatusIndicator, false);
+    if (wuwei.data && wuwei.data.Events && 'function' === typeof wuwei.data.Events.subscribe) {
+      try {
+        wuwei.data.Events.unsubscribe('socket-status', 'menuSocketStatus');
+      }
+      catch (e) {
+        // The first menu init has no previous subscriber.
+      }
+      try {
+        wuwei.data.Events.subscribe('socket-status', menuSocketStatus);
+      }
+      catch (e) {
+        if (window.console && console.warn) {
+          console.warn('Failed to subscribe socket status indicator.', e);
+        }
+      }
+    }
+    setNetworkStatusIndicator();
+  }
+
   drawmodeClicked = function () {
     drawmode_n = ++drawmode_n % 3;
     drawmode = state.Drawmode[drawmode_n];
@@ -6256,24 +6343,20 @@ wuwei.menu = wuwei.menu || {};
     switch (drawmode) {
       case 'draw':
         drawIcon.setAttribute('class', 'fas fa-pencil-ruler');
-        heading_menu.classList.add('active');
         searchIcon.classList.remove('simulation');
-        settinIgcon.style.display = 'none';
-        wuwei.menu.setting.close();
+        updateSettingIconForMode();
         draw.refresh();
         break;
       case 'view':
         drawIcon.setAttribute('class', 'far fa-square');
-        heading_menu.classList.remove('active');
         searchIcon.classList.remove('simulation');
-        settinIgcon.style.display = 'none';
+        updateSettingIconForMode();
         draw.refresh();
         break;
       case 'simulation':
         drawIcon.setAttribute('class', 'fas fa-expand-arrows-alt');
-        heading_menu.classList.add('active');
         searchIcon.classList.add('simulation');
-        settinIgcon.style.display = 'block';
+        updateSettingIconForMode();
         draw.restart();
         break;
     }
@@ -6316,13 +6399,15 @@ wuwei.menu = wuwei.menu || {};
       controls.style.display = 'none';
     }
 
-    drawmodeIcon.className = `${drawmode}`;
+    drawmodeIcon.className = `command ${drawmode}`;
     graph.mode = drawmode;
     drawIcon.setAttribute('class', 'fas fa-pencil-ruler');
-    settinIgcon.style.display = 'none';
+    updateSettingIconForMode();
     // shareIcon.style.display = 'none';
 
     settinIgcon.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
       if (settingPane.classList.contains('hidden')) {
         wuwei.menu.setting.open();
       }
@@ -6354,6 +6439,8 @@ wuwei.menu = wuwei.menu || {};
       document.getElementById('menu').innerHTML = wuwei.menu.markup.template(lang);
       initModule();
     }, false);
+    bindNetworkStatusIndicator();
+    updateUtilityIndicatorsVisibility();
 
     registerClick('#open_controls', openControlsClicked);
     registerClick('#draw_mode', drawmodeClicked);

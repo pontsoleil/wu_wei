@@ -52,10 +52,12 @@ wuwei.menu.markup = (function () {
 -->
   <a id="setting" class="simulation command">
     <i class="fas fa-cog"></i>
+    <span class="tooltiptext">${translate('Settings')}</span>
   </a>
 
   <a id="draw_mode" class="command">
     <i></i>
+    <span class="tooltiptext">${translate('Draw mode')}</span>
   </a>
 
   <a id="user_status" ${userStatusClass ? `class="${userStatusClass}"` : ''}>

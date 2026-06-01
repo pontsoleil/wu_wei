@@ -10,16 +10,83 @@
  * Copyright (c) 2013-2020, Nobuyuki SAMBUICHI
  **/
 wuwei.menu.setting.markup = ( function () {
-  const template = function () {
+  function optionList(options, value) {
+    return (options || []).map(function (option) {
+      var optionValue = String(option && option.value || '');
+      return '<option value="' + optionValue + '"' + (String(value || '') === optionValue ? ' selected' : '') + '>' +
+        String(option && option.label || optionValue) + '</option>';
+    }).join('');
+  }
+
+  function fontSizeValue(value) {
+    if (Number.isFinite(Number(value))) {
+      return String(Number(value)) + 'pt';
+    }
+    return value || '12pt';
+  }
+
+  function nodeDefaultStyleRows() {
+    var common = wuwei.common || {};
+    var current = common.current || {};
+    var noteStyle = (current.noteStyle && typeof current.noteStyle === 'object') ? current.noteStyle : {};
+    var nodeStyle = (noteStyle.node && typeof noteStyle.node === 'object') ? noteStyle.node : {};
+    var base = (common.defaultStyle && common.defaultStyle.topic) || {};
+    var style = {
+      fill: nodeStyle.fill || base.fill || '#FFFFF0',
+      font: Object.assign({}, base.font || common.defaultFont || {}, nodeStyle.font || {}),
+      line: Object.assign({}, base.line || {}, nodeStyle.line || {})
+    };
+    var fontAlignOptions = [
+      { value: 'left', label: translate('left') },
+      { value: 'center', label: translate('center') },
+      { value: 'right', label: translate('right') }
+    ];
+
     return `
-    <div class="controls">
+    <div class="force note-default-style">
+      <p><label>${translate('Node default style')}</label></p>
+      <label>
+        ${translate('Background')}
+        <input type="color" id="noteDefaultFill" value="${style.fill}">
+        <div id="noteDefaultFillPalette" class="note-default-color-palette"></div>
+      </label>
+      <label>
+        ${translate('Text')}
+        <input type="color" id="noteDefaultFontColor" value="${style.font.color || '#303030'}">
+        <div id="noteDefaultFontColorPalette" class="note-default-color-palette"></div>
+        <select id="noteDefaultFontSize">${optionList(common.fontSizes, fontSizeValue(style.font.size))}</select>
+      </label>
+      <label>
+        ${translate('Font')}
+        <input type="text" id="noteDefaultFontFamily" value="${style.font.family || 'sans-serif'}">
+      </label>
+      <label>
+        ${translate('align')}
+        <select id="noteDefaultFontAlign">${optionList(fontAlignOptions, style.font.align || 'center')}</select>
+      </label>
+      <label>
+        ${translate('Outline')}
+        <select id="noteDefaultLineKind">${optionList(common.strokeDasharray, style.line.kind || 'SOLID')}</select>
+        <input type="number" id="noteDefaultLineWidth" value="${Number.isFinite(Number(style.line.width)) ? Number(style.line.width) : 1}" min="0" step="1">
+        <input type="color" id="noteDefaultLineColor" value="${style.line.color || '#d7d8d9'}">
+        <div id="noteDefaultLineColorPalette" class="note-default-color-palette"></div>
+      </label>
+      <div>
+        <button type="button" id="noteDefaultStyleApply">${translate('Apply')}</button>
+        <button type="button" id="noteDefaultStyleReset">${translate('Reset')}</button>
+      </div>
+    </div>`;
+  }
+
+  function forceControlRows() {
+    return `
     <div class="force alpha">
       <p><label>alpha</label> Simulation activity</p>
       <div class="alpha_bar" onclick="wuwei.menu.setting.updateAll();">
         <div id="alpha_value"></div>
       </div>
     </div>
-  
+
     <div class="force">
       <p><label>
           <input type="checkbox" checked
@@ -132,7 +199,18 @@ wuwei.menu.setting.markup = ( function () {
                 return false;">
       </label>
     </div>
+    `;
+  }
 
+  const template = function () {
+    var graph = (wuwei.common && wuwei.common.graph) || {};
+    return `
+    <div class="controls">
+    <button type="button" class="setting-pane-close" title="${translate('Close')}">
+      <i class="fas fa-times"></i>
+    </button>
+    ${nodeDefaultStyleRows()}
+    ${('simulation' === graph.mode) ? forceControlRows() : ''}
   </div>
     `;
   };

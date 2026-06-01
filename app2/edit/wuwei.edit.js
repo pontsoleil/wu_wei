@@ -1420,10 +1420,11 @@ wuwei.edit = wuwei.edit || {};
     if (applyEditPath(targetInfo, path, value, target)) {
       if (stateMap.node && 'Topic' === stateMap.node.type &&
         ['shape', 'size.radius', 'size.width', 'size.height', 'style.fill', 'style.line.color',
-          'style.line.width', 'style.line.kind', 'style.font.color', 'style.font.size'].indexOf(path) >= 0) {
+          'style.line.width', 'style.line.kind', 'style.font.color', 'style.font.size',
+          'style.font.family', 'style.font.align'].indexOf(path) >= 0) {
         var applyToGroupEl = document.getElementById('applyToGroup');
         if (applyToGroupEl && applyToGroupEl.checked && model && typeof model.applyNodeStyleToGroup === 'function') {
-          model.applyNodeStyleToGroup(stateMap.node);
+          model.applyNodeStyleToGroup(stateMap.node, path);
         }
       }
       redrawEditedGraph();
