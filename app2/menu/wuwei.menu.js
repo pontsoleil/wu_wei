@@ -5830,7 +5830,6 @@ wuwei.menu = wuwei.menu || {};
           util.notEmpty(node) &&
           'HORIZONTAL' !== node.shape &&
           !node.copying &&
-          'draw' === graph.mode &&
           util.isLink(node)) {
           return true;
         }
@@ -5854,7 +5853,6 @@ wuwei.menu = wuwei.menu || {};
         if (allNodes.length === 1 &&
           util.notEmpty(node) &&
           'VERTICAL' !== node.shape &&
-          'draw' === graph.mode &&
           !node.copying &&
           util.isLink(node)) {
           return true;
@@ -5873,7 +5871,6 @@ wuwei.menu = wuwei.menu || {};
           util.notEmpty(node) &&
           'HORIZONTAL2' !== node.shape &&
           !node.copying &&
-          'draw' === graph.mode &&
           util.isLink(node)) {
           return true;
         }
@@ -5890,7 +5887,6 @@ wuwei.menu = wuwei.menu || {};
         if (allNodes.length === 1 &&
           util.notEmpty(node) &&
           'VERTICAL2' !== node.shape &&
-          'draw' === graph.mode &&
           !node.copying &&
           util.isLink(node)) {
           return true;

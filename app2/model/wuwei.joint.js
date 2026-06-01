@@ -242,7 +242,8 @@ wuwei.joint = wuwei.joint || {};
         p.indexOf('style.') === 0 || p.indexOf('text.') === 0;
     }
     if (kind === 'link') {
-      return p === 'visible' ||
+      return p === 'visible' || p === 'shape' ||
+        ['x', 'y', 'x2', 'y2'].indexOf(p) >= 0 ||
         p.indexOf('style.') === 0 || p.indexOf('routing.') === 0;
     }
     if (kind === 'group') {

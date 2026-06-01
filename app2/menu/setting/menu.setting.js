@@ -30,6 +30,19 @@ wuwei.menu.setting = wuwei.menu.setting || {};
     return current.noteStyle.node;
   }
 
+  function ensureNoteStyleKey(key) {
+    wuwei.common.current = wuwei.common.current || {};
+    wuwei.common.current.noteStyle =
+      ('object' === typeof wuwei.common.current.noteStyle && wuwei.common.current.noteStyle)
+        ? wuwei.common.current.noteStyle
+        : {};
+    wuwei.common.current.noteStyle[key] =
+      ('object' === typeof wuwei.common.current.noteStyle[key] && wuwei.common.current.noteStyle[key])
+        ? wuwei.common.current.noteStyle[key]
+        : {};
+    return wuwei.common.current.noteStyle[key];
+  }
+
   function defaultTopicStyle() {
     var common = wuwei.common || {};
     var defaults = common.defaultStyle || {};
@@ -63,6 +76,47 @@ wuwei.menu.setting = wuwei.menu.setting || {};
     return style;
   }
 
+  function currentLinkDefaultStyleFromPane() {
+    var common = wuwei.common || {};
+    var style = {
+      font: Object.assign({}, common.defaultFont || {}),
+      line: { kind: 'SOLID', color: '#888888', width: 2 },
+      label: { offset: { x: 0, y: 0 } }
+    };
+    var lineKindEl = document.getElementById('noteDefaultLinkLineKind');
+    var lineWidthEl = document.getElementById('noteDefaultLinkLineWidth');
+    var lineColorEl = document.getElementById('noteDefaultLinkLineColor');
+    var fontColorEl = document.getElementById('noteDefaultLinkFontColor');
+    var fontSizeEl = document.getElementById('noteDefaultLinkFontSize');
+    var fontFamilyEl = document.getElementById('noteDefaultLinkFontFamily');
+    var offsetXEl = document.getElementById('noteDefaultLinkLabelOffsetX');
+    var offsetYEl = document.getElementById('noteDefaultLinkLabelOffsetY');
+    style.line.kind = lineKindEl ? lineKindEl.value : style.line.kind;
+    style.line.width = lineWidthEl ? Number(lineWidthEl.value || 0) : style.line.width;
+    style.line.color = lineColorEl ? lineColorEl.value : style.line.color;
+    style.font.color = fontColorEl ? fontColorEl.value : style.font.color;
+    style.font.size = fontSizeEl ? fontSizeEl.value : style.font.size;
+    style.font.family = fontFamilyEl ? fontFamilyEl.value : style.font.family;
+    style.label.offset.x = offsetXEl ? Number(offsetXEl.value || 0) : 0;
+    style.label.offset.y = offsetYEl ? Number(offsetYEl.value || 0) : 0;
+    return style;
+  }
+
+  function currentGroupDefaultStyleFromPane() {
+    var style = {};
+    var kindEl = document.getElementById('noteDefaultGroupLineKind');
+    var widthEl = document.getElementById('noteDefaultGroupLineWidth');
+    var colorEl = document.getElementById('noteDefaultGroupLineColor');
+    var paddingEl = document.getElementById('noteDefaultGroupPadding');
+    var distEl = document.getElementById('noteDefaultGroupDist');
+    style.kind = kindEl ? kindEl.value : 'SOLID';
+    style.width = widthEl ? Number(widthEl.value || 0) : 6;
+    style.color = colorEl ? colorEl.value : '#888888';
+    style.padding = paddingEl ? Number(paddingEl.value || 0) : 12;
+    style.dist = distEl ? Number(distEl.value || 0) : 40;
+    return style;
+  }
+
   function snackbar(type, message) {
     if (wuwei.menu && wuwei.menu.snackbar && 'function' === typeof wuwei.menu.snackbar.open) {
       wuwei.menu.snackbar.open({ type: type || 'info', message: wuwei.nls.translate(message) });
@@ -78,7 +132,19 @@ wuwei.menu.setting = wuwei.menu.setting || {};
   function applyNodeDefaultStyle() {
     ensureNodeDefaultStyle();
     wuwei.common.current.noteStyle.node = currentNodeDefaultStyleFromPane();
-    snackbar('success', 'Node default style was updated.');
+    snackbar('success', 'Topic default style was updated.');
+  }
+
+  function applyLinkDefaultStyle() {
+    ensureNoteStyleKey('link');
+    wuwei.common.current.noteStyle.link = currentLinkDefaultStyleFromPane();
+    snackbar('success', 'Link default style was updated.');
+  }
+
+  function applyGroupDefaultStyle() {
+    ensureNoteStyleKey('group');
+    wuwei.common.current.noteStyle.group = currentGroupDefaultStyleFromPane();
+    snackbar('success', 'Group default style was updated.');
   }
 
   function resetNodeDefaultStyle() {
@@ -87,12 +153,25 @@ wuwei.menu.setting = wuwei.menu.setting || {};
       delete current.noteStyle.node;
     }
     open();
-    snackbar('success', 'Node default style was reset.');
+    snackbar('success', 'Topic default style was reset.');
+  }
+
+  function resetNoteStyleKey(key, message) {
+    var current = wuwei.common.current || {};
+    if (current.noteStyle && 'object' === typeof current.noteStyle) {
+      delete current.noteStyle[key];
+    }
+    open();
+    snackbar('success', message);
   }
 
   function bindNodeDefaultStyleControls(settingEl) {
     var applyEl = settingEl.querySelector('#noteDefaultStyleApply');
     var resetEl = settingEl.querySelector('#noteDefaultStyleReset');
+    var linkApplyEl = settingEl.querySelector('#noteDefaultLinkStyleApply');
+    var linkResetEl = settingEl.querySelector('#noteDefaultLinkStyleReset');
+    var groupApplyEl = settingEl.querySelector('#noteDefaultGroupStyleApply');
+    var groupResetEl = settingEl.querySelector('#noteDefaultGroupStyleReset');
     var closeEl = settingEl.querySelector('.setting-pane-close');
     if (closeEl) {
       closeEl.addEventListener('click', close, false);
@@ -102,6 +181,22 @@ wuwei.menu.setting = wuwei.menu.setting || {};
     }
     if (resetEl) {
       resetEl.addEventListener('click', resetNodeDefaultStyle, false);
+    }
+    if (linkApplyEl) {
+      linkApplyEl.addEventListener('click', applyLinkDefaultStyle, false);
+    }
+    if (linkResetEl) {
+      linkResetEl.addEventListener('click', function () {
+        resetNoteStyleKey('link', 'Link default style was reset.');
+      }, false);
+    }
+    if (groupApplyEl) {
+      groupApplyEl.addEventListener('click', applyGroupDefaultStyle, false);
+    }
+    if (groupResetEl) {
+      groupResetEl.addEventListener('click', function () {
+        resetNoteStyleKey('group', 'Group default style was reset.');
+      }, false);
     }
   }
 
@@ -113,6 +208,9 @@ wuwei.menu.setting = wuwei.menu.setting || {};
     wuwei.edit.style.markup.initPalette('noteDefaultFillPalette', 'noteDefaultFill');
     wuwei.edit.style.markup.initPalette('noteDefaultFontColorPalette', 'noteDefaultFontColor');
     wuwei.edit.style.markup.initPalette('noteDefaultLineColorPalette', 'noteDefaultLineColor');
+    wuwei.edit.style.markup.initPalette('noteDefaultLinkLineColorPalette', 'noteDefaultLinkLineColor');
+    wuwei.edit.style.markup.initPalette('noteDefaultLinkFontColorPalette', 'noteDefaultLinkFontColor');
+    wuwei.edit.style.markup.initPalette('noteDefaultGroupLineColorPalette', 'noteDefaultGroupLineColor');
   }
 
   function open(param) {
@@ -155,6 +253,8 @@ wuwei.menu.setting = wuwei.menu.setting || {};
 
   ns.updateAll = updateAll;
   ns.applyNodeDefaultStyle = applyNodeDefaultStyle;
+  ns.applyLinkDefaultStyle = applyLinkDefaultStyle;
+  ns.applyGroupDefaultStyle = applyGroupDefaultStyle;
   ns.resetNodeDefaultStyle = resetNodeDefaultStyle;
   ns.open = open;
   ns.close = close;

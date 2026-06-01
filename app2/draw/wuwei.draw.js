@@ -1571,7 +1571,15 @@ wuwei.draw = wuwei.draw || {};
     constants = common.constants;
     // FORCE = constants.FORCE;
     drawModeEl = document.getElementById('draw_mode');
-    graph.mode = drawModeEl ? drawModeEl.className : 'draw';
+    if (drawModeEl && drawModeEl.classList.contains('simulation')) {
+      graph.mode = 'simulation';
+    }
+    else if (drawModeEl && drawModeEl.classList.contains('view')) {
+      graph.mode = 'view';
+    }
+    else {
+      graph.mode = 'draw';
+    }
     common.current.note_id = `_${uuid.v4()}`;
 
     svg = d3.select('svg#draw');

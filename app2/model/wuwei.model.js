@@ -280,6 +280,12 @@ wuwei.model = (function () {
     return (noteStyle.node && 'object' === typeof noteStyle.node) ? noteStyle.node : {};
   }
 
+  function getNoteDefaultOverride(key) {
+    var note = (common && common.current) || {};
+    var noteStyle = (note.noteStyle && 'object' === typeof note.noteStyle) ? note.noteStyle : {};
+    return (noteStyle[key] && 'object' === typeof noteStyle[key]) ? noteStyle[key] : {};
+  }
+
   function mergeNodeVisualStyle(baseStyle, overrideStyle) {
     var style = clonePlainObject(baseStyle || {});
     overrideStyle = (overrideStyle && 'object' === typeof overrideStyle) ? overrideStyle : {};
@@ -310,11 +316,20 @@ wuwei.model = (function () {
   }
 
   function makeMemoStyle() {
-    return getNoteNodeDefaultStyle('memo');
+    return clonePlainObject((common.defaultStyle && common.defaultStyle.memo) || {
+      fill: '#FFF7B0',
+      font: common.defaultFont,
+      line: {
+        kind: 'SOLID',
+        color: '#666666',
+        width: 1
+      }
+    });
   }
 
   function makeLinkStyle() {
-    return {
+    var overrideStyle = getNoteDefaultOverride('link');
+    var style = {
       font: {
         family: defaultFont.family || 'sans-serif',
         size: defaultFont.size || 14,
@@ -327,6 +342,16 @@ wuwei.model = (function () {
         width: 2
       }
     };
+    if (overrideStyle.font && 'object' === typeof overrideStyle.font) {
+      style.font = Object.assign({}, style.font, clonePlainObject(overrideStyle.font));
+    }
+    if (overrideStyle.line && 'object' === typeof overrideStyle.line) {
+      style.line = Object.assign({}, style.line, clonePlainObject(overrideStyle.line));
+    }
+    if (overrideStyle.label && 'object' === typeof overrideStyle.label) {
+      style.label = clonePlainObject(overrideStyle.label);
+    }
+    return style;
   }
 
   function isDeletedRecord(record) {
@@ -726,9 +751,17 @@ wuwei.model = (function () {
      * been set while the link was horizontal/vertical or manually adjusted.
      */
     if (link.routing && typeof link.routing === 'object') {
+      delete link.routing.path;
       delete link.routing.startPosition;
       delete link.routing.endPosition;
     }
+    delete link.path;
+    delete link.x;
+    delete link.y;
+    delete link.x2;
+    delete link.y2;
+    delete link._controlPoint;
+    delete link._dragControlPoint;
     delete link.startPosition;
     delete link.endPosition;
 
@@ -866,18 +899,21 @@ wuwei.model = (function () {
 
   function groupStyleDefaults(type) {
     var style = (common && common.defaultStyle && common.defaultStyle.group) || {};
+    var overrideStyle = getNoteDefaultOverride('group');
     var typed = style[type] || {};
     var padding = numberOrDefault(typed.padding, style.padding);
+    var overridePadding = numberOrDefault(overrideStyle.padding, padding);
 
     return {
-      kind: typed.kind || style.kind,
-      color: typed.color || style.color,
-      width: numberOrDefault(typed.width, style.width),
-      padding: padding,
-      paddingTop: numberOrDefault(typed.paddingTop, padding),
-      paddingRight: numberOrDefault(typed.paddingRight, padding),
-      paddingBottom: numberOrDefault(typed.paddingBottom, padding),
-      paddingLeft: numberOrDefault(typed.paddingLeft, padding),
+      kind: overrideStyle.kind || typed.kind || style.kind,
+      color: overrideStyle.color || typed.color || style.color,
+      width: numberOrDefault(overrideStyle.width, numberOrDefault(typed.width, style.width)),
+      padding: overridePadding,
+      paddingTop: numberOrDefault(overrideStyle.paddingTop, numberOrDefault(typed.paddingTop, overridePadding)),
+      paddingRight: numberOrDefault(overrideStyle.paddingRight, numberOrDefault(typed.paddingRight, overridePadding)),
+      paddingBottom: numberOrDefault(overrideStyle.paddingBottom, numberOrDefault(typed.paddingBottom, overridePadding)),
+      paddingLeft: numberOrDefault(overrideStyle.paddingLeft, numberOrDefault(typed.paddingLeft, overridePadding)),
+      dist: numberOrDefault(overrideStyle.dist, numberOrDefault(typed.dist, style.dist)),
       visible: (typeof typed.visible === 'boolean')
         ? typed.visible
         : ((typeof style.visible === 'boolean') ? style.visible : true)
@@ -1245,10 +1281,10 @@ wuwei.model = (function () {
         self.style.fill = legacyColor;
       }
       else if ('Memo' === self.type) {
-        self.style.fill = (getNoteNodeDefaultStyle('memo').fill || '#FFF7B0');
+        self.style.fill = '#FFF7B0';
       }
       else if ('Content' === self.type) {
-        self.style.fill = (getNoteNodeDefaultStyle('content').fill || Color.contentFill || Color.nodeFill);
+        self.style.fill = (Color.contentFill || Color.nodeFill);
       }
       else {
         self.style.fill = (getNoteNodeDefaultStyle('topic').fill || Color.nodeFill);
@@ -1256,7 +1292,9 @@ wuwei.model = (function () {
     }
 
     self.style.font = self.style.font || {};
-    var defaultNodeStyleForType = getNoteNodeDefaultStyle(('Memo' === self.type) ? 'memo' : (('Content' === self.type) ? 'content' : 'topic'));
+    var defaultNodeStyleForType = ('Topic' === self.type)
+      ? getNoteNodeDefaultStyle('topic')
+      : (((common && common.defaultStyle) || {})[('Memo' === self.type) ? 'memo' : 'content'] || {});
     var defaultNodeFont = defaultNodeStyleForType.font || common.defaultFont || {};
     var defaultNodeLine = defaultNodeStyleForType.line || {};
     self.style.font.family = self.style.font.family || legacyFont.family || defaultNodeFont.family || common.defaultFont.family;
@@ -2571,20 +2609,22 @@ wuwei.model = (function () {
     self.visible = (typeof param.visible === 'boolean') ? param.visible : true;
     normalizeRecordState(self);
 
-    self.style = (param.style && 'object' === typeof param.style) ? param.style : {};
+    var defaultLinkStyleForNote = makeLinkStyle();
+    self.style = (param.style && 'object' === typeof param.style) ? param.style : clonePlainObject(defaultLinkStyleForNote);
 
-    self.style.font = self.style.font || {
+    self.style.font = self.style.font || clonePlainObject(defaultLinkStyleForNote.font) || {
       size: common.defaultFont.size,
       color: common.defaultFont.color,
       family: common.defaultFont.family,
       align: 'center'
     };
 
-    self.style.line = self.style.line || {
+    self.style.line = self.style.line || clonePlainObject(defaultLinkStyleForNote.line) || {
       kind: 'SOLID',
       color: defaultLink.style.line.color,
       width: defaultLink.style.line.size
     };
+    self.style.label = self.style.label || clonePlainObject(defaultLinkStyleForNote.label || {});
 
     self.routing = (param.routing && 'object' === typeof param.routing) ? param.routing : {};
     self.routing.path = self.routing.path || '';
@@ -3705,7 +3745,7 @@ wuwei.model = (function () {
         width: defaultSize.content,
         height: defaultSize.content
       },
-      style: getNoteNodeDefaultStyle('content'),
+      style: common.defaultStyle.content,
       visible: true
     });
 
@@ -3774,7 +3814,7 @@ wuwei.model = (function () {
         width: defaultSize.memo,
         height: defaultSize.memo
       },
-      style: getNoteNodeDefaultStyle('memo'),
+      style: common.defaultStyle.memo,
       description: {
         format: 'asciidoc',
         body: ''
@@ -7005,6 +7045,11 @@ wuwei.model = (function () {
         .attr('stroke', color)
         .attr('stroke-width', size);
 
+      let strokedash = strokeDasharrayForLineKind(link.style.line.kind, size);
+      if (strokedash) {
+        d3path.attr('stroke-dasharray', strokedash);
+      }
+
       pathEl = linkEl && linkEl.querySelector('path.Path');
     }
 
@@ -7016,6 +7061,13 @@ wuwei.model = (function () {
     pathEl.setAttribute('fill', 'none');
     pathEl.setAttribute('stroke', color);
     pathEl.setAttribute('stroke-width', size);
+    let strokedash = strokeDasharrayForLineKind(link.style.line.kind, size);
+    if (strokedash) {
+      pathEl.setAttribute('stroke-dasharray', strokedash);
+    }
+    else {
+      pathEl.removeAttribute('stroke-dasharray');
+    }
     applyLinkMarkers(d3link, link, pathEl, color, size);
 
     return link;
