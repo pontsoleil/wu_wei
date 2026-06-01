@@ -2071,10 +2071,77 @@ wuwei.util = (function () {
     function appendFallbackLink(linkObj, sceneEl, nodeIndex) {
       var source, target, sx, sy, tx, ty, pathEl, markerEl, dx, dy, len, ux, uy;
       var arrowLen = 16, arrowW = 6, bx, by, cx, cy;
+      var lineStyle, lineWidth, lineColor, dashArray, pathData;
+
+      function n(value, fallback) {
+        var number = Number(value);
+        return Number.isFinite(number) ? number : fallback;
+      }
+
+      function strokeDasharrayForLineKind(kind, width) {
+        var dash;
+        if (!kind || 'SOLID' === kind) { return ''; }
+        if ('DOTTED' === kind) { dash = [1.5, 1.5]; }
+        else if ('DASHED' === kind) { dash = [4, 2]; }
+        else if ('LONG_DASHED' === kind || 'LONG-DASHED' === kind) { dash = [6, 3]; }
+        else if (/^\s*\d+(\.\d+)?\s+\d+(\.\d+)?/.test(String(kind))) {
+          dash = String(kind).trim().split(/\s+/).map(Number);
+        }
+        else { return ''; }
+        return dash
+          .map(function (w) { return w * (1 + Math.log2(width || 1)); })
+          .join(' ');
+      }
+
+      function fallbackPathData(link, startX, startY, endX, endY) {
+        var shape = String(link && link.shape || 'NORMAL').toUpperCase();
+        var x = n(link && link.x, (startX + endX) / 2);
+        var y = n(link && link.y, (startY + endY) / 2);
+        var x2 = n(link && link.x2, x);
+        var y2 = n(link && link.y2, y);
+        var storedPath = (link && link.routing && link.routing.path) || (link && link.path) || '';
+
+        if (storedPath) {
+          return String(storedPath);
+        }
+        if ('HORIZONTAL' === shape) {
+          return 'M' + startX + ',' + startY + ' L' + x + ',' + startY + ' L' + x + ',' + endY + ' L' + endX + ',' + endY;
+        }
+        if ('VERTICAL' === shape) {
+          return 'M' + startX + ',' + startY + ' L' + startX + ',' + y + ' L' + endX + ',' + y + ' L' + endX + ',' + endY;
+        }
+        if ('HORIZONTAL2' === shape) {
+          return 'M' + startX + ',' + startY +
+            ' L' + startX + ',' + y +
+            ' L' + x + ',' + y +
+            ' L' + x + ',' + y2 +
+            ' L' + x2 + ',' + y2 +
+            ' L' + x2 + ',' + endY +
+            ' L' + endX + ',' + endY;
+        }
+        if ('VERTICAL2' === shape) {
+          return 'M' + startX + ',' + startY +
+            ' L' + x + ',' + startY +
+            ' L' + x + ',' + y +
+            ' L' + x2 + ',' + y +
+            ' L' + x2 + ',' + y2 +
+            ' L' + endX + ',' + y2 +
+            ' L' + endX + ',' + endY;
+        }
+        if (link && link.straight === false && Number.isFinite(Number(link.x)) && Number.isFinite(Number(link.y))) {
+          return 'M' + startX + ',' + startY + ' Q' + x + ',' + y + ' ' + endX + ',' + endY;
+        }
+        return 'M' + startX + ',' + startY + ' L' + endX + ',' + endY;
+      }
 
       if (!linkObj || linkObj.visible === false) {
         return;
       }
+
+      lineStyle = (linkObj.style && linkObj.style.line) || {};
+      lineWidth = n(lineStyle.width, n(linkObj.size, 2));
+      lineColor = lineStyle.color || linkObj.color || '#444';
+      dashArray = strokeDasharrayForLineKind(lineStyle.kind || '', lineWidth);
 
       if (isMiniatureTimelineAxisLink(linkObj)) {
         pathEl = createSvgEl('line');
@@ -2083,10 +2150,13 @@ wuwei.util = (function () {
         pathEl.setAttribute('x2', '' + (+linkObj.x2));
         pathEl.setAttribute('y2', '' + (+linkObj.y2));
         pathEl.setAttribute('fill', 'none');
-        pathEl.setAttribute('stroke', '#555');
-        pathEl.setAttribute('stroke-width', '' + Math.max(5, Number(linkObj.size || 4)));
+        pathEl.setAttribute('stroke', lineColor || '#555');
+        pathEl.setAttribute('stroke-width', '' + Math.max(5, Number(lineWidth || 4)));
         pathEl.setAttribute('stroke-linecap', 'round');
         pathEl.setAttribute('opacity', '1');
+        if (dashArray) {
+          pathEl.setAttribute('stroke-dasharray', dashArray);
+        }
         sceneEl.appendChild(pathEl);
         return;
       }
@@ -2103,12 +2173,16 @@ wuwei.util = (function () {
         return;
       }
 
+      pathData = fallbackPathData(linkObj, sx, sy, tx, ty);
       pathEl = createSvgEl('path');
-      pathEl.setAttribute('d', 'M' + sx + ',' + sy + ' L' + tx + ',' + ty);
+      pathEl.setAttribute('d', pathData);
       pathEl.setAttribute('fill', 'none');
-      pathEl.setAttribute('stroke', '#444');
-      pathEl.setAttribute('stroke-width', '2');
+      pathEl.setAttribute('stroke', lineColor);
+      pathEl.setAttribute('stroke-width', '' + lineWidth);
       pathEl.setAttribute('opacity', '1');
+      if (dashArray) {
+        pathEl.setAttribute('stroke-dasharray', dashArray);
+      }
       sceneEl.appendChild(pathEl);
 
       dx = tx - sx;
@@ -2124,8 +2198,8 @@ wuwei.util = (function () {
 
         markerEl = createSvgEl('path');
         markerEl.setAttribute('d', 'M' + tx + ',' + ty + ' L' + bx + ',' + by + ' L' + cx + ',' + cy + ' Z');
-        markerEl.setAttribute('fill', '#444');
-        markerEl.setAttribute('stroke', '#444');
+        markerEl.setAttribute('fill', lineColor);
+        markerEl.setAttribute('stroke', lineColor);
         markerEl.setAttribute('stroke-width', '1');
         sceneEl.appendChild(markerEl);
       }
