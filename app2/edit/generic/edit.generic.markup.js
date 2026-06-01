@@ -358,15 +358,21 @@ wuwei.edit.generic.markup = ( function () {
     );
 
     if (!(node && 'Memo' === node.type) && !option.flock) {
-      displayHtml.push(wuwei.edit.style.markup.labelRows({
+      displayHtml.push(wuwei.edit.style.markup.labelControlRows({
         label: label,
         align: fontAlign,
+        width: labelStyleWidth,
+        lines: labelStyleLines,
+        offsetX: labelOffsetX,
+        offsetY: labelOffsetY,
+        font: font,
+        fontSize: fontSizeValue,
+        fontPaletteId: 'style_font_color_palette',
         labelSize: 's5',
         alignSize: 's7'
       }));
     }
-
-    if ('Memo' !== node.type && (node.label || 'PageMarker' === node.type || 'Segment' === node.type || 'Topic' === node.type || 'Content' === node.type)) {
+    else if ('Memo' !== node.type && (node.label || 'PageMarker' === node.type || 'Segment' === node.type || 'Topic' === node.type || 'Content' === node.type)) {
       displayHtml.push(
         wuwei.edit.style.markup.labelLayoutRows({
           width: labelStyleWidth,
@@ -426,7 +432,8 @@ wuwei.edit.generic.markup = ( function () {
         fontSize: fontSizeValue,
         fillPaletteId: 'style_fill_palette',
         linePaletteId: 'style_line_color_palette',
-        fontPaletteId: 'style_font_color_palette'
+        fontPaletteId: 'style_font_color_palette',
+        includeFont: (node && 'Memo' === node.type) || option.flock
       })
     );
 

@@ -6873,6 +6873,12 @@ wuwei.model = (function () {
       : {};
     const offsetX = Number.isFinite(Number(labelOffset.x)) ? Number(labelOffset.x) : 0;
     const offsetY = Number.isFinite(Number(labelOffset.y)) ? Number(labelOffset.y) : 0;
+    const labelWidth = Number.isFinite(Number(labelStyle.width)) && Number(labelStyle.width) > 0
+      ? Number(labelStyle.width)
+      : 120;
+    const labelLines = Number.isFinite(Number(labelStyle.lines)) && Number(labelStyle.lines) > 0
+      ? Math.floor(Number(labelStyle.lines))
+      : 1;
     const fontFamily = font.family || 'Arial';
     const fontSize = font.size || '10pt';
     const fontColor = font.color || '#303030';
@@ -6903,6 +6909,15 @@ wuwei.model = (function () {
       .attr('text-anchor', textAnchor)
       .attr('dominant-baseline', 'middle')
       .text(label);
+
+    setMultipleLine({
+      text: text,
+      width: Math.max(1, labelWidth),
+      lines: Math.max(1, labelLines),
+      offsetx: Number(x || 0) + offsetX,
+      offsety: Number(y || 0) + offsetY,
+      verticalAlign: (offsetY > 0) ? 'top' : ((offsetY < 0) ? 'bottom' : 'center')
+    });
   }
 
   function notifyThumbnailLoadFailed(node, thumbnail) {

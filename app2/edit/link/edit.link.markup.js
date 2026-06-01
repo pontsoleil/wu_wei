@@ -79,13 +79,15 @@ wuwei.edit.link.markup = ( function () {
     const labelOffset = labelStyle.offset || {};
     const routing = (link.routing && 'object' === typeof link.routing) ? link.routing : {};
     const fontSizeValue = normalizeFontSizeValue(font && font.size);
+    const labelWidthValue = finiteOr(labelStyle.width, 120);
+    const labelLinesValue = finiteOr(labelStyle.lines, 1);
+    const fontAlignValue = String(font.align || 'center').toLowerCase();
     const label = link.label || '';
     const relation = link.relation || '';
     const shapeValue = link.shape || 'NORMAL';
     const lineKindValue = normalizeLineKind(line.kind);
     const lineWidthValue = finiteOr(line.width, 2);
     const lineColorValue = line.color || '#888888';
-    const fontColorValue = font.color || '#000000';
     const labelOffsetXValue = Number.isFinite(Number(labelOffset.x)) ? Number(labelOffset.x) : 0;
     const labelOffsetYValue = Number.isFinite(Number(labelOffset.y)) ? Number(labelOffset.y) : 0;
     const startArrow = routing.startArrow || {};
@@ -96,15 +98,23 @@ wuwei.edit.link.markup = ( function () {
       motivations = common.motivations,
       shapes = common.linkShapes,
       markerShapes = common.markerShapes,
-      strokeDasharray = common.strokeDasharray,
-      fontSizes = common.fontSizes;
+      strokeDasharray = common.strokeDasharray;
     const arrowShapes = [{ value: '', label: 'NONE' }].concat(markerShapes || []);
     var html = `
 <form id="editform" class="link form-group content">
-  <div class="w3-row">
-    <textarea id="label" name="label" class="w3-col s12 edit-value" rows="${rowcount(label)}" 
-        placeholder="${t('Label')}">${escapeHtml(label)}</textarea>
-  </div>
+  ${wuwei.edit.style.markup.labelControlRows({
+    label: label,
+    align: fontAlignValue,
+    width: labelWidthValue,
+    lines: labelLinesValue,
+    offsetX: labelOffsetXValue,
+    offsetY: labelOffsetYValue,
+    font: font,
+    fontSize: fontSizeValue,
+    fontPaletteId: 'style_font_color_palette',
+    labelSize: 's5',
+    alignSize: 's7'
+  })}
   <div class="w3-row">
     <label for="shape" class="w3-col s4">${t('Shape')}</label>`;  
 html += `    ${selectOptions('shape', shapeValue, shapes, t('Shape'), 's4')}`;
@@ -128,18 +138,6 @@ html += `    ${selectOptions('style.line.kind', lineKindValue, strokeDasharray, 
     <input type="number" id="style_line_width" name="style.line.width" value="${lineWidthValue}" class="w3-col s3 edit-value">
     <input type="color" id="style_line_color" name="style.line.color" value="${escapeHtml(lineColorValue)}" class="w3-col s3 pointer edit-value">
     <div id="style_line_color_palette" name="style_line_color_palette" class="w3-col s3 pointer"></div>
-  </div>
-  <div class="w3-row">
-    <label for="style_font_size" class="w3-col s3">${t('Text')}</label>  
-    ${selectOptions('style.font.size', fontSizeValue, fontSizes, 'Select font size', 's3')}
-    <input type="color" id="style_font_color" name="style.font.color" value="${escapeHtml(fontColorValue)}" class="w3-col s3 pointer edit-value">
-    <div id="style_font_color_palette" name="style_font_color_palette" class="w3-col s3 pointer"></div>
-  </div>
-  <div class="w3-row">
-    <label for="style_label_offset_x" class="w3-col s3">${t('offset X')}</label>
-    <input type="number" id="style_label_offset_x" name="style.label.offset.x" value="${labelOffsetXValue}" class="w3-col s3 edit-value" step="1">
-    <label for="style_label_offset_y" class="w3-col s3">${t('offset Y')}</label>
-    <input type="number" id="style_label_offset_y" name="style.label.offset.y" value="${labelOffsetYValue}" class="w3-col s3 edit-value" step="1">
   </div>
   <div class="w3-row">
     <label for="relation" class="w3-col s3">${t('Role')}</label>

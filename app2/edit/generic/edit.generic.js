@@ -62,6 +62,9 @@ wuwei.edit.generic = wuwei.edit.generic || {};
         el.innerHTML = wuwei.edit.generic.markup.template(param);
         el.style.display = 'block';
         initTabs(el);
+        if (wuwei.edit && typeof wuwei.edit.autoExpandTextareas === 'function') {
+          wuwei.edit.autoExpandTextareas(el);
+        }
       }
       initColorPalettePicker(param);
       resolve(el);

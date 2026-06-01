@@ -101,12 +101,40 @@ wuwei.edit.style.markup = (function () {
     param = param || {};
     return [
       '<div class="w3-row">',
-      '  <textarea id="label" name="label" class="w3-col s12 edit-value" rows="' + rowcount(param.label || '') + '" placeholder="' + esc(t('Label')) + '">' + esc(param.label || '') + '</textarea>',
+      '  <textarea id="label" name="label" class="w3-col s12 edit-value edit-auto-resize" rows="' + rowcount(param.label || '') + '" placeholder="' + esc(t('Label')) + '">' + esc(param.label || '') + '</textarea>',
       '</div>',
       '<div class="w3-row">',
       '  <label class="w3-col ' + (param.labelSize || 's6') + '">' + t(param.alignLabel || 'align') + '</label>',
       labelAlignIcons(param.align || 'center', param.alignSize || 's6'),
       '</div>'
+    ].join('\n');
+  }
+
+  function labelTextRows(param) {
+    var font;
+    param = param || {};
+    font = param.font || {};
+    return [
+      '<div class="w3-row">',
+      '  <label for="style_font_color" class="w3-col s3">' + t('Text') + '</label>',
+      '  <input type="color" id="style_font_color" name="style.font.color" value="' + esc(font.color || param.fontColor || '#303030') + '" class="w3-col s3 pointer edit-value">',
+      '  <div id="' + (param.fontPaletteId || 'style_font_color_palette') + '" class="w3-col s3 pointer"></div>',
+      selectOptions('style.font.size', param.fontSize || font.size || '12pt', wuwei.common.fontSizes, 'Select font size', 's3'),
+      '</div>'
+    ].join('\n');
+  }
+
+  function labelControlRows(param) {
+    param = param || {};
+    return [
+      labelRows({
+        label: param.label,
+        align: param.align,
+        labelSize: param.labelSize || 's5',
+        alignSize: param.alignSize || 's7'
+      }),
+      labelLayoutRows(param),
+      labelTextRows(param)
     ].join('\n');
   }
 
@@ -216,7 +244,7 @@ wuwei.edit.style.markup = (function () {
         '</div>',
         '<div class="w3-row">',
         '  <label for="description_body" class="w3-col s12">' + t('Supplement') + '</label>',
-        '  <textarea id="description_body" name="description.body" class="w3-col s12 edit-value" rows="' + rowcount(supplementBody) + '" placeholder="' + esc(param.placeholder || descriptionPlaceholder()) + '">' + esc(supplementBody) + '</textarea>',
+        '  <textarea id="description_body" name="description.body" class="w3-col s12 edit-value edit-auto-resize" rows="' + rowcount(supplementBody) + '" placeholder="' + esc(param.placeholder || descriptionPlaceholder()) + '">' + esc(supplementBody) + '</textarea>',
         '</div>'
       ].join('\n');
     }
@@ -226,7 +254,7 @@ wuwei.edit.style.markup = (function () {
       selectOptions('description.format', param.format || 'plain/text', descriptionFormatOptions(), null, 's8'),
       '</div>',
       '<div class="w3-row">',
-      '  <textarea id="description_body" name="description.body" class="w3-col s12 edit-value" rows="' + rowcount(param.body || '') + '" placeholder="' + esc(param.placeholder || descriptionPlaceholder()) + '">' + esc(param.body || '') + '</textarea>',
+      '  <textarea id="description_body" name="description.body" class="w3-col s12 edit-value edit-auto-resize" rows="' + rowcount(param.body || '') + '" placeholder="' + esc(param.placeholder || descriptionPlaceholder()) + '">' + esc(param.body || '') + '</textarea>',
       '</div>'
     ].join('\n');
   }
@@ -291,14 +319,16 @@ wuwei.edit.style.markup = (function () {
       );
     }
 
-    rows.push(
-      '<div class="w3-row">',
-      '  <label for="style_font_color" class="w3-col s3">' + t('Text') + '</label>',
-      '  <input type="color" id="style_font_color" name="style.font.color" value="' + (font.color || param.fontColor || '#303030') + '" class="w3-col s3 pointer edit-value">',
-      '  <div id="' + (param.fontPaletteId || 'style_font_color_palette') + '" class="w3-col s3 pointer"></div>',
-      param.includeFontSize === false ? '' : selectOptions('style.font.size', param.fontSize || font.size || '12pt', wuwei.common.fontSizes, 'Select font size', 's3'),
-      '</div>'
-    );
+    if (param.includeFont !== false) {
+      rows.push(
+        '<div class="w3-row">',
+        '  <label for="style_font_color" class="w3-col s3">' + t('Text') + '</label>',
+        '  <input type="color" id="style_font_color" name="style.font.color" value="' + (font.color || param.fontColor || '#303030') + '" class="w3-col s3 pointer edit-value">',
+        '  <div id="' + (param.fontPaletteId || 'style_font_color_palette') + '" class="w3-col s3 pointer"></div>',
+        param.includeFontSize === false ? '' : selectOptions('style.font.size', param.fontSize || font.size || '12pt', wuwei.common.fontSizes, 'Select font size', 's3'),
+        '</div>'
+      );
+    }
 
     return rows.join('\n');
   }
@@ -375,6 +405,8 @@ wuwei.edit.style.markup = (function () {
   return {
     labelAlignIcons: labelAlignIcons,
     labelRows: labelRows,
+    labelTextRows: labelTextRows,
+    labelControlRows: labelControlRows,
     descriptionRows: descriptionRows,
     descriptionFormatOptions: descriptionFormatOptions,
     labelLayoutRows: labelLayoutRows,

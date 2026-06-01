@@ -35,7 +35,9 @@ wuwei.edit.link = wuwei.edit.link || {};
       if (el) {
         el.innerHTML = wuwei.edit.link.markup.template(param);
         el.style.display = 'block';
-
+        if (wuwei.edit && typeof wuwei.edit.autoExpandTextareas === 'function') {
+          wuwei.edit.autoExpandTextareas(el);
+        }
       }
       initColorPalettePicker(param);
       resolve(el);

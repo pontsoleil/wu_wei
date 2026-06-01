@@ -1299,7 +1299,7 @@ wuwei.edit = wuwei.edit || {};
       applyNodeEditPath(targetInfo.object, path, value, el);
     }
     else if ('link' === targetInfo.kind) {
-      setLinkPath(targetInfo.object, path, value || null);
+      setLinkPath(targetInfo.object, path, value);
     }
     else if ('group' === targetInfo.kind) {
       setGroupPath(targetInfo.object, path, value);
@@ -1445,6 +1445,9 @@ wuwei.edit = wuwei.edit || {};
     if (!/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) {
       return;
     }
+    if ('TEXTAREA' === target.tagName) {
+      autoExpand(target);
+    }
     path = fieldIdToPath(target.id, target);
     if (!path || /^edit[A-Z]/.test(target.id)) {
       return;
@@ -1579,25 +1582,47 @@ wuwei.edit = wuwei.edit || {};
   }
 
   function autoExpand(field) {
-    var text;
-    var rows;
     var minRows;
     var maxRows;
+    var lineHeight;
+    var minHeight;
+    var maxHeight;
+    var previousHeight;
 
-    if (!field) {
+    if (!field || 'TEXTAREA' !== field.tagName) {
       return;
     }
 
-    text = String(field.value || '');
     minRows = Number(field.getAttribute('data-min-rows') || 1);
-    maxRows = Number(field.getAttribute('data-max-rows') || 16);
+    maxRows = Number(field.getAttribute('data-max-rows') || 24);
+    lineHeight = parseFloat(window.getComputedStyle(field).lineHeight);
+    if (!Number.isFinite(lineHeight) || lineHeight <= 0) {
+      lineHeight = 20;
+    }
+    minHeight = Math.ceil(lineHeight * Math.max(1, minRows));
+    maxHeight = Math.ceil(lineHeight * Math.max(minRows, maxRows));
+    previousHeight = field.style.height;
 
-    rows = text.split(/\r\n|\r|\n/).length;
-    rows = Math.max(minRows, rows);
-    rows = Math.min(maxRows, rows);
+    field.style.height = 'auto';
+    field.style.overflowY = 'hidden';
+    field.rows = minRows;
+    field.style.height = Math.min(maxHeight, Math.max(minHeight, field.scrollHeight)) + 'px';
+    if (field.scrollHeight > maxHeight) {
+      field.style.overflowY = 'auto';
+    }
+    if (previousHeight !== field.style.height) {
+      field.dispatchEvent(new CustomEvent('wuwei:textarea-resized', { bubbles: true }));
+    }
+  }
 
-    field.rows = rows;
-    field.style.height = null;
+  function autoExpandTextareas(root) {
+    root = root || document;
+    if (!root.querySelectorAll) {
+      return;
+    }
+    root.querySelectorAll('textarea').forEach(function (field) {
+      autoExpand(field);
+    });
   }
 
   function refreshTemplate(param) {
@@ -2030,6 +2055,7 @@ wuwei.edit = wuwei.edit || {};
       refreshTemplate(param)
         .then(() => {
           normalizeEditFieldPaths(document.getElementById('editform'));
+          autoExpandTextareas(document.getElementById('editform'));
           if (!state.Selecting) {
             var labelEl = document.getElementById('label');
             if (labelEl) {
@@ -2547,6 +2573,7 @@ wuwei.edit = wuwei.edit || {};
   ns.dismiss = dismiss;
   ns.commit = commit;
   ns.autoExpand = autoExpand;
+  ns.autoExpandTextareas = autoExpandTextareas;
   ns.refreshTemplate = refreshTemplate;
   ns.infoOpen = infoOpen;
   ns.closeEdit = closeEdit;

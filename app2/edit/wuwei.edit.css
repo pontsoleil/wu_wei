@@ -191,7 +191,12 @@
 }
 
 #edit textarea {
-  position: relative
+  position: relative;
+  min-height: 2em;
+  max-height: 50vh;
+  overflow-y: hidden;
+  resize: none;
+  box-sizing: border-box;
 }
 
 #edit textarea::placeholder {
