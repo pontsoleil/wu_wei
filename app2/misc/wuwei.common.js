@@ -627,7 +627,7 @@ wuwei.common = (function () {
 
   var defaultFont = {
     family: 'sans-serif',
-    size: 14,
+    size: '12pt',
     color: Color.nodeText,
     align: "center"
   };
