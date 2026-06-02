@@ -40,34 +40,6 @@ wuwei.edit.link.markup = ( function () {
     return String(value);
   }
 
-  function controlPointRows(link) {
-    var shape = String(link && link.shape || 'NORMAL').toUpperCase();
-    var x = Number.isFinite(Number(link && link.x)) ? Number(link.x) : '';
-    var y = Number.isFinite(Number(link && link.y)) ? Number(link.y) : '';
-    var x2 = Number.isFinite(Number(link && link.x2)) ? Number(link.x2) : '';
-    var y2 = Number.isFinite(Number(link && link.y2)) ? Number(link.y2) : '';
-
-    if (shape === 'NORMAL') {
-      return '';
-    }
-    if (shape === 'HORIZONTAL2' || shape === 'VERTICAL2') {
-      return `
-  <div class="w3-row">
-    <label for="link_control_x" class="w3-col s2">${t('Control')}</label>
-    <input type="number" id="link_control_x" name="x" value="${x}" class="w3-col s2 edit-value" step="1">
-    <input type="number" id="link_control_y" name="y" value="${y}" class="w3-col s2 edit-value" step="1">
-    <input type="number" id="link_control_x2" name="x2" value="${x2}" class="w3-col s3 edit-value" step="1">
-    <input type="number" id="link_control_y2" name="y2" value="${y2}" class="w3-col s3 edit-value" step="1">
-  </div>`;
-    }
-    return `
-  <div class="w3-row">
-    <label for="link_control_x" class="w3-col s3">${t('Control')}</label>
-    <input type="number" id="link_control_x" name="x" value="${x}" class="w3-col s4 edit-value" step="1">
-    <input type="number" id="link_control_y" name="y" value="${y}" class="w3-col s5 edit-value" step="1">
-  </div>`;
-  }
-
   const template = function( param ) {
     let
       link = param.link || {},
@@ -121,7 +93,6 @@ wuwei.edit.link.markup = ( function () {
 html += `    ${selectOptions('shape', shapeValue, shapes, t('Shape'), 's4')}`;
 html += `    ${selectOptions('style.line.kind', lineKindValue, strokeDasharray, t('Stroke'), 's4')}
   </div>
-  ${controlPointRows(link)}
   <div class="w3-row">
     <label for="routing_startArrow_kind" class="w3-col s3">${t('Start arrow')}</label>
     ${selectOptions('routing.startArrow.kind', startArrow.kind || '', arrowShapes, '', 's3')}

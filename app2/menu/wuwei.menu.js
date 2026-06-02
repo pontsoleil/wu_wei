@@ -2358,6 +2358,23 @@ wuwei.menu = wuwei.menu || {};
     return targets;
   }
 
+  function getUncoveredGroupedNodes(groupedNodes, groupIds) {
+    var covered = {};
+
+    (groupIds || []).forEach(function (gid) {
+      var group = model.findGroupById ? model.findGroupById(gid) : null;
+      getGroupOperationNodes(group).forEach(function (node) {
+        if (node && node.id) {
+          covered[node.id] = true;
+        }
+      });
+    });
+
+    return (groupedNodes || []).filter(function (node) {
+      return !(node && node.id && covered[node.id]);
+    });
+  }
+
   function translateSelectedGroupMark(groupId, dx, dy) {
     var mark;
     if (!groupId || !state.selectedGroupMarks || 'object' !== typeof state.selectedGroupMarks) {
@@ -2478,6 +2495,60 @@ wuwei.menu = wuwei.menu || {};
       topTarget: topTarget,
       bottomTarget: bottomTarget
     };
+  }
+
+  function distributeHorizontalGaps(targets) {
+    var sorted;
+    var totalWidth;
+    var gap;
+    var cursor;
+
+    sorted = (targets || []).filter(function (target) {
+      return !!(target && target.bounds);
+    }).sort(function (a, b) {
+      return a.bounds.left - b.bounds.left;
+    });
+    if (sorted.length < 3) {
+      return;
+    }
+
+    totalWidth = sorted.reduce(function (sum, target) {
+      return sum + target.bounds.width;
+    }, 0);
+    gap = (sorted[sorted.length - 1].bounds.right - sorted[0].bounds.left - totalWidth) / (sorted.length - 1);
+    cursor = sorted[0].bounds.right + gap;
+
+    for (let i = 1; i < sorted.length - 1; i++) {
+      moveOperationTargetCenter(sorted[i], cursor + sorted[i].bounds.width / 2, sorted[i].bounds.cy);
+      cursor += sorted[i].bounds.width + gap;
+    }
+  }
+
+  function distributeVerticalGaps(targets) {
+    var sorted;
+    var totalHeight;
+    var gap;
+    var cursor;
+
+    sorted = (targets || []).filter(function (target) {
+      return !!(target && target.bounds);
+    }).sort(function (a, b) {
+      return a.bounds.top - b.bounds.top;
+    });
+    if (sorted.length < 3) {
+      return;
+    }
+
+    totalHeight = sorted.reduce(function (sum, target) {
+      return sum + target.bounds.height;
+    }, 0);
+    gap = (sorted[sorted.length - 1].bounds.bottom - sorted[0].bounds.top - totalHeight) / (sorted.length - 1);
+    cursor = sorted[0].bounds.bottom + gap;
+
+    for (let i = 1; i < sorted.length - 1; i++) {
+      moveOperationTargetCenter(sorted[i], sorted[i].bounds.cx, cursor + sorted[i].bounds.height / 2);
+      cursor += sorted[i].bounds.height + gap;
+    }
   }
 
   function definePersistentGroup(kind, selectedNodes) {
@@ -3342,7 +3413,7 @@ wuwei.menu = wuwei.menu || {};
       }
     }
     else if (['alignTop', 'alignHorizontal', 'alignBottom', 'alignLeft', 'alignVertical',
-      'alignRight', 'horizontalEqual', 'verticalEqual', 'clipboard', 'paste', 'clone',
+      'alignRight', 'horizontalEqual', 'verticalEqual', 'horizontalGapEqual', 'verticalGapEqual', 'clipboard', 'paste', 'clone',
       'defineSimpleGroup', 'defineHorizontalGroup', 'defineVerticalGroup', 'ungroup',
       'deleteSelectedGroups'].includes(method) ||
       (state.Selecting && ('copy' === method || 'edit' === method))) {
@@ -3404,10 +3475,12 @@ wuwei.menu = wuwei.menu || {};
       var operationTargets = null;
       var operationMetrics = null;
       var isGroupPositionOperation = ['alignTop', 'alignHorizontal', 'alignBottom', 'alignLeft',
-        'alignVertical', 'alignRight', 'horizontalEqual', 'verticalEqual'].includes(method);
+        'alignVertical', 'alignRight', 'horizontalEqual', 'verticalEqual',
+        'horizontalGapEqual', 'verticalGapEqual'].includes(method);
 
       if (isGroupPositionOperation) {
         var alignmentSelection = collectAlignmentSelection();
+        var uncoveredGroupedNodes;
         if (alignmentSelection.groupIds.length === 1 &&
           alignmentSelection.groupedNodes.length === 0 &&
           alignmentSelection.ungroupedNodes.length === 0 &&
@@ -3432,33 +3505,20 @@ wuwei.menu = wuwei.menu || {};
             return;
           }
         }
-        if (!(alignmentSelection.groupIds.length === 0 &&
-          alignmentSelection.groupedNodes.length === 0 &&
-          alignmentSelection.ungroupedNodes.length >= 2)) {
+        operationTargets = buildGroupOperationTargets(alignmentSelection.ungroupedNodes);
+        uncoveredGroupedNodes = getUncoveredGroupedNodes(alignmentSelection.groupedNodes, alignmentSelection.groupIds);
+        if (uncoveredGroupedNodes.length > 0 || operationTargets.length < 2) {
           state.lastFlockOperation = {
             method: method,
             selectedNodeIds: Array.isArray(state.selectedNodeIds) ? state.selectedNodeIds.slice() : [],
             selectedGroupIds: Array.isArray(state.selectedGroupIds) ? state.selectedGroupIds.slice() : [],
             targetCount: 0,
-            error: 'alignment-requires-ungrouped-nodes'
+            error: 'alignment-requires-targets'
           };
-          notifyFlockError('Alignment commands require two or more ungrouped nodes.');
+          notifyFlockError('Alignment commands require two or more nodes or groups.');
           return;
         }
         allNodes = alignmentSelection.ungroupedNodes;
-        operationTargets = allNodes.map(function (node) {
-          var bounds = getNodeOperationBounds(node);
-          if (!bounds) {
-            return null;
-          }
-          return {
-            kind: 'node',
-            node: node,
-            bounds: bounds,
-            x: bounds.cx,
-            y: bounds.cy
-          };
-        }).filter(Boolean);
         operationMetrics = getOperationTargetMetrics(operationTargets);
         if (!operationMetrics || operationMetrics.count < 1) {
           state.lastFlockOperation = {
@@ -3586,6 +3646,9 @@ wuwei.menu = wuwei.menu || {};
             }
           }
         }
+        else if ('horizontalGapEqual' === method) {
+          distributeHorizontalGaps(operationTargets);
+        }
         else if ('verticalEqual' === method) {
           if (count > 1) {
             let diff = (BottomNode.bounds.cy - TopNode.bounds.cy) / (count - 1);
@@ -3596,6 +3659,9 @@ wuwei.menu = wuwei.menu || {};
               moveOperationTargetCenter(operationTargets[i], operationTargets[i].bounds.cx, TopNode.bounds.cy + diff * i);
             }
           }
+        }
+        else if ('verticalGapEqual' === method) {
+          distributeVerticalGaps(operationTargets);
         }
         // logData = { command: method, param: { node: allNodes } };
       }
@@ -6595,8 +6661,14 @@ wuwei.menu = wuwei.menu || {};
     registerClick('#alignMenu .operators .operator.HorizontalEqual', () => {
       ContextOperate('horizontalEqual');
     });
+    registerClick('#alignMenu .operators .operator.HorizontalGapEqual', () => {
+      ContextOperate('horizontalGapEqual');
+    });
     registerClick('#alignMenu .operators .operator.VerticalEqual', () => {
       ContextOperate('verticalEqual');
+    });
+    registerClick('#alignMenu .operators .operator.VerticalGapEqual', () => {
+      ContextOperate('verticalGapEqual');
     });
     registerClick('.pulldown.flock .operators .operator.DefineSimpleGroup', () => {
       ContextOperate('defineSimpleGroup');

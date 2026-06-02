@@ -338,9 +338,17 @@ wuwei.menu.markup = (function () {
         <i class="fas fa-arrows-alt-h fa-fw"></i>
         <span>${translate('Horizontal Equal')}</span>
       </div>
+      <div class="operator HorizontalGapEqual selecting">
+        <i class="fas fa-grip-lines fa-fw"></i>
+        <span>${translate('Horizontal Gap Equal')}</span>
+      </div>
       <div class="operator VerticalEqual selecting">
         <i class="fas fa-arrows-alt-v fa-fw"></i>
         <span>${translate('Vertical Equal')}</span>
+      </div>
+      <div class="operator VerticalGapEqual selecting">
+        <i class="fas fa-grip-lines-vertical fa-fw"></i>
+        <span>${translate('Vertical Gap Equal')}</span>
       </div>
       </div>
     </div>
