@@ -238,20 +238,33 @@ input.search[type=text]:focus {
  * page status
  */
 #page_name {
-  position: absolute;
+  position: fixed;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  max-width: calc(100vw - 18rem);
   text-align: right;
+  white-space: nowrap;
   top: 0.5rem;
-  right: 9rem;
+  right: 10.75rem;
   color: #808080;
+  z-index: 2;
 }
 #menu.simulation #page_name {
-  right: 11rem;
+  right: 10.75rem;
+}
+#page_name .pp {
+  order: 2;
 }
 #page_name .name {
-  width: 400px;
-  position: absolute;
+  order: 1;
+  display: inline-block;
+  max-width: min(24rem, calc(100vw - 23rem));
+  overflow: hidden;
+  text-overflow: ellipsis;
   text-align: right;
-  right: 2rem;
 }
 #page_name .description {
   visibility: hidden;
@@ -264,7 +277,7 @@ input.search[type=text]:focus {
   margin-top: 30px;
   /* Position the tooltip */
   position: absolute;
-  right: -4rem;
+  right: 0;
   z-index: 10;
 }
 #page_name .description::after {
