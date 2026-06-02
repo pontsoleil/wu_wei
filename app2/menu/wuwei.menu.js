@@ -2277,7 +2277,51 @@ wuwei.menu = wuwei.menu || {};
   function getGroupOperationBounds(group) {
     var nodes = getGroupOperationNodes(group);
     var bounds = nodes.map(getNodeOperationBounds).filter(Boolean);
+    var box;
+    var spine;
+    var strokeWidth;
     var left, right, top, bottom;
+
+    if (group && group.type === 'simple' && model.resolveGroupBox) {
+      box = model.resolveGroupBox(group.id);
+      if (box) {
+        left = Number(box.x);
+        top = Number(box.y);
+        right = left + Number(box.width);
+        bottom = top + Number(box.height);
+        return {
+          left: left,
+          right: right,
+          top: top,
+          bottom: bottom,
+          width: right - left,
+          height: bottom - top,
+          cx: (left + right) / 2,
+          cy: (top + bottom) / 2
+        };
+      }
+    }
+
+    if (group && (group.type === 'horizontal' || group.type === 'vertical') && model.resolveGroupSpine) {
+      spine = model.resolveGroupSpine(group.id);
+      if (spine) {
+        strokeWidth = Number.isFinite(Number(spine.strokeWidth)) ? Number(spine.strokeWidth) : 0;
+        left = Math.min(Number(spine.x1), Number(spine.x2)) - strokeWidth / 2;
+        right = Math.max(Number(spine.x1), Number(spine.x2)) + strokeWidth / 2;
+        top = Math.min(Number(spine.y1), Number(spine.y2)) - strokeWidth / 2;
+        bottom = Math.max(Number(spine.y1), Number(spine.y2)) + strokeWidth / 2;
+        return {
+          left: left,
+          right: right,
+          top: top,
+          bottom: bottom,
+          width: right - left,
+          height: bottom - top,
+          cx: (left + right) / 2,
+          cy: (top + bottom) / 2
+        };
+      }
+    }
 
     if (!bounds.length) {
       return null;
