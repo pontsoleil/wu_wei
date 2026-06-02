@@ -1368,6 +1368,7 @@ wuwei.note = (function () {
       state: normalizeRecordState(src),
       deleted: normalizeDeletedInfo(src),
       moveTogether: (false !== src.moveTogether),
+      lockMemberMove: !!src.lockMemberMove,
       orientation: src.orientation || 'auto',
       spine: {
         kind: spine.kind || defaultSpine.kind,

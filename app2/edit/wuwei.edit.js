@@ -904,6 +904,12 @@ wuwei.edit = wuwei.edit || {};
     if (['x', 'y', 'x2', 'y2'].indexOf(path) >= 0) {
       value = Number(value);
     }
+    if ('routing.cornerRadius' === path) {
+      link.routing = (link.routing && 'object' === typeof link.routing) ? link.routing : {};
+      value = Math.max(0, Number(value || 0));
+      delete link.routing.path;
+      delete link.path;
+    }
     if ('routing.startArrow.kind' === path || 'routing.endArrow.kind' === path) {
       link.routing = link.routing || {};
       var key = ('routing.startArrow.kind' === path) ? 'startArrow' : 'endArrow';
@@ -1142,7 +1148,9 @@ wuwei.edit = wuwei.edit || {};
       name: 'name',
       visible: 'visible',
       moveTogether: 'moveTogether',
+      lockMemberMove: 'lockMemberMove',
       type: 'type',
+      routing_cornerRadius: 'routing.cornerRadius',
       spine_kind: 'spine.kind',
       spine_width: 'spine.width',
       spine_color: 'spine.color',

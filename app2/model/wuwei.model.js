@@ -1116,6 +1116,7 @@ wuwei.model = (function () {
         : { format: 'plain', body: '' },
       visible: (typeof param.visible === 'boolean') ? param.visible : (param.enabled !== false),
       moveTogether: (false !== param.moveTogether),
+      lockMemberMove: !!param.lockMemberMove,
       orientation: param.orientation || 'auto',
       spine: {
         kind: spine.kind || defaultSpine.kind,
@@ -1495,11 +1496,23 @@ wuwei.model = (function () {
     return ids;
   }
 
+  function isSimpleGroupMemberMoveLocked(nodeId) {
+    if (!nodeId) {
+      return false;
+    }
+    return findGroupsByNodeId(nodeId).some(function (group) {
+      return group && group.type === 'simple' && false !== group.visible && !!group.lockMemberMove;
+    });
+  }
+
   function getDragMoveIds(page, d) {
     var nodeGroups = [];
     var selectedIds;
 
     if (!d) {
+      return [];
+    }
+    if (isSimpleGroupMemberMoveLocked(d.id)) {
       return [];
     }
 
@@ -1513,9 +1526,10 @@ wuwei.model = (function () {
     }
 
     // 非 group node のみ通常複数選択移動
-    selectedIds = getSelectedNonGroupNodeIds(page);
-    if (!state.Selecting &&
-      d3.select('g.node#' + d.id).classed('selected') &&
+    selectedIds = getSelectedNonGroupNodeIds(page).filter(function (id) {
+      return !isSimpleGroupMemberMoveLocked(id);
+    });
+    if (d3.select('g.node#' + d.id).classed('selected') &&
       selectedIds.length > 1 &&
       selectedIds.indexOf(d.id) >= 0) {
       return selectedIds;
@@ -1627,6 +1641,7 @@ wuwei.model = (function () {
 
     if ('view' === graph.mode) { return; }
     if (!canMoveRecordByCurrentUser(d)) { return; }
+    if (isSimpleGroupMemberMoveLocked(d && d.id)) { return; }
 
     ensureFiniteNodePosition(d);
 
@@ -1641,6 +1656,11 @@ wuwei.model = (function () {
 
     if ('draw' === graph.mode) {
       state.dragMoveIds = getDragMoveIds(page, d);
+      if (!state.dragMoveIds.length) {
+        state.dragging = false;
+        d.dragging = false;
+        return;
+      }
       state.dragMoveAnchor = { x: d.x, y: d.y };
       state.dragMoveOrigin = buildDragMoveOrigin(state.dragMoveIds);
       state.attachedSemanticGroupOrigin = buildAttachedSemanticGroupDragOrigins(state.dragMoveIds);
@@ -1800,6 +1820,7 @@ wuwei.model = (function () {
 
     if ('view' === graph.mode) { return; }
     if (!canMoveRecordByCurrentUser(d)) { return; }
+    if (isSimpleGroupMemberMoveLocked(d && d.id)) { return; }
 
     ensureFiniteNodePosition(d);
 
@@ -1898,6 +1919,7 @@ wuwei.model = (function () {
     if ('view' === graph.mode) { return; }
     ownerId = getRecordOwnerId(d);
     if (ownerId && ownerId !== common.getCurrentOwnerId()) { return; }
+    if (isSimpleGroupMemberMoveLocked(d && d.id)) { return; }
 
     state.dragging = false;
     d.dragging = false;
@@ -6631,13 +6653,20 @@ wuwei.model = (function () {
     return v2;
   }
 
+  function getLinkCornerRadius(link) {
+    var routing = (link && link.routing && 'object' === typeof link.routing) ? link.routing : {};
+    var value = Number(routing.cornerRadius);
+    return Number.isFinite(value) && value >= 0 ? value : ROUND;
+  }
+
   function hierarchyH(link, sPos, tPos, move) {
     let
       sX = sPos.x, sY = sPos.y, sTY = sPos.TY, sRX = sPos.RX, sBY = sPos.BY, sLX = sPos.LX,
       tX = tPos.x, tY = tPos.y, tTY = tPos.TY, tRX = tPos.RX, tBY = tPos.BY, tLX = tPos.LX,
       X, Y, sCY, tCY, sCX, tCX,
       P1, P2, P3, P4,
-      dx, pathString;
+      dx, pathString,
+      ROUND = getLinkCornerRadius(link);
 
     function updatePointsH(link) {
       X = link.x; Y = link.y;
@@ -6749,7 +6778,8 @@ wuwei.model = (function () {
     let sX = sPos.x, sY = sPos.y, sTY = sPos.TY, sRX = sPos.RX, sBY = sPos.BY, sLX = sPos.LX,
       tX = tPos.x, tY = tPos.y, tTY = tPos.TY, tRX = tPos.RX, tBY = tPos.BY, tLX = tPos.LX,
       X, Y, sCY, tCY,
-      dy, pathString;
+      dy, pathString,
+      ROUND = getLinkCornerRadius(link);
     function updatePointsV(link) {
       X = link.x; Y = link.y;
       sCX = nearest(X, sLX, sRX); tCX = nearest(X, tLX, tRX);
@@ -7104,7 +7134,8 @@ wuwei.model = (function () {
     let sX = sPos.x, sY = sPos.y, sTY = sPos.TY, sRX = sPos.RX, sBY = sPos.BY, sLX = sPos.LX,
       tX = tPos.x, tY = tPos.y, tTY = tPos.TY, tRX = tPos.RX, tBY = tPos.BY, tLX = tPos.LX,
       X, Y, Y2, sCY1, sCY2, tCY1, tCY2, sCX, tCX,
-      dy, dx, dy2, pathString;
+      dy, dx, dy2, pathString,
+      ROUND = getLinkCornerRadius(link);
     function updatePointsH(P3, P4) {
       X = P3.x; Y1 = P3.y; Y2 = P4.y;
       if (undefined === Y2) {
@@ -7340,7 +7371,8 @@ wuwei.model = (function () {
     let sX = sPos.x, sY = sPos.y, sTY = sPos.TY, sRX = sPos.RX, sBY = sPos.BY, sLX = sPos.LX,
       tX = tPos.x, tY = tPos.y, tTY = tPos.TY, tRX = tPos.RX, tBY = tPos.BY, tLX = tPos.LX,
       X1, X2, Y, sCY, tCY,
-      dy, dx, dx2, pathString;
+      dy, dx, dx2, pathString,
+      ROUND = getLinkCornerRadius(link);
     function updatePointsV(P3, P4) {
       X1 = P3.x; Y = P3.y; X2 = P4.x;
       if (!X2) {

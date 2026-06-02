@@ -28,6 +28,10 @@ wuwei.edit.group.markup = (function () {
     return false === value ? '' : ' checked';
   }
 
+  function checkedTrue(value) {
+    return true === value ? ' checked' : '';
+  }
+
   function num(value, fallback) {
     var n = Number(value);
     return Number.isFinite(n) ? n : fallback;
@@ -78,6 +82,9 @@ wuwei.edit.group.markup = (function () {
   </div>
   <div class="w3-row">
     <label class="w3-col s12"><input type="checkbox" id="moveTogether" name="moveTogether" class="edit-value"${checked(group && group.moveTogether)}> ${t('Move together')}</label>
+  </div>
+  <div class="w3-row" id="lockMemberMove-row" style="display:${isSimple ? 'block' : 'none'}">
+    <label class="w3-col s12"><input type="checkbox" id="lockMemberMove" name="lockMemberMove" class="edit-value"${checkedTrue(group && group.lockMemberMove)}> ${t('Lock member move')}</label>
   </div>
   <div class="w3-row">
     <label for="type" class="w3-col s4">${t('Shape')}</label>

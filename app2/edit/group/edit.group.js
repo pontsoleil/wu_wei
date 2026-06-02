@@ -71,12 +71,16 @@ wuwei.edit.group = wuwei.edit.group || {};
 
   function bindTypeChangeHandler() {
     var typeEl = $('type');
+    var lockRow = $('lockMemberMove-row');
 
     if (!typeEl) {
       return;
     }
     typeEl.onchange = function () {
       applySpineToFields(defaultSpineForType(typeEl.value || 'simple'));
+      if (lockRow) {
+        lockRow.style.display = (typeEl.value === 'simple') ? 'block' : 'none';
+      }
     };
   }
 
@@ -123,7 +127,7 @@ wuwei.edit.group = wuwei.edit.group || {};
   function commit() {
     var group = stateMap.group;
     var previousType;
-    var typeEl, nameEl, descriptionEl, moveTogetherEl;
+    var typeEl, nameEl, descriptionEl, moveTogetherEl, lockMemberMoveEl;
     var spineKindEl, spineWidthEl, spineColorEl, spinePaddingEl, spineVisibleEl;
     var spinePaddingTopEl, spinePaddingRightEl, spinePaddingBottomEl, spinePaddingLeftEl;
     var nextType;
@@ -140,6 +144,7 @@ wuwei.edit.group = wuwei.edit.group || {};
     nameEl = $('name');
     descriptionEl = $('description_body');
     moveTogetherEl = $('moveTogether');
+    lockMemberMoveEl = $('lockMemberMove');
     spineKindEl = $('spine_kind');
     spineWidthEl = $('spine_width');
     spineColorEl = $('spine_color');
@@ -161,6 +166,9 @@ wuwei.edit.group = wuwei.edit.group || {};
     }
     if (moveTogetherEl) {
       group.moveTogether = !!moveTogetherEl.checked;
+    }
+    if (lockMemberMoveEl) {
+      group.lockMemberMove = !!lockMemberMoveEl.checked;
     }
 
     nextType = typeEl ? typeEl.value : group.type;

@@ -88,6 +88,7 @@ wuwei.edit.link.markup = ( function () {
     const lineKindValue = normalizeLineKind(line.kind);
     const lineWidthValue = finiteOr(line.width, 2);
     const lineColorValue = line.color || '#888888';
+    const cornerRadiusValue = Math.max(0, finiteOr(routing.cornerRadius, 16));
     const labelOffsetXValue = Number.isFinite(Number(labelOffset.x)) ? Number(labelOffset.x) : 0;
     const labelOffsetYValue = Number.isFinite(Number(labelOffset.y)) ? Number(labelOffset.y) : 0;
     const startArrow = routing.startArrow || {};
@@ -138,6 +139,10 @@ html += `    ${selectOptions('style.line.kind', lineKindValue, strokeDasharray, 
     <input type="number" id="style_line_width" name="style.line.width" value="${lineWidthValue}" class="w3-col s3 edit-value">
     <input type="color" id="style_line_color" name="style.line.color" value="${escapeHtml(lineColorValue)}" class="w3-col s3 pointer edit-value">
     <div id="style_line_color_palette" name="style_line_color_palette" class="w3-col s3 pointer"></div>
+  </div>
+  <div class="w3-row" id="routing_cornerRadius-row" style="display:${['HORIZONTAL', 'VERTICAL', 'HORIZONTAL2', 'VERTICAL2'].indexOf(String(shapeValue).toUpperCase()) >= 0 ? 'block' : 'none'}">
+    <label for="routing_cornerRadius" class="w3-col s6">${t('Corner R')}</label>
+    <input type="number" id="routing_cornerRadius" name="routing.cornerRadius" value="${cornerRadiusValue}" class="w3-col s6 edit-value" min="0" step="1">
   </div>
   <div class="w3-row">
     <label for="relation" class="w3-col s3">${t('Role')}</label>

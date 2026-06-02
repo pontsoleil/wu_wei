@@ -1309,6 +1309,7 @@
     group.description = normalizeDescription(group.description);
     group.visible = group.visible === undefined ? true : !!group.visible;
     group.moveTogether = group.moveTogether === undefined ? true : !!group.moveTogether;
+    group.lockMemberMove = !!group.lockMemberMove;
     group.orientation = group.orientation || 'horizontal';
     group.spine = normalizeSpine(group.spine);
     group.members = ensureArray(group.members);
@@ -1401,6 +1402,7 @@
     group.description = normalizeDescription(group.description);
     group.visible = group.visible === undefined ? true : !!group.visible;
     group.moveTogether = group.moveTogether === undefined ? true : !!group.moveTogether;
+    group.lockMemberMove = !!group.lockMemberMove;
     group.orientation = group.orientation || 'horizontal';
     group.spine = normalizeSpine(group.spine);
     group.members = ensureArray(group.members);
@@ -1417,6 +1419,7 @@
     group.description = normalizeDescription(group.description);
     group.visible = group.visible === undefined ? true : !!group.visible;
     group.moveTogether = group.moveTogether === undefined ? true : !!group.moveTogether;
+    group.lockMemberMove = !!group.lockMemberMove;
     group.members = ensureArray(group.members);
     group.spine = normalizeSpine(group.spine);
     group.audit = isObject(group.audit) ? group.audit : {};

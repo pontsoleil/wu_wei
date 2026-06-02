@@ -247,7 +247,7 @@ wuwei.joint = wuwei.joint || {};
         p.indexOf('style.') === 0 || p.indexOf('routing.') === 0;
     }
     if (kind === 'group') {
-      return p === 'visible' || p === 'orientation' || p === 'moveTogether' ||
+      return p === 'visible' || p === 'orientation' || p === 'moveTogether' || p === 'lockMemberMove' ||
         p.indexOf('style.') === 0 || p.indexOf('spine.') === 0;
     }
     return false;
