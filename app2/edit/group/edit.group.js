@@ -84,6 +84,14 @@ wuwei.edit.group = wuwei.edit.group || {};
     };
   }
 
+  function initColorPalettePicker(group) {
+    if (!wuwei.edit.style || !wuwei.edit.style.markup ||
+      typeof wuwei.edit.style.markup.initPalette !== 'function') {
+      return;
+    }
+    wuwei.edit.style.markup.initPalette('spine_color_palette', 'spine_color', group, 'spine.color');
+  }
+
   function resolveGroup(target) {
     if (!target) {
       return null;
@@ -120,6 +128,7 @@ wuwei.edit.group = wuwei.edit.group || {};
     pane.innerHTML = wuwei.edit.group.markup.template(group);
     pane.style.display = 'block';
     bindTypeChangeHandler();
+    initColorPalettePicker(group);
 
     return true;
   }

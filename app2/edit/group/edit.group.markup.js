@@ -98,8 +98,9 @@ wuwei.edit.group.markup = (function () {
   </div>
   <div class="w3-row">
     <label for="spine_width" class="w3-col s4">${t('Size')}</label>
-    <input type="number" id="spine_width" name="spine.width" class="w3-col s4 edit-value" value="${num(spine.width, isSimple ? 2 : 6)}">
-    <input type="color" id="spine_color" name="spine.color" class="w3-col s4 pointer edit-value" value="${esc(spine.color || '#888888')}">
+    <input type="number" id="spine_width" name="spine.width" class="w3-col s3 edit-value" value="${num(spine.width, isSimple ? 2 : 6)}">
+    <input type="color" id="spine_color" name="spine.color" class="w3-col s3 pointer edit-value" value="${esc(spine.color || '#888888')}">
+    <div id="spine_color_palette" class="w3-col s2 pointer"></div>
   </div>
   <div class="w3-row">
     <label for="spine_padding" class="w3-col s4">${t('Padding')}</label>
