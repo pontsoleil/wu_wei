@@ -4428,7 +4428,7 @@ wuwei.model = (function () {
       content,
       bbox, // x0, y0,
       lineHeight,
-      lines, words, word,
+      lines, tokens, token, candidate,
       tempText, tempWidth, tempHeight,
       i, li, j, lj, idx, lineLength, ltr,
       line = '',
@@ -4477,9 +4477,11 @@ wuwei.model = (function () {
       return !!result;
     }
 
-    content = (t && t.node() && t.text()) ? t.text().trim() : '';
+    content = (t && t.node() && t.text()) ? t.text() : '';
     if (!content) { return; }
 
+    t.attr('xml:space', 'preserve')
+      .style('white-space', 'pre');
     bbox = t.node().getBBox();
     lineHeight = bbox.height + SPACING;
     if (Number.isFinite(MAX_LINES) && MAX_LINES > 0) {
@@ -4510,26 +4512,34 @@ wuwei.model = (function () {
           isLineSinglebype = isLineSinglebype && isSingleByte(line.charCodeAt(idx));
         }
         if (isLineSinglebype) {
-          words = line.split(' ');
-          for (j = 0, lj = words.length; j < lj; j++) {
-            word = words[j];
-            t.text(`${tempText} ${word}`);
+          tokens = line.match(/ +|[^ ]+/g) || [''];
+          for (j = 0, lj = tokens.length; j < lj; j++) {
+            token = tokens[j];
+            candidate = tempText + token;
+            t.text(candidate);
             tempWidth = t.node().getBBox().width;
             if (tempWidth > WIDTH) {
-              tArray.push(tempText);
+              if (tempText) {
+                tArray.push(tempText);
+              }
               tempText = '';
-              t.text(word);
+              t.text(token);
               tempHeight += lineHeight;
               if (tempHeight > HEIGHT) {
-                tArray[tArray.length - 1] += '...';
+                if (tArray.length) {
+                  tArray[tArray.length - 1] += '...';
+                }
+                else {
+                  tArray.push(token + '...');
+                }
                 break LOOP;
               }
               else {
-                tempText = word;
+                tempText = token;
               }
             }
             else {
-              tempText += ` ${word}`;
+              tempText = candidate;
             }
           }
         }
@@ -4561,7 +4571,7 @@ wuwei.model = (function () {
     t.text('');
 
     if (tempText) {
-      tArray.push(tempText.trim());
+      tArray.push(tempText);
     }
 
     t.empty();
@@ -4569,6 +4579,7 @@ wuwei.model = (function () {
     for (var lineI = 0; lineI < lineCount; lineI++) {
       line = tArray[lineI];
       t.append('tspan')
+        .attr('xml:space', 'preserve')
         .attr('x', OFFSET_X)
         .attr('y', lineTspanY(lineI, lineCount))
         .attr('dy', lineTspanAttrs())
