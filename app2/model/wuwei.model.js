@@ -2634,8 +2634,18 @@ wuwei.model = (function () {
         body: String(param.description || '')
       };
 
-    self.x = finiteOr(param.x, 0);
-    self.y = finiteOr(param.y, 0);
+    if (Number.isFinite(Number(param.x))) {
+      self.x = Number(param.x);
+    }
+    if (Number.isFinite(Number(param.y))) {
+      self.y = Number(param.y);
+    }
+    if (Number.isFinite(Number(param.x2))) {
+      self.x2 = Number(param.x2);
+    }
+    if (Number.isFinite(Number(param.y2))) {
+      self.y2 = Number(param.y2);
+    }
 
     self.shape = param.shape || 'NORMAL';
     self.state = param.state || 'active';
@@ -2675,9 +2685,6 @@ wuwei.model = (function () {
     };
     self.color = self.style.line.color;
     self.size = finiteOr(self.style.line.width, defaultLink.style.line.width);
-
-    if (!Number.isFinite(self.x)) { self.x = 0; }
-    if (!Number.isFinite(self.y)) { self.y = 0; }
 
     return self;
   };
@@ -8121,7 +8128,12 @@ wuwei.model = (function () {
     applyLinkMarkers(d3link, link, pathEl, color, size);
 
     if (label) {
-      renderLinkLabel(d3link, link, link.x, link.y);
+      renderLinkLabel(
+        d3link,
+        link,
+        Number.isFinite(Number(link.x)) ? Number(link.x) : mid.x,
+        Number.isFinite(Number(link.y)) ? Number(link.y) : mid.y
+      );
     }
 
     return link;

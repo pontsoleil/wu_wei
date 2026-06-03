@@ -1202,8 +1202,6 @@ wuwei.note = (function () {
       type: 'Link',
       from: (typeof src.from === 'object') ? src.from.id : (src.from || ''),
       to: (typeof src.to === 'object') ? src.to.id : (src.to || ''),
-      x: Number.isFinite(Number(src.x)) ? Number(src.x) : 0,
-      y: Number.isFinite(Number(src.y)) ? Number(src.y) : 0,
       shape: src.shape || oldView.shape || 'NORMAL',
       visible: (false !== src.visible),
       relation: src.relation || '',
@@ -1221,6 +1219,12 @@ wuwei.note = (function () {
       out.visible = false;
     }
 
+    if (Number.isFinite(Number(src.x))) {
+      out.x = Number(src.x);
+    }
+    if (Number.isFinite(Number(src.y))) {
+      out.y = Number(src.y);
+    }
     if (Number.isFinite(Number(src.x2))) {
       out.x2 = Number(src.x2);
     }
