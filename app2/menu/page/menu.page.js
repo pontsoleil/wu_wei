@@ -101,6 +101,30 @@ wuwei.menu.page = wuwei.menu.page || {};
   }
 
 
+  function updatePageListCard(page, name, description) {
+    var card;
+
+    if (!page) {
+      return;
+    }
+
+    card = document.querySelector('#page-list #gallery .flip-card[data-page-id="' + page.id + '"]');
+    if (!card) {
+      card = document.getElementById('page_' + page.pp);
+    }
+    if (!card) {
+      return;
+    }
+
+    Array.prototype.slice.call(card.querySelectorAll('.name')).forEach(function (el) {
+      el.textContent = name;
+    });
+    Array.prototype.slice.call(card.querySelectorAll('.description')).forEach(function (el) {
+      el.textContent = description;
+    });
+  }
+
+
   function ensurePageThumbnails() {
     const pages = getPages();
 
@@ -230,9 +254,7 @@ wuwei.menu.page = wuwei.menu.page || {};
     }
     let page_list = document.querySelector('#page-list');
     if (page_list && 'block' === page_list.style.display) {
-      page_list.querySelector(`.list #gallery #page_${pp} .name`).innerHTML = name;
-      let descriptionEl = page_list.querySelector(`.list #gallery #page_${pp} .description`);
-      descriptionEl.innerHTML = description;
+      updatePageListCard(page, name, description);
     }
     wuwei.menu.refreshPagenation();
     close_pane();
