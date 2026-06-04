@@ -2707,27 +2707,32 @@ wuwei.model = (function () {
   }
 
   function endPoint(link) {
-    let path, x, y, match1;
+    let path, x, y, match1, matches, last;
     if (!link.path) {
       x = y = 0;
     }
     else {
       path = link.path;
-      match1 = path.match(/[QL]([-]?\d*\.?\d*),([-]?\d*\.?\d*)$/);
-      if (match1) {
-        x = +match1[1]; y = +match1[2];
+      matches = String(path).match(/[-]?\d*\.?\d+,[-]?\d*\.?\d+/g);
+      last = matches && matches.length ? matches[matches.length - 1].match(/([-]?\d*\.?\d+),([-]?\d*\.?\d+)/) : null;
+      if (last) {
+        x = +last[1]; y = +last[2];
       }
       else {
-        let match2 = path.match(/([-]?\d*\.?\d*),([-]?\d*\.?\d*) H([-]?\d*\.?\d*)$/);
-        if (match2) {
-          x = +match2[3]; y = +match2[2];
+        x = y = 0;
+      }
+
+      match1 = path.match(/[HV]([-]?\d*\.?\d*)$/);
+      if (match1) {
+        if ('H' === path[path.length - match1[0].length]) {
+          x = +match1[1];
         }
         else {
-          let match3 = path.match(/([-]?\d*\.?\d*),([-]?\d*\.?\d*) V([-]?\d*\.?\d*)$/);
-          if (match3) {
-            x = +match3[1]; y = +match3[3];
-          }
+          y = +match1[1];
         }
+      }
+      else if (!last) {
+        x = y = 0;
       }
     }
     return { x: x, y: y };
