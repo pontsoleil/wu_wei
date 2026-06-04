@@ -3159,11 +3159,7 @@ wuwei.model = (function () {
       }
       X1 = P3.x; Y1 = P3.y; X2 = P4.x; Y2 = P4.y;
 
-      if (Math.abs(X1 - control.x) < 16 &&
-        ((Y2 < control.y && control.y < Y1) || (Y1 < control.y && control.y < Y2))) {
-        move.x = mouse.x - X1;
-      }
-      else if (P2 && Math.abs(Y1 - control.y) < 16 &&
+      if (P2 && Math.abs(Y1 - control.y) < 16 &&
         ((P2.x < control.x && control.x < X1) || (X1 < control.x && control.x < P2.x))) {
         move.y = mouse.y - Y1;
       }
@@ -3171,15 +3167,19 @@ wuwei.model = (function () {
         ((X2 < control.x && control.x < P5.x) || (P5.x < control.x && control.x < X2))) {
         move.y2 = mouse.y - Y2;
       }
+      else if (Math.abs(X1 - control.x) < 16 &&
+        ((Y2 < control.y && control.y < Y1) || (Y1 < control.y && control.y < Y2))) {
+        move.x = mouse.x - X1;
+      }
       if (!isFinite(move.x) && !isFinite(move.y) && !isFinite(move.y2)) {
-        if (Number.isFinite(X1) && Math.abs(control.x - X1) < DIFF) {
-          move.x = mouse.x - X1;
-        }
-        else if (Number.isFinite(Y1) && Math.abs(control.y - Y1) < DIFF) {
+        if (Number.isFinite(Y1) && Math.abs(control.y - Y1) < DIFF) {
           move.y = mouse.y - Y1;
         }
         else if (Number.isFinite(Y2) && Math.abs(control.y - Y2) < DIFF) {
           move.y2 = mouse.y - Y2;
+        }
+        else if (Number.isFinite(X1) && Math.abs(control.x - X1) < DIFF) {
+          move.x = mouse.x - X1;
         }
       }
     }
