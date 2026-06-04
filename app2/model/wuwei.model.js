@@ -2871,6 +2871,329 @@ wuwei.model = (function () {
     return wuwei.util.pContext({ x: x, y: y });
   }
 
+  function getLinkEndpointGuideLayer() {
+    var canvas = d3.select(`g#${state.canvasId}`);
+    var layer = canvas.select('g.LinkEndpointGuideLayer');
+    if (!layer.node()) {
+      layer = canvas.append('g')
+        .attr('class', 'LinkEndpointGuideLayer');
+    }
+    if (layer.node() && layer.node().parentNode) {
+      layer.node().parentNode.appendChild(layer.node());
+    }
+    return layer;
+  }
+
+  function clearLinkEndpointPreview() {
+    d3.select(`g#${state.canvasId}`).selectAll('path.LinkEndpointPreview').remove();
+  }
+
+  function renderLinkEndpointPreview(link, end, point) {
+    var sP, eP, pathString, layer, preview, color, size, dash;
+
+    if (!link || !point) {
+      return;
+    }
+
+    sP = ('start' === end) ? point : startPoint(link);
+    eP = ('start' === end) ? endPoint(link) : point;
+    pathString = `M${sP.x},${sP.y} L${eP.x},${eP.y}`;
+    color = (((link.style || {}).line || {}).color) || link.color || '#404040';
+    size = Number((((link.style || {}).line || {}).width) || link.size || 2);
+    dash = strokeDasharrayForLineKind((((link.style || {}).line || {}).kind), size);
+    layer = getLinkEndpointGuideLayer();
+    preview = layer.select('path.LinkEndpointPreview');
+
+    if (!preview.node()) {
+      preview = layer.append('path')
+        .attr('class', 'LinkEndpointPreview')
+        .attr('fill', 'none')
+        .attr('pointer-events', 'none')
+        .attr('stroke-opacity', 0.65);
+    }
+    if (preview.node() && layer.node() && layer.node().firstChild !== preview.node()) {
+      layer.node().insertBefore(preview.node(), layer.node().firstChild);
+    }
+
+    preview
+      .attr('d', pathString)
+      .attr('stroke', color)
+      .attr('stroke-width', Math.max(size, 2));
+    if (dash) {
+      preview.attr('stroke-dasharray', dash);
+    }
+    else {
+      preview.attr('stroke-dasharray', null);
+    }
+  }
+
+  function getLinkEndpointTarget(link, end, point) {
+    var excluded = {}, edge = 18, inc = 4, best = null, bestDistance = Infinity;
+
+    if (!link || !point) {
+      return null;
+    }
+
+    excluded[link.from] = true;
+    excluded[link.to] = true;
+
+    function roundedPosition(prefix, diff) {
+      var d = Math.round(diff / inc);
+      return `${prefix}${d < 0 ? '-' : ''}${Math.abs(d)}`;
+    }
+
+    (graph.nodes || []).forEach(function (node) {
+      var fp, distances, nearest, position, distance;
+
+      if (!isNodeShown(node) || !node.id || excluded[node.id]) {
+        return;
+      }
+
+      fp = featurePoints(node);
+      if (!fp || point.x < fp.LX - edge || point.x > fp.RX + edge ||
+        point.y < fp.TY - edge || point.y > fp.BY + edge) {
+        return;
+      }
+
+      distances = [
+        { side: 'L', distance: Math.abs(point.x - fp.LX) },
+        { side: 'R', distance: Math.abs(point.x - fp.RX) },
+        { side: 'T', distance: Math.abs(point.y - fp.TY) },
+        { side: 'B', distance: Math.abs(point.y - fp.BY) }
+      ].sort(function (a, b) { return a.distance - b.distance; });
+      nearest = distances[0];
+
+      if (!nearest || nearest.distance > edge) {
+        return;
+      }
+
+      if ('L' === nearest.side || 'R' === nearest.side) {
+        if (point.y < fp.TY - edge || point.y > fp.BY + edge) {
+          return;
+        }
+        position = roundedPosition(nearest.side, point.y - fp.y);
+      }
+      else {
+        if (point.x < fp.LX - edge || point.x > fp.RX + edge) {
+          return;
+        }
+        position = roundedPosition(nearest.side, point.x - fp.x);
+      }
+
+      distance = nearest.distance;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = {
+          node: node,
+          position: position,
+          point: point,
+          end: end
+        };
+      }
+    });
+
+    return best;
+  }
+
+  function setLinkEndpointGuideStatus(handle, target) {
+    getLinkEndpointGuideLayer().selectAll('g.LinkEndpointGuide circle.Mark')
+      .attr('stroke', '#9c27b0');
+    d3.select(handle).select('circle.Mark')
+      .attr('stroke', target ? '#d32f2f' : '#9c27b0');
+  }
+
+  function renderLinkAfterEndpointReconnect(link) {
+    if (!link) {
+      return null;
+    }
+    if (['HORIZONTAL', 'VERTICAL'].includes(link.shape)) {
+      return hierarchyLink(link, null);
+    }
+    if (['HORIZONTAL2', 'VERTICAL2'].includes(link.shape)) {
+      return hierarchyLink2(link, null);
+    }
+    return renderLink(link);
+  }
+
+  function commitLinkEndpointReconnect(link, end, target) {
+    if (!link || !target || !target.node) {
+      return null;
+    }
+
+    if (log && typeof log.savePrevious === 'function') {
+      log.savePrevious();
+    }
+
+    if ('start' === end) {
+      link.from = target.node.id;
+    }
+    else {
+      link.to = target.node.id;
+    }
+
+    setLinkEndPosition(link, end, target.position);
+    link.routing = link.routing || {};
+    link.routing.path = '';
+    link.path = '';
+
+    link = renderLinkAfterEndpointReconnect(link) || link;
+    swapLinkPathMirror(link);
+
+    if (util && typeof util.drawMiniature === 'function') {
+      util.drawMiniature();
+    }
+    if (log && typeof log.storeLog === 'function') {
+      log.storeLog({ operation: 'reconnect-link-endpoint' });
+    }
+
+    return link;
+  }
+
+  function hideLinkEndpointGuides(force) {
+    if (!force && (state.linkEndpointDragging || state.linkEndpointHovering)) {
+      return;
+    }
+    clearTimeout(state.linkEndpointGuideTimer);
+    clearLinkEndpointPreview();
+    getLinkEndpointGuideLayer().selectAll('g.LinkEndpointGuide').remove();
+    state.linkEndpointGuideLinkId = null;
+    state.linkEndpointReconnectTarget = null;
+  }
+
+  function scheduleHideLinkEndpointGuides() {
+    clearTimeout(state.linkEndpointGuideTimer);
+    state.linkEndpointGuideTimer = setTimeout(function () {
+      hideLinkEndpointGuides(false);
+    }, MENU_TIMEOUT);
+  }
+
+  function showLinkEndpointGuides(link) {
+    var layer, endpoints, guide, guideEnter, guideDrag;
+
+    if ('view' === graph.mode || !link || !link.id || !isLinkShown(link) || !getLinkPath(link)) {
+      hideLinkEndpointGuides(true);
+      return;
+    }
+
+    state.linkEndpointHovering = true;
+    clearTimeout(state.linkEndpointGuideTimer);
+    state.linkEndpointGuideLinkId = link.id;
+    layer = getLinkEndpointGuideLayer();
+    endpoints = [
+      { linkId: link.id, end: 'start', point: startPoint(link) },
+      { linkId: link.id, end: 'end', point: endPoint(link) }
+    ];
+
+    guideDrag = d3.drag()
+      .on('start', function (d) {
+        var se = (d3.event && d3.event.sourceEvent) ? d3.event.sourceEvent : d3.event;
+        if (se && se.preventDefault) { se.preventDefault(); }
+        if (se && se.stopImmediatePropagation) { se.stopImmediatePropagation(); }
+        state.linkEndpointDragging = true;
+        state.dragging = true;
+        state.linkEndpointReconnectTarget = null;
+        clearTimeout(state.linkEndpointGuideTimer);
+        menu.closeContextMenu();
+        d3.selectAll('.ContextMenu').classed('collapsed', true);
+        document.getElementById('Hovered').style.opacity = '0';
+        document.getElementById('Pointer').style.opacity = '0';
+        d3.select(this).style('cursor', 'grabbing');
+      })
+      .on('drag', function (d) {
+        var se = (d3.event && d3.event.sourceEvent) ? d3.event.sourceEvent : d3.event;
+        var point = getEventContextPoint();
+        var current = findLinkById(d.linkId);
+        var target;
+
+        if (se && se.preventDefault) { se.preventDefault(); }
+        if (se && se.stopImmediatePropagation) { se.stopImmediatePropagation(); }
+        if (!current || !point) {
+          return;
+        }
+
+        target = getLinkEndpointTarget(current, d.end, point);
+        state.linkEndpointReconnectTarget = target;
+        d3.select(this).attr('transform', `translate(${point.x},${point.y})`);
+        setLinkEndpointGuideStatus(this, target);
+        renderLinkEndpointPreview(current, d.end, point);
+      })
+      .on('end', function (d) {
+        var se = (d3.event && d3.event.sourceEvent) ? d3.event.sourceEvent : d3.event;
+        var current = findLinkById(d.linkId);
+        var target = state.linkEndpointReconnectTarget;
+
+        if (se && se.preventDefault) { se.preventDefault(); }
+        if (se && se.stopImmediatePropagation) { se.stopImmediatePropagation(); }
+        state.linkEndpointDragging = false;
+        state.dragging = false;
+        d3.select(this).style('cursor', 'grab');
+
+        if (current && target) {
+          commitLinkEndpointReconnect(current, d.end, target);
+        }
+
+        state.linkEndpointHovering = false;
+        hideLinkEndpointGuides(true);
+        document.getElementById('Hovered').style.opacity = '1';
+      });
+
+    guide = layer.selectAll('g.LinkEndpointGuide')
+      .data(endpoints, function (d) { return `${d.linkId}:${d.end}`; });
+
+    guide.exit().remove();
+    guideEnter = guide.enter().append('g')
+      .attr('class', 'LinkEndpointGuide')
+      .attr('pointer-events', 'all')
+      .style('cursor', 'grab')
+      .on('mouseover', function () {
+        state.linkEndpointHovering = true;
+        clearTimeout(state.linkEndpointGuideTimer);
+      })
+      .on('mouseout', function () {
+        state.linkEndpointHovering = false;
+        scheduleHideLinkEndpointGuides();
+      });
+    guideEnter.append('circle')
+      .attr('class', 'Hit')
+      .attr('r', 20)
+      .attr('fill', '#ffffff')
+      .attr('fill-opacity', 0)
+      .attr('stroke', 'none')
+      .attr('pointer-events', 'all');
+    guideEnter.append('circle')
+      .attr('class', 'Mark')
+      .attr('r', 7)
+      .attr('fill', '#ffffff')
+      .attr('fill-opacity', 0.9)
+      .attr('stroke', '#9c27b0')
+      .attr('stroke-width', 3)
+      .attr('pointer-events', 'none');
+
+    guide = layer.selectAll('g.LinkEndpointGuide').call(guideDrag);
+    guide
+      .attr('transform', function (d) { return `translate(${d.point.x},${d.point.y})`; })
+      .select('circle.Mark')
+      .attr('stroke', '#9c27b0');
+  }
+
+  function openLinkHoverMenu(link) {
+    clearTimeout(state.menuTimer);
+    showLinkEndpointGuides(link);
+    menu.openContextMenu({ link: link, position: getEventContextPoint() });
+  }
+
+  function scheduleLinkHoverClose() {
+    if (d3.event && d3.event.preventDefault) {
+      d3.event.preventDefault();
+    }
+    state.linkEndpointHovering = false;
+    clearTimeout(state.menuTimer);
+    state.menuTimer = setTimeout(function () {
+      menu.closeContextMenu();
+    }, MENU_TIMEOUT);
+    scheduleHideLinkEndpointGuides();
+  }
+
   Link.prototype.dragstarted = function (d) {
     if ('view' === graph.mode) { return; }
 
@@ -7093,15 +7416,10 @@ wuwei.model = (function () {
         .attr('class', 'link')
         .datum(link)
         .on('mouseover', function (d) {
-          clearTimeout(state.menuTimer);
-          menu.openContextMenu({ link: d, position: getEventContextPoint() });
+          openLinkHoverMenu(d);
         })
         .on('mouseout', function () {
-          d3.event.preventDefault();
-          clearTimeout(state.menuTimer);
-          state.menuTimer = setTimeout(function () {
-            menu.closeContextMenu();
-          }, MENU_TIMEOUT);
+          scheduleLinkHoverClose();
         });
     }
 
@@ -7735,15 +8053,10 @@ wuwei.model = (function () {
         .attr('class', 'link')
         .datum(link)
         .on('mouseover', function (d) {
-          clearTimeout(state.menuTimer);
-          menu.openContextMenu({ link: d, position: getEventContextPoint() });
+          openLinkHoverMenu(d);
         })
         .on('mouseout', function () {
-          d3.event.preventDefault();
-          clearTimeout(state.menuTimer);
-          state.menuTimer = setTimeout(function () {
-            menu.closeContextMenu();
-          }, MENU_TIMEOUT);
+          scheduleLinkHoverClose();
         });
     }
 
@@ -8069,15 +8382,10 @@ wuwei.model = (function () {
         .attr('class', 'link')
         .datum(link)
         .on('mouseover', function (d) {
-          clearTimeout(state.menuTimer);
-          menu.openContextMenu({ link: d, position: getEventContextPoint() });
+          openLinkHoverMenu(d);
         })
         .on('mouseout', function () {
-          d3.event.preventDefault();
-          clearTimeout(state.menuTimer);
-          state.menuTimer = setTimeout(function () {
-            menu.closeContextMenu();
-          }, MENU_TIMEOUT);
+          scheduleLinkHoverClose();
         })
         .call(d3.drag()
           .on('start', Link.prototype.dragstarted)
