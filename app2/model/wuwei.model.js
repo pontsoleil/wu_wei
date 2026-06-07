@@ -2778,7 +2778,7 @@ wuwei.model = (function () {
     }
     return {
       d: 'M0,0 L-' + length + ',-' + half + ' V' + half + ' Z',
-      fill: ('HOLLOW-ARROW' === kind) ? 'none' : null
+      fill: ('HOLLOW-ARROW' === kind) ? '#ffffff' : null
     };
   }
 
