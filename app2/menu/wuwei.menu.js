@@ -3485,10 +3485,14 @@ wuwei.menu = wuwei.menu || {};
         ySum = 0;
         d3.selectAll('g.node.selected')
           .each(function (d) {
-            allNodes.push(d);
-            count++;
             halfW = operationHalfWidth(d);
             halfH = operationHalfHeight(d);
+            if (!d || !Number.isFinite(Number(d.x)) || !Number.isFinite(Number(d.y)) ||
+              !Number.isFinite(Number(halfW)) || !Number.isFinite(Number(halfH))) {
+              return;
+            }
+            allNodes.push(d);
+            count++;
             if (d.x - halfW < xMin) { xMin = d.x - halfW; LeftNode = d; }
             if (d.x + halfW > xMax) { xMax = d.x + halfW; RightNode = d; }
             if (d.y - halfH < yMin) { yMin = d.y - halfH; TopNode = d; }
