@@ -10160,6 +10160,185 @@ wuwei.model = (function () {
     };
   }
 
+  function isGroupCopyTarget(target) {
+    if (!target) {
+      return false;
+    }
+    if (target.type && ['simple', 'horizontal', 'vertical', 'timeline', 'viewpoint'].indexOf(target.type) >= 0) {
+      return true;
+    }
+    if (target.type === 'Group' && target.groupRef) {
+      return true;
+    }
+    if (target.groupRole === 'representative' && target.groupRef) {
+      return true;
+    }
+    if (util.isLink(target) && target.groupRef) {
+      return true;
+    }
+    return false;
+  }
+
+  function makeGroupCopySnapshot(target) {
+    var group = isGroupCopyTarget(target) ? findGroupByTarget(target) : null;
+    var page = getCurrentPage();
+    var memberIds = {};
+    var nodes = [];
+    var links = [];
+    var representative;
+
+    if (!group || !page) {
+      return null;
+    }
+
+    findGroupNodes(group.id).forEach(function (node) {
+      if (!node || !node.id || memberIds[node.id]) {
+        return;
+      }
+      memberIds[node.id] = true;
+      nodes.push(util.clone(node));
+    });
+
+    representative = group.representativeNodeId ? findNodeById(group.representativeNodeId) : null;
+    if (representative && representative.id && !memberIds[representative.id]) {
+      memberIds[representative.id] = true;
+      nodes.push(util.clone(representative));
+    }
+
+    (page.links || []).forEach(function (link) {
+      if (!link || !link.id) {
+        return;
+      }
+      if (link.groupRef === group.id ||
+        (memberIds[link.from] && memberIds[link.to])) {
+        links.push(util.clone(link));
+      }
+    });
+
+    return {
+      group: util.clone(group),
+      nodes: nodes,
+      links: links,
+      sourceGroupId: group.id
+    };
+  }
+
+  function cloneGroupSnapshots(snapshots, command, option) {
+    var page = getCurrentPage();
+    var diff = (option && option.diff) || newPosition(0, 0);
+    var copiedNodes = [];
+    var copiedLinks = [];
+    var copiedGroups = [];
+
+    if (!page) {
+      return null;
+    }
+    if (!Array.isArray(page.groups)) {
+      page.groups = [];
+    }
+    if (!Array.isArray(page.links)) {
+      page.links = [];
+    }
+
+    (snapshots || []).forEach(function (snapshot) {
+      var idMap = {};
+      var sourceGroupId = snapshot && snapshot.sourceGroupId;
+      var copiedGroup;
+
+      if (!snapshot || !snapshot.group || !sourceGroupId) {
+        return;
+      }
+
+      copiedGroup = util.clone(snapshot.group);
+      copiedGroup.id = util.createUuid();
+      delete copiedGroup.audit;
+      delete copiedGroup.deleted;
+      delete copiedGroup.pseudoNodeId;
+      delete copiedGroup.pseudoLinkId;
+      copiedGroup.changed = true;
+
+      (snapshot.nodes || []).forEach(function (node) {
+        var cloned;
+        if (!node || !node.id) {
+          return;
+        }
+        cloned = util.clone(node);
+        cloned.id = util.createUuid();
+        cloned.x = Number(node.x || 0) + diff.x;
+        cloned.y = Number(node.y || 0) + diff.y;
+        if (cloned.groupRef === sourceGroupId) {
+          cloned.groupRef = copiedGroup.id;
+        }
+        if (cloned.groupRole === 'representative') {
+          cloned.groupRef = copiedGroup.id;
+          cloned.representativeOf = { kind: 'group', id: copiedGroup.id };
+        }
+        delete cloned.audit;
+        delete cloned.deleted;
+        cloned.changed = true;
+        cloned.visible = cloned.visible !== false;
+        idMap[node.id] = cloned.id;
+        copiedNodes.push(NodeFactory(cloned));
+        addNode({ node: cloned });
+      });
+
+      copiedGroup.representativeNodeId = copiedGroup.representativeNodeId && idMap[copiedGroup.representativeNodeId]
+        ? idMap[copiedGroup.representativeNodeId]
+        : '';
+      copiedGroup.members = (copiedGroup.members || []).map(function (member) {
+        var sourceId = (member && member.nodeId) ? member.nodeId : member;
+        var copiedMember;
+        if (!sourceId || !idMap[sourceId]) {
+          return null;
+        }
+        copiedMember = ('object' === typeof member) ? util.clone(member) : { nodeId: sourceId };
+        copiedMember.nodeId = idMap[sourceId];
+        return copiedMember;
+      }).filter(Boolean);
+      if (copiedGroup.origin) {
+        copiedGroup.origin.x = Number(copiedGroup.origin.x || 0) + diff.x;
+        copiedGroup.origin.y = Number(copiedGroup.origin.y || 0) + diff.y;
+      }
+      if (copiedGroup.axis && copiedGroup.axis.anchor) {
+        copiedGroup.axis.anchor.x = Number(copiedGroup.axis.anchor.x || 0) + diff.x;
+        copiedGroup.axis.anchor.y = Number(copiedGroup.axis.anchor.y || 0) + diff.y;
+      }
+
+      page.groups.push(copiedGroup);
+      copiedGroups.push(copiedGroup);
+
+      (snapshot.links || []).forEach(function (link) {
+        var clonedLink;
+        if (!link || !idMap[link.from] || !idMap[link.to]) {
+          return;
+        }
+        clonedLink = util.clone(link);
+        clonedLink.id = util.createUuid();
+        clonedLink.from = idMap[link.from];
+        clonedLink.to = idMap[link.to];
+        if (clonedLink.groupRef === sourceGroupId) {
+          clonedLink.groupRef = copiedGroup.id;
+        }
+        delete clonedLink.audit;
+        delete clonedLink.deleted;
+        clonedLink.changed = true;
+        page.links.push(LinkFactory(clonedLink));
+        copiedLinks.push(clonedLink);
+      });
+    });
+
+    setGraphFromCurrentPage();
+
+    return {
+      command: command,
+      param: {
+        node: copiedNodes,
+        link: copiedLinks,
+        group: copiedGroups
+      }
+    };
+  }
+
   function setRegularGroupFamilyVisible(group, visible, nodesBucket, linksBucket, hideConnectedLinks) {
     var changed = false;
     var shown = !!visible;
@@ -10896,6 +11075,20 @@ wuwei.model = (function () {
     return out;
   }
 
+  function makeCopySourceGroups(nodes) {
+    var out = [];
+    var seen = {};
+    (nodes || []).forEach(function (node) {
+      var snapshot = makeGroupCopySnapshot(node);
+      if (!snapshot || !snapshot.sourceGroupId || seen[snapshot.sourceGroupId]) {
+        return;
+      }
+      seen[snapshot.sourceGroupId] = true;
+      out.push(snapshot);
+    });
+    return out;
+  }
+
   function cloneNodeList(nodes, command, option) {
     const nodes_ = [];
     const center = getSafeContextPoint();
@@ -10928,16 +11121,22 @@ wuwei.model = (function () {
 
   copy = function (nodes) {
     // Backward-compatible immediate duplicate. The UI now exposes this as Clone.
+    var groupSnapshots = makeCopySourceGroups(nodes);
+    if (groupSnapshots.length) {
+      return cloneGroupSnapshots(groupSnapshots, 'copyGroup', { diff: newPosition(0, 0) });
+    }
     return cloneNodeList(nodes, 'copy', { diff: newPosition(0, 0) });
   };
 
   clipboard = function (nodes) {
-    state.copyingNodes = makeCopySourceNodes(nodes);
+    state.copyingGroups = makeCopySourceGroups(nodes);
+    state.copyingNodes = state.copyingGroups.length ? [] : makeCopySourceNodes(nodes);
     // log
     var logData = {
       command: 'clipboard',
       param: {
-        node: state.copyingNodes
+        node: state.copyingNodes,
+        group: (state.copyingGroups || []).map(function (snapshot) { return snapshot.group; })
       }
     };
     return logData;
@@ -10946,6 +11145,15 @@ wuwei.model = (function () {
   paste = function () {
     const r = 80 * (1 + Math.random());
     const theta = 2 * Math.PI * Math.random();
+    if (Array.isArray(state.copyingGroups) && state.copyingGroups.length) {
+      return cloneGroupSnapshots(state.copyingGroups, 'paste', {
+        diff: {
+          x: r * Math.cos(theta),
+          y: r * Math.sin(theta)
+        },
+        useContextFallback: true
+      });
+    }
     return cloneNodeList(state.copyingNodes || [], 'paste', {
       diff: {
         x: r * Math.cos(theta),
@@ -10956,6 +11164,10 @@ wuwei.model = (function () {
   }
 
   clone = function (nodes) {
+    var groupSnapshots = makeCopySourceGroups(nodes);
+    if (groupSnapshots.length) {
+      return cloneGroupSnapshots(groupSnapshots, 'clone', { diff: newPosition(0, 0) });
+    }
     const sourceNodes = (nodes && nodes.length) ? nodes : (state.copyingNodes || []);
     const result = cloneNodeList(sourceNodes, 'clone', { diff: newPosition(0, 0) });
     if (result) { result.command = 'clone'; }

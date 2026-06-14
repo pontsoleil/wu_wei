@@ -2792,7 +2792,8 @@ wuwei.menu = wuwei.menu || {};
     const current = wuwei.common.current;
 
     function hasNodeClipboard() {
-      return Array.isArray(state.copyingNodes) && state.copyingNodes.length > 0;
+      return (Array.isArray(state.copyingNodes) && state.copyingNodes.length > 0) ||
+        (Array.isArray(state.copyingGroups) && state.copyingGroups.length > 0);
     }
 
     function updateClipboardMenu(method) {
@@ -2816,6 +2817,7 @@ wuwei.menu = wuwei.menu || {};
       }
       else if ('paste' === method) {
         state.copyingNodes = null;
+        state.copyingGroups = null;
         for (let i = 0; i < clipboardEls.length; i++) {
           clipboardEls[i].style.display = 'block';
         }
@@ -4264,7 +4266,10 @@ wuwei.menu = wuwei.menu || {};
     pasteEl = menu.querySelector('.operators .operator.Paste');
     cloneEl = menu.querySelector('.operators .operator.Clone');
     if (pasteEl) {
-      pasteEl.style.display = (Array.isArray(state.copyingNodes) && state.copyingNodes.length > 0) ? 'block' : 'none';
+      pasteEl.style.display = (
+        (Array.isArray(state.copyingNodes) && state.copyingNodes.length > 0) ||
+        (Array.isArray(state.copyingGroups) && state.copyingGroups.length > 0)
+      ) ? 'block' : 'none';
     }
     if (cloneEl) {
       cloneEl.style.display = 'none';
@@ -4715,7 +4720,9 @@ wuwei.menu = wuwei.menu || {};
         'deleteViewpointTarget',
         'horizontal',
         'vertical',
-        'copy',
+        'clone',
+        'clipboard',
+        'paste',
         'deleteGroup',
         'erase'
       ],
@@ -5892,10 +5899,11 @@ wuwei.menu = wuwei.menu || {};
         var node = getContextTarget(allNodes);
         if (graph.mode === 'view' || state.viewOnly || state.published ||
           state.Selecting || state.Connecting ||
-          isContextGroup(allNodes) || isContextViewpointTarget(allNodes)) {
+          isContextViewpointTarget(allNodes)) {
           return false;
         }
-        if (allNodes.length === 1 && util.notEmpty(node) && util.isNode(node)) {
+        if (allNodes.length === 1 && util.notEmpty(node) &&
+          (util.isNode(node) || isContextGroup(allNodes) || (util.isLink(node) && node.groupRef))) {
           return true;
         }
         return false;
@@ -5921,10 +5929,11 @@ wuwei.menu = wuwei.menu || {};
         var node = getContextTarget(allNodes);
         if (graph.mode === 'view' || state.viewOnly || state.published ||
           state.Selecting || state.Connecting ||
-          isContextGroup(allNodes) || isContextViewpointTarget(allNodes)) {
+          isContextViewpointTarget(allNodes)) {
           return false;
         }
-        if (allNodes.length === 1 && util.notEmpty(node) && util.isNode(node)) {
+        if (allNodes.length === 1 && util.notEmpty(node) &&
+          (util.isNode(node) || isContextGroup(allNodes) || (util.isLink(node) && node.groupRef))) {
           return true;
         }
         return false;

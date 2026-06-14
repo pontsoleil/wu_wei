@@ -343,6 +343,7 @@ wuwei.common = (function () {
     drawmodeIdx: 0,
     Extra: false,
     copyingNodes: null,
+    copyingGroups: null,
     selectedFilter: '',
     selectedSearch: '',
     selectedEdit: '',
