@@ -2791,8 +2791,12 @@ wuwei.menu = wuwei.menu || {};
       links = [];
     const current = wuwei.common.current;
 
+    function hasNodeClipboard() {
+      return Array.isArray(state.copyingNodes) && state.copyingNodes.length > 0;
+    }
+
     function updateClipboardMenu(method) {
-      if (!['clipboard', 'paste', 'clone'].includes(method)) {
+      if (!['clipboard', 'paste'].includes(method)) {
         return;
       }
       // update menu
@@ -2810,7 +2814,7 @@ wuwei.menu = wuwei.menu || {};
           cloneEls[i].style.display = 'block';
         }
       }
-      else if (['paste', 'clone'].includes(method)) {
+      else if ('paste' === method) {
         state.copyingNodes = null;
         for (let i = 0; i < clipboardEls.length; i++) {
           clipboardEls[i].style.display = 'block';
@@ -3457,7 +3461,7 @@ wuwei.menu = wuwei.menu || {};
       }
     }
     else if (['alignTop', 'alignHorizontal', 'alignBottom', 'alignLeft', 'alignVertical',
-      'alignRight', 'horizontalEqual', 'verticalEqual', 'horizontalGapEqual', 'verticalGapEqual', 'clipboard', 'paste', 'clone',
+      'alignRight', 'horizontalEqual', 'verticalEqual', 'horizontalGapEqual', 'verticalGapEqual', 'clipboard', 'paste',
       'defineSimpleGroup', 'defineHorizontalGroup', 'defineVerticalGroup', 'ungroup',
       'deleteSelectedGroups'].includes(method) ||
       (state.Selecting && ('copy' === method || 'edit' === method))) {
@@ -3471,7 +3475,7 @@ wuwei.menu = wuwei.menu || {};
           allNodes.push(d);
         });
       }
-      else if (['paste', 'clone'].includes(method)) {
+      else if ('paste' === method) {
         allNodes = state.copyingNodes;
       }
       else {
@@ -4251,8 +4255,25 @@ wuwei.menu = wuwei.menu || {};
   };
 
   /** new */
+  function refreshNewMenuClipboardState(menu) {
+    var pasteEl;
+    var cloneEl;
+    if (!menu) {
+      return;
+    }
+    pasteEl = menu.querySelector('.operators .operator.Paste');
+    cloneEl = menu.querySelector('.operators .operator.Clone');
+    if (pasteEl) {
+      pasteEl.style.display = (Array.isArray(state.copyingNodes) && state.copyingNodes.length > 0) ? 'block' : 'none';
+    }
+    if (cloneEl) {
+      cloneEl.style.display = 'none';
+    }
+  }
+
   newClicked = function () {
     var menu = document.getElementById('newMenu');
+    refreshNewMenuClipboardState(menu);
     menuOpen(menu);
     // // 2023-06-12
     // if (common.state.loggedIn) {
@@ -4670,7 +4691,9 @@ wuwei.menu = wuwei.menu || {};
         'addContent',
         'addTopic',
         'addMemo',
-        'copy',
+        'clone',
+        'clipboard',
+        'paste',
         'erase'
       ],
 
@@ -4707,7 +4730,9 @@ wuwei.menu = wuwei.menu || {};
         'addContent',
         'addTopic',
         'addMemo',
-        'copy',
+        'clone',
+        'clipboard',
+        'paste',
         'erase'
       ],
 
@@ -4725,7 +4750,9 @@ wuwei.menu = wuwei.menu || {};
         'deleteViewpointTarget',
         'horizontal',
         'vertical',
-        'copy',
+        'clone',
+        'clipboard',
+        'paste',
         'deleteGroup',
         'erase'
       ],
@@ -5860,10 +5887,15 @@ wuwei.menu = wuwei.menu || {};
       'fa fa-clone fa-lg fa-fw'
     ],
 
-    'clipboard': ['Clipboard',
+    'clipboard': ['Copy',
       function (allNodes) {
         var node = getContextTarget(allNodes);
-        if (allNodes.length === 1 && util.notEmpty(node)) {
+        if (graph.mode === 'view' || state.viewOnly || state.published ||
+          state.Selecting || state.Connecting ||
+          isContextGroup(allNodes) || isContextViewpointTarget(allNodes)) {
+          return false;
+        }
+        if (allNodes.length === 1 && util.notEmpty(node) && util.isNode(node)) {
           return true;
         }
         return false;
@@ -5874,11 +5906,11 @@ wuwei.menu = wuwei.menu || {};
 
     'paste': ['Paste',
       function (allNodes) {
-        var node = getContextTarget(allNodes);
-        if (allNodes.length === 1 && util.notEmpty(node)) {
-          return true;
+        if (graph.mode === 'view' || state.viewOnly || state.published ||
+          state.Selecting || state.Connecting) {
+          return false;
         }
-        return false;
+        return hasNodeClipboard();
       },
       null,
       'fas fa-paste fa-lg fa-fw'
@@ -5887,7 +5919,12 @@ wuwei.menu = wuwei.menu || {};
     'clone': ['Clone',
       function (allNodes) {
         var node = getContextTarget(allNodes);
-        if (allNodes.length === 1 && util.notEmpty(node)) {
+        if (graph.mode === 'view' || state.viewOnly || state.published ||
+          state.Selecting || state.Connecting ||
+          isContextGroup(allNodes) || isContextViewpointTarget(allNodes)) {
+          return false;
+        }
+        if (allNodes.length === 1 && util.notEmpty(node) && util.isNode(node)) {
           return true;
         }
         return false;
@@ -6673,6 +6710,10 @@ wuwei.menu = wuwei.menu || {};
     registerClick('.pulldown.new .operators .operator.Upload', () => {
       wuwei.menu.upload.open();
     });
+    registerClick('.pulldown.new .operators .operator.Paste', () => {
+      ContextOperate('paste');
+      closeNewClicked();
+    });
     // flockIcon
     registerClick('#flockIcon', flockClicked);
     registerClick('.pulldown.flock .header i.fa-times', closeFlockClicked);
@@ -6742,7 +6783,7 @@ wuwei.menu = wuwei.menu || {};
     registerClick('.pulldown.flock .operators .operator.Paste', () => {
       ContextOperate('paste');
     });
-    registerClick('.pulldown.flock .operators .operator.clone', () => {
+    registerClick('.pulldown.flock .operators .operator.Clone', () => {
       ContextOperate('clone');
     });
     registerClick('.pulldown.flock .operators .operator.Edit', () => {

@@ -10885,31 +10885,54 @@ wuwei.model = (function () {
     };
   }
 
-  copy = function (nodes) {
-    // Deprecated legacy copy used resources/idx.
-    // Flattened model: nodes carry their own content metadata; copy duplicates nodes only.
+  function makeCopySourceNodes(nodes) {
+    var out = [];
+    (nodes || []).forEach(function (node) {
+      if (!node || !util.isNode(node)) {
+        return;
+      }
+      out.push(util.clone(node));
+    });
+    return out;
+  }
+
+  function cloneNodeList(nodes, command, option) {
     const nodes_ = [];
-    const diff = newPosition(0, 0);
-    for (const node of nodes) {
+    const center = getSafeContextPoint();
+    const diff = (option && option.diff) || newPosition(0, 0);
+    const useContextFallback = !!(option && option.useContextFallback);
+
+    for (const node of (nodes || [])) {
       const id = util.createUuid();
       const cloned = util.clone(node);
       cloned.id = id;
-      cloned.x = (node.x || 0) + diff.x;
-      cloned.y = (node.y || 0) + diff.y;
+      delete cloned.audit;
+      delete cloned.deleted;
+      cloned.changed = true;
+      cloned.visible = cloned.visible !== false;
+      cloned.x = (Number.isFinite(Number(cloned.x)) ? Number(cloned.x) : center.x) + diff.x;
+      cloned.y = (Number.isFinite(Number(cloned.y)) ? Number(cloned.y) : center.y) + diff.y;
+      if (useContextFallback && !Number.isFinite(Number(node.x)) && !Number.isFinite(Number(node.y))) {
+        cloned.x = center.x + diff.x;
+        cloned.y = center.y + diff.y;
+      }
       nodes_.push(NodeFactory(cloned));
       addNode({ node: cloned });
     }
+
     return {
-      command: 'copy',
+      command: command,
       param: { node: nodes_ }
     };
+  }
+
+  copy = function (nodes) {
+    // Backward-compatible immediate duplicate. The UI now exposes this as Clone.
+    return cloneNodeList(nodes, 'copy', { diff: newPosition(0, 0) });
   };
 
   clipboard = function (nodes) {
-    state.copyingNodes = [];
-    for (let node of nodes) {
-      state.copyingNodes.push(node);
-    }
+    state.copyingNodes = makeCopySourceNodes(nodes);
     // log
     var logData = {
       command: 'clipboard',
@@ -10921,32 +10944,20 @@ wuwei.model = (function () {
   };
 
   paste = function () {
-    const nodes_ = [];
-    const center = getSafeContextPoint();
     const r = 80 * (1 + Math.random());
     const theta = 2 * Math.PI * Math.random();
-    const dx = r * Math.cos(theta);
-    const dy = r * Math.sin(theta);
-
-    for (const node of (state.copyingNodes || [])) {
-      const id = util.createUuid();
-      const cloned = util.clone(node);
-      cloned.id = id;
-      cloned.x = (Number.isFinite(cloned.x) ? cloned.x : center.x) + dx;
-      cloned.y = (Number.isFinite(cloned.y) ? cloned.y : center.y) + dy;
-      nodes_.push(NodeFactory(cloned));
-      addNode({ node: cloned });
-    }
-
-    return {
-      command: 'paste',
-      param: { node: nodes_ }
-    };
+    return cloneNodeList(state.copyingNodes || [], 'paste', {
+      diff: {
+        x: r * Math.cos(theta),
+        y: r * Math.sin(theta)
+      },
+      useContextFallback: true
+    });
   }
 
-  clone = function () {
-    // Clone is paste with a different command name.
-    const result = paste();
+  clone = function (nodes) {
+    const sourceNodes = (nodes && nodes.length) ? nodes : (state.copyingNodes || []);
+    const result = cloneNodeList(sourceNodes, 'clone', { diff: newPosition(0, 0) });
     if (result) { result.command = 'clone'; }
     return result;
   }
