@@ -2064,11 +2064,17 @@ wuwei.menu = wuwei.menu || {};
 
     d3.selectAll('circle.selected').each(function (d) {
       var nodeId;
+      var groupId = this && this.getAttribute ? this.getAttribute('data-group-id') : '';
+      if (groupId) {
+        addGroup(groupId);
+        return;
+      }
       if (d && d.groupRef && (isRepresentativeTopic(d) || d.type === 'Group' || d.pseudo)) {
         addGroup(d.groupRef);
         return;
       }
-      nodeId = d && d.id ? d.id : (this && this.parentNode && this.parentNode.id);
+      nodeId = (this && this.getAttribute ? this.getAttribute('data-node-id') : '') ||
+        (d && d.id ? d.id : (this && this.parentNode && this.parentNode.id));
       addNode(findNode(nodeId));
     });
 
@@ -3534,7 +3540,7 @@ wuwei.menu = wuwei.menu || {};
 
       if (isGroupPositionOperation) {
         var alignmentSelection = collectAlignmentSelection();
-        var uncoveredGroupedNodes;
+        var alignmentNodes;
         if (alignmentSelection.groupIds.length === 1 &&
           alignmentSelection.groupedNodes.length === 0 &&
           alignmentSelection.ungroupedNodes.length === 0 &&
@@ -3559,9 +3565,11 @@ wuwei.menu = wuwei.menu || {};
             return;
           }
         }
-        operationTargets = buildGroupOperationTargets(alignmentSelection.ungroupedNodes);
-        uncoveredGroupedNodes = getUncoveredGroupedNodes(alignmentSelection.groupedNodes, alignmentSelection.groupIds);
-        if (uncoveredGroupedNodes.length > 0 || operationTargets.length < 2) {
+        alignmentNodes = alignmentSelection.ungroupedNodes.concat(
+          getUncoveredGroupedNodes(alignmentSelection.groupedNodes, alignmentSelection.groupIds)
+        );
+        operationTargets = buildGroupOperationTargets(alignmentNodes);
+        if (operationTargets.length < 2) {
           state.lastFlockOperation = {
             method: method,
             selectedNodeIds: Array.isArray(state.selectedNodeIds) ? state.selectedNodeIds.slice() : [],
@@ -3572,7 +3580,7 @@ wuwei.menu = wuwei.menu || {};
           notifyFlockError('Alignment commands require two or more nodes or groups.');
           return;
         }
-        allNodes = alignmentSelection.ungroupedNodes;
+        allNodes = alignmentNodes;
         operationMetrics = getOperationTargetMetrics(operationTargets);
         if (!operationMetrics || operationMetrics.count < 1) {
           state.lastFlockOperation = {
