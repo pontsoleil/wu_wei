@@ -10051,6 +10051,87 @@ wuwei.model = (function () {
     return true;
   }
 
+  function translatedCopyNumber(value, delta) {
+    var number = Number(value);
+
+    if (!Number.isFinite(number)) {
+      return value;
+    }
+    return number + delta;
+  }
+
+  function offsetCopyNumber(record, key, delta) {
+    var number;
+
+    if (!record || !Object.prototype.hasOwnProperty.call(record, key)) {
+      return;
+    }
+
+    number = Number(record[key]);
+    if (Number.isFinite(number)) {
+      record[key] = number + delta;
+    }
+  }
+
+  function translateCopiedPath(path, dx, dy) {
+    var numberPattern = '-?(?:\\d+\\.?\\d*|\\.\\d+)(?:e[-+]?\\d+)?';
+    var tokenPattern = new RegExp('([MLQHV])|(' + numberPattern + ')\\s*,\\s*(' + numberPattern + ')|(' + numberPattern + ')', 'gi');
+    var command = '';
+
+    if ('string' !== typeof path || !path) {
+      return path;
+    }
+
+    return path.replace(tokenPattern, function (match, code, x, y, value) {
+      if (code) {
+        command = code.toUpperCase();
+        return code;
+      }
+      if (undefined !== x && undefined !== y) {
+        return translatedCopyNumber(x, dx) + ',' + translatedCopyNumber(y, dy);
+      }
+      if (undefined !== value) {
+        if ('H' === command) {
+          return translatedCopyNumber(value, dx);
+        }
+        if ('V' === command) {
+          return translatedCopyNumber(value, dy);
+        }
+      }
+      return match;
+    });
+  }
+
+  function translateCopiedLinkGeometry(link, dx, dy) {
+    if (!link) {
+      return;
+    }
+
+    offsetCopyNumber(link, 'x', dx);
+    offsetCopyNumber(link, 'y', dy);
+    offsetCopyNumber(link, 'x2', dx);
+    offsetCopyNumber(link, 'y2', dy);
+
+    if (link._controlPoint && 'object' === typeof link._controlPoint) {
+      offsetCopyNumber(link._controlPoint, 'x', dx);
+      offsetCopyNumber(link._controlPoint, 'y', dy);
+    }
+    if (link._dragControlPoint && 'object' === typeof link._dragControlPoint) {
+      offsetCopyNumber(link._dragControlPoint, 'x', dx);
+      offsetCopyNumber(link._dragControlPoint, 'y', dy);
+    }
+
+    if (link.routing && 'object' === typeof link.routing && link.routing.path) {
+      link.routing.path = translateCopiedPath(link.routing.path, dx, dy);
+    }
+    if (link.path) {
+      link.path = translateCopiedPath(link.path, dx, dy);
+    }
+    else if (link.routing && 'object' === typeof link.routing && link.routing.path) {
+      link.path = link.routing.path;
+    }
+  }
+
   function copyGroup(target) {
     var group = findGroupByTarget(target);
     var page = getCurrentPage();
@@ -10143,6 +10224,7 @@ wuwei.model = (function () {
       if (clonedLink.groupRef === group.id) {
         clonedLink.groupRef = copiedGroup.id;
       }
+      translateCopiedLinkGeometry(clonedLink, diff.x, diff.y);
       clonedLink.changed = true;
       page.links.push(LinkFactory(clonedLink));
       copiedLinks.push(clonedLink);
@@ -10319,6 +10401,7 @@ wuwei.model = (function () {
         if (clonedLink.groupRef === sourceGroupId) {
           clonedLink.groupRef = copiedGroup.id;
         }
+        translateCopiedLinkGeometry(clonedLink, diff.x, diff.y);
         delete clonedLink.audit;
         delete clonedLink.deleted;
         clonedLink.changed = true;
