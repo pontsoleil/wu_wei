@@ -8230,8 +8230,32 @@ wuwei.model = (function () {
       return true;
     }
 
+    function nearestOverlayPoint(overlays, reference) {
+      var best = null;
+      var bestDistance = Infinity;
+
+      if (!overlays || !overlays.points || overlays.points.length < 1) {
+        return null;
+      }
+      reference = reference || mid;
+      overlays.points.forEach(function (point) {
+        var dx, dy, distance;
+        if (!point) {
+          return;
+        }
+        dx = Number(point.x) - Number(reference.x);
+        dy = Number(point.y) - Number(reference.y);
+        distance = dx * dx + dy * dy;
+        if (Number.isFinite(distance) && distance < bestDistance) {
+          best = point;
+          bestDistance = distance;
+        }
+      });
+      return best || overlays.points[0];
+    }
+
     function intersectNodeBoundary(geom, path, isSource) {
-      var shape, overlays;
+      var shape, overlays, reference, boundaryPoint;
 
       switch (geom.shape) {
         case 'RECTANGLE':
@@ -8297,9 +8321,12 @@ wuwei.model = (function () {
           break;
       }
 
-      if (overlays && overlays.points && overlays.points.length > 0) {
-        intersections.push(overlays.points[0]);
-      } else {
+      reference = isSource ? points[1] : points[points.length - 2];
+      boundaryPoint = nearestOverlayPoint(overlays, reference);
+      if (boundaryPoint) {
+        intersections.push(boundaryPoint);
+      }
+      else {
         intersections.push({ x: mid.x, y: mid.y });
       }
 
