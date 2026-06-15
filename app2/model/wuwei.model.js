@@ -5110,6 +5110,7 @@ wuwei.model = (function () {
         .classed('selected', true)
         .append('circle')
         .attr('class', 'selected')
+        .attr('data-node-id', nodeData && nodeData.id ? nodeData.id : '')
         .attr('cx', 0)
         .attr('cy', 0)
         .attr('r', 32)

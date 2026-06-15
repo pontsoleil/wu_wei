@@ -1034,6 +1034,7 @@ wuwei.menu = wuwei.menu || {};
                     .classed('selected', true)
                     .append('circle')
                     .attr('class', 'selected')
+                    .attr('data-node-id', targetNode && targetNode.id ? targetNode.id : '')
                     .attr('cx', 0)
                     .attr('cy', 0)
                     .attr('r', 32)
@@ -2081,6 +2082,7 @@ wuwei.menu = wuwei.menu || {};
     (Array.isArray(state.selectedNodeIds) ? state.selectedNodeIds : []).forEach(function (nodeId) {
       addNode(findNode(nodeId));
     });
+    getScreenSelectedNodes([]).forEach(addNode);
     (Array.isArray(state.selectedGroupIds) ? state.selectedGroupIds : []).forEach(addGroup);
 
     return out;
@@ -3747,6 +3749,7 @@ wuwei.menu = wuwei.menu || {};
             .classed('selected', true)
             .append('circle')
             .attr('class', 'selected')
+            .attr('data-node-id', node && node.id ? node.id : '')
             .attr('cx', 0)
             .attr('cy', 0)
             .attr('r', 32)
@@ -3763,6 +3766,7 @@ wuwei.menu = wuwei.menu || {};
             .classed('selected', true)
             .append('circle')
             .attr('class', 'selected')
+            .attr('data-node-id', node && node.id ? node.id : '')
             .attr('cx', 0)
             .attr('cy', 0)
             .attr('r', 32)
