@@ -6487,6 +6487,7 @@ wuwei.model = (function () {
           .style('font-family', font_family)
           .style('font-size', font_size)
           .style('color', font_color)
+          .style('white-space', 'pre-line')
           .html(memoHtml);
       }
       d3node.selectAll('rect.cover-description').raise();
