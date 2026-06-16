@@ -1911,6 +1911,16 @@ wuwei.menu = wuwei.menu || {};
       });
   }
 
+  function setControlToggleVisible(visible) {
+    var controlToggle = document.getElementById('open_controls');
+
+    if (!controlToggle) {
+      return;
+    }
+    controlToggle.classList.toggle('active', !!visible);
+    controlToggle.style.display = '';
+  }
+
   function getScreenSelectedNodes(fallbackNodes) {
     var page = getCurrentPage();
     var nodes = [];
@@ -3984,7 +3994,7 @@ wuwei.menu = wuwei.menu || {};
       searchIcon.classList.remove('active');
       drawMode.classList.remove('active');
       miniature.classList.remove('active');
-      controlToggle.classList.remove('active');
+      setControlToggleVisible(false);
       updateSettingIconForMode();
       updateUtilityIndicatorsVisibility();
       // shareMode.style.display = 'none';
@@ -3996,7 +4006,7 @@ wuwei.menu = wuwei.menu || {};
       searchIcon.classList.add('active');
       drawMode.classList.add('active');
       miniature.classList.add('active');
-      controlToggle.classList.add('active');
+      setControlToggleVisible(true);
       updateSettingIconForMode();
       updateUtilityIndicatorsVisibility();
       // shareMode.style.display = 'block';
@@ -4384,10 +4394,14 @@ wuwei.menu = wuwei.menu || {};
 */
   /** controls */
   openControlsClicked = function (event) {
-    event.stopPropagation();
     var
       menu = document.getElementById('open_controls'),
       elem = document.getElementById('controls');
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    setControlToggleVisible(true);
     if (elem.classList.contains('hidden')) {
       // show
       menu.innerHTML = '<span>&#9660</span>';
@@ -6567,6 +6581,7 @@ wuwei.menu = wuwei.menu || {};
       open_controls.innerHTML = '<span>&#9650</span>';
       controls.classList.add('hidden');
       controls.style.display = 'none';
+      setControlToggleVisible(false);
     }
 
     drawmodeIcon.className = `command ${drawmode}`;

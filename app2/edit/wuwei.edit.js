@@ -1855,14 +1855,27 @@ wuwei.edit = wuwei.edit || {};
     let menu = document.getElementById('open_controls'),
       elem = document.getElementById('controls');
     // hide
-    menu.innerHTML = '<span>&#9650</span>';
-    elem.classList.add('hidden');
+    if (menu) {
+      menu.innerHTML = '<span>&#9650</span>';
+    }
+    if (elem) {
+      elem.classList.add('hidden');
+    }
+  }
+
+  function setControlToggleVisible(visible) {
+    var openControls = document.getElementById('open_controls');
+
+    if (!openControls) {
+      return;
+    }
+    openControls.classList.toggle('active', !!visible);
+    openControls.style.display = '';
   }
 
   function resetForExternalEditor() {
     var editPane = document.getElementById('edit');
     var infoPane = document.getElementById('info');
-    var openControls = document.getElementById('open_controls');
     var editingCircle = document.getElementById('Editing');
 
     stateMap.node = null;
@@ -1880,9 +1893,7 @@ wuwei.edit = wuwei.edit || {};
       bindEditPaneValueEvents(editPane);
       editPane.style.display = 'block';
     }
-    if (openControls) {
-      openControls.style.display = 'none';
-    }
+    setControlToggleVisible(false);
     if (editingCircle) {
       editingCircle.style.opacity = '0';
       delete editingCircle.dataset.node_id;
@@ -1930,7 +1941,7 @@ wuwei.edit = wuwei.edit || {};
 
     bindEditPaneValueEvents(editPane);
     common.state.Editing = true;
-    document.getElementById('open_controls').style.display = 'none';
+    setControlToggleVisible(false);
     if (cb) {
       callback = cb;
     }
@@ -2163,7 +2174,7 @@ wuwei.edit = wuwei.edit || {};
 
     var editingCircle = document.getElementById('Editing');
     editingCircle.style.opacity = '0';
-    document.getElementById('open_controls').style.display = 'block';
+    setControlToggleVisible(true);
 
     if (state.previousEdit) {
       let _node = state.previousEdit.node;
