@@ -2099,7 +2099,7 @@ wuwei.note = (function () {
       json: noteJson,
       thumbnail: iconHTML,
       user_id: cu.user_id
-    }, 'POST', 30000).then(function (responseText) {
+    }, 'POST', 180000).then(function (responseText) {
       const saveResult = parseSaveResponse(responseText);
       if (saveResult.note_id && util.isUUIDid(saveResult.note_id)) {
         current.note_id = saveResult.note_id;

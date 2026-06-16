@@ -10,7 +10,7 @@
  * Copyright (c) 2013-2020, Nobuyuki SAMBUICHI
  **/
 ajaxRequest = function(url, data, methodType, ms) {
-  let xhr, timerid;
+  let xhr, timerid, timedOut = false;
   /**
    * use promise object in our ajaxRequest function
    * https://medium.com/front-end-hacking/ajax-async-callback-promise-e98f8074ebd7
@@ -83,6 +83,9 @@ ajaxRequest = function(url, data, methodType, ms) {
         }
         else if (xhr.readyState === DONE) {
           console.log(url, methodType, 'DONE status:', xhr.status);
+          if (timedOut) {
+            return;
+          }
           clearTimeout(timerid);
           if (xhr.status === 200) {
             responseText = xhr.responseText;
@@ -129,12 +132,13 @@ ajaxRequest = function(url, data, methodType, ms) {
   const timeout = new Promise((resolve, reject) => {
     timerid = setTimeout(() => {
       clearTimeout(timerid);
-      xhr.abort();
+      timedOut = true;
       console.log(`Timed out in ${ms}ms. xhr.abort()`);
       reject({
         status: 'timeout',
         statusText: `Timed out in ${ms}ms.`
       });
+      xhr.abort();
     }, ms);
   });
 
