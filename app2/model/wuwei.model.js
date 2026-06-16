@@ -2488,6 +2488,7 @@ wuwei.model = (function () {
     if (node) {
       markDeletedRecord(node);
       updateNode(node);
+      removeNodeFromAllGroups(id);
       d3.select('g.node#' + id).remove();
     }
     return linkids;
@@ -11672,13 +11673,17 @@ wuwei.model = (function () {
     return group.members.slice();
   }
 
+  function getGroupMemberNodeId(member) {
+    return (member && member.nodeId) ? member.nodeId : member;
+  }
+
   function getGroupNodeIds(group) {
     var seen = {};
     if (!group || !Array.isArray(group.members)) {
       return [];
     }
     return group.members.map(function (member) {
-      return member && member.nodeId;
+      return getGroupMemberNodeId(member);
     }).filter(function (nodeId) {
       if (!nodeId || seen[nodeId]) {
         return false;
@@ -11701,7 +11706,7 @@ wuwei.model = (function () {
     const group = findGroupById(groupId);
     const index = {};
     ((page && page.nodes) || []).forEach(function (n) {
-      if (n && n.id) { index[n.id] = n; }
+      if (n && n.id && !isDeletedRecord(n)) { index[n.id] = n; }
     });
     return getGroupNodeIds(group).map(function (id) { return index[id] || null; }).filter(Boolean);
   }
@@ -11732,12 +11737,24 @@ wuwei.model = (function () {
    */
   function pruneGroups() {
     var page = getCurrentPage();
+    var liveNodeIds = {};
     if (!page || !Array.isArray(page.groups)) {
       return;
     }
+    (Array.isArray(page.nodes) ? page.nodes : []).forEach(function (node) {
+      if (node && node.id && !isDeletedRecord(node)) {
+        liveNodeIds[node.id] = true;
+      }
+    });
     page.groups = page.groups.filter(function (g) {
       if (!g) {
         return false;
+      }
+      if (Array.isArray(g.members)) {
+        g.members = g.members.filter(function (member) {
+          var nodeId = getGroupMemberNodeId(member);
+          return !!(nodeId && liveNodeIds[nodeId]);
+        });
       }
       if ('simple' === g.type) {
         return Array.isArray(g.members) && g.members.length >= 1;
@@ -11763,7 +11780,7 @@ wuwei.model = (function () {
     page.groups.forEach(function (g) {
       if (g && Array.isArray(g.members)) {
         g.members = g.members.filter(function (member) {
-          return member && member.nodeId !== nodeId;
+          return getGroupMemberNodeId(member) !== nodeId;
         });
       }
     });
