@@ -635,6 +635,23 @@ wuwei.draw = wuwei.draw || {};
     var t = util && typeof util.getPageTransform === 'function'
       ? util.getPageTransform(page)
       : (page && page.transform) || { x: 0, y: 0, scale: 1 };
+    var liveTransform;
+
+    /*
+     * A node drag can rebuild the graph before the page transform has been
+     * synchronised.  In that narrow window the page fallback is scale 1,
+     * which makes moving a node reset the user's zoom.  While dragging, the
+     * canvas DOM is the authoritative view and must survive the rebuild.
+     */
+    if (state.dragging && util && typeof util.getTransform === 'function') {
+      liveTransform = util.getTransform('g#' + state.canvasId);
+      if (liveTransform && isFinite(Number(liveTransform.scale)) && Number(liveTransform.scale) > 0) {
+        t = liveTransform;
+        if (page && typeof util.setPageTransform === 'function') {
+          util.setPageTransform(page, liveTransform);
+        }
+      }
+    }
     var x = Number(t && t.x);
     var y = Number(t && t.y);
     var scale = Number(t && t.scale);
