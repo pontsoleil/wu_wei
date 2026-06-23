@@ -4082,11 +4082,94 @@ wuwei.menu = wuwei.menu || {};
     }, 0);
   }
 
+  function replaceForeignObjectsForCanvasExport(clone) {
+    var SVG_NS = 'http://www.w3.org/2000/svg';
+
+    function numberAttr(el, name, fallback) {
+      var value = Number(el && el.getAttribute(name));
+      return isFinite(value) ? value : fallback;
+    }
+
+    function approximateTextWidth(text, fontSize) {
+      return Array.prototype.reduce.call(String(text || ''), function (width, character) {
+        return width + (character.charCodeAt(0) > 255 ? fontSize : fontSize * 0.56);
+      }, 0);
+    }
+
+    function wrapText(text, maxWidth, fontSize) {
+      var source = String(text || '').replace(/\s+/g, ' ').trim();
+      var lines = [];
+      var line = '';
+      var i, next;
+
+      if (!source) { return lines; }
+      for (i = 0; i < source.length; i += 1) {
+        next = line + source.charAt(i);
+        if (line && approximateTextWidth(next, fontSize) > maxWidth) {
+          lines.push(line);
+          line = source.charAt(i);
+        } else {
+          line = next;
+        }
+      }
+      if (line) { lines.push(line); }
+      return lines;
+    }
+
+    Array.prototype.slice.call(clone.querySelectorAll('foreignObject')).forEach(function (foreignObject) {
+      var x = numberAttr(foreignObject, 'x', 0);
+      var y = numberAttr(foreignObject, 'y', 0);
+      var width = Math.max(1, numberAttr(foreignObject, 'width', 200));
+      var root = foreignObject.firstElementChild || foreignObject;
+      var style = root.getAttribute ? (root.getAttribute('style') || '') : '';
+      var familyMatch = /font-family\s*:\s*([^;]+)/i.exec(style);
+      var colorMatch = /color\s*:\s*([^;]+)/i.exec(style);
+      var blocks = Array.prototype.slice.call(root.querySelectorAll(
+        'h1,h2,h3,h4,h5,h6,p,li,pre,blockquote'
+      ));
+      var textEl = document.createElementNS(SVG_NS, 'text');
+      var cursorY = y + 4;
+
+      if (!blocks.length) { blocks = [root]; }
+      textEl.setAttribute('class', 'foreign-object-text-fallback');
+      textEl.setAttribute('font-family', familyMatch ? familyMatch[1].trim() : 'sans-serif');
+      textEl.setAttribute('fill', colorMatch ? colorMatch[1].trim() : '#303030');
+      textEl.setAttribute('text-anchor', 'start');
+
+      blocks.forEach(function (block) {
+        var isHeading = /^H[1-6]$/.test(String(block.tagName || '').toUpperCase());
+        var fontSize = isHeading ? 14 : 13;
+        var lineHeight = isHeading ? 18 : 17;
+        var lines = wrapText(block.textContent, width - 8, fontSize);
+
+        lines.forEach(function (line) {
+          var tspan = document.createElementNS(SVG_NS, 'tspan');
+          cursorY += lineHeight;
+          tspan.setAttribute('x', String(x + 4));
+          tspan.setAttribute('y', String(cursorY));
+          tspan.setAttribute('font-size', String(fontSize));
+          if (isHeading) { tspan.setAttribute('font-weight', 'bold'); }
+          tspan.textContent = line;
+          textEl.appendChild(tspan);
+        });
+        cursorY += isHeading ? 3 : 1;
+      });
+
+      if (foreignObject.parentNode) {
+        foreignObject.parentNode.replaceChild(textEl, foreignObject);
+      }
+    });
+  }
+
   function normalizeClonedCanvasForExport(clone) {
     if (!clone || !clone.querySelectorAll) {
       return clone;
     }
     clone.removeAttribute('transform');
+    // SVG images containing foreignObject cannot be drawn safely to a canvas
+    // in all supported browsers. Replace memo HTML with equivalent SVG text
+    // in the export clone so PNG generation stays origin-clean.
+    replaceForeignObjectsForCanvasExport(clone);
     Array.prototype.slice.call(clone.querySelectorAll(
       '#ContextMenu,#Editing,#Start,#Pointer,.group-selection-marks,circle.selected,.axis'
     )).forEach(function (el) {
