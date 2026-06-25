@@ -38,6 +38,13 @@ wuwei.info.contents.markup = (function () {
       esc(t('Click to open tab')) + '<i class="fas fa-external-link-alt"></i></a></div>';
   }
 
+  function openUriForPageMarker(viewerUri, pageNumber) {
+    if (wuwei.info && typeof wuwei.info.buildPdfPageOpenUri === 'function') {
+      return wuwei.info.buildPdfPageOpenUri(viewerUri, pageNumber);
+    }
+    return viewerUri;
+  }
+
   function block(label, value, klass) {
     if (!!label) {
       return '' +
@@ -107,6 +114,7 @@ wuwei.info.contents.markup = (function () {
     var documentName = (param && param.documentName) || '';
     var markerLabel = point.label || ('p.' + pageNumber);
     var viewerUri = String((param && param.viewerUri) || '');
+    var openUri = openUriForPageMarker(viewerUri, pageNumber);
     var anchorHref = String(point.htmlAnchorHref || point.anchorHref || '');
     var description = (point.description && 'object' === typeof point.description)
       ? point.description.body
@@ -126,8 +134,8 @@ wuwei.info.contents.markup = (function () {
       '</div>' +
       (viewerUri
         ? '<div class="contents-viewer-wrap">' +
-        fallbackNotice(viewerUri, 'contents-iframe-notice') +
-        fallbackActions(viewerUri, {
+        fallbackNotice(openUri, 'contents-iframe-notice') +
+        fallbackActions(openUri, {
           className: 'contents-open-window',
           windowFeatures: 'width=600,height=400,resizable=yes,scrollbars=yes'
         }) +

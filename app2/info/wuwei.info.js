@@ -1352,6 +1352,81 @@ wuwei.info = wuwei.info || {};
     ].join('');
   }
 
+  function getPdfJsViewerPath() {
+    var path = (window.location && window.location.pathname) ? window.location.pathname : '/wu_wei2/';
+    var marker = '/wu_wei2/';
+    var idx = path.indexOf(marker);
+    if (idx >= 0) {
+      return path.slice(0, idx + marker.length) + 'lib/pdfjs/web/viewer.html';
+    }
+    return '/wu_wei2/lib/pdfjs/web/viewer.html';
+  }
+
+  function isPdfLikeOpenUri(uri) {
+    var text = String(uri || '').trim();
+    var parsed;
+    var path;
+
+    if (!text) { return false; }
+    if (/\.pdf(?:[?#].*)?$/i.test(text)) { return true; }
+    try {
+      parsed = new URL(text, window.location && window.location.href ? window.location.href : undefined);
+      path = parsed.searchParams.get('path') || parsed.searchParams.get('file') || parsed.pathname || '';
+      try { path = decodeURIComponent(path); } catch (e) { /* keep path */ }
+      return /\.pdf$/i.test(String(path || '').split(/[?#]/)[0]);
+    }
+    catch (e2) {
+      return false;
+    }
+  }
+
+  function extractPdfPageNumber(uri, fallbackPageNumber) {
+    var match = String(uri || '').match(/#(?:.*&)?page=([0-9]+)/i);
+    var value = match && match[1] ? Number(match[1]) : Number(fallbackPageNumber);
+    if (!Number.isFinite(value)) { value = 1; }
+    return Math.max(1, Math.floor(value));
+  }
+
+  function appendPdfPageFragment(uri, pageNumber) {
+    var text = String(uri || '').trim();
+    var page = extractPdfPageNumber('', pageNumber);
+    return text ? text.replace(/#.*$/, '') + '#page=' + encodeURIComponent(page) : '';
+  }
+
+  function buildPdfPageOpenUri(uri, pageNumber) {
+    var text = String(uri || '').trim();
+    var page = extractPdfPageNumber(text, pageNumber);
+    var pdfUrl;
+    var viewerUrl;
+
+    if (!text || !isPdfLikeOpenUri(text)) {
+      return text;
+    }
+
+    /*
+     * Browser PDF plugins such as Adobe Acrobat can drop a PDF fragment when a
+     * file is opened in a separate tab/window.  Wrap same-origin PDFs with the
+     * bundled PDF.js viewer so PageMarker links keep the requested page.
+     */
+    try {
+      pdfUrl = new URL(text.replace(/#.*$/, ''), window.location.href);
+      if (pdfUrl.origin !== window.location.origin) {
+        return appendPdfPageFragment(text, page);
+      }
+      if (/\/lib\/pdfjs\/(?:generic\/)?web\/viewer\.html$/i.test(pdfUrl.pathname)) {
+        pdfUrl.hash = 'page=' + encodeURIComponent(page);
+        return pdfUrl.href;
+      }
+      viewerUrl = new URL(getPdfJsViewerPath(), window.location.origin);
+      viewerUrl.searchParams.set('file', pdfUrl.href);
+      viewerUrl.hash = 'page=' + encodeURIComponent(page);
+      return viewerUrl.href;
+    }
+    catch (e) {
+      return appendPdfPageFragment(text, page);
+    }
+  }
+
   function iframeNoticeHtml(uri, options) {
     var className;
     var encodedUri;
@@ -1502,6 +1577,7 @@ wuwei.info = wuwei.info || {};
   ns.openWindow = openWindow;
   ns.closeWindow = closeWindow;
   ns.openNewTab = openNewTab;
+  ns.buildPdfPageOpenUri = buildPdfPageOpenUri;
   ns.openActionsHtml = openActionsHtml;
   ns.iframeNoticeHtml = iframeNoticeHtml;
   ns.iframeError = iframeError;
